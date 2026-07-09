@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GroupStore } from '../../services/group/group.store';
+import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { LeaderboardCategory, LeaderboardPeriod } from '../../models/leaderboard.model';
@@ -23,7 +24,18 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
             <button (click)="archive(group.id)" class="text-sm text-danger hover:underline">Archiválás</button>
           }
         </div>
-        @if (group.schoolName) {
+        @if (schoolStore.schools().length > 0) {
+          <div class="flex items-center gap-2 mb-6 text-sm">
+            <label class="text-text-muted">Intézmény:</label>
+            <select [ngModel]="group.schoolId" (ngModelChange)="changeSchool(group.id, group.name, $event)"
+              class="rounded border border-border-default bg-bg-element px-2 py-1">
+              <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
+              @for (school of schoolStore.schools(); track school.id) {
+                <option [ngValue]="school.id">{{ school.name }}</option>
+              }
+            </select>
+          </div>
+        } @else if (group.schoolName) {
           <p class="text-text-muted mb-6">Intézmény: {{ group.schoolName }}</p>
         }
 
@@ -134,6 +146,7 @@ export class CsoportReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   readonly store = inject(GroupStore);
+  readonly schoolStore = inject(SchoolStore);
   readonly report = inject(ReportStore);
   readonly leaderboard = inject(LeaderboardStore);
 
@@ -157,6 +170,9 @@ export class CsoportReszletekComponent implements OnInit {
     }
     this.store.select(this.groupId);
     this.store.loadMembers(this.groupId);
+    if (this.schoolStore.schools().length === 0) {
+      this.schoolStore.loadMine();
+    }
   }
 
   setTab(tab: Tab): void {
@@ -182,5 +198,15 @@ export class CsoportReszletekComponent implements OnInit {
   archive(groupId: number): void {
     if (!confirm('Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést.')) return;
     this.store.archive(groupId, () => this.router.navigateByUrl('/csoportok'));
+  }
+
+  changeSchool(groupId: number, groupName: string, schoolId: number | null): void {
+    if (schoolId !== null) {
+      const schoolName = this.schoolStore.schools().find((s) => s.id === schoolId)?.name ?? '';
+      if (!confirm(`Biztosan a(z) „${schoolName}” intézményhez kötöd ezt a csoportot? A tagok minden korábbi eredménye láthatóvá válik az intézmény igazgatója számára, és a diákok erről értesítést kapnak.`)) {
+        return;
+      }
+    }
+    this.store.update(groupId, { name: groupName, schoolId: schoolId ?? undefined });
   }
 }
