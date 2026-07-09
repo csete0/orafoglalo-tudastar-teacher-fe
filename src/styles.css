@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Egyszerű, világos alapú felület — belső eszköz, nincs márka-igény.
+   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör). */
+:root {
+  --color-bg-base: #F6F8FA;
+  --color-bg-panel: #FFFFFF;
+  --color-bg-element: #F0F2F5;
+
+  --color-primary: #2F81F7;
+  --color-primary-hover: #1F6FEB;
+
+  --color-success: #1A7F37;
+  --color-danger: #CF222E;
+  --color-warning: #9A6700;
+
+  --color-text-primary: #1F2328;
+  --color-text-secondary: #59636E;
+
+  --color-border-default: #D0D7DE;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg-base: #0D1117;
+    --color-bg-panel: #161B22;
+    --color-bg-element: #1C2128;
+
+    --color-text-primary: #E6EDF3;
+    --color-text-secondary: #8B949E;
+
+    --color-border-default: #30363D;
+  }
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
