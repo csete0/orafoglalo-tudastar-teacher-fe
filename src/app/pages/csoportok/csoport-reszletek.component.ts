@@ -161,6 +161,7 @@ export class CsoportReszletekComponent implements OnInit {
 
   setTab(tab: Tab): void {
     this.tab.set(tab);
+    if (tab === 'tagok') this.store.loadMembers(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
   }

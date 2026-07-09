@@ -27,3 +27,7 @@ testem.log
 .DS_Store
 Thumbs.db
 package-lock.json
+
+# Playwright E2E artifacts
+/test-results
+/playwright-report

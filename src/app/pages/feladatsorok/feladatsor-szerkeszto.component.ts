@@ -181,7 +181,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   </label>
                 }
               </div>
-              <button type="submit" [disabled]="!newTaskTitle"
+              <button type="submit" [disabled]="!newTaskTitle || !newTaskDescription"
                 class="rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1.5 disabled:opacity-50">
                 Hozzáadás
               </button>
