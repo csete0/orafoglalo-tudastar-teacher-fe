@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
-import { SnippetDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
+import { AuthorizedFileService } from '../../services/file/authorized-file.service';
+import { SnippetDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
 
 const LANGUAGES: { id: number; name: string }[] = [
   { id: 2, name: 'Python' },
@@ -197,7 +198,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
               <li class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-3 text-sm">
                 <span>{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
                 <div class="flex items-center gap-3">
-                  <a [href]="apiOrigin + file.url" target="_blank" class="text-primary hover:underline">Megnyitás</a>
+                  <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
                   <button (click)="deleteFile(detail.id, file.id)" class="text-danger hover:underline">Törlés</button>
                 </div>
               </li>
@@ -222,11 +223,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
     }
   `,
 })
-export class FeladatsorSzerkesztoComponent implements OnInit {
+export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   readonly store = inject(TeacherTaskSetStore);
   private readonly schoolStore = inject(SchoolStore);
+  private readonly authorizedFileService = inject(AuthorizedFileService);
 
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
@@ -235,6 +237,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit {
 
   readonly expandedTaskId = signal<number | null>(null);
   private readonly drafts = signal<SnippetDraft>({});
+  // A "Megnyitás" link sima <a href> lenne, a token viszont localStorage-ban
+  // van (nem cookie-ban) — nyers navigáció nem viszi magával, 401-et adna.
+  // Ezért bearer tokennel lekért blob URL-re oldjuk fel, fileId -> blob URL.
+  private readonly resolvedDownloadUrls = signal<Record<string, string>>({});
 
   newTaskTitle = '';
   newTaskDescription = '';
@@ -278,7 +284,29 @@ export class FeladatsorSzerkesztoComponent implements OnInit {
       this.drafts.set(next);
     });
 
+    effect(() => {
+      const files = this.store.selectedDetail()?.files ?? [];
+      for (const file of files) {
+        const key = String(file.id);
+        if (this.resolvedDownloadUrls()[key] !== undefined) continue;
+
+        this.authorizedFileService.resolveUrl(this.apiOrigin + file.url).subscribe((url) => {
+          this.resolvedDownloadUrls.update((current) => ({ ...current, [key]: url }));
+        });
+      }
+    });
+
     this.schoolStore.loadMine();
+  }
+
+  ngOnDestroy(): void {
+    for (const url of Object.values(this.resolvedDownloadUrls())) {
+      this.authorizedFileService.revoke(url);
+    }
+  }
+
+  downloadHref(file: TeacherFileDto): string {
+    return this.resolvedDownloadUrls()[file.id] ?? this.apiOrigin + file.url;
   }
 
   ngOnInit(): void {

@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { FeladatsorSzerkesztoComponent } from './feladatsor-szerkeszto.component';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
+import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
@@ -32,6 +34,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     publish: ReturnType<typeof vi.fn>;
   };
   let schoolStoreMock: { schools: ReturnType<typeof signal<unknown[]>>; loadMine: ReturnType<typeof vi.fn> };
+  let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -43,12 +46,17 @@ describe('FeladatsorSzerkesztoComponent', () => {
       publish: vi.fn(),
     };
     schoolStoreMock = { schools: signal([]), loadMine: vi.fn() };
+    authorizedFileServiceMock = {
+      resolveUrl: vi.fn((url: string) => of(`blob:resolved-${url}`)),
+      revoke: vi.fn(),
+    };
 
     TestBed.configureTestingModule({
       imports: [FeladatsorSzerkesztoComponent],
       providers: [
         { provide: TeacherTaskSetStore, useValue: taskSetStoreMock },
         { provide: SchoolStore, useValue: schoolStoreMock },
+        { provide: AuthorizedFileService, useValue: authorizedFileServiceMock },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } },
@@ -184,5 +192,24 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
 
     confirmSpy.mockRestore();
+  });
+
+  it('a "Megnyitás" link a bearer tokennel lekért blob URL-re mutat, nem a nyers (401-et adó) API URL-re', () => {
+    configure(
+      makeDetail({
+        files: [
+          { id: 'f1', kind: 'SolutionPdf', originalFileName: 'solution.pdf', contentType: 'application/pdf', sizeBytes: 10, createdAt: '', url: '/api/teacher-files/f1' },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const expectedApiUrl = fixture.componentInstance.apiOrigin + '/api/teacher-files/f1';
+    expect(authorizedFileServiceMock.resolveUrl).toHaveBeenCalledWith(expectedApiUrl);
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
+    expect(link.getAttribute('href')).toBe(`blob:resolved-${expectedApiUrl}`);
   });
 });
