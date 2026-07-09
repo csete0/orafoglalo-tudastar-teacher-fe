@@ -19,6 +19,7 @@ import { AuthStore } from './services/auth/store/auth.store';
             <a routerLink="/feladatsorok" class="hover:text-primary">Feladatsorok</a>
             @if (authStore.hasAdminRole()) {
               <a routerLink="/admin/jelentkezesek" class="hover:text-primary">Jelentkezések</a>
+              <a routerLink="/admin/tanarok" class="hover:text-primary">Tanárok</a>
             }
             <button (click)="logout()" class="text-text-muted hover:text-danger">Kilépés</button>
           </nav>
