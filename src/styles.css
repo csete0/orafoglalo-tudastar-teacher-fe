@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 /* Egyszerű, világos alapú felület — belső eszköz, nincs márka-igény.
-   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör).
+   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör),
+   de a vizuális nyelvéből (lekerekítés, árnyék, hover-lift, gradiens
+   logó-csempe) átvettünk néhány elemet, hogy egy termékcsaládnak tűnjön.
 
    FONTOS: Tailwind v4-ben a szín-utility-k (text-danger, bg-primary, …)
    CSAK a @theme blokkban definiált --color-* változókból generálódnak —
@@ -13,6 +15,7 @@
   --color-bg-base: #F6F8FA;
   --color-bg-panel: #FFFFFF;
   --color-bg-element: #F0F2F5;
+  --color-bg-elevated: #EAEEF2;
 
   --color-primary: #2F81F7;
   --color-primary-hover: #1F6FEB;
@@ -32,6 +35,7 @@
     --color-bg-base: #0D1117;
     --color-bg-panel: #161B22;
     --color-bg-element: #1C2128;
+    --color-bg-elevated: #262C36;
 
     --color-text-primary: #E6EDF3;
     --color-text-muted: #8B949E;
@@ -43,4 +47,31 @@
 body {
   background-color: var(--color-bg-base);
   color: var(--color-text-primary);
+}
+
+/* Tailwind v4 preflight-ja (v3-tól eltérően) NEM állítja be a
+   cursor: pointer-t <button>-ökön — a diák-app ezt osztályonként, kézzel
+   pótolja, itt egy globális szabállyal oldjuk meg, mert nincs a diák-app
+   szintű, data-theme-enkénti disabled-state komplexitás. */
+@layer base {
+  button, a, [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Kártya-link idióma: lista-oldalakon egy egész kártya kattintható
+   navigációs cél. A diák-app hover-lift+árnyék mintáját véve, de a
+   letisztultabb rounded-lg-t megtartva (a diák-app rounded-2xl-je túl
+   kerek lenne egy sűrű admin-táblázatos UI-hoz). */
+@layer components {
+  .card-link {
+    @apply bg-bg-panel border border-border-default rounded-lg p-4 transition-all duration-200;
+  }
+  .card-link:hover {
+    @apply border-primary bg-bg-elevated shadow-sm;
+    transform: translateY(-2px);
+  }
 }

@@ -24,7 +24,7 @@ import { SchoolStore } from '../../services/school/school.store';
         @for (group of store.groups(); track group.id) {
           <li>
             <a [routerLink]="['/csoportok', group.id]"
-              class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-4 hover:border-primary">
+              class="card-link flex justify-between">
               <span>
                 {{ group.name }}
                 @if (group.schoolName) {

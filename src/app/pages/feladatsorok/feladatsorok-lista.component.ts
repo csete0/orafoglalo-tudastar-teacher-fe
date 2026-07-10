@@ -29,7 +29,7 @@ const LEVELS = [
         @for (taskSet of store.taskSets(); track taskSet.id) {
           <li>
             <a [routerLink]="['/feladatsorok', taskSet.id, 'szerkesztes']"
-              class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-4 hover:border-primary">
+              class="card-link flex justify-between">
               <span>{{ taskSet.title }} <span class="text-text-muted text-sm">({{ taskSet.taskCount }} feladat)</span></span>
               <span class="text-sm text-text-muted">{{ taskSet.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
             </a>

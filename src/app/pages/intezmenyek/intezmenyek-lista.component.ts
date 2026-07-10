@@ -27,7 +27,7 @@ import { SchoolStore } from '../../services/school/school.store';
         @for (school of store.schools(); track school.id) {
           <li>
             <a [routerLink]="['/intezmenyek', school.id]"
-              class="flex justify-between items-center bg-bg-panel border border-border-default rounded-lg p-4 hover:border-primary">
+              class="card-link flex justify-between items-center">
               <span>{{ school.name }}</span>
               <span class="text-sm text-text-muted">{{ school.myRole === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
             </a>
