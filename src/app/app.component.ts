@@ -23,6 +23,7 @@ import { AuthStore } from './services/auth/store/auth.store';
             @if (authStore.hasAdminRole()) {
               <a routerLink="/admin/jelentkezesek" class="hover:text-primary transition-colors">Jelentkezések</a>
               <a routerLink="/admin/tanarok" class="hover:text-primary transition-colors">Tanárok</a>
+              <a routerLink="/admin/intezmenyek" class="hover:text-primary transition-colors">Intézmények (admin)</a>
             }
             <button (click)="logout()" class="text-text-muted hover:text-danger transition-colors">Kilépés</button>
           </nav>

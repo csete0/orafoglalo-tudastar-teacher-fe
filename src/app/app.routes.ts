@@ -87,6 +87,12 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/admin/admin-tanarok.component').then((m) => m.AdminTanarokComponent),
   },
+  {
+    path: 'admin/intezmenyek',
+    canActivate: [authGuard, roleGuard('admin')],
+    loadComponent: () =>
+      import('./pages/admin/admin-intezmenyek.component').then((m) => m.AdminIntezmenyekComponent),
+  },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   {
     path: '404',

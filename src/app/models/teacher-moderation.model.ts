@@ -25,3 +25,19 @@ export interface AdminTaskSetDto {
   createdAt: string;
   taskCount: number;
 }
+
+export interface SchoolAdminDto {
+  id: number;
+  name: string;
+  city?: string;
+  createdAt: string;
+  teacherCount: number;
+  groupCount: number;
+  adminDisplayNames: string[];
+}
+
+export interface SchoolMergeResultDto {
+  movedGroups: number;
+  movedMemberships: number;
+  mergedDuplicateMemberships: number;
+}
