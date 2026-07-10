@@ -58,6 +58,19 @@ export class AdminTeacherStore {
       });
   }
 
+  setQuota(teacherProfileId: number, maxTaskSets: number | null, maxStorageBytes: number | null): void {
+    // Hibakezelés szándékosan nincs: a backend OrafoglaloException-t dob
+    // (negatív érték / ismeretlen profil), azt az interceptor kezeli globálisan.
+    this.service
+      .setQuota(teacherProfileId, maxTaskSets, maxStorageBytes)
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this._teachers.update((list) =>
+          list.map((t) => (t.id === teacherProfileId ? { ...t, maxTaskSets, maxStorageBytes } : t)),
+        );
+      });
+  }
+
   selectTeacher(teacherProfileId: number): void {
     if (this._selectedTeacherId() === teacherProfileId) {
       this._selectedTeacherId.set(null);

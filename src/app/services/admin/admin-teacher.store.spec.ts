@@ -14,6 +14,9 @@ function makeTeacher(overrides: Partial<TeacherProfileAdminDto> = {}): TeacherPr
     createdAt: new Date().toISOString(),
     taskSetCount: 2,
     groupCount: 1,
+    storageUsedBytes: 0,
+    maxTaskSets: null,
+    maxStorageBytes: null,
     ...overrides,
   };
 }
@@ -36,6 +39,7 @@ describe('AdminTeacherStore', () => {
   let serviceMock: {
     getTeachers: ReturnType<typeof vi.fn>;
     setActive: ReturnType<typeof vi.fn>;
+    setQuota: ReturnType<typeof vi.fn>;
     getTaskSets: ReturnType<typeof vi.fn>;
     takedownTaskSet: ReturnType<typeof vi.fn>;
   };
@@ -44,6 +48,7 @@ describe('AdminTeacherStore', () => {
     serviceMock = {
       getTeachers: vi.fn(),
       setActive: vi.fn(),
+      setQuota: vi.fn(),
       getTaskSets: vi.fn(),
       takedownTaskSet: vi.fn(),
     };
@@ -109,6 +114,37 @@ describe('AdminTeacherStore', () => {
 
     expect(store.selectedTeacherId()).toBeNull();
     expect(store.taskSets().length).toBe(0);
+  });
+
+  it('setQuota siker esetén helyben frissíti a kvóta-mezőket', async () => {
+    serviceMock.getTeachers.mockReturnValue(of([makeTeacher()]));
+    serviceMock.setQuota.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.load();
+    await Promise.resolve();
+
+    store.setQuota(1, 5, 10485760);
+    await Promise.resolve();
+
+    expect(store.teachers()[0].maxTaskSets).toBe(5);
+    expect(store.teachers()[0].maxStorageBytes).toBe(10485760);
+    expect(serviceMock.setQuota).toHaveBeenCalledWith(1, 5, 10485760);
+  });
+
+  it('setQuota null értékekkel korlátlanra állít', async () => {
+    serviceMock.getTeachers.mockReturnValue(of([makeTeacher({ maxTaskSets: 5, maxStorageBytes: 1000 })]));
+    serviceMock.setQuota.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.load();
+    await Promise.resolve();
+
+    store.setQuota(1, null, null);
+    await Promise.resolve();
+
+    expect(store.teachers()[0].maxTaskSets).toBeNull();
+    expect(store.teachers()[0].maxStorageBytes).toBeNull();
   });
 
   it('takedownTaskSet siker esetén isPublished=false-ra állítja a listában', async () => {

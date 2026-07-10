@@ -17,6 +17,10 @@ export class AdminTeacherService {
     return this.http.post(`${this.baseUrl}/teachers/${teacherProfileId}/set-active`, { isActive });
   }
 
+  setQuota(teacherProfileId: number, maxTaskSets: number | null, maxStorageBytes: number | null): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/teachers/${teacherProfileId}/quota`, { maxTaskSets, maxStorageBytes });
+  }
+
   getTaskSets(teacherProfileId: number): Observable<AdminTaskSetDto[]> {
     return this.http.get<AdminTaskSetDto[]>(`${this.baseUrl}/teachers/${teacherProfileId}/task-sets`);
   }

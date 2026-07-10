@@ -8,6 +8,10 @@ export interface TeacherProfileAdminDto {
   createdAt: string;
   taskSetCount: number;
   groupCount: number;
+  storageUsedBytes: number;
+  /** Kvóta: null = korlátlan. Használat alatti érték csak az új létrehozást blokkolja. */
+  maxTaskSets: number | null;
+  maxStorageBytes: number | null;
 }
 
 export interface AdminTaskSetDto {

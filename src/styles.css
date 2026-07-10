@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 /* Egyszerű, világos alapú felület — belső eszköz, nincs márka-igény.
-   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör). */
-:root {
+   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör).
+
+   FONTOS: Tailwind v4-ben a szín-utility-k (text-danger, bg-primary, …)
+   CSAK a @theme blokkban definiált --color-* változókból generálódnak —
+   sima :root-ban definiálva a Tailwind nem veszi észre őket, és az
+   osztályok csendben semmit sem csinálnak. A sötét mód a generált
+   CSS-változók :root-szintű felülírásával működik (a utility-k
+   var(--color-…)-ra hivatkoznak). */
+@theme {
   --color-bg-base: #F6F8FA;
   --color-bg-panel: #FFFFFF;
   --color-bg-element: #F0F2F5;
@@ -15,7 +22,7 @@
   --color-warning: #9A6700;
 
   --color-text-primary: #1F2328;
-  --color-text-secondary: #59636E;
+  --color-text-muted: #59636E;
 
   --color-border-default: #D0D7DE;
 }
@@ -27,7 +34,7 @@
     --color-bg-element: #1C2128;
 
     --color-text-primary: #E6EDF3;
-    --color-text-secondary: #8B949E;
+    --color-text-muted: #8B949E;
 
     --color-border-default: #30363D;
   }

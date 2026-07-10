@@ -1,12 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { AdminTeacherStore } from '../../services/admin/admin-teacher.store';
+import { TeacherProfileAdminDto } from '../../models/teacher-moderation.model';
+
+const BYTES_PER_MB = 1048576;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-admin-tanarok',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, FormsModule],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <h1 class="text-xl font-semibold mb-4">Tanárok</h1>
@@ -33,8 +37,12 @@ import { AdminTeacherStore } from '../../services/admin/admin-teacher.store';
                 @if (teacher.institutionName) {
                   <p class="text-sm text-text-muted">Intézmény: {{ teacher.institutionName }}</p>
                 }
-                <p class="text-xs text-text-muted mt-1">
-                  {{ teacher.taskSetCount }} feladatsor · {{ teacher.groupCount }} csoport · tag {{ teacher.createdAt | date: 'yyyy.MM.dd' }} óta
+                <p class="text-xs mt-1" [class.text-danger]="isOverQuota(teacher)"
+                  [class.text-text-muted]="!isOverQuota(teacher)">
+                  {{ teacher.taskSetCount }}@if (teacher.maxTaskSets !== null) { / {{ teacher.maxTaskSets }}} feladatsor ·
+                  {{ teacher.groupCount }} csoport ·
+                  {{ mb(teacher.storageUsedBytes) }}@if (teacher.maxStorageBytes !== null) { / {{ mb(teacher.maxStorageBytes) }}} MB tárhely ·
+                  tag {{ teacher.createdAt | date: 'yyyy.MM.dd' }} óta
                 </p>
               </div>
               <div class="flex flex-col gap-2 items-end">
@@ -49,12 +57,41 @@ import { AdminTeacherStore } from '../../services/admin/admin-teacher.store';
                     Aktiválás
                   </button>
                 }
+                <button (click)="toggleQuotaEdit(teacher)"
+                  class="text-sm text-primary hover:underline whitespace-nowrap">
+                  Kvóta {{ quotaEditId() === teacher.id ? '▲' : '▼' }}
+                </button>
                 <button (click)="store.selectTeacher(teacher.id)"
                   class="text-sm text-primary hover:underline whitespace-nowrap">
                   Feladatsorai {{ store.selectedTeacherId() === teacher.id ? '▲' : '▼' }}
                 </button>
               </div>
             </div>
+
+            @if (quotaEditId() === teacher.id) {
+              <form (ngSubmit)="saveQuota(teacher.id)" class="mt-4 pl-4 border-l-2 border-border-default">
+                <div class="flex gap-3 items-end flex-wrap">
+                  <div>
+                    <label class="text-xs text-text-muted block mb-1">Max feladatsor</label>
+                    <input type="number" min="0" [(ngModel)]="quotaTaskSets" name="quotaTaskSets"
+                      class="rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm w-32" />
+                  </div>
+                  <div>
+                    <label class="text-xs text-text-muted block mb-1">Max tárhely (MB)</label>
+                    <input type="number" min="0" [(ngModel)]="quotaStorageMb" name="quotaStorageMb"
+                      class="rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm w-32" />
+                  </div>
+                  <button type="submit"
+                    class="rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1.5">
+                    Mentés
+                  </button>
+                </div>
+                <p class="text-xs text-text-muted mt-2">
+                  Üres mező = korlátlan. A használat alatti kvóta a meglévő tartalmat nem érinti, csak az új
+                  feladatsor-létrehozást/fájl-feltöltést blokkolja.
+                </p>
+              </form>
+            }
 
             @if (store.selectedTeacherId() === teacher.id) {
               <div class="mt-4 pl-4 border-l-2 border-border-default">
@@ -98,8 +135,44 @@ import { AdminTeacherStore } from '../../services/admin/admin-teacher.store';
 export class AdminTanarokComponent {
   readonly store = inject(AdminTeacherStore);
 
+  readonly quotaEditId = signal<number | null>(null);
+  quotaTaskSets: number | null = null;
+  quotaStorageMb: number | null = null;
+
   constructor() {
     this.store.load();
+  }
+
+  mb(bytes: number): string {
+    return (bytes / BYTES_PER_MB).toFixed(1);
+  }
+
+  isOverQuota(teacher: TeacherProfileAdminDto): boolean {
+    return (
+      (teacher.maxTaskSets !== null && teacher.taskSetCount >= teacher.maxTaskSets) ||
+      (teacher.maxStorageBytes !== null && teacher.storageUsedBytes >= teacher.maxStorageBytes)
+    );
+  }
+
+  toggleQuotaEdit(teacher: TeacherProfileAdminDto): void {
+    if (this.quotaEditId() === teacher.id) {
+      this.quotaEditId.set(null);
+      return;
+    }
+    this.quotaTaskSets = teacher.maxTaskSets;
+    this.quotaStorageMb =
+      teacher.maxStorageBytes === null ? null : Math.round(teacher.maxStorageBytes / BYTES_PER_MB);
+    this.quotaEditId.set(teacher.id);
+  }
+
+  saveQuota(teacherProfileId: number): void {
+    // A number-input üresen null-t ad — az a "korlátlan". Negatívot a min="0"
+    // mellett itt is blokkolunk, a backend úgyis elutasítaná.
+    if ((this.quotaTaskSets ?? 0) < 0 || (this.quotaStorageMb ?? 0) < 0) return;
+
+    const maxStorageBytes = this.quotaStorageMb === null ? null : this.quotaStorageMb * BYTES_PER_MB;
+    this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes);
+    this.quotaEditId.set(null);
   }
 
   confirmSuspend(teacherProfileId: number, displayName: string): void {
