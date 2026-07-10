@@ -53,15 +53,17 @@ export class GroupStore {
     });
   }
 
-  update(id: number, request: CreateGroupRequest): void {
+  update(id: number, request: CreateGroupRequest, onSuccess?: () => void): void {
     this.mutate(this.service.update(id, request), (group) => {
       this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
+      if (onSuccess) onSuccess();
     });
   }
 
-  regenerateInvite(id: number): void {
+  regenerateInvite(id: number, onSuccess?: () => void): void {
     this.mutate(this.service.regenerateInvite(id), (group) => {
       this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
+      if (onSuccess) onSuccess();
     });
   }
 

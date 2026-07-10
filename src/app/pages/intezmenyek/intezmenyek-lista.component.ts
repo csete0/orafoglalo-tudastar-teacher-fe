@@ -2,59 +2,75 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { SchoolStore } from '../../services/school/school.store';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent } from '../../shared/icon/icon.component';
 
-/**
- * Placeholder-lista — a Fázis 8 építi ki a teljes UI-t (kártyák, iskola-
- * választó dizájn). A store és a valós HTTP-hívások már itt élesben mennek.
- */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmenyek-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, IconComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <h1 class="text-xl font-semibold mb-6">Intézményeim</h1>
+      <h1 class="page-title">Intézményeim</h1>
+      <p class="text-sm text-text-muted mt-1">Iskolák és szervezetek, ahol tanítasz</p>
+      <div class="hairline"></div>
 
-      @if (store.loading()) {
-        <p class="text-text-muted">Betöltés…</p>
-      }
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
 
-      <ul class="space-y-2 mb-8">
-        @for (school of store.schools(); track school.id) {
-          <li>
-            <a [routerLink]="['/intezmenyek', school.id]"
-              class="card-link flex justify-between items-center">
-              <span>{{ school.name }}</span>
-              <span class="text-sm text-text-muted">{{ school.myRole === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
-            </a>
-          </li>
-        }
-        @empty {
-          <li class="text-text-muted">Még nem tagja egyetlen intézménynek sem.</li>
-        }
-      </ul>
+      @if (store.loading() && store.schools().length === 0) {
+        <div class="space-y-2 mb-8">
+          <div class="skeleton h-20"></div>
+          <div class="skeleton h-20"></div>
+          <div class="skeleton h-20"></div>
+        </div>
+      } @else {
+        <ul class="space-y-3 mb-8">
+          @for (school of store.schools(); track school.id) {
+            <li>
+              <a [routerLink]="['/intezmenyek', school.id]"
+                class="card-link block group" [class]="'accent-' + (school.id % 4)">
+                <div class="accent-bar"></div>
+                <div class="p-4 flex items-center gap-3">
+                  <div class="icon-tile icon-tile-primary">
+                    <app-icon name="building" class="w-6 h-6 block" />
+                  </div>
+                  <span class="font-bold flex-1 truncate">{{ school.name }}</span>
+                  <span class="badge shrink-0" [class]="school.myRole === 'Admin' ? 'badge-primary' : 'badge-neutral'">
+                    {{ school.myRole === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
+                  <app-icon name="arrow-right"
+                    class="w-4 h-4 block text-text-muted transition-transform group-hover:translate-x-1 shrink-0" />
+                </div>
+              </a>
+            </li>
+          }
+          @empty {
+            <li class="flex flex-col items-center py-10 gap-3">
+              <div class="icon-tile icon-tile-neutral">
+                <app-icon name="building" class="w-6 h-6 block" />
+              </div>
+              <p class="font-semibold">Még nem tagja egyetlen intézménynek sem.</p>
+              <p class="text-sm text-text-muted">Hozz létre egyet, vagy csatlakozz meghívó kóddal.</p>
+            </li>
+          }
+        </ul>
+      }
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <form [formGroup]="createForm" (ngSubmit)="createSchool()" class="bg-bg-panel border border-border-default rounded-lg p-4 space-y-2">
-          <h2 class="font-medium">Új intézmény</h2>
-          <input formControlName="name" placeholder="Intézmény neve"
-            class="w-full rounded border border-border-default bg-bg-element px-3 py-2" />
-          <button type="submit" [disabled]="createForm.invalid"
-            class="rounded bg-primary hover:bg-primary-hover text-white px-3 py-1.5 disabled:opacity-50">
+        <form [formGroup]="createForm" (ngSubmit)="createSchool()" class="card p-5 space-y-2">
+          <h2 class="font-bold">Új intézmény</h2>
+          <input formControlName="name" placeholder="Intézmény neve" class="input" />
+          <button type="submit" [disabled]="createForm.invalid" class="btn btn-primary !px-3 !py-1.5">
             Létrehozás
           </button>
         </form>
 
-        <form [formGroup]="joinForm" (ngSubmit)="joinSchool()" class="bg-bg-panel border border-border-default rounded-lg p-4 space-y-2">
-          <h2 class="font-medium">Csatlakozás kóddal</h2>
-          <input formControlName="code" placeholder="Meghívó kód"
-            class="w-full rounded border border-border-default bg-bg-element px-3 py-2" />
-          <button type="submit" [disabled]="joinForm.invalid"
-            class="rounded bg-primary hover:bg-primary-hover text-white px-3 py-1.5 disabled:opacity-50">
+        <form [formGroup]="joinForm" (ngSubmit)="joinSchool()" class="card p-5 space-y-2">
+          <h2 class="font-bold">Csatlakozás kóddal</h2>
+          <input formControlName="code" placeholder="Meghívó kód" class="input" />
+          <button type="submit" [disabled]="joinForm.invalid" class="btn btn-primary !px-3 !py-1.5">
             Csatlakozás
           </button>
         </form>
@@ -64,6 +80,7 @@ import { SchoolStore } from '../../services/school/school.store';
 })
 export class IntezmenyekListaComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly toastService = inject(ToastService);
   readonly store = inject(SchoolStore);
 
   readonly createForm = this.fb.nonNullable.group({ name: ['', Validators.required] });
@@ -75,11 +92,17 @@ export class IntezmenyekListaComponent {
 
   createSchool(): void {
     if (this.createForm.invalid) return;
-    this.store.create({ name: this.createForm.getRawValue().name }, () => this.createForm.reset());
+    this.store.create({ name: this.createForm.getRawValue().name }, () => {
+      this.createForm.reset();
+      this.toastService.success('Intézmény létrehozva.');
+    });
   }
 
   joinSchool(): void {
     if (this.joinForm.invalid) return;
-    this.store.join({ code: this.joinForm.getRawValue().code }, () => this.joinForm.reset());
+    this.store.join({ code: this.joinForm.getRawValue().code }, () => {
+      this.joinForm.reset();
+      this.toastService.success('Sikeresen csatlakoztál az intézményhez.');
+    });
   }
 }

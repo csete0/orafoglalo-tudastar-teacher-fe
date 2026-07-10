@@ -3,6 +3,7 @@ import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { authInterceptor } from './auth.interceptor';
 import { AuthStore } from '../services/auth/store/auth.store';
+import { ToastService } from '../shared/toast/toast.service';
 
 describe('authInterceptor', () => {
   let httpClient: HttpClient;
@@ -105,5 +106,39 @@ describe('authInterceptor', () => {
 
     await promise;
     expect((error as { status: number }).status).toBe(401);
+  });
+
+  it('nem-GET hiba (nem 401) danger toastot lő a backend üzenetével', async () => {
+    const toastService = TestBed.inject(ToastService);
+    const dangerSpy = vi.spyOn(toastService, 'danger');
+
+    const promise = new Promise<void>((resolve) => {
+      httpClient.post('/api/schools', {}).subscribe({ error: () => resolve() });
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const req = httpMock.expectOne('/api/schools');
+    req.flush({ error: 'Az intézmény nem található.' }, { status: 400, statusText: 'Bad Request' });
+
+    await promise;
+    expect(dangerSpy).toHaveBeenCalledWith('Az intézmény nem található.');
+  });
+
+  it('GET hiba nem lő toastot (a store inline error-ja jeleníti meg)', async () => {
+    const toastService = TestBed.inject(ToastService);
+    const dangerSpy = vi.spyOn(toastService, 'danger');
+
+    const promise = new Promise<void>((resolve) => {
+      httpClient.get('/api/schools').subscribe({ error: () => resolve() });
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const req = httpMock.expectOne('/api/schools');
+    req.flush({ error: 'Nem található.' }, { status: 404, statusText: 'Not Found' });
+
+    await promise;
+    expect(dangerSpy).not.toHaveBeenCalled();
   });
 });

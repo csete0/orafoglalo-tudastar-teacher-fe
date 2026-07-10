@@ -5,6 +5,10 @@ import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-task
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { SnippetDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent, IconName } from '../../shared/icon/icon.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 const LANGUAGES: { id: number; name: string }[] = [
   { id: 2, name: 'Python' },
@@ -35,21 +39,25 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
-        <div class="flex justify-between items-start mb-6">
-          <div>
-            <h1 class="text-xl font-semibold">{{ detail.title }}</h1>
-            <p class="text-text-muted text-sm">{{ detail.taskCount }} feladat · {{ detail.isPublished ? 'Publikált' : 'Piszkozat' }}</p>
+        <div class="flex justify-between items-start mb-6 gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-2xl font-black tracking-tight">{{ detail.title }}</h1>
+              <span class="badge" [class]="detail.isPublished ? 'badge-success' : 'badge-warning'">
+                {{ detail.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
+            </div>
+            <p class="text-text-muted text-sm mt-1">{{ detail.taskCount }} feladat</p>
           </div>
-          <div class="flex gap-2 items-center">
+          <div class="flex gap-2 items-center shrink-0">
             @if (detail.isPublished) {
               <a [routerLink]="['/feladatsorok', detail.id, 'eredmenyek']" class="text-sm text-primary hover:underline">Eredmények</a>
             }
             <button (click)="publish(detail.id)" [disabled]="detail.isPublished || store.loading()"
-              class="rounded bg-primary hover:bg-primary-hover text-white px-4 py-2 disabled:opacity-50">
+              data-testid="publish-button" class="btn btn-primary">
               {{ detail.isPublished ? 'Publikálva' : 'Publikálás' }}
             </button>
           </div>
@@ -61,7 +69,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
         @if (store.publishResult(); as result) {
           @if (!result.success) {
-            <ul class="bg-bg-element border border-danger rounded-lg p-4 mb-6 text-sm text-danger space-y-1">
+            <ul class="bg-danger-subtle border border-danger/40 rounded-xl p-4 mb-6 text-sm text-danger space-y-1">
               @for (err of result.errors; track err) {
                 <li>{{ err }}</li>
               }
@@ -70,134 +78,158 @@ type SnippetDraft = Record<number, Record<number, string>>;
         }
 
         @if (!sqlFilesPaired()) {
-          <p class="bg-bg-element border border-warning rounded-lg p-3 mb-6 text-sm text-warning">
-            SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
-            SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.
+          <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 mb-6 text-sm text-warning flex items-start gap-2">
+            <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
+            <span>SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
+            SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.</span>
           </p>
         }
 
-        <!-- ── Feladatok ────────────────────────────────────────── -->
+        <!-- ── Feladatok, típusonként összecsukható blokkokban ─────── -->
         <section class="mb-8">
-          <h2 class="font-medium mb-3">Feladatok</h2>
+          <h2 class="font-bold mb-3">Feladatok</h2>
 
-          @for (task of detail.tasks; track task.id) {
-            <div class="bg-bg-panel border border-border-default rounded-lg p-4 mb-3">
-              <div class="flex justify-between items-start">
-                <button (click)="toggleTask(task.id)" class="text-left flex-1">
-                  <p class="font-medium">{{ task.taskOrder }}. {{ task.title }}</p>
-                  <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
-                </button>
-                <button (click)="deleteTask(detail.id, task.id)" class="text-sm text-danger hover:underline">Törlés</button>
-              </div>
+          @for (section of typeSections(); track section.id) {
+            <div class="card !rounded-xl mb-4 overflow-hidden">
+              <button (click)="toggleSection(section.id)"
+                class="w-full flex items-center justify-between gap-2 p-4 text-left group">
+                <span class="flex items-center gap-3 min-w-0">
+                  <div class="icon-tile shrink-0"
+                    [class]="section.isOther ? 'icon-tile-neutral' : (section.id === 6 ? 'icon-tile-primary' : 'icon-tile-secondary')">
+                    <app-icon [name]="section.icon" class="w-5 h-5 block" />
+                  </div>
+                  <span class="font-bold group-hover:text-primary transition-colors truncate">{{ section.label }}</span>
+                  <span class="badge badge-neutral shrink-0">{{ section.tasks.length }} db</span>
+                </span>
+                <app-icon name="chevron-down" class="w-5 h-5 block text-text-muted transition-transform shrink-0"
+                  [class.-rotate-90]="!isSectionExpanded(section.id)" />
+              </button>
 
-              @if (expandedTaskId() === task.id) {
-                <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
-                  <!-- Részfeladatok -->
-                  @for (solution of task.solutions; track solution.id) {
-                    <div class="bg-bg-element rounded p-3">
-                      <div class="flex justify-between items-start mb-2">
-                        <p class="text-sm font-medium">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
-                        <button (click)="deleteSolution(detail.id, solution.id)" class="text-sm text-danger hover:underline">Törlés</button>
+              @if (isSectionExpanded(section.id)) {
+                <div class="px-4 pb-4 space-y-3">
+                  @for (task of section.tasks; track task.id) {
+                    <div class="bg-bg-element rounded-xl p-4">
+                      <div class="flex justify-between items-start gap-2">
+                        <button (click)="toggleTask(task.id)" class="text-left flex-1 flex items-start gap-2 group">
+                          <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
+                            [class.-rotate-90]="expandedTaskId() !== task.id" />
+                          <span>
+                            <p class="font-medium group-hover:text-primary transition-colors">{{ task.taskOrder }}. {{ task.title }}</p>
+                            <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
+                          </span>
+                        </button>
+                        <button (click)="deleteTask(detail.id, task.id)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
                       </div>
-                      <p class="text-sm text-text-muted mb-2">{{ solution.description }}</p>
 
-                      <div class="grid grid-cols-2 gap-2">
-                        @for (lang of languages; track lang.id) {
-                          <div>
-                            <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                            <textarea rows="3"
-                              [ngModel]="draftCode(solution.id, lang.id)"
-                              (ngModelChange)="setDraftCode(solution.id, lang.id, $event)"
-                              class="w-full rounded border border-border-default bg-bg-panel px-2 py-1 text-xs font-mono"></textarea>
+                      @if (expandedTaskId() === task.id) {
+                        <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
+                          <!-- Részfeladatok -->
+                          @for (solution of task.solutions; track solution.id) {
+                            <div class="bg-bg-panel rounded-xl p-3">
+                              <div class="flex justify-between items-start mb-2">
+                                <p class="text-sm font-medium">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
+                                <button (click)="deleteSolution(detail.id, solution.id)" class="text-sm text-danger hover:underline">Törlés</button>
+                              </div>
+                              <p class="text-sm text-text-muted mb-2">{{ solution.description }}</p>
+
+                              <div class="grid grid-cols-2 gap-2">
+                                @for (lang of languages; track lang.id) {
+                                  <div>
+                                    <label class="text-xs text-text-muted">{{ lang.name }}</label>
+                                    <textarea rows="3"
+                                      [ngModel]="draftCode(solution.id, lang.id)"
+                                      (ngModelChange)="setDraftCode(solution.id, lang.id, $event)"
+                                      class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
+                                  </div>
+                                }
+                              </div>
+                              <button (click)="saveSnippets(detail.id, solution)"
+                                class="btn btn-primary mt-2 !px-3 !py-1">
+                                Kódrészletek mentése
+                              </button>
+                            </div>
+                          }
+
+                          <form (ngSubmit)="addSolution(detail.id, task.id)" class="flex gap-2 items-end">
+                            <div class="flex-1">
+                              <label class="text-xs text-text-muted">Új részfeladat szövege</label>
+                              <input [(ngModel)]="newSolutionDescription" name="newSolutionDescription"
+                                class="input !px-2 !py-1" />
+                            </div>
+                            <div class="w-20">
+                              <label class="text-xs text-text-muted">Pont</label>
+                              <input type="number" [(ngModel)]="newSolutionPoints" name="newSolutionPoints"
+                                class="input !px-2 !py-1" />
+                            </div>
+                            <button type="submit" [disabled]="!newSolutionDescription"
+                              class="btn btn-primary !px-3 !py-1.5">
+                              Hozzáadás
+                            </button>
+                          </form>
+
+                          <!-- Összevont megoldás -->
+                          <div class="bg-bg-panel rounded-xl p-3">
+                            <p class="text-sm font-medium mb-2">Összevont megoldás</p>
+                            <div class="grid grid-cols-2 gap-2">
+                              @for (lang of languages; track lang.id) {
+                                <div>
+                                  <label class="text-xs text-text-muted">{{ lang.name }}</label>
+                                  <textarea rows="3"
+                                    [ngModel]="draftCode(completeSolutionKey(task.id), lang.id)"
+                                    (ngModelChange)="setDraftCode(completeSolutionKey(task.id), lang.id, $event)"
+                                    class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
+                                </div>
+                              }
+                            </div>
+                            <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
+                              class="btn btn-primary mt-2 !px-3 !py-1">
+                              Összevont megoldás mentése
+                            </button>
                           </div>
-                        }
-                      </div>
-                      <button (click)="saveSnippets(detail.id, solution)"
-                        class="mt-2 rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1">
-                        Kódrészletek mentése
-                      </button>
-                    </div>
-                  }
-
-                  <form (ngSubmit)="addSolution(detail.id, task.id)" class="flex gap-2 items-end">
-                    <div class="flex-1">
-                      <label class="text-xs text-text-muted">Új részfeladat szövege</label>
-                      <input [(ngModel)]="newSolutionDescription" name="newSolutionDescription"
-                        class="w-full rounded border border-border-default bg-bg-element px-2 py-1 text-sm" />
-                    </div>
-                    <div class="w-20">
-                      <label class="text-xs text-text-muted">Pont</label>
-                      <input type="number" [(ngModel)]="newSolutionPoints" name="newSolutionPoints"
-                        class="w-full rounded border border-border-default bg-bg-element px-2 py-1 text-sm" />
-                    </div>
-                    <button type="submit" [disabled]="!newSolutionDescription"
-                      class="rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1.5 disabled:opacity-50">
-                      Hozzáadás
-                    </button>
-                  </form>
-
-                  <!-- Összevont megoldás -->
-                  <div class="bg-bg-element rounded p-3">
-                    <p class="text-sm font-medium mb-2">Összevont megoldás</p>
-                    <div class="grid grid-cols-2 gap-2">
-                      @for (lang of languages; track lang.id) {
-                        <div>
-                          <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                          <textarea rows="3"
-                            [ngModel]="draftCode(completeSolutionKey(task.id), lang.id)"
-                            (ngModelChange)="setDraftCode(completeSolutionKey(task.id), lang.id, $event)"
-                            class="w-full rounded border border-border-default bg-bg-panel px-2 py-1 text-xs font-mono"></textarea>
                         </div>
                       }
                     </div>
-                    <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
-                      class="mt-2 rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1">
-                      Összevont megoldás mentése
-                    </button>
-                  </div>
+                  } @empty {
+                    <p class="text-sm text-text-muted">Még nincs ilyen típusú feladat.</p>
+                  }
+
+                  @if (!section.isOther) {
+                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2">
+                      <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
+                      <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id"
+                        [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
+                      <textarea [(ngModel)]="newTaskDrafts[section.id].description" [attr.name]="'newTaskDescription-' + section.id"
+                        [ngModelOptions]="{standalone: true}" placeholder="Leírás" rows="2" class="input !bg-bg-panel !px-2 !py-1.5"></textarea>
+                      <div class="flex gap-2 items-end">
+                        <div>
+                          <label class="text-xs text-text-muted">Max pont</label>
+                          <input type="number" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
+                            [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
+                        </div>
+                        <button type="submit" [disabled]="!newTaskDrafts[section.id].title"
+                          class="btn btn-primary !px-3 !py-1.5">
+                          Hozzáadás
+                        </button>
+                      </div>
+                    </form>
+                  }
                 </div>
               }
             </div>
-          } @empty {
-            <p class="text-text-muted text-sm">Még nincs feladat.</p>
           }
-
-          <form (ngSubmit)="addTask(detail.id)" class="bg-bg-panel border border-border-default rounded-lg p-4 space-y-2">
-            <p class="font-medium text-sm">Új feladat</p>
-            <input [(ngModel)]="newTaskTitle" name="newTaskTitle" placeholder="Cím"
-              class="w-full rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm" />
-            <textarea [(ngModel)]="newTaskDescription" name="newTaskDescription" placeholder="Leírás" rows="2"
-              class="w-full rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm"></textarea>
-            <div class="flex gap-2 items-end">
-              <div>
-                <label class="text-xs text-text-muted">Max pont</label>
-                <input type="number" [(ngModel)]="newTaskMaxPoints" name="newTaskMaxPoints"
-                  class="rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm w-24" />
-              </div>
-              <div class="flex gap-3 text-sm">
-                @for (type of taskTypes; track type.id) {
-                  <label class="flex items-center gap-1">
-                    <input type="checkbox" [checked]="newTaskTypeIds.includes(type.id)" (change)="toggleTaskType(type.id)" />
-                    {{ type.label }}
-                  </label>
-                }
-              </div>
-              <button type="submit" [disabled]="!newTaskTitle || !newTaskDescription"
-                class="rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1.5 disabled:opacity-50">
-                Hozzáadás
-              </button>
-            </div>
-          </form>
         </section>
 
         <!-- ── Fájlok ───────────────────────────────────────────── -->
         <section>
-          <h2 class="font-medium mb-3">Fájlok</h2>
+          <h2 class="font-bold mb-3">Fájlok</h2>
           <ul class="space-y-2 mb-4">
             @for (file of detail.files; track file.id) {
-              <li class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-3 text-sm">
-                <span>{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
-                <div class="flex items-center gap-3">
+              <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
+                <span class="flex items-center gap-2 min-w-0">
+                  <app-icon name="document" class="w-4 h-4 block text-text-muted shrink-0" />
+                  <span class="truncate">{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
+                </span>
+                <div class="flex items-center gap-3 shrink-0">
                   <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
                   <button (click)="deleteFile(detail.id, file.id)" class="text-danger hover:underline">Törlés</button>
                 </div>
@@ -207,7 +239,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
           <div class="grid grid-cols-2 gap-3">
             @for (kindOption of fileKinds; track kindOption.kind) {
-              <div class="bg-bg-panel border border-border-default rounded-lg p-3">
+              <div class="card !rounded-xl p-3">
                 <label class="text-sm block mb-1">{{ kindOption.label }}</label>
                 <input type="file" [accept]="kindOption.accept"
                   (change)="uploadFile(detail.id, kindOption.kind, $event)" class="text-sm" />
@@ -217,7 +249,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         </section>
       </div>
     } @else if (store.loading()) {
-      <p class="text-text-muted text-center py-10">Betöltés…</p>
+      <app-local-spinner />
     } @else {
       <p class="text-danger text-center py-10">{{ store.error() }}</p>
     }
@@ -226,6 +258,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
 export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly confirmService = inject(ConfirmService);
+  private readonly toastService = inject(ToastService);
   readonly store = inject(TeacherTaskSetStore);
   private readonly schoolStore = inject(SchoolStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
@@ -242,13 +276,62 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // Ezért bearer tokennel lekért blob URL-re oldjuk fel, fileId -> blob URL.
   private readonly resolvedDownloadUrls = signal<Record<string, string>>({});
 
-  newTaskTitle = '';
-  newTaskDescription = '';
-  newTaskMaxPoints = 10;
-  newTaskTypeIds: number[] = [];
+  /** Típusonként (Programozás/SQL) külön "Új feladat" űrlap-draft — a szerkesztő a feladatokat
+   *  típus szerint csoportosítja, összecsukható blokkokban (nincs jelenleg vegyes-típusú
+   *  feladatsor-igény, ezért a típus a blokk szintjén implicit, nem választógomb). */
+  newTaskDrafts: Record<number, { title: string; description: string; maxPoints: number }> = Object.fromEntries(
+    TASK_TYPES.map((t) => [t.id, { title: '', description: '', maxPoints: 10 }]),
+  );
+
+  /** Alapból mind kinyitva — a tanár azonnal lássa a meglévő feladatait, ne kelljen
+   *  minden megnyitáskor kattintania. */
+  readonly expandedSections = signal<Set<number>>(new Set([...TASK_TYPES.map((t) => t.id), 0]));
 
   newSolutionDescription = '';
   newSolutionPoints = 5;
+
+  /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
+   *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
+   *  (pl. a checkbox→radio váltás előtti adatok) — ezekhez nincs típus-scope-olt hozzáadó űrlap. */
+  readonly typeSections = computed(() => {
+    const detail = this.store.selectedDetail();
+    if (!detail) return [];
+
+    const sections = this.taskTypes.map((type) => ({
+      id: type.id,
+      label: type.label,
+      icon: (type.id === 6 ? 'code' : 'database') as IconName,
+      isOther: false,
+      tasks: detail.tasks.filter((t) => t.taskTypeIds.includes(type.id)),
+    }));
+
+    const categorizedTaskIds = new Set(sections.flatMap((s) => s.tasks.map((t) => t.id)));
+    const otherTasks = detail.tasks.filter((t) => !categorizedTaskIds.has(t.id));
+    if (otherTasks.length > 0) {
+      sections.push({
+        id: 0,
+        label: 'Egyéb',
+        icon: 'clipboard-list' as IconName,
+        isOther: true,
+        tasks: otherTasks,
+      });
+    }
+
+    return sections;
+  });
+
+  toggleSection(id: number): void {
+    this.expandedSections.update((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  isSectionExpanded(id: number): boolean {
+    return this.expandedSections().has(id);
+  }
 
   /** SQL-kódrészlet esetén a publikáláshoz create.sql + create_lite.sql pár kell. */
   readonly sqlFilesPaired = computed(() => {
@@ -318,12 +401,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.expandedTaskId.set(this.expandedTaskId() === taskId ? null : taskId);
   }
 
-  toggleTaskType(typeId: number): void {
-    this.newTaskTypeIds = this.newTaskTypeIds.includes(typeId)
-      ? this.newTaskTypeIds.filter((id) => id !== typeId)
-      : [...this.newTaskTypeIds, typeId];
-  }
-
   /** Negatív kulcs, hogy ne ütközzön a valódi (pozitív) solutionId-kal. */
   completeSolutionKey(taskId: number): number {
     return -taskId;
@@ -350,73 +427,101 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   saveSnippets(taskSetId: number, solution: TeacherSolutionDto): void {
     const snippets = this.snippetsFromDraft(solution.id);
     if (snippets.length === 0) return;
-    this.store.upsertSolutionSnippets(taskSetId, solution.id, snippets);
+    this.store.upsertSolutionSnippets(taskSetId, solution.id, snippets, () =>
+      this.toastService.success('Kódrészletek mentve.'),
+    );
   }
 
   saveCompleteSolutionSnippets(taskSetId: number, task: TeacherTaskDto): void {
     const snippets = this.snippetsFromDraft(this.completeSolutionKey(task.id));
     if (snippets.length === 0) return;
-    this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets);
+    this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets, () =>
+      this.toastService.success('Összevont megoldás mentve.'),
+    );
   }
 
-  addTask(taskSetId: number): void {
-    if (!this.newTaskTitle.trim()) return;
-    this.store.addTask(taskSetId, {
-      title: this.newTaskTitle.trim(),
-      description: this.newTaskDescription.trim(),
-      maxPoints: this.newTaskMaxPoints,
-      taskTypeIds: this.newTaskTypeIds,
+  addTask(taskSetId: number, typeId: number): void {
+    const draft = this.newTaskDrafts[typeId];
+    if (!draft?.title.trim()) return;
+    this.store.addTask(
+      taskSetId,
+      {
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        maxPoints: draft.maxPoints,
+        taskTypeIds: [typeId],
+      },
+      () => this.toastService.success('Feladat hozzáadva.'),
+    );
+    this.newTaskDrafts[typeId] = { title: '', description: '', maxPoints: 10 };
+  }
+
+  async deleteTask(taskSetId: number, taskId: number): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan törlöd a feladatot a részfeladataival együtt?',
+      danger: true,
+      confirmLabel: 'Törlés',
     });
-    this.newTaskTitle = '';
-    this.newTaskDescription = '';
-    this.newTaskMaxPoints = 10;
-    this.newTaskTypeIds = [];
-  }
-
-  deleteTask(taskSetId: number, taskId: number): void {
-    if (!confirm('Biztosan törlöd a feladatot a részfeladataival együtt?')) return;
-    this.store.deleteTask(taskSetId, taskId);
+    if (!ok) return;
+    this.store.deleteTask(taskSetId, taskId, () => this.toastService.success('Feladat törölve.'));
   }
 
   addSolution(taskSetId: number, taskId: number): void {
     if (!this.newSolutionDescription.trim()) return;
-    this.store.addSolution(taskSetId, taskId, {
-      description: this.newSolutionDescription.trim(),
-      points: this.newSolutionPoints,
-    });
+    this.store.addSolution(
+      taskSetId,
+      taskId,
+      {
+        description: this.newSolutionDescription.trim(),
+        points: this.newSolutionPoints,
+      },
+      () => this.toastService.success('Részfeladat hozzáadva.'),
+    );
     this.newSolutionDescription = '';
     this.newSolutionPoints = 5;
   }
 
-  deleteSolution(taskSetId: number, solutionId: number): void {
-    if (!confirm('Biztosan törlöd a részfeladatot?')) return;
-    this.store.deleteSolution(taskSetId, solutionId);
+  async deleteSolution(taskSetId: number, solutionId: number): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan törlöd a részfeladatot?',
+      danger: true,
+      confirmLabel: 'Törlés',
+    });
+    if (!ok) return;
+    this.store.deleteSolution(taskSetId, solutionId, () => this.toastService.success('Részfeladat törölve.'));
   }
 
   uploadFile(taskSetId: number, kind: TeacherFileKind, event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.store.uploadFile(taskSetId, kind, file);
+    this.store.uploadFile(taskSetId, kind, file, undefined, () => this.toastService.success('Fájl feltöltve.'));
     input.value = '';
   }
 
-  deleteFile(taskSetId: number, fileId: string): void {
-    if (!confirm('Biztosan törlöd a fájlt?')) return;
-    this.store.deleteFile(taskSetId, fileId);
+  async deleteFile(taskSetId: number, fileId: string): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan törlöd a fájlt?',
+      danger: true,
+      confirmLabel: 'Törlés',
+    });
+    if (!ok) return;
+    this.store.deleteFile(taskSetId, fileId, () => this.toastService.success('Fájl törölve.'));
   }
 
   fileKindLabel(kind: TeacherFileKind): string {
     return this.fileKinds.find((k) => k.kind === kind)?.label ?? kind;
   }
 
-  publish(taskSetId: number): void {
+  async publish(taskSetId: number): Promise<void> {
     if (this.schoolStore.schools().length > 0) {
-      const confirmed = confirm(
-        'Publikálás után az intézményed MINDEN iskolai csoportjának diákjai is elérik ezt a feladatsort (tartalom-megosztás). Folytatod?',
-      );
+      const confirmed = await this.confirmService.ask({
+        message:
+          'Publikálás után az intézményed MINDEN iskolai csoportjának diákjai is elérik ezt a feladatsort (tartalom-megosztás). Folytatod?',
+        confirmLabel: 'Publikálás',
+      });
       if (!confirmed) return;
     }
-    this.store.publish(taskSetId);
+    this.store.publish(taskSetId, () => this.toastService.success('Feladatsor publikálva.'));
   }
 }

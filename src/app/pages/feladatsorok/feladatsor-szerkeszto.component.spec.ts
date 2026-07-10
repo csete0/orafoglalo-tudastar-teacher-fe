@@ -6,6 +6,7 @@ import { FeladatsorSzerkesztoComponent } from './feladatsor-szerkeszto.component
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
@@ -35,6 +36,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
   };
   let schoolStoreMock: { schools: ReturnType<typeof signal<unknown[]>>; loadMine: ReturnType<typeof vi.fn> };
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
+  let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -50,6 +52,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       resolveUrl: vi.fn((url: string) => of(`blob:resolved-${url}`)),
       revoke: vi.fn(),
     };
+    confirmServiceMock = { ask: vi.fn().mockResolvedValue(false), pending: signal(null), resolve: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [FeladatsorSzerkesztoComponent],
@@ -57,6 +60,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
         { provide: TeacherTaskSetStore, useValue: taskSetStoreMock },
         { provide: SchoolStore, useValue: schoolStoreMock },
         { provide: AuthorizedFileService, useValue: authorizedFileServiceMock },
+        { provide: ConfirmService, useValue: confirmServiceMock },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } },
@@ -161,7 +165,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
 
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button.bg-primary.hover\\:bg-primary-hover');
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('[data-testid="publish-button"]');
     expect(button.disabled).toBe(true);
     expect(button.textContent).toContain('Publikálva');
   });
@@ -172,26 +176,23 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
 
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button.bg-primary.hover\\:bg-primary-hover');
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('[data-testid="publish-button"]');
     expect(button.disabled).toBe(false);
     expect(button.textContent).toContain('Publikálás');
   });
 
-  it('publish hívás előtt intézményi tagságnál megerősítést kér (confirm)', () => {
+  it('publish hívás előtt intézményi tagságnál megerősítést kér (ConfirmService)', async () => {
     configure(makeDetail({ isPublished: false }));
     schoolStoreMock.schools.set([{ id: 1 }]);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance;
 
-    component.publish(1);
+    await component.publish(1);
 
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
-
-    confirmSpy.mockRestore();
   });
 
   it('a "Megnyitás" link a bearer tokennel lekért blob URL-re mutat, nem a nyers (401-et adó) API URL-re', () => {

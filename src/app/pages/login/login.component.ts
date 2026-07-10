@@ -4,16 +4,20 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { environment } from '../../../environments/environment';
+import { IconComponent } from '../../shared/icon/icon.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, IconComponent],
   template: `
     <div class="min-h-screen flex items-center justify-center px-4">
-      <div class="w-full max-w-sm bg-bg-panel border border-border-default rounded-lg p-6">
-        <h1 class="text-xl font-semibold mb-1">Tanári bejelentkezés</h1>
+      <div class="w-full max-w-sm card p-8 shadow-md">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-sm mb-4">
+          <img src="assets/patricks/patricks_logo.png" alt="" class="w-7 h-7 object-contain" />
+        </div>
+        <h1 class="text-2xl font-black tracking-tight mb-1">Tanári bejelentkezés</h1>
         <p class="text-sm text-text-muted mb-6">
           Ugyanazzal a fiókkal jelentkezz be, amivel a
           <a [href]="studentAppUrl" class="text-primary hover:underline">patricks.hu</a>-n regisztráltál.
@@ -22,21 +26,26 @@ import { environment } from '../../../environments/environment';
         <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
           <div>
             <label class="block text-sm mb-1" for="email">Email</label>
-            <input id="email" type="email" formControlName="email"
-              class="w-full rounded border border-border-default bg-bg-element px-3 py-2" />
+            <input id="email" type="email" formControlName="email" class="input" />
           </div>
           <div>
             <label class="block text-sm mb-1" for="password">Jelszó</label>
-            <input id="password" type="password" formControlName="password"
-              class="w-full rounded border border-border-default bg-bg-element px-3 py-2" />
+            <div class="relative">
+              <input id="password" [type]="hidePassword() ? 'password' : 'text'" formControlName="password"
+                class="input !pr-10" />
+              <button type="button" (click)="hidePassword.set(!hidePassword())"
+                [attr.aria-label]="hidePassword() ? 'Jelszó megjelenítése' : 'Jelszó elrejtése'"
+                class="absolute right-0 top-0 h-full px-3 flex items-center text-text-muted hover:text-text-primary transition-colors">
+                <app-icon [name]="hidePassword() ? 'eye' : 'eye-off'" class="w-5 h-5 block" />
+              </button>
+            </div>
           </div>
 
           @if (errorMessage()) {
             <p class="text-sm text-danger">{{ errorMessage() }}</p>
           }
 
-          <button type="submit" [disabled]="form.invalid || loading()"
-            class="w-full rounded bg-primary hover:bg-primary-hover text-white py-2 disabled:opacity-50">
+          <button type="submit" [disabled]="form.invalid || loading()" class="btn btn-primary w-full">
             {{ loading() ? 'Belépés…' : 'Belépés' }}
           </button>
         </form>
@@ -60,6 +69,8 @@ export class LoginComponent {
   readonly errorMessage = computed(() => this.authStore.error()?.message ?? null);
 
   private returnUrl = '/dashboard';
+
+  readonly hidePassword = signal(true);
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],

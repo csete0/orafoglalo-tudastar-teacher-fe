@@ -2,24 +2,30 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminApplicationStore } from '../../services/admin/admin-application.store';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent } from '../../shared/icon/icon.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-admin-jelentkezesek',
   standalone: true,
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
-      <h1 class="text-xl font-semibold mb-4">Tanári jelentkezések</h1>
+      <h1 class="page-title">Tanári jelentkezések</h1>
+      <p class="text-sm text-text-muted mt-1">Beérkezett tanári hozzáférés-kérelmek bírálata</p>
+      <div class="hairline"></div>
 
-      <div class="flex gap-2 mb-6 text-sm">
+      <div class="flex gap-2 mb-6 text-sm flex-wrap">
         @for (option of statusOptions; track option.value) {
           <button (click)="store.setStatusFilter(option.value)"
-            class="px-3 py-1 rounded border"
+            class="px-3 py-1.5 rounded-lg border font-semibold transition-colors"
             [class.bg-primary]="store.statusFilter() === option.value"
             [class.text-white]="store.statusFilter() === option.value"
             [class.border-primary]="store.statusFilter() === option.value"
-            [class.border-border-default]="store.statusFilter() !== option.value">
+            [class.border-border-default]="store.statusFilter() !== option.value"
+            [class.text-text-muted]="store.statusFilter() !== option.value">
             {{ option.label }}
           </button>
         }
@@ -29,12 +35,12 @@ import { AdminApplicationStore } from '../../services/admin/admin-application.st
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
       @if (store.loading()) {
-        <p class="text-text-muted">Betöltés…</p>
+        <app-local-spinner />
       }
 
       <ul class="space-y-3">
         @for (application of store.applications(); track application.id) {
-          <li class="bg-bg-panel border border-border-default rounded-lg p-4">
+          <li class="card p-4">
             <div class="flex justify-between items-start mb-2">
               <div>
                 <p class="font-medium">{{ application.applicantName }}</p>
@@ -51,18 +57,18 @@ import { AdminApplicationStore } from '../../services/admin/admin-application.st
               @if (rejectingId() === application.id) {
                 <div class="flex gap-2 items-start mt-2">
                   <input [(ngModel)]="rejectReason" placeholder="Indoklás (opcionális)"
-                    class="flex-1 rounded border border-border-default bg-bg-element px-2 py-1 text-sm" />
+                    class="input flex-1 !px-2 !py-1" />
                   <button (click)="confirmReject(application.id)" class="text-sm text-danger px-2 py-1">Megerősítés</button>
                   <button (click)="cancelReject()" class="text-sm text-text-muted px-2 py-1">Mégse</button>
                 </div>
               } @else {
                 <div class="flex gap-2 mt-2">
-                  <button (click)="store.approve(application.id)"
-                    class="rounded bg-success text-white text-sm px-3 py-1.5">
+                  <button (click)="approve(application.id)"
+                    class="btn !bg-success !text-white !px-3 !py-1.5">
                     Elfogadás
                   </button>
                   <button (click)="startReject(application.id)"
-                    class="rounded border border-danger text-danger text-sm px-3 py-1.5">
+                    class="btn btn-danger !px-3 !py-1.5">
                     Elutasítás
                   </button>
                 </div>
@@ -72,7 +78,14 @@ import { AdminApplicationStore } from '../../services/admin/admin-application.st
             }
           </li>
         } @empty {
-          <li class="text-text-muted">Nincs a szűrésnek megfelelő jelentkezés.</li>
+          @if (!store.loading()) {
+            <li class="flex flex-col items-center py-10 gap-3">
+              <div class="icon-tile icon-tile-neutral">
+                <app-icon name="inbox" class="w-6 h-6 block" />
+              </div>
+              <p class="font-semibold">Nincs a szűrésnek megfelelő jelentkezés.</p>
+            </li>
+          }
         }
       </ul>
     </div>
@@ -80,6 +93,7 @@ import { AdminApplicationStore } from '../../services/admin/admin-application.st
 })
 export class AdminJelentkezesekComponent {
   readonly store = inject(AdminApplicationStore);
+  private readonly toastService = inject(ToastService);
 
   readonly statusOptions = [
     { value: 'pending' as const, label: 'Elbírálásra vár' },
@@ -104,7 +118,14 @@ export class AdminJelentkezesekComponent {
     this.rejectingId.set(null);
   }
 
+  approve(id: number): void {
+    this.store.approve(id, () => this.toastService.success('Jelentkezés elfogadva.'));
+  }
+
   confirmReject(id: number): void {
-    this.store.reject(id, { reason: this.rejectReason || undefined }, () => this.rejectingId.set(null));
+    this.store.reject(id, { reason: this.rejectReason || undefined }, () => {
+      this.rejectingId.set(null);
+      this.toastService.success('Jelentkezés elutasítva.');
+    });
   }
 }

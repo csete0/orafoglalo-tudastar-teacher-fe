@@ -42,7 +42,7 @@ export class AdminTeacherStore {
       });
   }
 
-  setActive(teacherProfileId: number, isActive: boolean): void {
+  setActive(teacherProfileId: number, isActive: boolean, onSuccess?: () => void): void {
     this._error.set(null);
 
     this.service
@@ -53,12 +53,18 @@ export class AdminTeacherStore {
           this._teachers.update((list) =>
             list.map((t) => (t.id === teacherProfileId ? { ...t, isActive } : t)),
           );
+          if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.error ?? 'A módosítás sikertelen.'),
       });
   }
 
-  setQuota(teacherProfileId: number, maxTaskSets: number | null, maxStorageBytes: number | null): void {
+  setQuota(
+    teacherProfileId: number,
+    maxTaskSets: number | null,
+    maxStorageBytes: number | null,
+    onSuccess?: () => void,
+  ): void {
     // Hibakezelés szándékosan nincs: a backend OrafoglaloException-t dob
     // (negatív érték / ismeretlen profil), azt az interceptor kezeli globálisan.
     this.service
@@ -68,6 +74,7 @@ export class AdminTeacherStore {
         this._teachers.update((list) =>
           list.map((t) => (t.id === teacherProfileId ? { ...t, maxTaskSets, maxStorageBytes } : t)),
         );
+        if (onSuccess) onSuccess();
       });
   }
 
@@ -95,7 +102,7 @@ export class AdminTeacherStore {
       });
   }
 
-  takedownTaskSet(taskSetId: number): void {
+  takedownTaskSet(taskSetId: number, onSuccess?: () => void): void {
     this._error.set(null);
 
     this.service
@@ -106,6 +113,7 @@ export class AdminTeacherStore {
           this._taskSets.update((list) =>
             list.map((ts) => (ts.id === taskSetId ? { ...ts, isPublished: false } : ts)),
           );
+          if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.error ?? 'A visszavonás sikertelen.'),
       });

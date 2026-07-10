@@ -7,6 +7,7 @@ describe('AppComponent', () => {
   let authStoreMock: {
     isAuthenticated: ReturnType<typeof vi.fn>;
     hasAdminRole: ReturnType<typeof vi.fn>;
+    currentUser: ReturnType<typeof vi.fn>;
     logout: ReturnType<typeof vi.fn>;
   };
 
@@ -14,6 +15,14 @@ describe('AppComponent', () => {
     authStoreMock = {
       isAuthenticated: vi.fn().mockReturnValue(false),
       hasAdminRole: vi.fn().mockReturnValue(false),
+      currentUser: vi.fn().mockReturnValue({
+        id: 1,
+        userName: 'teszt@example.com',
+        email: 'teszt@example.com',
+        firstName: 'Elek',
+        lastName: 'Teszt',
+        roles: ['teacher'],
+      }),
       logout: vi.fn(),
     };
 
@@ -57,5 +66,16 @@ describe('AppComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('nav').textContent).toContain('Jelentkezések');
+  });
+
+  it('a profil-chip monogramja magyar sorrendben: vezetéknév + keresztnév kezdőbetű', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const monogram = fixture.nativeElement.querySelector('[data-testid="profile-monogram"]');
+    expect(monogram).toBeTruthy();
+    expect(monogram.textContent.trim()).toBe('TE');
   });
 });

@@ -32,14 +32,18 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.waitForURL(/\/feladatsorok\/\d+\/szerkesztes/, { timeout: 15000 });
 
-  await teacherPage.locator('[name="newTaskTitle"]').fill('Feladat');
-  await teacherPage.locator('[name="newTaskDescription"]').fill('Feladat leírása.');
-  await teacherPage.getByRole('button', { name: 'Hozzáadás' }).click();
+  // Típusonként külön, összecsukható szekció + saját "Új feladat" űrlap —
+  // a típus itt lényegtelen, a Programozás blokkot (id=6) használjuk.
+  await teacherPage.locator('[name="newTaskTitle-6"]').fill('Feladat');
+  await teacherPage.locator('[name="newTaskDescription-6"]').fill('Feladat leírása.');
+  const taskAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-6"]') });
+  await taskAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
   await expect(teacherPage.getByText('1. Feladat')).toBeVisible({ timeout: 15000 });
   await teacherPage.getByText('1. Feladat').click();
 
   await teacherPage.locator('[name="newSolutionDescription"]').fill('Részfeladat');
-  await teacherPage.getByRole('button', { name: 'Hozzáadás' }).nth(0).click();
+  const solutionAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newSolutionDescription"]') });
+  await solutionAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
 
   const saveSnippetsButton = teacherPage.getByRole('button', { name: 'Kódrészletek mentése' });
   // Python az első nyelv a rácsban (nem igényel fájl-párosítást, mint az SQL) —

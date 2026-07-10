@@ -90,7 +90,7 @@ export class TeacherTaskSetStore {
     });
   }
 
-  publish(id: number): void {
+  publish(id: number, onSuccess?: () => void): void {
     this._loading.set(true);
     this._error.set(null);
 
@@ -104,50 +104,53 @@ export class TeacherTaskSetStore {
       .subscribe({
         next: (result) => {
           this._publishResult.set(result);
-          if (result.success) this.loadDetail(id);
+          if (result.success) {
+            this.loadDetail(id);
+            if (onSuccess) onSuccess();
+          }
         },
         error: (err) => this._error.set(err.error?.error ?? 'A publikálás sikertelen.'),
       });
   }
 
-  addTask(taskSetId: number, request: CreateTeacherTaskRequest): void {
-    this.mutateAndReload(this.service.addTask(taskSetId, request), taskSetId);
+  addTask(taskSetId: number, request: CreateTeacherTaskRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.addTask(taskSetId, request), taskSetId, onSuccess);
   }
 
   updateTask(taskSetId: number, taskId: number, request: CreateTeacherTaskRequest): void {
     this.mutateAndReload(this.service.updateTask(taskId, request), taskSetId);
   }
 
-  deleteTask(taskSetId: number, taskId: number): void {
-    this.mutateAndReload(this.service.deleteTask(taskId), taskSetId);
+  deleteTask(taskSetId: number, taskId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.deleteTask(taskId), taskSetId, onSuccess);
   }
 
-  addSolution(taskSetId: number, taskId: number, request: CreateTeacherSolutionRequest): void {
-    this.mutateAndReload(this.service.addSolution(taskId, request), taskSetId);
+  addSolution(taskSetId: number, taskId: number, request: CreateTeacherSolutionRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.addSolution(taskId, request), taskSetId, onSuccess);
   }
 
   updateSolution(taskSetId: number, solutionId: number, request: CreateTeacherSolutionRequest): void {
     this.mutateAndReload(this.service.updateSolution(solutionId, request), taskSetId);
   }
 
-  deleteSolution(taskSetId: number, solutionId: number): void {
-    this.mutateAndReload(this.service.deleteSolution(solutionId), taskSetId);
+  deleteSolution(taskSetId: number, solutionId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.deleteSolution(solutionId), taskSetId, onSuccess);
   }
 
-  upsertSolutionSnippets(taskSetId: number, solutionId: number, snippets: SnippetDto[]): void {
-    this.mutateAndReload(this.service.upsertSolutionSnippets(solutionId, snippets), taskSetId);
+  upsertSolutionSnippets(taskSetId: number, solutionId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.upsertSolutionSnippets(solutionId, snippets), taskSetId, onSuccess);
   }
 
-  upsertCompleteSolutionSnippets(taskSetId: number, taskId: number, snippets: SnippetDto[]): void {
-    this.mutateAndReload(this.service.upsertCompleteSolutionSnippets(taskId, snippets), taskSetId);
+  upsertCompleteSolutionSnippets(taskSetId: number, taskId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.upsertCompleteSolutionSnippets(taskId, snippets), taskSetId, onSuccess);
   }
 
-  uploadFile(taskSetId: number, kind: string, file: File, taskId?: number): void {
-    this.mutateAndReload(this.service.uploadFile(taskSetId, kind, file, taskId), taskSetId);
+  uploadFile(taskSetId: number, kind: string, file: File, taskId?: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.uploadFile(taskSetId, kind, file, taskId), taskSetId, onSuccess);
   }
 
-  deleteFile(taskSetId: number, fileId: string): void {
-    this.mutateAndReload(this.service.deleteFile(fileId), taskSetId);
+  deleteFile(taskSetId: number, fileId: string, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.deleteFile(fileId), taskSetId, onSuccess);
   }
 
   clearError(): void {
@@ -174,7 +177,10 @@ export class TeacherTaskSetStore {
       });
   }
 
-  private mutateAndReload<T>(observable: Observable<T>, taskSetId: number): void {
-    this.mutate(observable, () => this.loadDetail(taskSetId));
+  private mutateAndReload<T>(observable: Observable<T>, taskSetId: number, onSuccess?: () => void): void {
+    this.mutate(observable, () => {
+      this.loadDetail(taskSetId);
+      if (onSuccess) onSuccess();
+    });
   }
 }

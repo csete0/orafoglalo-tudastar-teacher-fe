@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
-/* Egyszerű, világos alapú felület — belső eszköz, nincs márka-igény.
-   A diák-app "void" sötét témáját szándékosan nem másoltuk (kisebb kör),
-   de a vizuális nyelvéből (lekerekítés, árnyék, hover-lift, gradiens
-   logó-csempe) átvettünk néhány elemet, hogy egy termékcsaládnak tűnjön.
+/* Világos alapú felület — belső eszköz, nincs márka-igény. A diák-app
+   "void" sötét témáját szándékosan nem vettük át (user-döntés, 2026-07-10:
+   marad a világos + OS-szintű dark), de a vizuális nyelvét (kártya-idióma
+   akcent-sávval és ikon-csempével, badge-ek, hover-lift, gradiens
+   logó-csempe, font-black címek) igen, hogy egy termékcsaládnak tűnjön.
 
    FONTOS: Tailwind v4-ben a szín-utility-k (text-danger, bg-primary, …)
    CSAK a @theme blokkban definiált --color-* változókból generálódnak —
@@ -19,15 +20,26 @@
 
   --color-primary: #2F81F7;
   --color-primary-hover: #1F6FEB;
+  /* Dekoratív másodlagos szín (kártya-akcent rotációhoz) — GitHub light lila */
+  --color-secondary: #8250DF;
 
   --color-success: #1A7F37;
   --color-danger: #CF222E;
   --color-warning: #9A6700;
 
+  /* -subtle variánsok: ikon-csempék, badge-hátterek, fókusz-gyűrű */
+  --color-primary-subtle: rgba(47, 129, 247, 0.10);
+  --color-secondary-subtle: rgba(130, 80, 223, 0.10);
+  --color-success-subtle: rgba(26, 127, 55, 0.10);
+  --color-danger-subtle: rgba(207, 34, 46, 0.10);
+  --color-warning-subtle: rgba(154, 103, 0, 0.10);
+
   --color-text-primary: #1F2328;
   --color-text-muted: #59636E;
 
   --color-border-default: #D0D7DE;
+  /* Hover-lift kártyák erősebb kerete */
+  --color-border-strong: #AFB8C1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,10 +49,25 @@
     --color-bg-element: #1C2128;
     --color-bg-elevated: #262C36;
 
+    --color-secondary: #A371F7;
+
+    /* A világos szemantikus színek (#CF222E, #1A7F37, #9A6700) sötét
+       alapon olvashatatlanok — GitHub-dark megfelelőik: */
+    --color-success: #3FB950;
+    --color-danger: #F85149;
+    --color-warning: #D29922;
+
+    --color-primary-subtle: rgba(47, 129, 247, 0.15);
+    --color-secondary-subtle: rgba(163, 113, 247, 0.15);
+    --color-success-subtle: rgba(63, 185, 80, 0.15);
+    --color-danger-subtle: rgba(248, 81, 73, 0.15);
+    --color-warning-subtle: rgba(210, 153, 34, 0.15);
+
     --color-text-primary: #E6EDF3;
     --color-text-muted: #8B949E;
 
     --color-border-default: #30363D;
+    --color-border-strong: #6E7681;
   }
 }
 
@@ -51,8 +78,7 @@ body {
 
 /* Tailwind v4 preflight-ja (v3-tól eltérően) NEM állítja be a
    cursor: pointer-t <button>-ökön — a diák-app ezt osztályonként, kézzel
-   pótolja, itt egy globális szabállyal oldjuk meg, mert nincs a diák-app
-   szintű, data-theme-enkénti disabled-state komplexitás. */
+   pótolja, itt egy globális szabállyal oldjuk meg. */
 @layer base {
   button, a, [role="button"] {
     cursor: pointer;
@@ -62,16 +88,93 @@ body {
   }
 }
 
-/* Kártya-link idióma: lista-oldalakon egy egész kártya kattintható
-   navigációs cél. A diák-app hover-lift+árnyék mintáját véve, de a
-   letisztultabb rounded-lg-t megtartva (a diák-app rounded-2xl-je túl
-   kerek lenne egy sűrű admin-táblázatos UI-hoz). */
+/* Közös komponens-osztályok — a diák-app vizuális idiómáinak világos-téma
+   adaptációi. A btn/badge/icon-tile variánsok szándékosan NEM @apply-olják
+   az alap-osztályukat (Tailwind v4-ben a custom utility @apply-a másik
+   custom utility-ben sorrend-érzékeny) — a HTML-ben a két osztály együtt
+   használandó: class="btn btn-primary". */
 @layer components {
+  /* Panel-kártya (rounded-2xl a diák-app mintájára) */
+  .card {
+    @apply bg-bg-panel border border-border-default rounded-2xl;
+  }
+
+  /* Kattintható kártya hover-lifttel: lista-oldalakon egy egész kártya a
+     navigációs cél. Az overflow-hidden az .accent-bar felső csík miatt kell. */
   .card-link {
-    @apply bg-bg-panel border border-border-default rounded-lg p-4 transition-all duration-200;
+    @apply bg-bg-panel border border-border-default rounded-2xl overflow-hidden transition-all duration-200;
   }
   .card-link:hover {
-    @apply border-primary bg-bg-elevated shadow-sm;
+    @apply border-border-strong bg-bg-elevated shadow-md;
     transform: translateY(-2px);
+  }
+
+  /* Felső akcent-csík — a szülő kártyán .accent-{0..3} rotáció (id % 4) */
+  .accent-bar {
+    @apply h-1 w-full;
+  }
+  .accent-0 .accent-bar { background: var(--color-primary); }
+  .accent-1 .accent-bar { background: var(--color-secondary); }
+  .accent-2 .accent-bar { background: var(--color-success); }
+  .accent-3 .accent-bar { background: var(--color-warning); }
+
+  /* 44px ikon-csempe (subtle háttér + szemantikus szín) */
+  .icon-tile {
+    @apply w-11 h-11 rounded-xl flex items-center justify-center shrink-0;
+  }
+  .icon-tile-primary { @apply bg-primary-subtle text-primary; }
+  .icon-tile-secondary { @apply bg-secondary-subtle text-secondary; }
+  .icon-tile-success { @apply bg-success-subtle text-success; }
+  .icon-tile-warning { @apply bg-warning-subtle text-warning; }
+  .icon-tile-danger { @apply bg-danger-subtle text-danger; }
+  .icon-tile-neutral { @apply bg-bg-element text-text-muted; }
+
+  /* Badge/chip */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border;
+  }
+  .badge-primary { @apply bg-primary-subtle text-primary border-primary/30; }
+  .badge-success { @apply bg-success-subtle text-success border-success/30; }
+  .badge-warning { @apply bg-warning-subtle text-warning border-warning/30; }
+  .badge-danger { @apply bg-danger-subtle text-danger border-danger/30; }
+  .badge-neutral { @apply bg-bg-element text-text-muted border-border-default; }
+
+  /* Gombok */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50;
+  }
+  .btn-primary { @apply bg-primary hover:bg-primary-hover text-white; }
+  .btn-danger { @apply border border-danger/40 text-danger hover:bg-danger-subtle; }
+  .btn-ghost { @apply text-text-muted hover:text-text-primary hover:bg-bg-element; }
+
+  /* Űrlap-input */
+  .input {
+    @apply w-full rounded-lg border border-border-default bg-bg-element px-3 py-2 text-sm;
+  }
+  .input:focus {
+    @apply outline-none border-primary ring-2 ring-primary-subtle;
+  }
+
+  /* Oldalcím + gradiens hairline elválasztó */
+  .page-title {
+    @apply text-3xl font-black tracking-tight;
+  }
+  .hairline {
+    height: 1px;
+    background: linear-gradient(to right, var(--color-primary), var(--color-border-default), transparent);
+    @apply my-6;
+  }
+
+  /* Betöltési skeleton */
+  .skeleton {
+    @apply animate-pulse rounded-2xl bg-bg-element;
+  }
+
+  /* Fül-navigáció */
+  .tab-btn {
+    @apply pb-2 border-b-2 border-transparent text-sm text-text-muted transition-colors;
+  }
+  .tab-btn-active {
+    @apply border-primary text-text-primary font-semibold;
   }
 }

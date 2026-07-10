@@ -46,9 +46,9 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     await teacherPage.getByRole('button', { name: 'Tagok' }).click();
     await expect(teacherPage.getByRole('button', { name: 'Eltávolítás' })).toBeVisible({ timeout: 15000 });
 
-    // ── Eltávolítás (natív confirm dialógus) ──
-    teacherPage.once('dialog', (dialog) => dialog.accept());
+    // ── Eltávolítás (saját confirm-dialógus komponens) ──
     await teacherPage.getByRole('button', { name: 'Eltávolítás' }).click();
+    await teacherPage.getByTestId('confirm-accept').click();
     await expect(teacherPage.getByRole('button', { name: 'Eltávolítás' })).toHaveCount(0, { timeout: 15000 });
 
     // ── A diák "Csoportjaim" oldala már nem mutatja a csoportot ──

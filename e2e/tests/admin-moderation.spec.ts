@@ -26,14 +26,16 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
     await teacherPage.waitForURL(/\/feladatsorok\/\d+\/szerkesztes/, { timeout: 15000 });
 
-    await teacherPage.locator('[name="newTaskTitle"]').fill('Feladat');
-    await teacherPage.locator('[name="newTaskDescription"]').fill('Feladat leírása.');
-    await teacherPage.getByRole('button', { name: 'Hozzáadás' }).click();
+    await teacherPage.locator('[name="newTaskTitle-6"]').fill('Feladat');
+    await teacherPage.locator('[name="newTaskDescription-6"]').fill('Feladat leírása.');
+    const taskAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-6"]') });
+    await taskAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
     await expect(teacherPage.getByText('1. Feladat')).toBeVisible({ timeout: 15000 });
     await teacherPage.getByText('1. Feladat').click();
 
     await teacherPage.locator('[name="newSolutionDescription"]').fill('Részfeladat');
-    await teacherPage.getByRole('button', { name: 'Hozzáadás' }).nth(0).click();
+    const solutionAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newSolutionDescription"]') });
+    await solutionAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
 
     const saveSnippetsButton = teacherPage.getByRole('button', { name: 'Kódrészletek mentése' });
     const snippetGrid = saveSnippetsButton.locator('xpath=preceding-sibling::div[1]');
@@ -55,14 +57,14 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     await item.getByRole('button', { name: /Feladatsorai/ }).click();
     await expect(item.getByText(taskSetTitle)).toBeVisible({ timeout: 15000 });
 
-    // ── Takedown ──
-    adminPage.once('dialog', (dialog) => dialog.accept());
+    // ── Takedown (saját confirm-dialógus) ──
     await item.getByRole('button', { name: 'Publikálás visszavonása' }).click();
+    await adminPage.getByTestId('confirm-accept').click();
     await expect(item.getByText('Piszkozat')).toBeVisible({ timeout: 15000 });
 
-    // ── Kill-switch ──
-    adminPage.once('dialog', (dialog) => dialog.accept());
+    // ── Kill-switch (saját confirm-dialógus) ──
     await item.getByRole('button', { name: 'Felfüggesztés' }).click();
+    await adminPage.getByTestId('confirm-accept').click();
     await expect(item.getByText('Felfüggesztve')).toBeVisible({ timeout: 15000 });
   } finally {
     await teacherContext.close();

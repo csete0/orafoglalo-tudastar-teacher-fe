@@ -3,6 +3,10 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminTeacherStore } from '../../services/admin/admin-teacher.store';
 import { TeacherProfileAdminDto } from '../../models/teacher-moderation.model';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent } from '../../shared/icon/icon.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 const BYTES_PER_MB = 1048576;
 
@@ -10,27 +14,29 @@ const BYTES_PER_MB = 1048576;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-admin-tanarok',
   standalone: true,
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
-      <h1 class="text-xl font-semibold mb-4">Tanárok</h1>
+      <h1 class="page-title">Tanárok</h1>
+      <p class="text-sm text-text-muted mt-1">Jóváhagyott tanári fiókok moderálása és kvótái</p>
+      <div class="hairline"></div>
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
       @if (store.loading()) {
-        <p class="text-text-muted">Betöltés…</p>
+        <app-local-spinner />
       }
 
       <ul class="space-y-3">
         @for (teacher of store.teachers(); track teacher.id) {
-          <li class="bg-bg-panel border border-border-default rounded-lg p-4">
+          <li class="card p-4">
             <div class="flex justify-between items-start">
               <div>
-                <p class="font-medium">
+                <p class="font-medium flex items-center gap-2 flex-wrap">
                   {{ teacher.displayName }}
                   @if (!teacher.isActive) {
-                    <span class="text-danger text-xs ml-2">Felfüggesztve</span>
+                    <span class="badge badge-danger">Felfüggesztve</span>
                   }
                 </p>
                 <p class="text-sm text-text-muted">{{ teacher.email }}</p>
@@ -48,12 +54,12 @@ const BYTES_PER_MB = 1048576;
               <div class="flex flex-col gap-2 items-end">
                 @if (teacher.isActive) {
                   <button (click)="confirmSuspend(teacher.id, teacher.displayName)"
-                    class="rounded border border-danger text-danger text-sm px-3 py-1.5 whitespace-nowrap">
+                    class="btn btn-danger !px-3 !py-1.5 whitespace-nowrap">
                     Felfüggesztés
                   </button>
                 } @else {
-                  <button (click)="store.setActive(teacher.id, true)"
-                    class="rounded bg-success text-white text-sm px-3 py-1.5 whitespace-nowrap">
+                  <button (click)="activate(teacher.id)"
+                    class="btn !bg-success !text-white !px-3 !py-1.5 whitespace-nowrap">
                     Aktiválás
                   </button>
                 }
@@ -74,15 +80,14 @@ const BYTES_PER_MB = 1048576;
                   <div>
                     <label class="text-xs text-text-muted block mb-1">Max feladatsor</label>
                     <input type="number" min="0" [(ngModel)]="quotaTaskSets" name="quotaTaskSets"
-                      class="rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm w-32" />
+                      class="input !px-2 !py-1.5 !w-32" />
                   </div>
                   <div>
                     <label class="text-xs text-text-muted block mb-1">Max tárhely (MB)</label>
                     <input type="number" min="0" [(ngModel)]="quotaStorageMb" name="quotaStorageMb"
-                      class="rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm w-32" />
+                      class="input !px-2 !py-1.5 !w-32" />
                   </div>
-                  <button type="submit"
-                    class="rounded bg-primary hover:bg-primary-hover text-white text-sm px-3 py-1.5">
+                  <button type="submit" class="btn btn-primary !px-3 !py-1.5">
                     Mentés
                   </button>
                 </div>
@@ -100,7 +105,7 @@ const BYTES_PER_MB = 1048576;
                 }
                 <ul class="space-y-2">
                   @for (taskSet of store.taskSets(); track taskSet.id) {
-                    <li class="flex justify-between items-center bg-bg-element rounded p-2 text-sm">
+                    <li class="flex justify-between items-center bg-bg-element rounded-xl p-2 text-sm">
                       <div>
                         <span>{{ taskSet.title }}</span>
                         <span class="text-text-muted ml-2">
@@ -125,7 +130,12 @@ const BYTES_PER_MB = 1048576;
           </li>
         } @empty {
           @if (!store.loading()) {
-            <li class="text-text-muted">Nincs még jóváhagyott tanár.</li>
+            <li class="flex flex-col items-center py-10 gap-3">
+              <div class="icon-tile icon-tile-neutral">
+                <app-icon name="academic-cap" class="w-6 h-6 block" />
+              </div>
+              <p class="font-semibold">Nincs még jóváhagyott tanár.</p>
+            </li>
           }
         }
       </ul>
@@ -134,6 +144,8 @@ const BYTES_PER_MB = 1048576;
 })
 export class AdminTanarokComponent {
   readonly store = inject(AdminTeacherStore);
+  private readonly confirmService = inject(ConfirmService);
+  private readonly toastService = inject(ToastService);
 
   readonly quotaEditId = signal<number | null>(null);
   quotaTaskSets: number | null = null;
@@ -171,19 +183,33 @@ export class AdminTanarokComponent {
     if ((this.quotaTaskSets ?? 0) < 0 || (this.quotaStorageMb ?? 0) < 0) return;
 
     const maxStorageBytes = this.quotaStorageMb === null ? null : this.quotaStorageMb * BYTES_PER_MB;
-    this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes);
+    this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes, () =>
+      this.toastService.success('Kvóta mentve.'),
+    );
     this.quotaEditId.set(null);
   }
 
-  confirmSuspend(teacherProfileId: number, displayName: string): void {
-    if (confirm(`Biztosan felfüggeszted ${displayName} tanári fiókját? A csoportjai és feladatsorai azonnal elérhetetlenné válnak a diákjai számára.`)) {
-      this.store.setActive(teacherProfileId, false);
-    }
+  activate(teacherProfileId: number): void {
+    this.store.setActive(teacherProfileId, true, () => this.toastService.success('Tanári fiók aktiválva.'));
   }
 
-  confirmTakedown(taskSetId: number, title: string): void {
-    if (confirm(`Biztosan visszavonod a(z) „${title}” feladatsor publikálását? A tanár diákjai számára azonnal elérhetetlenné válik.`)) {
-      this.store.takedownTaskSet(taskSetId);
-    }
+  async confirmSuspend(teacherProfileId: number, displayName: string): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: `Biztosan felfüggeszted ${displayName} tanári fiókját? A csoportjai és feladatsorai azonnal elérhetetlenné válnak a diákjai számára.`,
+      danger: true,
+      confirmLabel: 'Felfüggesztés',
+    });
+    if (!ok) return;
+    this.store.setActive(teacherProfileId, false, () => this.toastService.success('Tanári fiók felfüggesztve.'));
+  }
+
+  async confirmTakedown(taskSetId: number, title: string): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: `Biztosan visszavonod a(z) „${title}” feladatsor publikálását? A tanár diákjai számára azonnal elérhetetlenné válik.`,
+      danger: true,
+      confirmLabel: 'Visszavonás',
+    });
+    if (!ok) return;
+    this.store.takedownTaskSet(taskSetId, () => this.toastService.success('Publikálás visszavonva.'));
   }
 }

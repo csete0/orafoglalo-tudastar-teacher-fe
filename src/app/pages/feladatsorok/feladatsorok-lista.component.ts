@@ -5,6 +5,8 @@ import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-task
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent } from '../../shared/icon/icon.component';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -16,50 +18,75 @@ const LEVELS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsorok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, IconComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <h1 class="text-xl font-semibold mb-6">Feladatsoraim</h1>
+      <h1 class="page-title">Feladatsoraim</h1>
+      <p class="text-sm text-text-muted mt-1">Saját feladatsorok szerkesztése és publikálása</p>
+      <div class="hairline"></div>
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
 
-      <ul class="space-y-2 mb-8">
-        @for (taskSet of store.taskSets(); track taskSet.id) {
-          <li>
-            <a [routerLink]="['/feladatsorok', taskSet.id, 'szerkesztes']"
-              class="card-link flex justify-between">
-              <span>{{ taskSet.title }} <span class="text-text-muted text-sm">({{ taskSet.taskCount }} feladat)</span></span>
-              <span class="text-sm text-text-muted">{{ taskSet.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
-            </a>
-          </li>
-        }
-        @empty {
-          <li class="text-text-muted">Még nincs feladatsorod.</li>
-        }
-      </ul>
+      @if (store.loading() && store.taskSets().length === 0) {
+        <div class="space-y-2 mb-8">
+          <div class="skeleton h-20"></div>
+          <div class="skeleton h-20"></div>
+          <div class="skeleton h-20"></div>
+        </div>
+      } @else {
+        <ul class="space-y-3 mb-8">
+          @for (taskSet of store.taskSets(); track taskSet.id) {
+            <li>
+              <a [routerLink]="['/feladatsorok', taskSet.id, 'szerkesztes']"
+                class="card-link block group" [class]="'accent-' + (taskSet.id % 4)">
+                <div class="accent-bar"></div>
+                <div class="p-4 flex items-center gap-3">
+                  <div class="icon-tile icon-tile-success">
+                    <app-icon name="clipboard-list" class="w-6 h-6 block" />
+                  </div>
+                  <span class="min-w-0 flex-1">
+                    <span class="font-bold block truncate">{{ taskSet.title }}</span>
+                    <span class="text-text-muted text-xs">{{ taskSet.taskCount }} feladat</span>
+                  </span>
+                  <span class="badge shrink-0" [class]="taskSet.isPublished ? 'badge-success' : 'badge-warning'">
+                    {{ taskSet.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
+                  <app-icon name="arrow-right"
+                    class="w-4 h-4 block text-text-muted transition-transform group-hover:translate-x-1 shrink-0" />
+                </div>
+              </a>
+            </li>
+          }
+          @empty {
+            <li class="flex flex-col items-center py-10 gap-3">
+              <div class="icon-tile icon-tile-neutral">
+                <app-icon name="clipboard-list" class="w-6 h-6 block" />
+              </div>
+              <p class="font-semibold">Még nincs feladatsorod.</p>
+              <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
+            </li>
+          }
+        </ul>
+      }
 
-      <form [formGroup]="createForm" (ngSubmit)="create()" class="bg-bg-panel border border-border-default rounded-lg p-4 space-y-3">
-        <h2 class="font-medium">Új feladatsor</h2>
-        <input formControlName="title" placeholder="Cím"
-          class="w-full rounded border border-border-default bg-bg-element px-3 py-2" />
-        <textarea formControlName="description" placeholder="Leírás" rows="3"
-          class="w-full rounded border border-border-default bg-bg-element px-3 py-2"></textarea>
-        <select formControlName="levelId" class="w-full rounded border border-border-default bg-bg-element px-3 py-2">
+      <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
+        <h2 class="font-bold">Új feladatsor</h2>
+        <input formControlName="title" placeholder="Cím" class="input" />
+        <textarea formControlName="description" placeholder="Leírás" rows="3" class="input"></textarea>
+        <select formControlName="levelId" class="input">
           @for (level of levels; track level.id) {
             <option [value]="level.id">{{ level.label }}</option>
           }
         </select>
-        <select formControlName="subjectCategoryId" class="w-full rounded border border-border-default bg-bg-element px-3 py-2">
+        <select formControlName="subjectCategoryId" class="input">
           <option [ngValue]="null">Nincs tantárgyi kategória</option>
           @for (category of categories(); track category.id) {
             <option [ngValue]="category.id">{{ category.name }}</option>
           }
         </select>
 
-        <button type="submit" [disabled]="createForm.invalid"
-          class="rounded bg-primary hover:bg-primary-hover text-white px-4 py-2 disabled:opacity-50">
+        <button type="submit" [disabled]="createForm.invalid" class="btn btn-primary">
           Létrehozás
         </button>
       </form>
@@ -70,6 +97,7 @@ export class FeladatsorokListaComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly categoryService = inject(CategoryService);
+  private readonly toastService = inject(ToastService);
   readonly store = inject(TeacherTaskSetStore);
 
   readonly levels = LEVELS;
@@ -96,7 +124,10 @@ export class FeladatsorokListaComponent {
         levelId: raw.levelId,
         subjectCategoryId: raw.subjectCategoryId ?? undefined,
       },
-      (taskSet) => this.router.navigate(['/feladatsorok', taskSet.id, 'szerkesztes']),
+      (taskSet) => {
+        this.toastService.success('Feladatsor létrehozva.');
+        this.router.navigate(['/feladatsorok', taskSet.id, 'szerkesztes']);
+      },
     );
   }
 }

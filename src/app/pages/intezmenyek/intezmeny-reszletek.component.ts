@@ -6,6 +6,10 @@ import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { LeaderboardCategory, LeaderboardPeriod } from '../../models/leaderboard.model';
 import { SchoolTeacherRole } from '../../models/school.model';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { IconComponent } from '../../shared/icon/icon.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
 
@@ -19,32 +23,36 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="max-w-3xl mx-auto px-4 py-10">
-        <div class="flex justify-between items-start mb-1">
-          <h1 class="text-xl font-semibold">{{ s.name }}</h1>
-          <button (click)="leave(s.id)" class="text-sm text-danger hover:underline">Kilépés</button>
+        <div class="flex justify-between items-start mb-1 gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="icon-tile icon-tile-primary">
+              <app-icon name="building" class="w-6 h-6 block" />
+            </div>
+            <h1 class="page-title truncate">{{ s.name }}</h1>
+            <span class="badge shrink-0" data-testid="my-role-badge"
+              [class]="s.myRole === 'Admin' ? 'badge-primary' : 'badge-neutral'">
+              {{ s.myRole === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
+          </div>
+          <button (click)="leave(s.id)" class="btn btn-danger shrink-0">Kilépés</button>
         </div>
-        <p class="text-text-muted mb-6">A szereped: {{ s.myRole === 'Admin' ? 'Igazgató' : 'Tanár' }}</p>
+        <div class="hairline"></div>
 
-        <nav class="flex gap-4 border-b border-border-default mb-6 text-sm">
-          <button (click)="setTab('tanarok')" [class.border-primary]="tab() === 'tanarok'"
-            [class.text-text-muted]="tab() !== 'tanarok'" class="pb-2 border-b-2 border-transparent">
+        <nav class="flex gap-4 border-b border-border-default mb-6">
+          <button (click)="setTab('tanarok')" class="tab-btn" [class.tab-btn-active]="tab() === 'tanarok'">
             Tanárok
           </button>
-          <button (click)="setTab('ranglista')" [class.border-primary]="tab() === 'ranglista'"
-            [class.text-text-muted]="tab() !== 'ranglista'" class="pb-2 border-b-2 border-transparent">
+          <button (click)="setTab('ranglista')" class="tab-btn" [class.tab-btn-active]="tab() === 'ranglista'">
             Ranglista
           </button>
           @if (school.isSelectedAdmin()) {
-            <button (click)="setTab('attekintes')" [class.border-primary]="tab() === 'attekintes'"
-              [class.text-text-muted]="tab() !== 'attekintes'" class="pb-2 border-b-2 border-transparent">
+            <button (click)="setTab('attekintes')" class="tab-btn" [class.tab-btn-active]="tab() === 'attekintes'">
               Áttekintés
             </button>
-            <button (click)="setTab('csoportok')" [class.border-primary]="tab() === 'csoportok'"
-              [class.text-text-muted]="tab() !== 'csoportok'" class="pb-2 border-b-2 border-transparent">
+            <button (click)="setTab('csoportok')" class="tab-btn" [class.tab-btn-active]="tab() === 'csoportok'">
               Csoportok
             </button>
           }
@@ -57,21 +65,29 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
         @switch (tab()) {
           @case ('tanarok') {
             @if (school.isSelectedAdmin() && s.teacherInviteCode) {
-              <div class="bg-bg-element border border-border-default rounded-lg p-3 mb-4 flex justify-between items-center text-sm">
-                <span>Tanári meghívó kód: <code>{{ s.teacherInviteCode }}</code></span>
-                <button (click)="school.regenerateInvite(s.id)" class="text-primary hover:underline">Új kód generálása</button>
+              <div class="card !rounded-xl bg-bg-element p-3 mb-4 flex justify-between items-center text-sm">
+                <span class="flex items-center gap-2">
+                  <app-icon name="link" class="w-4 h-4 block text-primary" />
+                  Tanári meghívó kód: <code class="font-bold">{{ s.teacherInviteCode }}</code>
+                </span>
+                <button (click)="regenerateInvite(s.id)" class="text-primary hover:underline">Új kód generálása</button>
               </div>
             }
 
             <ul class="space-y-2 mb-6">
               @for (member of school.members(); track member.teacherProfileId) {
-                <li class="flex justify-between items-center bg-bg-panel border border-border-default rounded-lg p-3">
-                  <div>
-                    <p>{{ member.displayName }}</p>
-                    <p class="text-xs text-text-muted">{{ member.groupCount }} csoport</p>
+                <li class="flex justify-between items-center card !rounded-xl p-3">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-9 h-9 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center shrink-0">
+                      {{ initials(member.displayName) }}</div>
+                    <div class="min-w-0">
+                      <p class="truncate">{{ member.displayName }}</p>
+                      <p class="text-xs text-text-muted">{{ member.groupCount }} csoport</p>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2 text-sm">
-                    <span class="text-text-muted">{{ member.role === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
+                  <div class="flex items-center gap-2 text-sm shrink-0">
+                    <span class="badge" [class]="member.role === 'Admin' ? 'badge-primary' : 'badge-neutral'">
+                      {{ member.role === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
                     @if (school.isSelectedAdmin()) {
                       <button (click)="toggleRole(s.id, member.teacherProfileId, member.role)" class="text-primary hover:underline">
                         {{ member.role === 'Admin' ? 'Lefokozás' : 'Igazgatóvá tétel' }}
@@ -84,17 +100,13 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
             </ul>
 
             @if (school.isSelectedAdmin()) {
-              <div class="bg-bg-panel border border-border-default rounded-lg p-4">
-                <h2 class="font-medium mb-2">Intézmény szerkesztése</h2>
+              <div class="card p-5">
+                <h2 class="font-bold mb-3">Intézmény szerkesztése</h2>
                 <div class="flex gap-2 mb-3">
-                  <input [(ngModel)]="editName" placeholder="Név"
-                    class="flex-1 rounded border border-border-default bg-bg-element px-2 py-1.5 text-sm" />
-                  <button (click)="saveEdit(s.id)" class="rounded bg-primary hover:bg-primary-hover text-white px-3 py-1.5 text-sm">
-                    Mentés
-                  </button>
+                  <input [(ngModel)]="editName" placeholder="Név" class="input flex-1" />
+                  <button (click)="saveEdit(s.id)" class="btn btn-primary">Mentés</button>
                 </div>
-                <button (click)="deleteSchool(s.id, s.groupCount)"
-                  class="text-sm text-danger hover:underline">
+                <button (click)="deleteSchool(s.id, s.groupCount)" class="text-sm text-danger hover:underline">
                   Intézmény törlése
                 </button>
               </div>
@@ -102,76 +114,91 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
           }
 
           @case ('ranglista') {
-            <div class="flex gap-2 mb-4 text-sm">
-              <select [(ngModel)]="category" (ngModelChange)="loadLeaderboard(s.id)"
-                class="rounded border border-border-default bg-bg-element px-2 py-1">
+            <div class="flex gap-2 mb-4">
+              <select [(ngModel)]="category" (ngModelChange)="loadLeaderboard(s.id)" class="input !w-auto">
                 <option value="quiz">Kvíz</option>
                 <option value="exam">Vizsga</option>
               </select>
-              <select [(ngModel)]="period" (ngModelChange)="loadLeaderboard(s.id)"
-                class="rounded border border-border-default bg-bg-element px-2 py-1">
+              <select [(ngModel)]="period" (ngModelChange)="loadLeaderboard(s.id)" class="input !w-auto">
                 <option value="weekly">Heti</option>
                 <option value="monthly">Havi</option>
                 <option value="alltime">Összes idő</option>
               </select>
             </div>
 
-            <ol class="space-y-1">
+            <ol class="space-y-2">
               @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-                <li class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-2 text-sm"
-                  [class.border-primary]="entry.isCurrentUser">
-                  <span>{{ entry.rank }}. {{ entry.nickname }}</span>
-                  <span>{{ entry.score }}</span>
+                <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm"
+                  [class.!border-primary]="entry.isCurrentUser">
+                  <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
+                  <span class="flex-1 truncate">{{ entry.nickname }}</span>
+                  <span class="font-bold">{{ entry.score }}</span>
                 </li>
               } @empty {
-                <li class="text-text-muted text-sm">Még nincs ranglista-adat.</li>
+                <li class="flex flex-col items-center py-10 gap-3">
+                  <div class="icon-tile icon-tile-neutral">
+                    <app-icon name="trophy" class="w-6 h-6 block" />
+                  </div>
+                  <p class="font-semibold">Még nincs ranglista-adat.</p>
+                </li>
               }
             </ol>
           }
 
           @case ('attekintes') {
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="text-left text-text-muted border-b border-border-default">
-                  <th class="py-2">Diák</th>
-                  <th class="py-2">Vizsgák</th>
-                  <th class="py-2">Átlag %</th>
-                  <th class="py-2">Sorozat</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (student of report.schoolActivity(); track student.userId) {
-                  <tr class="border-b border-border-default">
-                    <td class="py-2">
-                      <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                    </td>
-                    <td class="py-2">{{ student.completedExamsCount }}</td>
-                    <td class="py-2">{{ student.averageExamScorePercent ?? '–' }}</td>
-                    <td class="py-2">{{ student.currentStreak }}</td>
+            <div class="card overflow-hidden">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                    <th class="py-3 px-4">Diák</th>
+                    <th class="py-3 px-4">Vizsgák</th>
+                    <th class="py-3 px-4">Átlag %</th>
+                    <th class="py-3 px-4">Sorozat</th>
                   </tr>
-                } @empty {
-                  <tr><td colspan="4" class="py-4 text-text-muted">Nincs adat.</td></tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (student of report.schoolActivity(); track student.userId) {
+                    <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                      <td class="py-2.5 px-4">
+                        <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
+                      </td>
+                      <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
+                      <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
+                      <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           }
 
           @case ('csoportok') {
             <ul class="space-y-2">
               @for (group of school.schoolGroups(); track group.groupId) {
-                <li class="flex justify-between bg-bg-panel border border-border-default rounded-lg p-3 text-sm">
-                  <span>{{ group.name }}</span>
+                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
+                  <span class="flex items-center gap-2">
+                    <app-icon name="users" class="w-4 h-4 block text-text-muted" />
+                    {{ group.name }}
+                  </span>
                   <span class="text-text-muted">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
                 </li>
               } @empty {
-                <li class="text-text-muted text-sm">Az intézményhez még nincs csoport kötve.</li>
+                <li class="flex flex-col items-center py-10 gap-3">
+                  <div class="icon-tile icon-tile-neutral">
+                    <app-icon name="users" class="w-6 h-6 block" />
+                  </div>
+                  <p class="font-semibold">Az intézményhez még nincs csoport kötve.</p>
+                </li>
               }
             </ul>
           }
         }
       </div>
     } @else if (school.loading()) {
-      <p class="text-text-muted text-center py-10">Betöltés…</p>
+      <app-local-spinner />
     } @else {
       <p class="text-text-muted text-center py-10">Az intézmény nem található.</p>
     }
@@ -180,6 +207,8 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
 export class IntezmenyReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly confirmService = inject(ConfirmService);
+  private readonly toastService = inject(ToastService);
   readonly school = inject(SchoolStore);
   readonly report = inject(ReportStore);
   readonly leaderboard = inject(LeaderboardStore);
@@ -212,32 +241,78 @@ export class IntezmenyReszletekComponent implements OnInit {
     this.leaderboard.loadSchoolLeaderboard(schoolId, this.category, this.period);
   }
 
-  toggleRole(schoolId: number, teacherProfileId: number, currentRole: SchoolTeacherRole): void {
-    const newRole: SchoolTeacherRole = currentRole === 'Admin' ? 'Teacher' : 'Admin';
-    this.school.changeMemberRole(schoolId, teacherProfileId, { role: newRole });
+  initials(name: string): string {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
   }
 
-  removeMember(schoolId: number, teacherProfileId: number): void {
-    if (!confirm('Biztosan eltávolítod ezt a tanárt az intézményből? A csoportjai lekerülnek az intézményről.')) return;
-    this.school.removeMember(schoolId, teacherProfileId);
+  rankClass(rank: number): string {
+    if (rank === 1) return 'bg-warning-subtle text-warning';
+    if (rank === 2) return 'bg-primary-subtle text-primary';
+    if (rank === 3) return 'bg-secondary-subtle text-secondary';
+    return 'bg-bg-element text-text-muted';
+  }
+
+  toggleRole(schoolId: number, teacherProfileId: number, currentRole: SchoolTeacherRole): void {
+    const newRole: SchoolTeacherRole = currentRole === 'Admin' ? 'Teacher' : 'Admin';
+    this.school.changeMemberRole(schoolId, teacherProfileId, { role: newRole }, () =>
+      this.toastService.success('Szerepkör módosítva.'),
+    );
+  }
+
+  async removeMember(schoolId: number, teacherProfileId: number): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan eltávolítod ezt a tanárt az intézményből? A csoportjai lekerülnek az intézményről.',
+      danger: true,
+      confirmLabel: 'Eltávolítás',
+    });
+    if (!ok) return;
+    this.school.removeMember(schoolId, teacherProfileId, () =>
+      this.toastService.success('Tanár eltávolítva az intézményből.'),
+    );
   }
 
   saveEdit(schoolId: number): void {
     if (!this.editName.trim()) return;
-    this.school.update(schoolId, { name: this.editName.trim() });
+    this.school.update(schoolId, { name: this.editName.trim() }, () =>
+      this.toastService.success('Intézmény átnevezve.'),
+    );
   }
 
-  deleteSchool(schoolId: number, groupCount: number): void {
+  async deleteSchool(schoolId: number, groupCount: number): Promise<void> {
     if (groupCount > 0) {
-      alert('Az intézmény csak akkor törölhető, ha nincs hozzá kötött csoport.');
+      this.toastService.warning('Az intézmény csak akkor törölhető, ha nincs hozzá kötött csoport.', 5000);
       return;
     }
-    if (!confirm('Biztosan törlöd az intézményt?')) return;
-    this.school.delete(schoolId, () => this.router.navigateByUrl('/intezmenyek'));
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan törlöd az intézményt?',
+      danger: true,
+      confirmLabel: 'Törlés',
+    });
+    if (!ok) return;
+    this.school.delete(schoolId, () => {
+      this.toastService.success('Intézmény törölve.');
+      this.router.navigateByUrl('/intezmenyek');
+    });
   }
 
-  leave(schoolId: number): void {
-    if (!confirm('Biztosan kilépsz az intézményből? A hozzá kötött csoportjaid lekerülnek az intézményről, és megszűnik a tartalom-megosztás.')) return;
+  async leave(schoolId: number): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message:
+        'Biztosan kilépsz az intézményből? A hozzá kötött csoportjaid lekerülnek az intézményről, és megszűnik a tartalom-megosztás.',
+      danger: true,
+      confirmLabel: 'Kilépés',
+    });
+    if (!ok) return;
     this.school.leave(schoolId, () => this.router.navigateByUrl('/intezmenyek'));
+  }
+
+  regenerateInvite(schoolId: number): void {
+    this.school.regenerateInvite(schoolId, () => this.toastService.success('Új tanári meghívó kód generálva.'));
   }
 }

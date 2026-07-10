@@ -2,56 +2,71 @@ import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/cor
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
+import { StudentActivityDetailDto } from '../../models/report.model';
+import { IconComponent, IconName } from '../../shared/icon/icon.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-diak-reszletek',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, IconComponent, LocalSpinnerComponent],
   template: `
     @if (store.studentDetail(); as detail) {
       <div class="max-w-2xl mx-auto px-4 py-10">
-        <h1 class="text-xl font-semibold mb-6">{{ detail.name }}</h1>
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-full bg-primary-subtle text-primary text-sm font-bold flex items-center justify-center shrink-0">
+            {{ initials(detail.name) }}</div>
+          <h1 class="page-title truncate">{{ detail.name }}</h1>
+        </div>
+        <div class="hairline"></div>
 
-        <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm mb-8">
-          <div><dt class="text-text-muted">Befejezett vizsgák</dt><dd>{{ detail.completedExamsCount }}</dd></div>
-          <div><dt class="text-text-muted">Átlag pontszázalék</dt><dd>{{ detail.averageExamScorePercent ?? '–' }}%</dd></div>
-          <div><dt class="text-text-muted">Kvíz-sessionök</dt><dd>{{ detail.completedQuizSessionsCount }}</dd></div>
-          <div><dt class="text-text-muted">Kvíz pontosság</dt><dd>{{ detail.quizAccuracyPercent ?? '–' }}%</dd></div>
-          <div><dt class="text-text-muted">Aktuális sorozat</dt><dd>{{ detail.currentStreak }} nap</dd></div>
-          <div><dt class="text-text-muted">Badge-ek</dt><dd>{{ detail.badgeCount }}</dd></div>
-        </dl>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+          @for (stat of stats(detail); track stat.label) {
+            <div class="card !rounded-xl p-4 flex items-center gap-3">
+              <div class="icon-tile" [class]="stat.tile">
+                <app-icon [name]="stat.icon" class="w-5 h-5 block" />
+              </div>
+              <div class="min-w-0">
+                <p class="text-lg font-black leading-tight">{{ stat.value }}</p>
+                <p class="text-xs text-text-muted truncate">{{ stat.label }}</p>
+              </div>
+            </div>
+          }
+        </div>
 
-        <h2 class="font-medium mb-3">Legutóbbi vizsgák</h2>
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-text-muted border-b border-border-default">
-              <th class="py-2">Feladatsor</th>
-              <th class="py-2">Dátum</th>
-              <th class="py-2">Eredmény</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (exam of detail.recentExams; track exam.sessionId) {
-              <tr class="border-b border-border-default">
-                <td class="py-2">{{ exam.taskSetTitle }}</td>
-                <td class="py-2">{{ exam.startedAt | date: 'yyyy.MM.dd' }}</td>
-                <td class="py-2">
-                  @if (exam.isCompleted) {
-                    {{ exam.scorePercent ?? '–' }}%
-                  } @else {
-                    folyamatban
-                  }
-                </td>
+        <h2 class="font-bold mb-3">Legutóbbi vizsgák</h2>
+        <div class="card overflow-hidden">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                <th class="py-3 px-4">Feladatsor</th>
+                <th class="py-3 px-4">Dátum</th>
+                <th class="py-3 px-4">Eredmény</th>
               </tr>
-            } @empty {
-              <tr><td colspan="3" class="py-4 text-text-muted">Nincs vizsga-előzmény.</td></tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (exam of detail.recentExams; track exam.sessionId) {
+                <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                  <td class="py-2.5 px-4">{{ exam.taskSetTitle }}</td>
+                  <td class="py-2.5 px-4">{{ exam.startedAt | date: 'yyyy.MM.dd' }}</td>
+                  <td class="py-2.5 px-4">
+                    @if (exam.isCompleted) {
+                      {{ exam.scorePercent ?? '–' }}%
+                    } @else {
+                      <span class="badge badge-warning">folyamatban</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="3" class="py-6 px-4 text-text-muted text-center">Nincs vizsga-előzmény.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
     } @else if (store.loading()) {
-      <p class="text-text-muted text-center py-10">Betöltés…</p>
+      <app-local-spinner />
     } @else {
       <p class="text-danger text-center py-10">{{ store.error() }}</p>
     }
@@ -64,5 +79,26 @@ export class DiakReszletekComponent implements OnInit {
   ngOnInit(): void {
     const userId = Number(this.route.snapshot.paramMap.get('userId'));
     this.store.loadStudentActivity(userId);
+  }
+
+  initials(name: string): string {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+  }
+
+  stats(detail: StudentActivityDetailDto): { label: string; value: string; icon: IconName; tile: string }[] {
+    return [
+      { label: 'Befejezett vizsgák', value: `${detail.completedExamsCount}`, icon: 'clipboard-list', tile: 'icon-tile-primary' },
+      { label: 'Átlag pontszázalék', value: `${detail.averageExamScorePercent ?? '–'}%`, icon: 'chart', tile: 'icon-tile-success' },
+      { label: 'Kvíz-sessionök', value: `${detail.completedQuizSessionsCount}`, icon: 'academic-cap', tile: 'icon-tile-secondary' },
+      { label: 'Kvíz pontosság', value: `${detail.quizAccuracyPercent ?? '–'}%`, icon: 'chart', tile: 'icon-tile-warning' },
+      { label: 'Aktuális sorozat', value: `${detail.currentStreak} nap`, icon: 'trophy', tile: 'icon-tile-danger' },
+      { label: 'Badge-ek', value: `${detail.badgeCount}`, icon: 'shield', tile: 'icon-tile-primary' },
+    ];
   }
 }

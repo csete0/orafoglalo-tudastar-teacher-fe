@@ -2,14 +2,18 @@ import { HttpErrorResponse, HttpEvent, HttpHandlerFn, HttpInterceptorFn, HttpReq
 import { inject } from '@angular/core';
 import { catchError, defer, from, Observable, switchMap, throwError } from 'rxjs';
 import { AuthStore } from '../services/auth/store/auth.store';
+import { ToastService } from '../shared/toast/toast.service';
 
 /**
- * Egyszerűsített változat a diák-repó interceptor.ts-éhez képest: nincs
- * Toast-függőség (a Fázis 8 UI-ja majd megjeleníti a hibákat komponens-
- * szinten) — a token-csatolás + 401-re refresh-és-újrapróbálkozás megmarad.
+ * Token-csatolás + 401-re refresh-és-újrapróbálkozás, plusz globális
+ * hiba-toast a MUTÁCIÓKRA (nem-GET): a backend OrafoglaloException-jei itt
+ * érnek felszínre, komponensenkénti hibakezelés nélkül. A GET/betöltési
+ * hibák a store-ok inline error() megjelenítésén maradnak (nincs dupla
+ * jelentés).
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authStore = inject(AuthStore);
+  const toastService = inject(ToastService);
 
   if (isPublicEndpoint(req.url)) {
     return next(req);
@@ -26,12 +30,19 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           if (error.status === 401 && token && !req.url.includes('/refresh')) {
             return handleTokenRefresh(authStore, req, next, error);
           }
+          if (req.method !== 'GET') {
+            toastService.danger(mutationErrorMessage(error));
+          }
           return throwError(() => error);
         }),
       );
     }),
   );
 };
+
+function mutationErrorMessage(error: HttpErrorResponse): string {
+  return error.error?.error ?? error.error?.errorMessage ?? 'A művelet sikertelen.';
+}
 
 function handleTokenRefresh(
   authStore: AuthStore,

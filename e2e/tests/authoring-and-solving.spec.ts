@@ -34,22 +34,24 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.waitForURL(/\/feladatsorok\/\d+\/szerkesztes/, { timeout: 15000 });
 
-  // ── Feladat hozzáadása SQL típussal ──
-  await teacherPage.locator('[name="newTaskTitle"]').fill('Feladat egy');
-  await teacherPage.locator('[name="newTaskDescription"]').fill('Írj egy SELECT lekérdezést.');
-  await teacherPage.getByRole('checkbox', { name: 'SQL', exact: true }).check();
-  await teacherPage.getByRole('button', { name: 'Hozzáadás' }).click();
+  // ── Feladat hozzáadása az SQL blokkban (típusonként külön, összecsukható
+  //    szekció + saját "Új feladat" űrlap — a típus a szekció, nem választógomb) ──
+  await teacherPage.locator('[name="newTaskTitle-5"]').fill('Feladat egy');
+  await teacherPage.locator('[name="newTaskDescription-5"]').fill('Írj egy SELECT lekérdezést.');
+  const sqlAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-5"]') });
+  await sqlAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
 
   await expect(teacherPage.getByText('1. Feladat egy')).toBeVisible({ timeout: 15000 });
   await teacherPage.getByText('1. Feladat egy').click();
 
   // ── Részfeladat (megoldás) hozzáadása ──
-  // A "Hozzáadás" gomb szövege megegyezik a lap alján lévő "új feladat"
-  // formmal — a részfeladat-form a kibontott feladat sorában, a DOM-ban
-  // KORÁBBAN jelenik meg, ezért ez az első (nth(0)) találat.
+  // A "Hozzáadás" gomb szövege több formmal is megegyezik (típusonkénti "új
+  // feladat" formok + ez a részfeladat-form) — a formot a benne lévő
+  // newSolutionDescription mező alapján azonosítjuk egyértelműen.
   await teacherPage.locator('[name="newSolutionDescription"]').fill('Listázd az összes felhasználót.');
   await teacherPage.locator('[name="newSolutionPoints"]').fill('10');
-  await teacherPage.getByRole('button', { name: 'Hozzáadás' }).nth(0).click();
+  const solutionAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newSolutionDescription"]') });
+  await solutionAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
 
   // ── SQL kódrészlet kitöltése + mentés ──
   const saveSnippetsButton = teacherPage.getByRole('button', { name: 'Kódrészletek mentése' });

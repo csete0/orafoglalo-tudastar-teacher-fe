@@ -83,15 +83,17 @@ export class SchoolStore {
     });
   }
 
-  update(id: number, request: CreateSchoolRequest): void {
+  update(id: number, request: CreateSchoolRequest, onSuccess?: () => void): void {
     this.mutate(this.service.update(id, request), (school) => {
       this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
+      if (onSuccess) onSuccess();
     });
   }
 
-  regenerateInvite(id: number): void {
+  regenerateInvite(id: number, onSuccess?: () => void): void {
     this.mutate(this.service.regenerateTeacherInvite(id), (school) => {
       this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
+      if (onSuccess) onSuccess();
     });
   }
 
@@ -133,11 +135,17 @@ export class SchoolStore {
     });
   }
 
-  changeMemberRole(schoolId: number, memberTeacherProfileId: number, request: ChangeSchoolMemberRoleRequest): void {
+  changeMemberRole(
+    schoolId: number,
+    memberTeacherProfileId: number,
+    request: ChangeSchoolMemberRoleRequest,
+    onSuccess?: () => void,
+  ): void {
     this.mutate(this.service.changeMemberRole(schoolId, memberTeacherProfileId, request), () => {
       this._members.update((list) =>
         list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
       );
+      if (onSuccess) onSuccess();
     });
   }
 
