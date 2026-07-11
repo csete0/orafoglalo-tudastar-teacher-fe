@@ -338,8 +338,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     const detail = this.store.selectedDetail();
     if (!detail) return true;
 
-    const usesSql = detail.tasks.some((t) =>
-      t.solutions.some((s) => s.snippets.some((sn) => sn.programmingLanguageId === SQL_LANGUAGE_ID)),
+    // Az "Összevont megoldás" (completeSolutionSnippets) egy külön mező a részfeladatonkénti
+    // kódrészletektől - ha az SQL-kód kizárólag ide kerül, a régi ellenőrzés a figyelmeztető
+    // sárga bannert sem jelenítette meg (UI-TT-30, BE-oldali tükre ugyanennek a hibának).
+    const usesSql = detail.tasks.some(
+      (t) =>
+        t.solutions.some((s) => s.snippets.some((sn) => sn.programmingLanguageId === SQL_LANGUAGE_ID)) ||
+        t.completeSolutionSnippets.some((sn) => sn.programmingLanguageId === SQL_LANGUAGE_ID),
     );
     if (!usesSql) return true;
 

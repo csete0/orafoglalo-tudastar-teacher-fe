@@ -102,6 +102,42 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(warning.textContent).toContain('kötelező');
   });
 
+  // UI-TT-30: az "Összevont megoldás" mező a részfeladatonkénti kódrészletektől teljesen
+  // különálló - ha az SQL-kód kizárólag ide kerül, a régi usesSql-detektálás ezt sosem látta,
+  // ezért a figyelmeztető banner sem jelent meg.
+  it('SQL kód kizárólag az Összevont megoldásban esetén is figyelmeztetést mutat', () => {
+    configure(
+      makeDetail({
+        tasks: [
+          {
+            id: 1,
+            title: 'F1',
+            description: 'd',
+            maxPoints: 10,
+            taskOrder: 1,
+            taskTypeIds: [],
+            completeSolutionSnippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }],
+            solutions: [
+              {
+                id: 1,
+                description: 'd',
+                snippets: [{ programmingLanguageId: 2, code: "print('nem SQL')" }],
+              },
+            ],
+          },
+        ],
+        files: [],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const warning = fixture.nativeElement.querySelector('.text-warning');
+    expect(warning).not.toBeNull();
+    expect(warning.textContent).toContain('kötelező');
+  });
+
   it('SQL kódrészlethez mindkét fájl feltöltve esetén nincs figyelmeztetés', () => {
     configure(
       makeDetail({
