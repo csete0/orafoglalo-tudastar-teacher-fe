@@ -63,4 +63,40 @@ describe('ConfirmDialogComponent', () => {
     expect(accept.classList.contains('btn-danger')).toBe(true);
     expect(accept.classList.contains('btn-primary')).toBe(false);
   });
+
+  // UI-TT-28: Shift+Tab a Megerősítés gombról korábban elhagyhatta a dialógust,
+  // és a háttér-oldal egy másik sorának mutáló gombjára ugorhatott.
+  it('Tab a Megerősítésről a Mégsére viszi a fókuszt, nem hagyja el a dialógust', () => {
+    const fixture = TestBed.createComponent(ConfirmDialogComponent);
+    service.ask({ message: 'Biztos?' });
+    fixture.detectChanges();
+
+    const dialog = fixture.nativeElement.querySelector('.fixed.inset-0');
+    const cancel = fixture.nativeElement.querySelector('[data-testid="confirm-cancel"]') as HTMLButtonElement;
+    const accept = fixture.nativeElement.querySelector('[data-testid="confirm-accept"]') as HTMLButtonElement;
+
+    accept.focus();
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    dialog.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  it('Shift+Tab a Mégséről a Megerősítésre viszi a fókuszt, nem hagyja el a dialógust', () => {
+    const fixture = TestBed.createComponent(ConfirmDialogComponent);
+    service.ask({ message: 'Biztos?' });
+    fixture.detectChanges();
+
+    const dialog = fixture.nativeElement.querySelector('.fixed.inset-0');
+    const cancel = fixture.nativeElement.querySelector('[data-testid="confirm-cancel"]') as HTMLButtonElement;
+    const accept = fixture.nativeElement.querySelector('[data-testid="confirm-accept"]') as HTMLButtonElement;
+
+    cancel.focus();
+    const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    dialog.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(accept);
+  });
 });
