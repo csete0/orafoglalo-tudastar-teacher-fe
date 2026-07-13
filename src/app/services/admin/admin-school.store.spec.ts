@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AdminSchoolStore } from './admin-school.store';
 import { AdminSchoolService } from './admin-school.service';
 import { SchoolAdminDto, SchoolMergeResultDto } from '../../models/teacher-moderation.model';
@@ -83,5 +83,51 @@ describe('AdminSchoolStore', () => {
 
     store.clearLastMergeResult();
     expect(store.lastMergeResult()).toBeNull();
+  });
+
+  // UI-TT-10: egy sikertelen egyesítés ne hagyjon se kezeletlen hibát, se
+  // egy ellentmondó, korábbi sikeres eredményt a képernyőn.
+  it('merge hiba esetén beállítja az error jelet, és törli a korábbi (immár félrevezető) sikeres eredményt', async () => {
+    serviceMock.getSchools.mockReturnValue(of([makeSchool()]));
+    serviceMock.merge.mockReturnValueOnce(of(makeMergeResult()));
+
+    const store = TestBed.inject(AdminSchoolStore);
+    store.merge(1, 2);
+    await Promise.resolve();
+    expect(store.lastMergeResult()).not.toBeNull();
+
+    serviceMock.merge.mockReturnValueOnce(
+      throwError(() => ({ error: { error: 'A forrás intézmény már nem létezik.' } })),
+    );
+    store.merge(1, 3);
+    await Promise.resolve();
+
+    expect(store.error()).toBe('A forrás intézmény már nem létezik.');
+    expect(store.lastMergeResult()).toBeNull();
+    expect(store.loading()).toBe(false);
+  });
+
+  // UI-TT-23: egy még folyamatban lévő egyesítés alatt egy második merge()
+  // hívás nem indíthat el egy átfedő kérést.
+  it('loading true a merge kérés alatt, és egy átfedő merge() hívás nem indít második kérést', async () => {
+    serviceMock.getSchools.mockReturnValue(of([]));
+    const mergeSubject = new Subject<SchoolMergeResultDto>();
+    serviceMock.merge.mockReturnValue(mergeSubject.asObservable());
+
+    const store = TestBed.inject(AdminSchoolStore);
+    store.merge(1, 2);
+
+    expect(store.loading()).toBe(true);
+    expect(serviceMock.merge).toHaveBeenCalledTimes(1);
+
+    // átfedő hívás, amíg az első még folyamatban van
+    store.merge(1, 3);
+    expect(serviceMock.merge).toHaveBeenCalledTimes(1);
+
+    mergeSubject.next(makeMergeResult());
+    mergeSubject.complete();
+    await Promise.resolve();
+
+    expect(store.loading()).toBe(false);
   });
 });

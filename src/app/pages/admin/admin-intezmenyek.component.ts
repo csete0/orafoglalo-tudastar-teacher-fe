@@ -29,6 +29,10 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
         </div>
       }
 
+      @if (store.error()) {
+        <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
+      }
+
       @if (store.loading()) {
         <app-local-spinner />
       }
@@ -58,7 +62,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
               }
             </select>
           </div>
-          <button (click)="confirmMerge()" [disabled]="!canMerge()" class="btn btn-primary !px-3 !py-1.5">
+          <button (click)="confirmMerge()" [disabled]="!canMerge() || store.loading()" class="btn btn-primary !px-3 !py-1.5">
             Egyesítés
           </button>
         </div>
@@ -114,7 +118,7 @@ export class AdminIntezmenyekComponent {
   }
 
   async confirmMerge(): Promise<void> {
-    if (!this.canMerge() || this.sourceId === null || this.targetId === null) return;
+    if (!this.canMerge() || this.sourceId === null || this.targetId === null || this.store.loading()) return;
 
     const source = this.store.schools().find((s) => s.id === this.sourceId);
     const target = this.store.schools().find((s) => s.id === this.targetId);

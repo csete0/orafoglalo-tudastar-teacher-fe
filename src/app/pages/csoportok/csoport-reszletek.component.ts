@@ -78,7 +78,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
                       <p class="text-xs text-text-muted truncate">{{ member.email }}</p>
                     </div>
                   </div>
-                  <button (click)="removeMember(group.id, member.userId)" class="text-danger hover:underline shrink-0">Eltávolítás</button>
+                  <button (click)="removeMember(group.id, member.userId, member.name)" class="text-danger hover:underline shrink-0">Eltávolítás</button>
                 </li>
               } @empty {
                 <li class="flex flex-col items-center py-10 gap-3">
@@ -134,23 +134,27 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
               </select>
             </div>
 
-            <ol class="space-y-2">
-              @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-                <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm">
-                  <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                  <span class="flex-1 truncate">{{ entry.nickname }}</span>
-                  <span class="font-bold">{{ entry.score }}</span>
-                </li>
-              } @empty {
-                <li class="flex flex-col items-center py-10 gap-3">
-                  <div class="icon-tile icon-tile-neutral">
-                    <app-icon name="trophy" class="w-6 h-6 block" />
-                  </div>
-                  <p class="font-semibold">Még nincs ranglista-adat.</p>
-                </li>
-              }
-            </ol>
+            @if (leaderboard.error()) {
+              <p class="text-danger text-sm mb-4">{{ leaderboard.error() }}</p>
+            } @else {
+              <ol class="space-y-2">
+                @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
+                  <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm">
+                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
+                    <span class="flex-1 truncate">{{ entry.nickname }}</span>
+                    <span class="font-bold">{{ entry.score }}</span>
+                  </li>
+                } @empty {
+                  <li class="flex flex-col items-center py-10 gap-3">
+                    <div class="icon-tile icon-tile-neutral">
+                      <app-icon name="trophy" class="w-6 h-6 block" />
+                    </div>
+                    <p class="font-semibold">Még nincs ranglista-adat.</p>
+                  </li>
+                }
+              </ol>
+            }
           }
 
           @case ('meghivo') {
@@ -243,9 +247,9 @@ export class CsoportReszletekComponent implements OnInit {
     return 'bg-bg-element text-text-muted';
   }
 
-  async removeMember(groupId: number, userId: number): Promise<void> {
+  async removeMember(groupId: number, userId: number, memberName: string): Promise<void> {
     const ok = await this.confirmService.ask({
-      message: 'Biztosan eltávolítod ezt a diákot a csoportból?',
+      message: `Biztosan eltávolítod ${memberName} diákot a csoportból?`,
       danger: true,
       confirmLabel: 'Eltávolítás',
     });
@@ -255,7 +259,8 @@ export class CsoportReszletekComponent implements OnInit {
 
   async archive(groupId: number): Promise<void> {
     const ok = await this.confirmService.ask({
-      message: 'Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést.',
+      message:
+        'Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést. Ez a művelet VÉGLEGES, az archiválás nem vonható vissza.',
       danger: true,
       confirmLabel: 'Archiválás',
     });
@@ -267,10 +272,18 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   async changeSchool(groupId: number, groupName: string, schoolId: number | null): Promise<void> {
+    const previousSchoolId = this.store.selectedGroup()?.schoolId ?? null;
     if (schoolId !== null) {
       const schoolName = this.schoolStore.schools().find((s) => s.id === schoolId)?.name ?? '';
       const ok = await this.confirmService.ask({
         message: `Biztosan a(z) „${schoolName}” intézményhez kötöd ezt a csoportot? A tagok minden korábbi eredménye láthatóvá válik az intézmény igazgatója számára, és a diákok erről értesítést kapnak.`,
+      });
+      if (!ok) return;
+    } else if (previousSchoolId !== null) {
+      const ok = await this.confirmService.ask({
+        message: 'Biztosan visszavonod a csoport intézményhez-kötését? A csoport lekerül az intézményről, és az igazgató a továbbiakban nem látja a diákok eredményeit.',
+        danger: true,
+        confirmLabel: 'Kötés visszavonása',
       });
       if (!ok) return;
     }

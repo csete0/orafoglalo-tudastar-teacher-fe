@@ -26,6 +26,7 @@ export class ReportStore {
   loadGroupActivity(groupId: number, from?: Date, to?: Date): void {
     this._loading.set(true);
     this._error.set(null);
+    this._groupActivity.set([]);
 
     this.service
       .getGroupActivity(groupId, from, to)
@@ -43,6 +44,7 @@ export class ReportStore {
   loadSchoolActivity(schoolId: number, from?: Date, to?: Date): void {
     this._loading.set(true);
     this._error.set(null);
+    this._schoolActivity.set([]);
 
     this.service
       .getSchoolActivity(schoolId, from, to)
@@ -60,6 +62,7 @@ export class ReportStore {
   loadStudentActivity(studentUserId: number, from?: Date, to?: Date): void {
     this._loading.set(true);
     this._error.set(null);
+    this._studentDetail.set(null);
 
     this.service
       .getStudentActivity(studentUserId, from, to)
@@ -77,6 +80,7 @@ export class ReportStore {
   loadTaskSetResults(taskSetId: number): void {
     this._loading.set(true);
     this._error.set(null);
+    this._taskSetResults.set(null);
 
     this.service
       .getTaskSetResults(taskSetId)

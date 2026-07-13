@@ -20,6 +20,7 @@ export class LeaderboardStore {
   loadGroupLeaderboard(groupId: number, category: LeaderboardCategory, period: LeaderboardPeriod): void {
     this._loading.set(true);
     this._error.set(null);
+    this._leaderboard.set(null);
 
     this.service
       .getGroupLeaderboard(groupId, category, period)
@@ -37,6 +38,7 @@ export class LeaderboardStore {
   loadSchoolLeaderboard(schoolId: number, category: LeaderboardCategory, period: LeaderboardPeriod): void {
     this._loading.set(true);
     this._error.set(null);
+    this._leaderboard.set(null);
 
     this.service
       .getSchoolLeaderboard(schoolId, category, period)

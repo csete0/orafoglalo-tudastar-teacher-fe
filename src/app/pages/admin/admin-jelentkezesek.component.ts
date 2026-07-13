@@ -58,16 +58,18 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
                 <div class="flex gap-2 items-start mt-2">
                   <input [(ngModel)]="rejectReason" placeholder="Indoklás (opcionális)"
                     class="input flex-1 !px-2 !py-1" />
-                  <button (click)="confirmReject(application.id)" class="text-sm text-danger px-2 py-1">Megerősítés</button>
-                  <button (click)="cancelReject()" class="text-sm text-text-muted px-2 py-1">Mégse</button>
+                  <button (click)="confirmReject(application.id)" [disabled]="store.loading()"
+                    class="text-sm text-danger px-2 py-1">Megerősítés</button>
+                  <button (click)="cancelReject()" [disabled]="store.loading()"
+                    class="text-sm text-text-muted px-2 py-1">Mégse</button>
                 </div>
               } @else {
                 <div class="flex gap-2 mt-2">
-                  <button (click)="approve(application.id)"
+                  <button (click)="approve(application.id)" [disabled]="store.loading()"
                     class="btn !bg-success !text-white !px-3 !py-1.5">
                     Elfogadás
                   </button>
-                  <button (click)="startReject(application.id)"
+                  <button (click)="startReject(application.id)" [disabled]="store.loading()"
                     class="btn btn-danger !px-3 !py-1.5">
                     Elutasítás
                   </button>

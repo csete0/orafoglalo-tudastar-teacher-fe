@@ -37,6 +37,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
 
         <h2 class="font-bold mb-3">Legutóbbi vizsgák</h2>
         <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
               <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
@@ -63,6 +64,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
               }
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     } @else if (store.loading()) {

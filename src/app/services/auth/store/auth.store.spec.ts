@@ -151,6 +151,20 @@ describe('AuthStore', () => {
     expect(onError).toHaveBeenCalledWith('Hibás jelszó');
   });
 
+  it('signIn hiba: status 0 (hálózati/CORS hiba) esetén NEM "hibás email/jelszó" üzenetet mutat', async () => {
+    authServiceMock.signIn.mockReturnValue(throwError(() => ({ status: 0, error: null })));
+
+    const store = TestBed.inject(AuthStore);
+    const onError = vi.fn();
+    store.signIn({ email: 'x@x.hu', password: 'jelszo' }, undefined, onError);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.isAuthenticated()).toBe(false);
+    expect(store.error()?.message).toBe('Nem sikerült kapcsolódni a szerverhez. Próbáld újra később.');
+    expect(onError).toHaveBeenCalledWith('Nem sikerült kapcsolódni a szerverhez. Próbáld újra később.');
+  });
+
   it('logout: törli a tokeneket és isAuthenticated=false lesz', async () => {
     authServiceMock.logout.mockReturnValue(of({}));
 

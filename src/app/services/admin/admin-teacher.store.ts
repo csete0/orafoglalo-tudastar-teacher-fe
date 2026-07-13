@@ -65,16 +65,19 @@ export class AdminTeacherStore {
     maxStorageBytes: number | null,
     onSuccess?: () => void,
   ): void {
-    // Hibakezelés szándékosan nincs: a backend OrafoglaloException-t dob
-    // (negatív érték / ismeretlen profil), azt az interceptor kezeli globálisan.
+    this._error.set(null);
+
     this.service
       .setQuota(teacherProfileId, maxTaskSets, maxStorageBytes)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
-        this._teachers.update((list) =>
-          list.map((t) => (t.id === teacherProfileId ? { ...t, maxTaskSets, maxStorageBytes } : t)),
-        );
-        if (onSuccess) onSuccess();
+      .subscribe({
+        next: () => {
+          this._teachers.update((list) =>
+            list.map((t) => (t.id === teacherProfileId ? { ...t, maxTaskSets, maxStorageBytes } : t)),
+          );
+          if (onSuccess) onSuccess();
+        },
+        error: (err) => this._error.set(err.error?.error ?? 'A kvóta mentése sikertelen.'),
       });
   }
 
@@ -86,6 +89,7 @@ export class AdminTeacherStore {
     }
 
     this._selectedTeacherId.set(teacherProfileId);
+    this._taskSets.set([]);
     this._taskSetsLoading.set(true);
     this._error.set(null);
 

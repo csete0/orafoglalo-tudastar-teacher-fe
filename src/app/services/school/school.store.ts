@@ -115,6 +115,7 @@ export class SchoolStore {
 
   loadMembers(id: number): void {
     this._loading.set(true);
+    this._error.set(null);
     this.service
       .getMembers(id)
       .pipe(
@@ -131,6 +132,11 @@ export class SchoolStore {
   removeMember(schoolId: number, memberTeacherProfileId: number, onSuccess?: () => void): void {
     this.mutate(this.service.removeMember(schoolId, memberTeacherProfileId), () => {
       this._members.update((list) => list.filter((m) => m.teacherProfileId !== memberTeacherProfileId));
+      // A SchoolMemberDto-nak nincs önmagát azonosító mezője, ezért nem tudjuk
+      // itt eldönteni, hogy a hívó saját magát távolította-e el — a `_schools`
+      // (és ezáltal myRole/isSelectedAdmin) mindig újratöltődik, hogy egy
+      // önmaga-eltávolítás után a fejléc/fülek se maradjanak elavultak.
+      this.loadMine();
       if (onSuccess) onSuccess();
     });
   }
@@ -145,12 +151,16 @@ export class SchoolStore {
       this._members.update((list) =>
         list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
       );
+      // Ugyanaz az ok, mint removeMember()-nél: a `_schools`-beli myRole
+      // csak innen frissülhet, ha a hívó saját szerepét módosította.
+      this.loadMine();
       if (onSuccess) onSuccess();
     });
   }
 
   loadSchoolGroups(id: number): void {
     this._loading.set(true);
+    this._error.set(null);
     this.service
       .getSchoolGroups(id)
       .pipe(

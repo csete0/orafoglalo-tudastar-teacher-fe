@@ -89,7 +89,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                     <span class="badge" [class]="member.role === 'Admin' ? 'badge-primary' : 'badge-neutral'">
                       {{ member.role === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
                     @if (school.isSelectedAdmin()) {
-                      <button (click)="toggleRole(s.id, member.teacherProfileId, member.role)" class="text-primary hover:underline">
+                      <button (click)="toggleRole(s.id, member.teacherProfileId, member.role, member.displayName)" class="text-primary hover:underline">
                         {{ member.role === 'Admin' ? 'Lefokozás' : 'Igazgatóvá tétel' }}
                       </button>
                       <button (click)="removeMember(s.id, member.teacherProfileId)" class="text-danger hover:underline">Eltávolítás</button>
@@ -126,53 +126,61 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
               </select>
             </div>
 
-            <ol class="space-y-2">
-              @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-                <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm"
-                  [class.!border-primary]="entry.isCurrentUser">
-                  <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                  <span class="flex-1 truncate">{{ entry.nickname }}</span>
-                  <span class="font-bold">{{ entry.score }}</span>
-                </li>
-              } @empty {
-                <li class="flex flex-col items-center py-10 gap-3">
-                  <div class="icon-tile icon-tile-neutral">
-                    <app-icon name="trophy" class="w-6 h-6 block" />
-                  </div>
-                  <p class="font-semibold">Még nincs ranglista-adat.</p>
-                </li>
-              }
-            </ol>
+            @if (leaderboard.error()) {
+              <p class="text-danger text-sm mb-4">{{ leaderboard.error() }}</p>
+            } @else {
+              <ol class="space-y-2">
+                @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
+                  <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm"
+                    [class.!border-primary]="entry.isCurrentUser">
+                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
+                    <span class="flex-1 truncate">{{ entry.nickname }}</span>
+                    <span class="font-bold">{{ entry.score }}</span>
+                  </li>
+                } @empty {
+                  <li class="flex flex-col items-center py-10 gap-3">
+                    <div class="icon-tile icon-tile-neutral">
+                      <app-icon name="trophy" class="w-6 h-6 block" />
+                    </div>
+                    <p class="font-semibold">Még nincs ranglista-adat.</p>
+                  </li>
+                }
+              </ol>
+            }
           }
 
           @case ('attekintes') {
-            <div class="card overflow-hidden">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                    <th class="py-3 px-4">Diák</th>
-                    <th class="py-3 px-4">Vizsgák</th>
-                    <th class="py-3 px-4">Átlag %</th>
-                    <th class="py-3 px-4">Sorozat</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (student of report.schoolActivity(); track student.userId) {
-                    <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                      <td class="py-2.5 px-4">
-                        <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                      </td>
-                      <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                      <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                      <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+            @if (report.error()) {
+              <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
+            } @else {
+              <div class="card overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                      <th class="py-3 px-4">Diák</th>
+                      <th class="py-3 px-4">Vizsgák</th>
+                      <th class="py-3 px-4">Átlag %</th>
+                      <th class="py-3 px-4">Sorozat</th>
                     </tr>
-                  } @empty {
-                    <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    @for (student of report.schoolActivity(); track student.userId) {
+                      <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                        <td class="py-2.5 px-4">
+                          <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
+                        </td>
+                        <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
+                        <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
+                        <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
           }
 
           @case ('csoportok') {
@@ -258,8 +266,22 @@ export class IntezmenyReszletekComponent implements OnInit {
     return 'bg-bg-element text-text-muted';
   }
 
-  toggleRole(schoolId: number, teacherProfileId: number, currentRole: SchoolTeacherRole): void {
+  async toggleRole(
+    schoolId: number,
+    teacherProfileId: number,
+    currentRole: SchoolTeacherRole,
+    displayName: string,
+  ): Promise<void> {
     const newRole: SchoolTeacherRole = currentRole === 'Admin' ? 'Teacher' : 'Admin';
+    const ok = await this.confirmService.ask({
+      message:
+        newRole === 'Admin'
+          ? `Biztosan igazgatóvá teszed ${displayName} tanárt? Ezzel teljes intézmény-admin jogkört kap.`
+          : `Biztosan lefokozod ${displayName} tanárt? Elveszíti az intézmény-admin jogkörét.`,
+      danger: true,
+      confirmLabel: newRole === 'Admin' ? 'Igazgatóvá tétel' : 'Lefokozás',
+    });
+    if (!ok) return;
     this.school.changeMemberRole(schoolId, teacherProfileId, { role: newRole }, () =>
       this.toastService.success('Szerepkör módosítva.'),
     );

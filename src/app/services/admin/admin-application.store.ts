@@ -42,6 +42,8 @@ export class AdminApplicationStore {
   }
 
   approve(id: number, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
     this._loading.set(true);
     this._error.set(null);
 
@@ -62,6 +64,8 @@ export class AdminApplicationStore {
   }
 
   reject(id: number, request: RejectTeacherApplicationRequest, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
     this._loading.set(true);
     this._error.set(null);
 

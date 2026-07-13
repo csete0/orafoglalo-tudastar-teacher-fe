@@ -69,6 +69,7 @@ export class GroupStore {
 
   loadMembers(id: number): void {
     this._loading.set(true);
+    this._error.set(null);
     this.service
       .getMembers(id)
       .pipe(

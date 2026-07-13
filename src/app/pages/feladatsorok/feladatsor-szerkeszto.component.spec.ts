@@ -34,7 +34,11 @@ describe('FeladatsorSzerkesztoComponent', () => {
     loadDetail: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
   };
-  let schoolStoreMock: { schools: ReturnType<typeof signal<unknown[]>>; loadMine: ReturnType<typeof vi.fn> };
+  let schoolStoreMock: {
+    schools: ReturnType<typeof signal<unknown[]>>;
+    loading: ReturnType<typeof signal<boolean>>;
+    loadMine: ReturnType<typeof vi.fn>;
+  };
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
 
@@ -47,7 +51,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       loadDetail: vi.fn(),
       publish: vi.fn(),
     };
-    schoolStoreMock = { schools: signal([]), loadMine: vi.fn() };
+    schoolStoreMock = { schools: signal([]), loading: signal(false), loadMine: vi.fn() };
     authorizedFileServiceMock = {
       resolveUrl: vi.fn((url: string) => of(`blob:resolved-${url}`)),
       revoke: vi.fn(),
@@ -229,6 +233,177 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  it('publish() megvárja a schoolStore.loading() lezárását race esetén, mielőtt eldönti, kell-e megerősítés (UI-TT-47)', async () => {
+    configure(makeDetail({ isPublished: false }));
+    // A schools() még üres és a store még "loading" — pontosan az az időablak, amikor a
+    // taskset-detail válasza HAMARABB érkezett meg, mint az intézmény-lista.
+    schoolStoreMock.loading.set(true);
+    schoolStoreMock.schools.set([]);
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const publishPromise = component.publish(1);
+
+    // Az intézmény-lista később, de MÉG a publish() döntése előtt megérkezik — a tanár
+    // TÉNYLEGESEN tagja egy intézménynek.
+    schoolStoreMock.schools.set([{ id: 1 }]);
+    schoolStoreMock.loading.set(false);
+    fixture.detectChanges();
+
+    await publishPromise;
+
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
+    expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  it('egy független sikeres mentés/hozzáadás utáni újratöltés NEM dobja el egy másik, még el nem mentett kódrészlet-piszkozatot (UI-TT-40)', () => {
+    configure(
+      makeDetail({
+        tasks: [
+          {
+            id: 1,
+            title: 'F1',
+            description: 'd',
+            maxPoints: 10,
+            taskOrder: 1,
+            taskTypeIds: [],
+            completeSolutionSnippets: [],
+            solutions: [
+              { id: 101, description: 'A', snippets: [] },
+              { id: 102, description: 'B', snippets: [] },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.setDraftCode(101, 2, "def sort_items(items): return sorted(items)");
+    expect(component.draftCode(101, 2)).toContain('sort_items');
+
+    // Egy FÜGGETLEN, sikeres mutáció (pl. egy harmadik, #103 solution hozzáadása) miatt a
+    // store ÚJ selectedDetail referenciát ad (mint egy loadDetail() reload után) — a
+    // #101/#102-t VÁLTOZATLANUL hagyva.
+    taskSetStoreMock.selectedDetail.set(
+      makeDetail({
+        tasks: [
+          {
+            id: 1,
+            title: 'F1',
+            description: 'd',
+            maxPoints: 10,
+            taskOrder: 1,
+            taskTypeIds: [],
+            completeSolutionSnippets: [],
+            solutions: [
+              { id: 101, description: 'A', snippets: [] },
+              { id: 102, description: 'B', snippets: [] },
+              { id: 103, description: 'C', snippets: [] },
+            ],
+          },
+        ],
+      }),
+    );
+    fixture.detectChanges();
+
+    expect(component.draftCode(101, 2)).toContain('sort_items');
+  });
+
+  it('a "Új részfeladat szövege" piszkozat feladatonként elkülönített, task-váltáskor nem szivárog át (UI-TT-66)', () => {
+    configure(
+      makeDetail({
+        tasks: [
+          { id: 501, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [], completeSolutionSnippets: [], solutions: [] },
+          { id: 502, title: 'F2', description: 'd', maxPoints: 10, taskOrder: 2, taskTypeIds: [], completeSolutionSnippets: [], solutions: [] },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.setNewSolutionDescription(501, 'A-hoz szánt piszkozat szöveg');
+    component.setNewSolutionPoints(501, 7);
+
+    expect(component.newSolutionDraft(502).description).toBe('');
+    expect(component.newSolutionDraft(502).points).toBe(5);
+    expect(component.newSolutionDraft(501).description).toBe('A-hoz szánt piszkozat szöveg');
+    expect(component.newSolutionDraft(501).points).toBe(7);
+  });
+
+  it('a feladat-kártya címe truncate-elt, hogy a Törlés gomb sose kerüljön a kártya overflow-hidden határa mögé (UI-TT-55)', () => {
+    const longTitle = 'X'.repeat(160);
+    configure(
+      makeDetail({
+        tasks: [
+          { id: 1, title: longTitle, description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [], completeSolutionSnippets: [], solutions: [] },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const titleEl = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('p')).find((p) =>
+      p.textContent?.includes(longTitle),
+    );
+    expect(titleEl).toBeDefined();
+    expect(titleEl!.className).toContain('truncate');
+  });
+
+  it('a részfeladat-kártya solutionText/description mezőin truncate/break-words védelem van (UI-TT-56)', () => {
+    const longSolutionText = 'S'.repeat(160);
+    const longDescription = 'D'.repeat(200);
+    configure(
+      makeDetail({
+        tasks: [
+          {
+            id: 1,
+            title: 'F1',
+            description: 'd',
+            maxPoints: 10,
+            taskOrder: 1,
+            taskTypeIds: [],
+            completeSolutionSnippets: [],
+            solutions: [{ id: 101, description: longDescription, solutionText: longSolutionText, snippets: [] }],
+          },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.toggleTask(1);
+    fixture.detectChanges();
+
+    const paragraphs = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('p'));
+    const solutionTextEl = paragraphs.find((p) => p.textContent?.includes(longSolutionText));
+    const descriptionEl = paragraphs.find((p) => p.textContent === longDescription);
+
+    expect(solutionTextEl).toBeDefined();
+    expect(solutionTextEl!.className).toContain('truncate');
+    expect(descriptionEl).toBeDefined();
+    expect(descriptionEl!.className).toContain('break-words');
+  });
+
+  it('az oldal saját <h1> feladatsor-címe truncate-elt (UI-TT-57)', () => {
+    const longTitle = 'T'.repeat(150);
+    configure(makeDetail({ title: longTitle }));
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const h1: HTMLElement = fixture.nativeElement.querySelector('h1');
+    expect(h1.textContent).toBe(longTitle);
+    expect(h1.className).toContain('truncate');
   });
 
   it('a "Megnyitás" link a bearer tokennel lekért blob URL-re mutat, nem a nyers (401-et adó) API URL-re', () => {

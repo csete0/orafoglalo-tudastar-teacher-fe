@@ -105,16 +105,16 @@ const BYTES_PER_MB = 1048576;
                 }
                 <ul class="space-y-2">
                   @for (taskSet of store.taskSets(); track taskSet.id) {
-                    <li class="flex justify-between items-center bg-bg-element rounded-xl p-2 text-sm">
-                      <div>
-                        <span>{{ taskSet.title }}</span>
-                        <span class="text-text-muted ml-2">
+                    <li class="flex justify-between items-center gap-2 bg-bg-element rounded-xl p-2 text-sm">
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate">{{ taskSet.title }}</span>
+                        <span class="text-text-muted">
                           {{ taskSet.taskCount }} feladat · {{ taskSet.isPublished ? 'Publikálva' : 'Piszkozat' }}
                         </span>
-                      </div>
+                      </span>
                       @if (taskSet.isPublished) {
                         <button (click)="confirmTakedown(taskSet.id, taskSet.title)"
-                          class="text-danger hover:underline whitespace-nowrap">
+                          class="text-danger hover:underline whitespace-nowrap shrink-0">
                           Publikálás visszavonása
                         </button>
                       }
@@ -129,7 +129,7 @@ const BYTES_PER_MB = 1048576;
             }
           </li>
         } @empty {
-          @if (!store.loading()) {
+          @if (!store.loading() && !store.error()) {
             <li class="flex flex-col items-center py-10 gap-3">
               <div class="icon-tile icon-tile-neutral">
                 <app-icon name="academic-cap" class="w-6 h-6 block" />

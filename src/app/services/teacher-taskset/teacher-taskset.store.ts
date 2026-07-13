@@ -54,7 +54,7 @@ export class TeacherTaskSetStore {
       });
   }
 
-  loadDetail(id: number): void {
+  loadDetail(id: number, onSuccess?: () => void): void {
     this._loading.set(true);
     this._error.set(null);
 
@@ -66,7 +66,10 @@ export class TeacherTaskSetStore {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (detail) => this._selectedDetail.set(detail),
+        next: (detail) => {
+          this._selectedDetail.set(detail);
+          if (onSuccess) onSuccess();
+        },
         error: (err) => this._error.set(err.error?.error ?? 'A feladatsor betöltése sikertelen.'),
       });
   }
@@ -96,20 +99,24 @@ export class TeacherTaskSetStore {
 
     this.service
       .publish(id)
-      .pipe(
-        take(1),
-        finalize(() => this._loading.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
           this._publishResult.set(result);
           if (result.success) {
-            this.loadDetail(id);
-            if (onSuccess) onSuccess();
+            // Loading marad true (a loadDetail() gondoskodik a lezárásáról), amíg az
+            // újratöltés válasza meg nem érkezik — enélkül a "Publikálás" gomb és a
+            // fejléc-jelvény átmenetileg úgy mutatná, mintha a publikálás sikertelen
+            // lenne / még nem történt volna meg (UI-TT-45).
+            this.loadDetail(id, onSuccess);
+          } else {
+            this._loading.set(false);
           }
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A publikálás sikertelen.'),
+        error: (err) => {
+          this._error.set(err.error?.error ?? 'A publikálás sikertelen.');
+          this._loading.set(false);
+        },
       });
   }
 
@@ -178,9 +185,24 @@ export class TeacherTaskSetStore {
   }
 
   private mutateAndReload<T>(observable: Observable<T>, taskSetId: number, onSuccess?: () => void): void {
-    this.mutate(observable, () => {
-      this.loadDetail(taskSetId);
-      if (onSuccess) onSuccess();
-    });
+    this._loading.set(true);
+    this._error.set(null);
+
+    observable
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          // Loading marad true a mutáció válasza UTÁN is, egészen addig, amíg a
+          // szinkron módon elindított loadDetail() saját finalize()-a le nem futtatja
+          // — enélkül a mutáció válaszának megérkezésekor azonnal false-ra váltana,
+          // mielőtt a UI ténylegesen a frissített (pl. újonnan mentett) állapotot
+          // mutatná (UI-TT-45).
+          this.loadDetail(taskSetId, onSuccess);
+        },
+        error: (err) => {
+          this._error.set(err.error?.error ?? 'A művelet sikertelen.');
+          this._loading.set(false);
+        },
+      });
   }
 }

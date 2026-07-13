@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal, computed, inject, DestroyRef, NgZone } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs/operators';
@@ -153,8 +154,14 @@ export class AuthStore {
           this._isAuthenticated.set(true);
           if (onSuccess) onSuccess();
         },
-        error: (err) => {
-          const message = err.error?.errorMessage ?? err.error?.error ?? 'Hibás email cím vagy jelszó.';
+        error: (err: HttpErrorResponse) => {
+          // status === 0 → a kérés nem jutott el a backendig (hálózati hiba vagy
+          // CORS-blokk), tehát a hitelesítő adatok nem lettek ellenőrizve — ezt
+          // nem szabad "hibás email/jelszó"-ként mutatni.
+          const message =
+            err.status === 0
+              ? 'Nem sikerült kapcsolódni a szerverhez. Próbáld újra később.'
+              : (err.error?.errorMessage ?? err.error?.error ?? 'Hibás email cím vagy jelszó.');
           this._error.set({ message, timestamp: new Date() });
           this._isAuthenticated.set(false);
           if (onError) onError(message);

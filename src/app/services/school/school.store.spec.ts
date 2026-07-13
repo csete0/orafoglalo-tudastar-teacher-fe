@@ -25,6 +25,8 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     delete: ReturnType<typeof vi.fn>;
     getMembers: ReturnType<typeof vi.fn>;
     getSchoolGroups: ReturnType<typeof vi.fn>;
+    changeMemberRole: ReturnType<typeof vi.fn>;
+    removeMember: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -35,6 +37,8 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
       delete: vi.fn(),
       getMembers: vi.fn(),
       getSchoolGroups: vi.fn(),
+      changeMemberRole: vi.fn(),
+      removeMember: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [SchoolStore, { provide: SchoolService, useValue: serviceMock }],
@@ -134,5 +138,85 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     await Promise.resolve();
 
     expect(store.error()).toBe('Nincs jogosultságod.');
+  });
+
+  // BUG UI-TT-9: loadMembers()/loadSchoolGroups() sosem törölte az előző mutáció hibáját indításkor.
+  it('egy sikertelen mutáció után egy KÉSŐBBI, SIKERES loadMembers() törli a régi hibaüzenetet', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
+    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { error: 'A törlés sikertelen.' } })));
+    serviceMock.getMembers.mockReturnValue(of([]));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    store.delete(1);
+    await Promise.resolve();
+    expect(store.error()).toBe('A törlés sikertelen.');
+
+    store.loadMembers(1);
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+  });
+
+  it('egy sikertelen mutáció után egy KÉSŐBBI, SIKERES loadSchoolGroups() törli a régi hibaüzenetet', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
+    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { error: 'A törlés sikertelen.' } })));
+    serviceMock.getSchoolGroups.mockReturnValue(of([]));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    store.delete(1);
+    await Promise.resolve();
+    expect(store.error()).toBe('A törlés sikertelen.');
+
+    store.loadSchoolGroups(1);
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+  });
+
+  // BUG UI-TT-46: saját szerepkör lefokozása a tag-listán át nem frissítette a SchoolDto.myRole-t/isSelectedAdmin-t.
+  it('saját szerepkör sikeres lefokozása után a _schools (myRole/isSelectedAdmin) újratöltődik', async () => {
+    serviceMock.getMine
+      .mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]))
+      .mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Teacher' })]));
+    serviceMock.changeMemberRole.mockReturnValue(of({}));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+    expect(store.isSelectedAdmin()).toBe(true);
+
+    store.changeMemberRole(1, 42, { role: 'Teacher' });
+    await Promise.resolve();
+
+    expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
+    expect(store.isSelectedAdmin()).toBe(false);
+    expect(store.selectedSchool()?.myRole).toBe('Teacher');
+  });
+
+  it('saját eltávolítás után (removeMember) a _schools szintén újratöltődik', async () => {
+    serviceMock.getMine
+      .mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]))
+      .mockReturnValueOnce(of([]));
+    serviceMock.removeMember.mockReturnValue(of({}));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    store.removeMember(1, 42);
+    await Promise.resolve();
+
+    expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
+    expect(store.schools()).toHaveLength(0);
   });
 });

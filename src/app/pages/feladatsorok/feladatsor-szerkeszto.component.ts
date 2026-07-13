@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { filter, firstValueFrom, take } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
@@ -46,7 +48,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         <div class="flex justify-between items-start mb-6 gap-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
-              <h1 class="text-2xl font-black tracking-tight">{{ detail.title }}</h1>
+              <h1 class="text-2xl font-black tracking-tight truncate min-w-0">{{ detail.title }}</h1>
               <span class="badge" [class]="detail.isPublished ? 'badge-success' : 'badge-warning'">
                 {{ detail.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
             </div>
@@ -113,8 +115,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
                         <button (click)="toggleTask(task.id)" class="text-left flex-1 flex items-start gap-2 group">
                           <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
                             [class.-rotate-90]="expandedTaskId() !== task.id" />
-                          <span>
-                            <p class="font-medium group-hover:text-primary transition-colors">{{ task.taskOrder }}. {{ task.title }}</p>
+                          <span class="min-w-0 flex-1">
+                            <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
                             <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
                           </span>
                         </button>
@@ -126,11 +128,11 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <!-- Részfeladatok -->
                           @for (solution of task.solutions; track solution.id) {
                             <div class="bg-bg-panel rounded-xl p-3">
-                              <div class="flex justify-between items-start mb-2">
-                                <p class="text-sm font-medium">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
-                                <button (click)="deleteSolution(detail.id, solution.id)" class="text-sm text-danger hover:underline">Törlés</button>
+                              <div class="flex justify-between items-start gap-2 mb-2">
+                                <p class="text-sm font-medium min-w-0 flex-1 truncate">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
+                                <button (click)="deleteSolution(detail.id, solution.id)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
                               </div>
-                              <p class="text-sm text-text-muted mb-2">{{ solution.description }}</p>
+                              <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
 
                               <div class="grid grid-cols-2 gap-2">
                                 @for (lang of languages; track lang.id) {
@@ -153,15 +155,17 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <form (ngSubmit)="addSolution(detail.id, task.id)" class="flex gap-2 items-end">
                             <div class="flex-1">
                               <label class="text-xs text-text-muted">Új részfeladat szövege</label>
-                              <input [(ngModel)]="newSolutionDescription" name="newSolutionDescription"
+                              <input [ngModel]="newSolutionDraft(task.id).description"
+                                (ngModelChange)="setNewSolutionDescription(task.id, $event)" name="newSolutionDescription"
                                 class="input !px-2 !py-1" />
                             </div>
                             <div class="w-20">
                               <label class="text-xs text-text-muted">Pont</label>
-                              <input type="number" [(ngModel)]="newSolutionPoints" name="newSolutionPoints"
+                              <input type="number" [ngModel]="newSolutionDraft(task.id).points"
+                                (ngModelChange)="setNewSolutionPoints(task.id, $event)" name="newSolutionPoints"
                                 class="input !px-2 !py-1" />
                             </div>
-                            <button type="submit" [disabled]="!newSolutionDescription"
+                            <button type="submit" [disabled]="!newSolutionDraft(task.id).description"
                               class="btn btn-primary !px-3 !py-1.5">
                               Hozzáadás
                             </button>
@@ -263,6 +267,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly store = inject(TeacherTaskSetStore);
   private readonly schoolStore = inject(SchoolStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
+  // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
+  // a schools() alapján dönt a megerősítő dialógusról (UI-TT-47 load-order race).
+  private readonly schoolStoreLoading$ = toObservable(this.schoolStore.loading);
 
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
@@ -271,6 +278,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   readonly expandedTaskId = signal<number | null>(null);
   private readonly drafts = signal<SnippetDraft>({});
+  // Azon draft-kulcsok (solutionId / completeSolutionKey), amelyeken a tanár MÉG NEM
+  // mentett módosítást gépelt be — az effect() ezeket nem írja felül egy FÜGGETLEN,
+  // máshol lezajlott sikeres mentés/hozzáadás utáni újratöltéskor (UI-TT-40).
+  private readonly dirtyDraftKeys = signal<Set<number>>(new Set());
   // A "Megnyitás" link sima <a href> lenne, a token viszont localStorage-ban
   // van (nem cookie-ban) — nyers navigáció nem viszi magával, 401-et adna.
   // Ezért bearer tokennel lekért blob URL-re oldjuk fel, fileId -> blob URL.
@@ -287,8 +298,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
    *  minden megnyitáskor kattintania. */
   readonly expandedSections = signal<Set<number>>(new Set([...TASK_TYPES.map((t) => t.id), 0]));
 
-  newSolutionDescription = '';
-  newSolutionPoints = 5;
+  /** Feladatonként (task.id) külön "Új részfeladat" űrlap-draft — enélkül a mentetlen
+   *  szöveg/pont a task-váltáskor csendben átkerülne az újonnan kiválasztott feladathoz
+   *  (UI-TT-66). Lazy-létrehozott bejegyzések, sima objektum (a newTaskDrafts mintáját
+   *  követve — OnPush mellett is frissül, mert a bekötő esemény ebben a komponensben
+   *  keletkezik). */
+  private readonly newSolutionDrafts: Record<number, { description: string; points: number }> = {};
 
   /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
    *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
@@ -354,22 +369,32 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   constructor() {
     // A drafteket a szerver-állapotból töltjük — mentés után a store úgyis
-    // újratölti a detailt, ezért a draft mindig a legutóbb mentett állapotra
-    // áll vissza (ez a szándékolt, egyszerű viselkedés).
+    // újratölti a detailt, ezért az ÉRINTETT draft a legutóbb mentett állapotra
+    // áll vissza (ez a szándékolt, egyszerű viselkedés). DE ez a reload MINDEN
+    // sikeres mutációra lefut (nemcsak az érintett solution/task-éra) — ezért
+    // a még "piszkos" (mentetlen) kulcsokat itt NEM írjuk felül, különben egy
+    // teljesen független mentés/hozzáadás csendben eldobná egy MÁSIK, még el
+    // nem mentett kódrészlet-piszkozatot ugyanazon az oldalon (UI-TT-40).
     effect(() => {
       const detail = this.store.selectedDetail();
       if (!detail) return;
 
-      const next: SnippetDraft = {};
-      for (const task of detail.tasks) {
-        for (const solution of task.solutions) {
-          next[solution.id] = Object.fromEntries(solution.snippets.map((s) => [s.programmingLanguageId, s.code]));
+      const dirty = this.dirtyDraftKeys();
+      this.drafts.update((current) => {
+        const next: SnippetDraft = { ...current };
+        for (const task of detail.tasks) {
+          for (const solution of task.solutions) {
+            if (dirty.has(solution.id)) continue;
+            next[solution.id] = Object.fromEntries(solution.snippets.map((s) => [s.programmingLanguageId, s.code]));
+          }
+          const completeKey = this.completeSolutionKey(task.id);
+          if (dirty.has(completeKey)) continue;
+          next[completeKey] = Object.fromEntries(
+            task.completeSolutionSnippets.map((s) => [s.programmingLanguageId, s.code]),
+          );
         }
-        next[this.completeSolutionKey(task.id)] = Object.fromEntries(
-          task.completeSolutionSnippets.map((s) => [s.programmingLanguageId, s.code]),
-        );
-      }
-      this.drafts.set(next);
+        return next;
+      });
     });
 
     effect(() => {
@@ -420,6 +445,19 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       ...current,
       [key]: { ...current[key], [languageId]: code },
     }));
+    // A kulcs "piszkos" marad, amíg a mentése tényleg le nem fut — enélkül egy
+    // MÁSIK, független mutáció utáni újratöltés csendben eldobná ezt a mentetlen
+    // szerkesztést (UI-TT-40).
+    this.dirtyDraftKeys.update((current) => new Set(current).add(key));
+  }
+
+  private clearDirtyDraft(key: number): void {
+    this.dirtyDraftKeys.update((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
   }
 
   private snippetsFromDraft(key: number): SnippetDto[] {
@@ -432,17 +470,20 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   saveSnippets(taskSetId: number, solution: TeacherSolutionDto): void {
     const snippets = this.snippetsFromDraft(solution.id);
     if (snippets.length === 0) return;
-    this.store.upsertSolutionSnippets(taskSetId, solution.id, snippets, () =>
-      this.toastService.success('Kódrészletek mentve.'),
-    );
+    this.store.upsertSolutionSnippets(taskSetId, solution.id, snippets, () => {
+      this.clearDirtyDraft(solution.id);
+      this.toastService.success('Kódrészletek mentve.');
+    });
   }
 
   saveCompleteSolutionSnippets(taskSetId: number, task: TeacherTaskDto): void {
-    const snippets = this.snippetsFromDraft(this.completeSolutionKey(task.id));
+    const key = this.completeSolutionKey(task.id);
+    const snippets = this.snippetsFromDraft(key);
     if (snippets.length === 0) return;
-    this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets, () =>
-      this.toastService.success('Összevont megoldás mentve.'),
-    );
+    this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets, () => {
+      this.clearDirtyDraft(key);
+      this.toastService.success('Összevont megoldás mentve.');
+    });
   }
 
   addTask(taskSetId: number, typeId: number): void {
@@ -471,19 +512,33 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.store.deleteTask(taskSetId, taskId, () => this.toastService.success('Feladat törölve.'));
   }
 
+  /** Lazy-létrehozott, task.id-vel kulcsolt draft — így a "Új részfeladat szövege" mező
+   *  sosem "szivárog át" egy másik feladatra task-váltáskor (UI-TT-66). */
+  newSolutionDraft(taskId: number): { description: string; points: number } {
+    return (this.newSolutionDrafts[taskId] ??= { description: '', points: 5 });
+  }
+
+  setNewSolutionDescription(taskId: number, value: string): void {
+    this.newSolutionDraft(taskId).description = value;
+  }
+
+  setNewSolutionPoints(taskId: number, value: number): void {
+    this.newSolutionDraft(taskId).points = value;
+  }
+
   addSolution(taskSetId: number, taskId: number): void {
-    if (!this.newSolutionDescription.trim()) return;
+    const draft = this.newSolutionDraft(taskId);
+    if (!draft.description.trim()) return;
     this.store.addSolution(
       taskSetId,
       taskId,
       {
-        description: this.newSolutionDescription.trim(),
-        points: this.newSolutionPoints,
+        description: draft.description.trim(),
+        points: draft.points,
       },
       () => this.toastService.success('Részfeladat hozzáadva.'),
     );
-    this.newSolutionDescription = '';
-    this.newSolutionPoints = 5;
+    this.newSolutionDrafts[taskId] = { description: '', points: 5 };
   }
 
   async deleteSolution(taskSetId: number, solutionId: number): Promise<void> {
@@ -519,6 +574,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   async publish(taskSetId: number): Promise<void> {
+    // A schoolStore.loadMine() a konstruktorban indul, a taskset-detail betöltésétől
+    // FÜGGETLENÜL — ha a publish() a schools() még be-nem-töltött (üres) kezdőállapotán
+    // dönt, egy ténylegesen intézményi tagságú tanár megerősítés NÉLKÜL publikálna
+    // (UI-TT-47 load-order race). Ezért itt mindig megvárjuk a betöltés lezárását.
+    if (this.schoolStore.loading()) {
+      await firstValueFrom(this.schoolStoreLoading$.pipe(filter((loading) => !loading), take(1)));
+    }
+
     if (this.schoolStore.schools().length > 0) {
       const confirmed = await this.confirmService.ask({
         message:
