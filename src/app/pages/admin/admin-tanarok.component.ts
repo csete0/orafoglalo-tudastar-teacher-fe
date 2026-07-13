@@ -31,17 +31,17 @@ const BYTES_PER_MB = 1048576;
       <ul class="space-y-3">
         @for (teacher of store.teachers(); track teacher.id) {
           <li class="card p-4">
-            <div class="flex justify-between items-start">
-              <div>
-                <p class="font-medium flex items-center gap-2 flex-wrap">
+            <div class="flex justify-between items-start gap-3">
+              <div class="min-w-0">
+                <p class="font-medium flex items-center gap-2 flex-wrap break-words">
                   {{ teacher.displayName }}
                   @if (!teacher.isActive) {
-                    <span class="badge badge-danger">Felfüggesztve</span>
+                    <span class="badge badge-danger shrink-0">Felfüggesztve</span>
                   }
                 </p>
-                <p class="text-sm text-text-muted">{{ teacher.email }}</p>
+                <p class="text-sm text-text-muted truncate">{{ teacher.email }}</p>
                 @if (teacher.institutionName) {
-                  <p class="text-sm text-text-muted">Intézmény: {{ teacher.institutionName }}</p>
+                  <p class="text-sm text-text-muted break-words">Intézmény: {{ teacher.institutionName }}</p>
                 }
                 <p class="text-xs mt-1" [class.text-danger]="isOverQuota(teacher)"
                   [class.text-text-muted]="!isOverQuota(teacher)">
@@ -51,7 +51,7 @@ const BYTES_PER_MB = 1048576;
                   tag {{ teacher.createdAt | date: 'yyyy.MM.dd' }} óta
                 </p>
               </div>
-              <div class="flex flex-col gap-2 items-end">
+              <div class="flex flex-col gap-2 items-end shrink-0">
                 @if (teacher.isActive) {
                   <button (click)="confirmSuspend(teacher.id, teacher.displayName)"
                     class="btn btn-danger !px-3 !py-1.5 whitespace-nowrap">

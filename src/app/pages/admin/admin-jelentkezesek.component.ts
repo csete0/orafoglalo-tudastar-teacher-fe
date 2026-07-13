@@ -41,16 +41,16 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
       <ul class="space-y-3">
         @for (application of store.applications(); track application.id) {
           <li class="card p-4">
-            <div class="flex justify-between items-start mb-2">
-              <div>
-                <p class="font-medium">{{ application.applicantName }}</p>
-                <p class="text-sm text-text-muted">{{ application.applicantEmail }}</p>
+            <div class="flex justify-between items-start mb-2 gap-3">
+              <div class="min-w-0">
+                <p class="font-medium truncate">{{ application.applicantName }}</p>
+                <p class="text-sm text-text-muted truncate">{{ application.applicantEmail }}</p>
               </div>
-              <span class="text-xs text-text-muted">{{ application.createdAt | date: 'yyyy.MM.dd' }}</span>
+              <span class="text-xs text-text-muted shrink-0">{{ application.createdAt | date: 'yyyy.MM.dd' }}</span>
             </div>
-            <p class="text-sm mb-1">{{ application.motivation }}</p>
+            <p class="text-sm mb-1 break-words">{{ application.motivation }}</p>
             @if (application.institutionName) {
-              <p class="text-sm text-text-muted mb-3">Intézmény: {{ application.institutionName }}</p>
+              <p class="text-sm text-text-muted mb-3 break-words">Intézmény: {{ application.institutionName }}</p>
             }
 
             @if (store.statusFilter() === 'pending') {

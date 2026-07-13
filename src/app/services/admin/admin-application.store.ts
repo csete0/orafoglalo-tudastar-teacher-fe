@@ -27,6 +27,7 @@ export class AdminApplicationStore {
   load(): void {
     this._loading.set(true);
     this._error.set(null);
+    this._applications.set([]);
 
     this.service
       .getApplications(this._statusFilter())

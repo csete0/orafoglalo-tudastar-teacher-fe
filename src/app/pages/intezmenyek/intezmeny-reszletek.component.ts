@@ -186,12 +186,12 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
           @case ('csoportok') {
             <ul class="space-y-2">
               @for (group of school.schoolGroups(); track group.groupId) {
-                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
-                  <span class="flex items-center gap-2">
-                    <app-icon name="users" class="w-4 h-4 block text-text-muted" />
-                    {{ group.name }}
+                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
+                  <span class="flex items-center gap-2 min-w-0">
+                    <app-icon name="users" class="w-4 h-4 block text-text-muted shrink-0" />
+                    <span class="truncate">{{ group.name }}</span>
                   </span>
-                  <span class="text-text-muted">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
+                  <span class="text-text-muted shrink-0">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
                 </li>
               } @empty {
                 <li class="flex flex-col items-center py-10 gap-3">

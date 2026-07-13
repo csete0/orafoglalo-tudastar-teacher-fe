@@ -166,7 +166,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
                 <p class="text-sm">Meghívó kód: <code class="font-bold">{{ group.inviteCode }}</code></p>
               </div>
               <p class="text-sm break-all">Csatlakozási link: <code>{{ joinLink(group.inviteCode) }}</code></p>
-              <button (click)="regenerateInvite(group.id)" class="btn btn-primary">
+              <button (click)="regenerateInvite(group.id)" [disabled]="store.loading()" class="btn btn-primary">
                 Új kód generálása
               </button>
             </div>
@@ -293,6 +293,7 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   regenerateInvite(groupId: number): void {
+    if (this.store.loading()) return;
     this.store.regenerateInvite(groupId, () => this.toastService.success('Új meghívó kód generálva.'));
   }
 }

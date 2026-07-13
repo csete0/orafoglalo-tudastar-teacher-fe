@@ -75,12 +75,12 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
               <app-icon name="building" class="w-6 h-6 block" />
             </div>
             <div class="min-w-0">
-              <p class="font-medium">{{ school.name }}</p>
+              <p class="font-medium truncate">{{ school.name }}</p>
               @if (school.city) {
-                <p class="text-sm text-text-muted">{{ school.city }}</p>
+                <p class="text-sm text-text-muted truncate">{{ school.city }}</p>
               }
               @if (school.adminDisplayNames.length > 0) {
-                <p class="text-sm text-text-muted">Igazgató: {{ school.adminDisplayNames.join(', ') }}</p>
+                <p class="text-sm text-text-muted break-words">Igazgató: {{ school.adminDisplayNames.join(', ') }}</p>
               }
               <p class="text-xs text-text-muted mt-1">
                 {{ school.teacherCount }} tanár · {{ school.groupCount }} csoport ·

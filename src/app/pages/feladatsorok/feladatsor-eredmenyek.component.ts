@@ -12,7 +12,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
   template: `
     @if (report.taskSetResults(); as results) {
       <div class="max-w-5xl mx-auto px-4 py-10">
-        <h1 class="page-title">{{ results.title }} — eredmények</h1>
+        <h1 class="page-title truncate">{{ results.title }} — eredmények</h1>
         <p class="text-sm text-text-muted mt-1">Tagonkénti eredmény-mátrix (diákok × feladatok)</p>
         <div class="hairline"></div>
 
