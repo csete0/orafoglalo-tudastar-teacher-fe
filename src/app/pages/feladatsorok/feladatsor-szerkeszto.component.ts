@@ -247,7 +247,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
               <div class="card !rounded-xl p-3">
                 <label class="text-sm block mb-1">{{ kindOption.label }}</label>
                 <input type="file" [accept]="kindOption.accept"
-                  (change)="uploadFile(detail.id, kindOption.kind, $event)" class="text-sm" />
+                  (change)="uploadFile(detail.id, kindOption.kind, $event)"
+                  class="text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
               </div>
             }
           </div>

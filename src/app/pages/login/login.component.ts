@@ -57,9 +57,12 @@ import { IconComponent } from '../../shared/icon/icon.component';
         </div>
 
         <div class="space-y-2">
-          <button type="button" (click)="signInWithProvider('google')" class="btn w-full">Google</button>
-          <button type="button" (click)="signInWithProvider('facebook')" class="btn w-full">Facebook</button>
-          <button type="button" (click)="signInWithProvider('apple')" class="btn w-full">Apple</button>
+          <button type="button" (click)="signInWithProvider('google')"
+            class="btn w-full border border-border-default hover:bg-bg-element">Google</button>
+          <button type="button" (click)="signInWithProvider('facebook')"
+            class="btn w-full border border-border-default hover:bg-bg-element">Facebook</button>
+          <button type="button" (click)="signInWithProvider('apple')"
+            class="btn w-full border border-border-default hover:bg-bg-element">Apple</button>
         </div>
 
         <p class="text-sm text-text-muted mt-4">
