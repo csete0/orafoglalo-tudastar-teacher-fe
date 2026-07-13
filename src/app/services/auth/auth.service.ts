@@ -27,8 +27,27 @@ export class AuthService {
     );
   }
 
+  /**
+   * A social-login redirect utan a backend altal HttpOnly cookie-ban
+   * elhelyezett auto_login_token-t valtja be egy tenyleges munkamenetre
+   * (ugyanaz a végpont/mintázat, mint a diák-repóban).
+   */
+  autoLogin(): Observable<LoginResponseDto> {
+    return this.http.post<LoginResponseDto>(
+      `${environment.apiUrl}/auth/auto-login`,
+      {},
+      { withCredentials: true },
+    );
+  }
+
   logout(): Observable<unknown> {
     return this.http.post(`${environment.apiUrl}/auth/logout`, {}, { withCredentials: true });
+  }
+
+  /** Google/Facebook/Apple bejelentkezés indítása - a ?app=teacher jelzi a
+   * backendnek, hogy sikeres OAuth után a teacher-fe-re irányítson vissza. */
+  signInWithProvider(provider: 'google' | 'facebook' | 'apple'): void {
+    window.location.href = `${environment.providerUri}/${provider}?app=teacher`;
   }
 
   getTokenExpiry(token: string): Date | null {

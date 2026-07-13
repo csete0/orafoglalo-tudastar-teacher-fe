@@ -175,6 +175,42 @@ export class AuthStore {
       });
   }
 
+  autoLogin(onSuccess?: () => void, onError?: (message: string) => void): void {
+    this._loading.set(true);
+    this._error.set(null);
+
+    this.authService
+      .autoLogin()
+      .pipe(
+        take(1),
+        finalize(() => this._loading.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: async (response) => {
+          if (response.accessToken) {
+            await this.tokenService.saveTokenPair(response.accessToken, response.user);
+          }
+          this._loginResponse.set(response);
+          this._isAuthenticated.set(true);
+          if (onSuccess) onSuccess();
+        },
+        error: (err: HttpErrorResponse) => {
+          const message =
+            err.status === 0
+              ? 'Nem sikerült kapcsolódni a szerverhez. Próbáld újra később.'
+              : (err.error?.errorMessage ?? err.error?.error ?? 'A bejelentkezés nem sikerült.');
+          this._error.set({ message, timestamp: new Date() });
+          this._isAuthenticated.set(false);
+          if (onError) onError(message);
+        },
+      });
+  }
+
+  signInWithProvider(provider: 'google' | 'facebook' | 'apple'): void {
+    this.authService.signInWithProvider(provider);
+  }
+
   logout(callback?: () => void): void {
     this._loading.set(true);
 

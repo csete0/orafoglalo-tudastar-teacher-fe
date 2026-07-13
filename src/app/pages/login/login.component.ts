@@ -50,6 +50,18 @@ import { IconComponent } from '../../shared/icon/icon.component';
           </button>
         </form>
 
+        <div class="flex items-center gap-3 my-4">
+          <div class="h-px flex-1 bg-border-default"></div>
+          <span class="text-xs text-text-muted">vagy</span>
+          <div class="h-px flex-1 bg-border-default"></div>
+        </div>
+
+        <div class="space-y-2">
+          <button type="button" (click)="signInWithProvider('google')" class="btn w-full">Google</button>
+          <button type="button" (click)="signInWithProvider('facebook')" class="btn w-full">Facebook</button>
+          <button type="button" (click)="signInWithProvider('apple')" class="btn w-full">Apple</button>
+        </div>
+
         <p class="text-sm text-text-muted mt-4">
           Nincs még fiókod?
           <a [href]="studentAppUrl + '/registration'" class="text-primary hover:underline">Regisztrálj a patricks.hu-n</a>.
@@ -91,5 +103,9 @@ export class LoginComponent {
     this.authStore.signIn(this.form.getRawValue(), () => {
       this.router.navigateByUrl(this.returnUrl, { replaceUrl: true });
     });
+  }
+
+  signInWithProvider(provider: 'google' | 'facebook' | 'apple'): void {
+    this.authStore.signInWithProvider(provider);
   }
 }
