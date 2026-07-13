@@ -75,7 +75,7 @@ describe('AdminTeacherStore', () => {
 
   it('load hiba esetén error-t állít', async () => {
     serviceMock.getTeachers.mockReturnValue(
-      throwError(() => ({ error: { error: 'Szerverhiba' } })),
+      throwError(() => ({ error: { errorMessage: 'Szerverhiba' } })),
     );
 
     const store = TestBed.inject(AdminTeacherStore);

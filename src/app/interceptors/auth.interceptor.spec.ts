@@ -141,4 +141,71 @@ describe('authInterceptor', () => {
     await promise;
     expect(dangerSpy).not.toHaveBeenCalled();
   });
+
+  // UI-TT-51: sikeres 401-refresh utáni ÚJRAKÜLDÖTT mutáció saját (nem 401) hibáját
+  // (pl. 409 üzleti hiba) az interceptor korábban elnyelte, és mindig az EREDETI
+  // 401-et adta tovább — sem a subscriber nem kapta meg a valós okot, sem a
+  // mutáció-toast nem tüzelt vele.
+  it('BUG UI-TT-51: sikeres refresh utáni újraküldött mutáció saját 409-es hibája nem vész el, és toastot is lő', async () => {
+    authStoreMock.refreshToken.mockResolvedValue('refreshed-token');
+    const toastService = TestBed.inject(ToastService);
+    const dangerSpy = vi.spyOn(toastService, 'danger');
+
+    let error: unknown;
+    const promise = new Promise<void>((resolve) => {
+      httpClient.post('/api/groups/9401/archive', {}).subscribe({
+        error: (err) => {
+          error = err;
+          resolve();
+        },
+      });
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const firstReq = httpMock.expectOne('/api/groups/9401/archive');
+    firstReq.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const retryReq = httpMock.expectOne('/api/groups/9401/archive');
+    expect(retryReq.request.headers.get('Authorization')).toBe('Bearer refreshed-token');
+    retryReq.flush(
+      { error: 'A csoport már archiválva van.' },
+      { status: 409, statusText: 'Conflict' },
+    );
+
+    await promise;
+
+    expect((error as { status: number }).status).toBe(409);
+    expect(dangerSpy).toHaveBeenCalledWith('A csoport már archiválva van.');
+  });
+
+  it('sikertelen refresh esetén (a retry el sem indul) a toast NEM a retry-üzenettel, hanem egyáltalán nem tüzel emiatt az ágért', async () => {
+    authStoreMock.refreshToken.mockResolvedValue(null);
+    const toastService = TestBed.inject(ToastService);
+    const dangerSpy = vi.spyOn(toastService, 'danger');
+
+    let error: unknown;
+    const promise = new Promise<void>((resolve) => {
+      httpClient.post('/api/groups/9401/archive', {}).subscribe({
+        error: (err) => {
+          error = err;
+          resolve();
+        },
+      });
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const req = httpMock.expectOne('/api/groups/9401/archive');
+    req.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+
+    await promise;
+
+    expect((error as { status: number }).status).toBe(401);
+    expect(dangerSpy).not.toHaveBeenCalled();
+  });
 });

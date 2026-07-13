@@ -5,6 +5,7 @@ import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -55,13 +56,17 @@ import { IconComponent } from '../../shared/icon/icon.component';
             </li>
           }
           @empty {
-            <li class="flex flex-col items-center py-10 gap-3">
-              <div class="icon-tile icon-tile-neutral">
-                <app-icon name="users" class="w-6 h-6 block" />
-              </div>
-              <p class="font-semibold">Még nincs csoportod.</p>
-              <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
-            </li>
+            <!-- UI-TT-32: sikertelen betöltésnél NE mutassuk a "hozz létre elsőt" üres-állapotot
+                 a fenti hibaüzenettel egyidejűleg. -->
+            @if (!store.error()) {
+              <li class="flex flex-col items-center py-10 gap-3">
+                <div class="icon-tile icon-tile-neutral">
+                  <app-icon name="users" class="w-6 h-6 block" />
+                </div>
+                <p class="font-semibold">Még nincs csoportod.</p>
+                <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
+              </li>
+            }
           }
         </ul>
       }
@@ -69,6 +74,9 @@ import { IconComponent } from '../../shared/icon/icon.component';
       <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
         <h2 class="font-bold">Új csoport</h2>
         <input formControlName="name" placeholder="Csoport neve (pl. 11.A)" class="input" />
+        @if (createForm.controls.name.hasError('blank')) {
+          <p class="text-sm text-danger">A csoport neve nem állhat kizárólag szóközökből.</p>
+        }
 
         @if (schoolStore.schools().length > 0) {
           <select formControlName="schoolId" class="input">
@@ -93,7 +101,7 @@ export class CsoportokListaComponent {
   readonly schoolStore = inject(SchoolStore);
 
   readonly createForm = this.fb.nonNullable.group({
-    name: ['', Validators.required],
+    name: ['', [Validators.required, notBlankValidator()]],
     schoolId: this.fb.control<number | null>(null),
   });
 

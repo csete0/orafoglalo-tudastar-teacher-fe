@@ -38,7 +38,7 @@ export class AdminTeacherStore {
       )
       .subscribe({
         next: (teachers) => this._teachers.set(teachers),
-        error: (err) => this._error.set(err.error?.error ?? 'A tanárok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A tanárok betöltése sikertelen.'),
       });
   }
 
@@ -55,7 +55,7 @@ export class AdminTeacherStore {
           );
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A módosítás sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A módosítás sikertelen.'),
       });
   }
 
@@ -77,7 +77,7 @@ export class AdminTeacherStore {
           );
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A kvóta mentése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A kvóta mentése sikertelen.'),
       });
   }
 
@@ -102,7 +102,7 @@ export class AdminTeacherStore {
       )
       .subscribe({
         next: (taskSets) => this._taskSets.set(taskSets),
-        error: (err) => this._error.set(err.error?.error ?? 'A feladatsorok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsorok betöltése sikertelen.'),
       });
   }
 
@@ -119,7 +119,7 @@ export class AdminTeacherStore {
           );
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A visszavonás sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A visszavonás sikertelen.'),
       });
   }
 

@@ -97,7 +97,7 @@ describe('AdminSchoolStore', () => {
     expect(store.lastMergeResult()).not.toBeNull();
 
     serviceMock.merge.mockReturnValueOnce(
-      throwError(() => ({ error: { error: 'A forrás intézmény már nem létezik.' } })),
+      throwError(() => ({ error: { errorMessage: 'A forrás intézmény már nem létezik.' } })),
     );
     store.merge(1, 3);
     await Promise.resolve();

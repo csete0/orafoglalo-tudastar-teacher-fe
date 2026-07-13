@@ -96,9 +96,9 @@ export class DiakReszletekComponent implements OnInit {
   stats(detail: StudentActivityDetailDto): { label: string; value: string; icon: IconName; tile: string }[] {
     return [
       { label: 'Befejezett vizsgák', value: `${detail.completedExamsCount}`, icon: 'clipboard-list', tile: 'icon-tile-primary' },
-      { label: 'Átlag pontszázalék', value: `${detail.averageExamScorePercent ?? '–'}%`, icon: 'chart', tile: 'icon-tile-success' },
+      { label: 'Átlag pontszázalék', value: detail.averageExamScorePercent == null ? '–' : `${detail.averageExamScorePercent}%`, icon: 'chart', tile: 'icon-tile-success' },
       { label: 'Kvíz-sessionök', value: `${detail.completedQuizSessionsCount}`, icon: 'academic-cap', tile: 'icon-tile-secondary' },
-      { label: 'Kvíz pontosság', value: `${detail.quizAccuracyPercent ?? '–'}%`, icon: 'chart', tile: 'icon-tile-warning' },
+      { label: 'Kvíz pontosság', value: detail.quizAccuracyPercent == null ? '–' : `${detail.quizAccuracyPercent}%`, icon: 'chart', tile: 'icon-tile-warning' },
       { label: 'Aktuális sorozat', value: `${detail.currentStreak} nap`, icon: 'trophy', tile: 'icon-tile-danger' },
       { label: 'Badge-ek', value: `${detail.badgeCount}`, icon: 'shield', tile: 'icon-tile-primary' },
     ];

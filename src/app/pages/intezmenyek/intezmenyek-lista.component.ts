@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { SchoolStore } from '../../services/school/school.store';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,13 +48,17 @@ import { IconComponent } from '../../shared/icon/icon.component';
             </li>
           }
           @empty {
-            <li class="flex flex-col items-center py-10 gap-3">
-              <div class="icon-tile icon-tile-neutral">
-                <app-icon name="building" class="w-6 h-6 block" />
-              </div>
-              <p class="font-semibold">Még nem tagja egyetlen intézménynek sem.</p>
-              <p class="text-sm text-text-muted">Hozz létre egyet, vagy csatlakozz meghívó kóddal.</p>
-            </li>
+            <!-- UI-TT-32: sikertelen betöltésnél NE mutassuk a "hozz létre egyet" üres-állapotot
+                 a fenti hibaüzenettel egyidejűleg. -->
+            @if (!store.error()) {
+              <li class="flex flex-col items-center py-10 gap-3">
+                <div class="icon-tile icon-tile-neutral">
+                  <app-icon name="building" class="w-6 h-6 block" />
+                </div>
+                <p class="font-semibold">Még nem tagja egyetlen intézménynek sem.</p>
+                <p class="text-sm text-text-muted">Hozz létre egyet, vagy csatlakozz meghívó kóddal.</p>
+              </li>
+            }
           }
         </ul>
       }
@@ -62,6 +67,9 @@ import { IconComponent } from '../../shared/icon/icon.component';
         <form [formGroup]="createForm" (ngSubmit)="createSchool()" class="card p-5 space-y-2">
           <h2 class="font-bold">Új intézmény</h2>
           <input formControlName="name" placeholder="Intézmény neve" class="input" />
+          @if (createForm.controls.name.hasError('blank')) {
+            <p class="text-sm text-danger">Az intézmény neve nem állhat kizárólag szóközökből.</p>
+          }
           <button type="submit" [disabled]="createForm.invalid" class="btn btn-primary !px-3 !py-1.5">
             Létrehozás
           </button>
@@ -83,7 +91,7 @@ export class IntezmenyekListaComponent {
   private readonly toastService = inject(ToastService);
   readonly store = inject(SchoolStore);
 
-  readonly createForm = this.fb.nonNullable.group({ name: ['', Validators.required] });
+  readonly createForm = this.fb.nonNullable.group({ name: ['', [Validators.required, notBlankValidator()]] });
   readonly joinForm = this.fb.nonNullable.group({ code: ['', Validators.required] });
 
   constructor() {

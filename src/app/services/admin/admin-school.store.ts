@@ -60,7 +60,7 @@ export class AdminSchoolStore {
         },
         error: (err) => {
           this._lastMergeResult.set(null);
-          this._error.set(err.error?.error ?? 'Az egyesítés sikertelen.');
+          this._error.set(err.error?.errorMessage ?? 'Az egyesítés sikertelen.');
           this._loading.set(false);
         },
       });

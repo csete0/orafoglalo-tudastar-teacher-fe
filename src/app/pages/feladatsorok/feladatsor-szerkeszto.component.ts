@@ -11,6 +11,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { environment } from '../../../environments/environment';
 
 const LANGUAGES: { id: number; name: string }[] = [
   { id: 2, name: 'Python' },
@@ -210,7 +211,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <input type="number" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
                             [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
                         </div>
-                        <button type="submit" [disabled]="!newTaskDrafts[section.id].title"
+                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id)"
                           class="btn btn-primary !px-3 !py-1.5">
                           Hozzáadás
                         </button>
@@ -274,7 +275,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
   readonly fileKinds = FILE_KINDS;
-  readonly apiOrigin = new URL(location.origin).origin.replace(':4300', ':7083');
+  // UI-TT-27: az API origóját a ténylegesen konfigurált environment.apiUrl-ból kell
+  // levezetni, nem a jelenlegi böngésző-origóból "sejteni" — utóbbi csak véletlenül
+  // esett egybe a backenddel azokon a topológiákon, ahol az /api/ proxyzva van.
+  readonly apiOrigin = new URL(environment.apiUrl).origin;
 
   readonly expandedTaskId = signal<number | null>(null);
   private readonly drafts = signal<SnippetDraft>({});
@@ -399,6 +403,25 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
     effect(() => {
       const files = this.store.selectedDetail()?.files ?? [];
+      const currentIds = new Set(files.map((f) => String(f.id)));
+
+      // Egy fájl törlésekor/lecserélésekor (kind-onkénti csere) az adott file.id
+      // eltűnik a listából — a hozzá tartozó blob object URL-t itt kell felszabadítani,
+      // nem csak a komponens megsemmisülésekor (UI-TT-68 memóriaszivárgás egy hosszabb
+      // szerkesztési munkamenetben).
+      const resolved = this.resolvedDownloadUrls();
+      const staleKeys = Object.keys(resolved).filter((key) => !currentIds.has(key));
+      if (staleKeys.length > 0) {
+        for (const key of staleKeys) {
+          this.authorizedFileService.revoke(resolved[key]);
+        }
+        this.resolvedDownloadUrls.update((current) => {
+          const next = { ...current };
+          for (const key of staleKeys) delete next[key];
+          return next;
+        });
+      }
+
       for (const file of files) {
         const key = String(file.id);
         if (this.resolvedDownloadUrls()[key] !== undefined) continue;
@@ -469,20 +492,29 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   saveSnippets(taskSetId: number, solution: TeacherSolutionDto): void {
     const snippets = this.snippetsFromDraft(solution.id);
-    if (snippets.length === 0) return;
+    // Ha nincs is korábban mentett kódrészlet, egy üres mentés valóban no-op (UI-TT-13) —
+    // de ha VOLT, az üres nyelv-mezők a tanár törlési szándékát jelentik, ezt tényleg
+    // el kell küldeni (a backend upsert teljes-csere szemantikájú, üres tömb = törlés).
+    if (snippets.length === 0 && solution.snippets.length === 0) {
+      this.toastService.warning('Nincs megadva kódrészlet egyik nyelven sem — nincs mit menteni.');
+      return;
+    }
     this.store.upsertSolutionSnippets(taskSetId, solution.id, snippets, () => {
       this.clearDirtyDraft(solution.id);
-      this.toastService.success('Kódrészletek mentve.');
+      this.toastService.success(snippets.length === 0 ? 'Kódrészletek törölve.' : 'Kódrészletek mentve.');
     });
   }
 
   saveCompleteSolutionSnippets(taskSetId: number, task: TeacherTaskDto): void {
     const key = this.completeSolutionKey(task.id);
     const snippets = this.snippetsFromDraft(key);
-    if (snippets.length === 0) return;
+    if (snippets.length === 0 && task.completeSolutionSnippets.length === 0) {
+      this.toastService.warning('Nincs megadva kódrészlet egyik nyelven sem — nincs mit menteni.');
+      return;
+    }
     this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets, () => {
       this.clearDirtyDraft(key);
-      this.toastService.success('Összevont megoldás mentve.');
+      this.toastService.success(snippets.length === 0 ? 'Összevont megoldás törölve.' : 'Összevont megoldás mentve.');
     });
   }
 
@@ -497,9 +529,21 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         maxPoints: draft.maxPoints,
         taskTypeIds: [typeId],
       },
-      () => this.toastService.success('Feladat hozzáadva.'),
+      () => {
+        // UI-TT-25: a draftot csak SIKERES mentés után ürítjük — korábban ez a hívás ELŐTT,
+        // optimistán futott le, így egy lassú/sikertelen kérésnél a tanár visszavonhatatlanul
+        // elveszítette a begépelt cím/leírás/pontszám szöveget.
+        this.newTaskDrafts[typeId] = { title: '', description: '', maxPoints: 10 };
+        this.toastService.success('Feladat hozzáadva.');
+      },
     );
-    this.newTaskDrafts[typeId] = { title: '', description: '', maxPoints: 10 };
+  }
+
+  /** UI-TT-61: a "Hozzáadás" gomb [disabled] állapotának is trim-elnie kell, hogy ne
+   *  maradjon kattintható whitespace-only cím mellett — a mögöttes addTask() guard-ja
+   *  már helyesen trim-el, csendben visszatérne, a gomb tehát néma no-opot mutatna. */
+  isTaskDraftTitleBlank(typeId: number): boolean {
+    return !this.newTaskDrafts[typeId]?.title.trim();
   }
 
   async deleteTask(taskSetId: number, taskId: number): Promise<void> {
@@ -536,9 +580,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         description: draft.description.trim(),
         points: draft.points,
       },
-      () => this.toastService.success('Részfeladat hozzáadva.'),
+      () => {
+        // UI-TT-25 testvér-előfordulása: ugyanaz a fix, a draftot csak sikeres mentés után ürítjük.
+        this.newSolutionDrafts[taskId] = { description: '', points: 5 };
+        this.toastService.success('Részfeladat hozzáadva.');
+      },
     );
-    this.newSolutionDrafts[taskId] = { description: '', points: 5 };
   }
 
   async deleteSolution(taskSetId: number, solutionId: number): Promise<void> {

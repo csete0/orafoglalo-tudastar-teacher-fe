@@ -37,7 +37,7 @@ export class ReportStore {
       )
       .subscribe({
         next: (activity) => this._groupActivity.set(activity),
-        error: (err) => this._error.set(err.error?.error ?? 'A csoport-aktivitás betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A csoport-aktivitás betöltése sikertelen.'),
       });
   }
 
@@ -55,7 +55,7 @@ export class ReportStore {
       )
       .subscribe({
         next: (activity) => this._schoolActivity.set(activity),
-        error: (err) => this._error.set(err.error?.error ?? 'Ehhez a riporthoz intézmény-admin szerep kell.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Ehhez a riporthoz intézmény-admin szerep kell.'),
       });
   }
 
@@ -73,7 +73,7 @@ export class ReportStore {
       )
       .subscribe({
         next: (detail) => this._studentDetail.set(detail),
-        error: (err) => this._error.set(err.error?.error ?? 'A diák adatainak betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A diák adatainak betöltése sikertelen.'),
       });
   }
 
@@ -91,7 +91,7 @@ export class ReportStore {
       )
       .subscribe({
         next: (results) => this._taskSetResults.set(results),
-        error: (err) => this._error.set(err.error?.error ?? 'Az eredmény-mátrix betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az eredmény-mátrix betöltése sikertelen.'),
       });
   }
 

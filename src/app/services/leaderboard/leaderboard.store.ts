@@ -31,7 +31,7 @@ export class LeaderboardStore {
       )
       .subscribe({
         next: (result) => this._leaderboard.set(result),
-        error: (err) => this._error.set(err.error?.error ?? 'A ranglista betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A ranglista betöltése sikertelen.'),
       });
   }
 
@@ -49,7 +49,7 @@ export class LeaderboardStore {
       )
       .subscribe({
         next: (result) => this._leaderboard.set(result),
-        error: (err) => this._error.set(err.error?.error ?? 'A ranglista betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A ranglista betöltése sikertelen.'),
       });
   }
 

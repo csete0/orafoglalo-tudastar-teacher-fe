@@ -55,7 +55,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (schools) => this._schools.set(schools),
-        error: (err) => this._error.set(err.error?.error ?? 'Az intézmények betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az intézmények betöltése sikertelen.'),
       });
   }
 
@@ -125,7 +125,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (members) => this._members.set(members),
-        error: (err) => this._error.set(err.error?.error ?? 'A tagok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A tagok betöltése sikertelen.'),
       });
   }
 
@@ -170,7 +170,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (groups) => this._schoolGroups.set(groups),
-        error: (err) => this._error.set(err.error?.error ?? 'Az intézmény csoportjainak betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az intézmény csoportjainak betöltése sikertelen.'),
       });
   }
 
@@ -190,7 +190,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.error ?? 'A művelet sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
       });
   }
 }

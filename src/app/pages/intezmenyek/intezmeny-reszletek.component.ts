@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SchoolStore } from '../../services/school/school.store';
@@ -225,17 +225,32 @@ export class IntezmenyReszletekComponent implements OnInit {
   category: LeaderboardCategory = 'quiz';
   period: LeaderboardPeriod = 'weekly';
   editName = '';
+  // UI-TT-62: friss (nem cache-elt) oldalbetöltésnél a selectedSchool() még null a
+  // ngOnInit szinkron lefutásakor (a store csak ezután tölti be aszinkron) — az
+  // editName-et emiatt egy effect()-ben szinkronizáljuk, amint a tényleges adat
+  // megérkezik, nem csak egyetlen, esetlegesen korai ngOnInit-beli olvasással.
+  private nameSynced = false;
 
   private schoolId = 0;
 
+  constructor() {
+    effect(() => {
+      const school = this.school.selectedSchool();
+      if (school && !this.nameSynced) {
+        this.editName = school.name;
+        this.nameSynced = true;
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.schoolId = Number(this.route.snapshot.paramMap.get('id'));
+    this.nameSynced = false;
     if (this.school.schools().length === 0) {
       this.school.loadMine();
     }
     this.school.select(this.schoolId);
     this.school.loadMembers(this.schoolId);
-    this.editName = this.school.selectedSchool()?.name ?? '';
   }
 
   setTab(tab: Tab): void {

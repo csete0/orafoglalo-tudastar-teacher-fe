@@ -55,7 +55,7 @@ describe('TeacherApplicationStore', () => {
 
   it('loadMine egyéb hiba esetén error-t állít', async () => {
     serviceMock.getMine.mockReturnValue(
-      throwError(() => ({ status: 500, error: { error: 'Szerverhiba' } })),
+      throwError(() => ({ status: 500, error: { errorMessage: 'Szerverhiba' } })),
     );
 
     const store = TestBed.inject(TeacherApplicationStore);
@@ -79,7 +79,7 @@ describe('TeacherApplicationStore', () => {
 
   it('apply hiba: error beállítva, application változatlan marad', async () => {
     serviceMock.apply.mockReturnValue(
-      throwError(() => ({ error: { error: 'Már van elbírálásra váró jelentkezésed.' } })),
+      throwError(() => ({ error: { errorMessage: 'Már van elbírálásra váró jelentkezésed.' } })),
     );
 
     const store = TestBed.inject(TeacherApplicationStore);

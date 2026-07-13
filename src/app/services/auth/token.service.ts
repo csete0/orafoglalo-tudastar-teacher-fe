@@ -150,7 +150,13 @@ export class TokenService {
     const accessToken = await this.getAccessToken();
     if (!accessToken) return null;
 
-    if (this.shouldRefreshToken(accessToken) && !this.refreshInProgress) {
+    if (this.shouldRefreshToken(accessToken)) {
+      if (this.refreshInProgress) {
+        // UI-TT-44: egy MÁSHONNAN már folyamatban lévő refresh esetén ne a
+        // lejárat előtt álló régi tokent adjuk vissza — várjuk meg ugyanazt
+        // a folyamatban lévő refresh-t, és annak eredményét adjuk tovább.
+        return this.waitForRefresh();
+      }
       const newToken = await this.performTokenRefresh();
       return newToken || accessToken;
     }

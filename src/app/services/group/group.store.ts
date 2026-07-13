@@ -37,7 +37,7 @@ export class GroupStore {
       )
       .subscribe({
         next: (groups) => this._groups.set(groups),
-        error: (err) => this._error.set(err.error?.error ?? 'A csoportok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A csoportok betöltése sikertelen.'),
       });
   }
 
@@ -79,7 +79,7 @@ export class GroupStore {
       )
       .subscribe({
         next: (members) => this._members.set(members),
-        error: (err) => this._error.set(err.error?.error ?? 'A tagok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A tagok betöltése sikertelen.'),
       });
   }
 
@@ -113,7 +113,7 @@ export class GroupStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.error ?? 'A művelet sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
       });
   }
 }

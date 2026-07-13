@@ -131,7 +131,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   });
 
   it('getMembers hiba esetén error signal beállítva', async () => {
-    serviceMock.getMembers.mockReturnValue(throwError(() => ({ error: { error: 'Nincs jogosultságod.' } })));
+    serviceMock.getMembers.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Nincs jogosultságod.' } })));
 
     const store = TestBed.inject(SchoolStore);
     store.loadMembers(1);
@@ -143,7 +143,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   // BUG UI-TT-9: loadMembers()/loadSchoolGroups() sosem törölte az előző mutáció hibáját indításkor.
   it('egy sikertelen mutáció után egy KÉSŐBBI, SIKERES loadMembers() törli a régi hibaüzenetet', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
-    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { error: 'A törlés sikertelen.' } })));
+    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { errorMessage: 'A törlés sikertelen.' } })));
     serviceMock.getMembers.mockReturnValue(of([]));
 
     const store = TestBed.inject(SchoolStore);
@@ -163,7 +163,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
 
   it('egy sikertelen mutáció után egy KÉSŐBBI, SIKERES loadSchoolGroups() törli a régi hibaüzenetet', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
-    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { error: 'A törlés sikertelen.' } })));
+    serviceMock.delete.mockReturnValue(throwError(() => ({ error: { errorMessage: 'A törlés sikertelen.' } })));
     serviceMock.getSchoolGroups.mockReturnValue(of([]));
 
     const store = TestBed.inject(SchoolStore);

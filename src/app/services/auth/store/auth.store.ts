@@ -158,10 +158,16 @@ export class AuthStore {
           // status === 0 → a kérés nem jutott el a backendig (hálózati hiba vagy
           // CORS-blokk), tehát a hitelesítő adatok nem lettek ellenőrizve — ezt
           // nem szabad "hibás email/jelszó"-ként mutatni.
+          // status === 429 → a login-rate-limiter EGY HARMADIK, a többi végponttól
+          // eltérő válasz-alakot ad ({"error":"Too many requests","message":"<magyar szöveg>"}),
+          // ezért itt kifejezetten a "message" mezőt kell előnyben részesíteni, különben
+          // az alábbi errorMessage/error fallback-lánc a nyers angol "error" mezőt kapná el (UI-TT-31).
           const message =
             err.status === 0
               ? 'Nem sikerült kapcsolódni a szerverhez. Próbáld újra később.'
-              : (err.error?.errorMessage ?? err.error?.error ?? 'Hibás email cím vagy jelszó.');
+              : err.status === 429
+                ? (err.error?.message ?? 'Túl sok próbálkozás történt. Kérjük, várj egy kicsit, mielőtt újra próbálkozol.')
+                : (err.error?.errorMessage ?? err.error?.error ?? 'Hibás email cím vagy jelszó.');
           this._error.set({ message, timestamp: new Date() });
           this._isAuthenticated.set(false);
           if (onError) onError(message);

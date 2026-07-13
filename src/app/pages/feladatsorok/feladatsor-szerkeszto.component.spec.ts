@@ -33,6 +33,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
     publishResult: ReturnType<typeof signal<null>>;
     loadDetail: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
+    addTask: ReturnType<typeof vi.fn>;
+    addSolution: ReturnType<typeof vi.fn>;
   };
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
@@ -50,6 +52,11 @@ describe('FeladatsorSzerkesztoComponent', () => {
       publishResult: signal(null),
       loadDetail: vi.fn(),
       publish: vi.fn(),
+      // Alapból NEM hívja meg onSuccess-t (folyamatban lévő/sikertelen kérést szimulál) —
+      // az egyes tesztek explicit mockImplementation-nel írhatják felül, ha a sikeres ágat
+      // akarják bizonyítani (UI-TT-25).
+      addTask: vi.fn(),
+      addSolution: vi.fn(),
     };
     schoolStoreMock = { schools: signal([]), loading: signal(false), loadMine: vi.fn() };
     authorizedFileServiceMock = {
@@ -423,5 +430,101 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
     expect(link.getAttribute('href')).toBe(`blob:resolved-${expectedApiUrl}`);
+  });
+
+  describe('"Új feladat hozzáadása" draft-kezelés (UI-TT-25 / UI-TT-61)', () => {
+    it('BUG UI-TT-25 javítva: sikertelen/folyamatban lévő mentésnél NEM törli a beírt cím/leírás/pont draftot, mielőtt a válasz megérkezne', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.newTaskDrafts[6] = { title: 'Hosszan kigondolt feladatcím', description: 'Részletes leírás', maxPoints: 7 };
+      // A mock addTask() alapból NEM hívja meg onSuccess-t — folyamatban lévő/sikertelen kérést szimulál.
+      component.addTask(1, 6);
+
+      expect(component.newTaskDrafts[6]).toEqual({
+        title: 'Hosszan kigondolt feladatcím',
+        description: 'Részletes leírás',
+        maxPoints: 7,
+      });
+    });
+
+    it('sikeres mentés (onSuccess meghívása) UTÁN üríti a draftot', () => {
+      configure(makeDetail({ tasks: [] }));
+      taskSetStoreMock.addTask.mockImplementation(
+        (_taskSetId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.newTaskDrafts[6] = { title: 'Hosszan kigondolt feladatcím', description: 'Részletes leírás', maxPoints: 7 };
+      component.addTask(1, 6);
+
+      expect(component.newTaskDrafts[6]).toEqual({ title: '', description: '', maxPoints: 10 });
+    });
+
+    it('whitespace-only cím esetén addTask() csendben visszatér, a store-t nem hívja meg', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.newTaskDrafts[6] = { title: '   ', description: '', maxPoints: 10 };
+      component.addTask(1, 6);
+
+      expect(taskSetStoreMock.addTask).not.toHaveBeenCalled();
+    });
+
+    it('BUG UI-TT-61 javítva: whitespace-only cím esetén a "Hozzáadás" gomb letiltva marad (nem csendben no-op)', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+
+      const titleInput: HTMLInputElement = fixture.nativeElement.querySelector('input[name="newTaskTitle-6"]');
+      titleInput.value = '   ';
+      titleInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      const form = titleInput.closest('form') as HTMLFormElement;
+      const submitButton: HTMLButtonElement = form.querySelector('button[type="submit"]')!;
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    it('valódi (nem-whitespace) cím esetén a "Hozzáadás" gomb aktív', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+
+      const titleInput: HTMLInputElement = fixture.nativeElement.querySelector('input[name="newTaskTitle-6"]');
+      titleInput.value = 'Valódi feladatcím';
+      titleInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      const form = titleInput.closest('form') as HTMLFormElement;
+      const submitButton: HTMLButtonElement = form.querySelector('button[type="submit"]')!;
+      expect(submitButton.disabled).toBe(false);
+    });
+
+    it('addSolution() sikertelen/folyamatban lévő mentésnél is megőrzi a beírt leírás/pont draftot', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.setNewSolutionDescription(1, 'Beírt részfeladat-leírás');
+      component.setNewSolutionPoints(1, 8);
+      // A mock addSolution() alapból NEM hívja meg onSuccess-t.
+      component.addSolution(1, 1);
+
+      expect(component.newSolutionDraft(1)).toEqual({ description: 'Beírt részfeladat-leírás', points: 8 });
+    });
   });
 });

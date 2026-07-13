@@ -37,7 +37,7 @@ export class AdminApplicationStore {
       )
       .subscribe({
         next: (applications) => this._applications.set(applications),
-        error: (err) => this._error.set(err.error?.error ?? 'A jelentkezések betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A jelentkezések betöltése sikertelen.'),
       });
   }
 
@@ -59,7 +59,7 @@ export class AdminApplicationStore {
           this._applications.update((list) => list.filter((a) => a.id !== id));
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A jóváhagyás sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A jóváhagyás sikertelen.'),
       });
   }
 
@@ -81,7 +81,7 @@ export class AdminApplicationStore {
           this._applications.update((list) => list.filter((a) => a.id !== id));
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'Az elutasítás sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az elutasítás sikertelen.'),
       });
   }
 

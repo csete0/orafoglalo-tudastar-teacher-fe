@@ -7,6 +7,7 @@ import { PublicCategoryDto } from '../../models/category.model';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -59,13 +60,18 @@ const LEVELS = [
             </li>
           }
           @empty {
-            <li class="flex flex-col items-center py-10 gap-3">
-              <div class="icon-tile icon-tile-neutral">
-                <app-icon name="clipboard-list" class="w-6 h-6 block" />
-              </div>
-              <p class="font-semibold">Még nincs feladatsorod.</p>
-              <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
-            </li>
+            <!-- UI-TT-32: sikertelen betöltésnél NE mutassuk a "hozz létre elsőt" üres-állapotot
+                 a fenti hibaüzenettel egyidejűleg — az üres tömb ilyenkor a hibából ered, nem
+                 abból, hogy a tanárnak ténylegesen nincs egy feladatsora sem. -->
+            @if (!store.error()) {
+              <li class="flex flex-col items-center py-10 gap-3">
+                <div class="icon-tile icon-tile-neutral">
+                  <app-icon name="clipboard-list" class="w-6 h-6 block" />
+                </div>
+                <p class="font-semibold">Még nincs feladatsorod.</p>
+                <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
+              </li>
+            }
           }
         </ul>
       }
@@ -73,6 +79,9 @@ const LEVELS = [
       <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
         <h2 class="font-bold">Új feladatsor</h2>
         <input formControlName="title" placeholder="Cím" class="input" />
+        @if (createForm.controls.title.hasError('blank')) {
+          <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
+        }
         <textarea formControlName="description" placeholder="Leírás" rows="3" class="input"></textarea>
         <select formControlName="levelId" class="input">
           @for (level of levels; track level.id) {
@@ -104,7 +113,7 @@ export class FeladatsorokListaComponent {
   readonly categories = toSignal(this.categoryService.getAll(), { initialValue: [] as PublicCategoryDto[] });
 
   readonly createForm = this.fb.nonNullable.group({
-    title: ['', Validators.required],
+    title: ['', [Validators.required, notBlankValidator()]],
     description: ['', Validators.required],
     levelId: [2, Validators.required],
     subjectCategoryId: this.fb.control<number | null>(null),

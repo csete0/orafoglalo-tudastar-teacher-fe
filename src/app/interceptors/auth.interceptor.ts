@@ -25,15 +25,33 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
         : req;
 
+      const handleFinalError = (error: HttpErrorResponse): Observable<never> => {
+        if (req.method !== 'GET') {
+          toastService.danger(mutationErrorMessage(error));
+        }
+        return throwError(() => error);
+      };
+
       return next(authReq).pipe(
         catchError((error: HttpErrorResponse): Observable<HttpEvent<unknown>> => {
           if (error.status === 401 && token && !req.url.includes('/refresh')) {
-            return handleTokenRefresh(authStore, req, next, error);
+            return handleTokenRefresh(authStore, req, next, error).pipe(
+              catchError((retryOrRefreshError: HttpErrorResponse) => {
+                // UI-TT-51: ha a refresh maga hiúsult meg, handleTokenRefresh
+                // szándékosan UGYANAZT az originalError (401) referenciát dobja
+                // tovább — azt változatlanul, extra toast nélkül adjuk tovább
+                // (ez nem ennek a jegynek a hatóköre). Ha viszont ez egy MÁSIK
+                // hiba (az ÚJRAKÜLDÖTT kérés saját válasza, pl. 409/400 üzleti
+                // hiba), azt NEM szabad elnyelni: ugyanazon a toast+propagate
+                // logikán kell átfutnia, mint bármelyik más mutáció-hibának.
+                if (retryOrRefreshError === error) {
+                  return throwError(() => retryOrRefreshError);
+                }
+                return handleFinalError(retryOrRefreshError);
+              }),
+            );
           }
-          if (req.method !== 'GET') {
-            toastService.danger(mutationErrorMessage(error));
-          }
-          return throwError(() => error);
+          return handleFinalError(error);
         }),
       );
     }),
@@ -58,7 +76,6 @@ function handleTokenRefresh(
       const retryReq = originalReq.clone({ setHeaders: { Authorization: `Bearer ${newToken}` } });
       return next(retryReq);
     }),
-    catchError(() => throwError(() => originalError)),
   );
 }
 

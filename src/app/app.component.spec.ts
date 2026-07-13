@@ -7,6 +7,7 @@ describe('AppComponent', () => {
   let authStoreMock: {
     isAuthenticated: ReturnType<typeof vi.fn>;
     hasAdminRole: ReturnType<typeof vi.fn>;
+    hasTeacherRole: ReturnType<typeof vi.fn>;
     currentUser: ReturnType<typeof vi.fn>;
     logout: ReturnType<typeof vi.fn>;
   };
@@ -15,6 +16,7 @@ describe('AppComponent', () => {
     authStoreMock = {
       isAuthenticated: vi.fn().mockReturnValue(false),
       hasAdminRole: vi.fn().mockReturnValue(false),
+      hasTeacherRole: vi.fn().mockReturnValue(true),
       currentUser: vi.fn().mockReturnValue({
         id: 1,
         userName: 'teszt@example.com',
@@ -66,6 +68,37 @@ describe('AppComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('nav').textContent).toContain('Jelentkezések');
+  });
+
+  // UI-TT-15: teacher role NÉLKÜLI (pl. elbírálás alatt álló) bejelentkezett usernek
+  // a tanár-only nav-linkek (Csoportok/Feladatsorok/Intézmények) ne is jelenjenek meg,
+  // ne csak a roleGuard dobja vissza kattintáskor néma módon.
+  it('BUG UI-TT-15: teacher role NÉLKÜLI bejelentkezett usernek nem jelenik meg a tanári navigáció', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasTeacherRole.mockReturnValue(false);
+    authStoreMock.hasAdminRole.mockReturnValue(false);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav');
+    expect(nav).toBeTruthy();
+    expect(nav.textContent).not.toContain('Csoportok');
+    expect(nav.textContent).not.toContain('Feladatsorok');
+    expect(nav.textContent).not.toContain('Intézmények');
+  });
+
+  it('teacher role-lal rendelkező usernek megjelenik a tanári navigáció', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasTeacherRole.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav');
+    expect(nav.textContent).toContain('Csoportok');
+    expect(nav.textContent).toContain('Feladatsorok');
+    expect(nav.textContent).toContain('Intézmények');
   });
 
   it('a profil-chip monogramja magyar sorrendben: vezetéknév + keresztnév kezdőbetű', () => {

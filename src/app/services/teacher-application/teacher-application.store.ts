@@ -44,7 +44,7 @@ export class TeacherApplicationStore {
           if (err.status === 404) {
             this._application.set(null);
           } else {
-            this._error.set(err.error?.error ?? 'A jelentkezés állapotának lekérdezése sikertelen.');
+            this._error.set(err.error?.errorMessage ?? 'A jelentkezés állapotának lekérdezése sikertelen.');
           }
         },
       });
@@ -68,7 +68,7 @@ export class TeacherApplicationStore {
           if (onSuccess) onSuccess();
         },
         error: (err) => {
-          this._error.set(err.error?.error ?? 'A jelentkezés beadása sikertelen.');
+          this._error.set(err.error?.errorMessage ?? 'A jelentkezés beadása sikertelen.');
         },
       });
   }

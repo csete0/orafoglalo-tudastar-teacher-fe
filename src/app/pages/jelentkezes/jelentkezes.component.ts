@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { interval } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TeacherApplicationStore } from '../../services/teacher-application/teacher-application.store';
@@ -15,7 +15,7 @@ const POLL_INTERVAL_MS = 5000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-jelentkezes',
   standalone: true,
-  imports: [ReactiveFormsModule, DatePipe, IconComponent, LocalSpinnerComponent],
+  imports: [ReactiveFormsModule, DatePipe, IconComponent, LocalSpinnerComponent, RouterLink],
   template: `
     <div class="max-w-lg mx-auto px-4 py-10">
       <h1 class="page-title">Tanári jelentkezés</h1>
@@ -24,6 +24,19 @@ const POLL_INTERVAL_MS = 5000;
 
       @if (!store.checked()) {
         <app-local-spinner />
+      } @else if (authStore.hasTeacherRole()) {
+        <div class="card p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="icon-tile icon-tile-success">
+              <app-icon name="check" class="w-6 h-6 block" />
+            </div>
+            <p class="text-success font-bold">Már rendelkezel tanári hozzáféréssel.</p>
+          </div>
+          <p class="text-sm text-text-muted mb-4">
+            Nincs szükség új jelentkezésre, a tanári funkciók már elérhetők számodra.
+          </p>
+          <a routerLink="/dashboard" class="btn btn-primary">Ugrás a vezérlőpultra</a>
+        </div>
       } @else if (store.isApproved()) {
         <div class="card p-6">
           <div class="flex items-center gap-3 mb-4">
@@ -35,6 +48,9 @@ const POLL_INTERVAL_MS = 5000;
           <p class="text-sm text-text-muted mb-4">
             A tanári funkciók aktiválásához frissítened kell a munkameneted.
           </p>
+          @if (enterAsTeacherError()) {
+            <p class="text-sm text-danger mb-3">{{ enterAsTeacherError() }}</p>
+          }
           <button (click)="enterAsTeacher()" class="btn btn-primary">
             Belépés tanárként
           </button>
@@ -88,13 +104,15 @@ const POLL_INTERVAL_MS = 5000;
 export class JelentkezesComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
-  private readonly authStore = inject(AuthStore);
+  readonly authStore = inject(AuthStore);
   readonly store = inject(TeacherApplicationStore);
 
   readonly form = this.fb.nonNullable.group({
     motivation: ['', [Validators.required, Validators.minLength(20)]],
     institutionName: [''],
   });
+
+  readonly enterAsTeacherError = signal<string | null>(null);
 
   constructor() {
     this.store.loadMine();
@@ -107,6 +125,18 @@ export class JelentkezesComponent {
           this.store.loadMine();
         }
       });
+
+    // UI-TT-17: elutasított jelentkezés esetén a korábban beadott bemutatkozás/intézménynév előtöltése,
+    // hogy az újra-jelentkezőnek ne kelljen mindent nulláról begépelnie.
+    effect(() => {
+      const application = this.store.application();
+      if (application && this.store.isRejected()) {
+        this.form.patchValue({
+          motivation: application.motivation ?? '',
+          institutionName: application.institutionName ?? '',
+        });
+      }
+    });
   }
 
   submit(): void {
@@ -120,7 +150,17 @@ export class JelentkezesComponent {
   }
 
   async enterAsTeacher(): Promise<void> {
-    await this.authStore.refreshToken();
+    this.enterAsTeacherError.set(null);
+    const newToken = await this.authStore.refreshToken();
+    if (!newToken) {
+      // UI-TT-16: sikertelen refresh esetén a TokenService a munkamenetet
+      // már törölte (onTokenRefreshFailed) — ne navigáljunk tovább néma
+      // kijelentkeztetésként, hanem jelezzük a hibát és hagyjuk a usert újra próbálkozni.
+      this.enterAsTeacherError.set(
+        'A munkamenet frissítése sikertelen. Próbáld újra, vagy jelentkezz be újra.',
+      );
+      return;
+    }
     this.router.navigateByUrl('/dashboard', { replaceUrl: true });
   }
 }

@@ -39,12 +39,14 @@ const ADMIN_LINKS: NavLink[] = [
         @if (authStore.isAuthenticated()) {
           <!-- Desktop nav -->
           <nav class="hidden md:flex items-center gap-1 text-sm">
-            @for (link of teacherLinks; track link.path) {
-              <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
-                class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-text-muted hover:text-text-primary transition-colors">
-                <app-icon [name]="link.icon" class="w-4 h-4 block" />
-                {{ link.label }}
-              </a>
+            @if (authStore.hasTeacherRole()) {
+              @for (link of teacherLinks; track link.path) {
+                <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
+                  class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-text-muted hover:text-text-primary transition-colors">
+                  <app-icon [name]="link.icon" class="w-4 h-4 block" />
+                  {{ link.label }}
+                </a>
+              }
             }
             @if (authStore.hasAdminRole()) {
               <div class="h-4 w-px bg-border-default mx-1"></div>
@@ -83,13 +85,15 @@ const ADMIN_LINKS: NavLink[] = [
            a desktop navigációt célozzák egyértelműen) -->
       @if (authStore.isAuthenticated() && menuOpen()) {
         <div class="md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1">
-          @for (link of teacherLinks; track link.path) {
-            <a [routerLink]="link.path" (click)="menuOpen.set(false)"
-              routerLinkActive="text-primary font-semibold bg-primary-subtle"
-              class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-muted">
-              <app-icon [name]="link.icon" class="w-4 h-4 block" />
-              {{ link.label }}
-            </a>
+          @if (authStore.hasTeacherRole()) {
+            @for (link of teacherLinks; track link.path) {
+              <a [routerLink]="link.path" (click)="menuOpen.set(false)"
+                routerLinkActive="text-primary font-semibold bg-primary-subtle"
+                class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-muted">
+                <app-icon [name]="link.icon" class="w-4 h-4 block" />
+                {{ link.label }}
+              </a>
+            }
           }
           @if (authStore.hasAdminRole()) {
             <div class="h-px bg-border-default my-2"></div>

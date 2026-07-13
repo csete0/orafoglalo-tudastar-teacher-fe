@@ -33,7 +33,13 @@ export class AuthService {
 
   getTokenExpiry(token: string): Date | null {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      // UI-TT-48: a JWT payload base64url-kódolású (RFC 7519), a szabványos
+      // atob() `-`/`_` karaktereken InvalidCharacterError-t dob — ugyanaz a
+      // base64url-biztos dekódolás, mint a diák-repó
+      // (orafoglalo-tudastar-fe) UtilService.decodeToken()-je.
+      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const decoded = decodeURIComponent(escape(atob(base64)));
+      const payload = JSON.parse(decoded);
       return payload.exp ? new Date(payload.exp * 1000) : null;
     } catch {
       return null;

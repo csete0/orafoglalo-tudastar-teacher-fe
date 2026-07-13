@@ -109,7 +109,7 @@ describe('AdminApplicationStore', () => {
   it('approve hiba esetén beállítja az error jelet, és NEM távolítja el az elemet a listából', async () => {
     serviceMock.getApplications.mockReturnValue(of([makeApplication()]));
     serviceMock.approve.mockReturnValue(
-      throwError(() => ({ error: { error: 'Csak elbírálásra váró jelentkezés hagyható jóvá.' } })),
+      throwError(() => ({ error: { errorMessage: 'Csak elbírálásra váró jelentkezés hagyható jóvá.' } })),
     );
 
     const store = TestBed.inject(AdminApplicationStore);

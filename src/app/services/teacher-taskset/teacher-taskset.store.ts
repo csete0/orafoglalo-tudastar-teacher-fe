@@ -50,7 +50,7 @@ export class TeacherTaskSetStore {
       )
       .subscribe({
         next: (taskSets) => this._taskSets.set(taskSets),
-        error: (err) => this._error.set(err.error?.error ?? 'A feladatsorok betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsorok betöltése sikertelen.'),
       });
   }
 
@@ -70,7 +70,7 @@ export class TeacherTaskSetStore {
           this._selectedDetail.set(detail);
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.error ?? 'A feladatsor betöltése sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsor betöltése sikertelen.'),
       });
   }
 
@@ -114,7 +114,7 @@ export class TeacherTaskSetStore {
           }
         },
         error: (err) => {
-          this._error.set(err.error?.error ?? 'A publikálás sikertelen.');
+          this._error.set(err.error?.errorMessage ?? 'A publikálás sikertelen.');
           this._loading.set(false);
         },
       });
@@ -180,7 +180,7 @@ export class TeacherTaskSetStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.error ?? 'A művelet sikertelen.'),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
       });
   }
 
@@ -200,7 +200,7 @@ export class TeacherTaskSetStore {
           this.loadDetail(taskSetId, onSuccess);
         },
         error: (err) => {
-          this._error.set(err.error?.error ?? 'A művelet sikertelen.');
+          this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.');
           this._loading.set(false);
         },
       });

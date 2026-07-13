@@ -37,7 +37,18 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
                   </td>
                   <td class="py-2.5 px-4">
                     @if (row.hasSession) {
-                      {{ row.totalEarnedPoints ?? '–' }} / {{ row.totalMaxPoints ?? '–' }}
+                      <span class="inline-flex items-center gap-1.5">
+                        {{ row.totalEarnedPoints ?? '–' }} / {{ row.totalMaxPoints ?? '–' }}
+                        @if (!row.isCompleted) {
+                          <!-- UI-TT-49: a totalEarnedPoints/totalMaxPoints csak a MÁR
+                               megkísérelt feladatokból összegződik, ezért egy még folyamatban
+                               lévő diák részleges eredménye vizuálisan megkülönböztethetetlen
+                               lenne egy ténylegesen kész, tökéletes eredménytől e nélkül a badge nélkül. -->
+                          <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="A diák még nem fejezte be a feladatsort.">
+                            folyamatban
+                          </span>
+                        }
+                      </span>
                     } @else {
                       nem kezdte el
                     }
