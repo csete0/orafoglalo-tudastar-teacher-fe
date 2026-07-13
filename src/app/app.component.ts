@@ -1,12 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { filter } from 'rxjs/operators';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from './services/auth/store/auth.store';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
 import { IconComponent, IconName } from './shared/icon/icon.component';
 import { ToastComponent } from './shared/toast/toast.component';
-import { ToastService } from './shared/toast/toast.service';
 
 interface NavLink {
   path: string;
@@ -135,47 +132,11 @@ const ADMIN_LINKS: NavLink[] = [
 })
 export class AppComponent {
   private readonly router = inject(Router);
-  private readonly toastService = inject(ToastService);
   readonly authStore = inject(AuthStore);
 
   readonly teacherLinks = TEACHER_LINKS;
   readonly adminLinks = ADMIN_LINKS;
   readonly menuOpen = signal(false);
-
-  constructor() {
-    this.router.events
-      .pipe(
-        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-        takeUntilDestroyed(),
-      )
-      .subscribe((event) => this.handleSocialAuthRedirect(event));
-  }
-
-  /** Google/Facebook/Apple redirect utan (ld. AuthService.signInWithProvider)
-   *  a backend ?..._authentication=success query-parammel iranyitja ide vissza
-   *  a bongeszot - ezt kapjuk el es valtjuk be tenyleges munkamenetre. */
-  private handleSocialAuthRedirect(event: NavigationEnd): void {
-    const urlTree = this.router.parseUrl(event.urlAfterRedirects);
-    const params = urlTree.queryParams;
-
-    const hasSocialAuth =
-      params['google_authentication'] === 'success' ||
-      params['facebook_authentication'] === 'success' ||
-      params['apple_authentication'] === 'success';
-
-    if (!hasSocialAuth) return;
-
-    this.authStore.autoLogin(
-      () => {
-        this.toastService.success('Sikeres bejelentkezés!');
-        this.router.navigate(['/dashboard'], { queryParams: {}, replaceUrl: true });
-      },
-      (message) => {
-        this.toastService.danger(message);
-        this.router.navigate(['/login'], { queryParams: {}, replaceUrl: true });
-      },
-    );
-  }
 
   /** Magyar névsorrend: vezetéknév + keresztnév kezdőbetűje. */
   readonly monogram = computed(() => {

@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/login/login.component').then((m) => m.LoginComponent),
   },
   {
+    path: 'oauth-callback',
+    loadComponent: () =>
+      import('./pages/oauth-callback/oauth-callback.component').then((m) => m.OauthCallbackComponent),
+  },
+  {
     path: 'jelentkezes',
     canActivate: [authGuard],
     loadComponent: () => import('./pages/jelentkezes/jelentkezes.component').then((m) => m.JelentkezesComponent),
