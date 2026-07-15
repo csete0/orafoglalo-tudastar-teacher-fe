@@ -97,6 +97,13 @@ export class GroupStore {
     });
   }
 
+  setJoinEnabled(id: number, enabled: boolean, onSuccess?: () => void): void {
+    this.mutate(this.service.setJoinEnabled(id, enabled), () => {
+      this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isJoinEnabled: enabled } : g)));
+      if (onSuccess) onSuccess();
+    });
+  }
+
   clearError(): void {
     this._error.set(null);
   }

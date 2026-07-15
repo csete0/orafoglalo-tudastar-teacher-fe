@@ -11,6 +11,7 @@ export interface GroupDto {
   schoolName?: string;
   inviteCode: string;
   isArchived: boolean;
+  isJoinEnabled: boolean;
   createdAt: string;
   memberCount: number;
 }

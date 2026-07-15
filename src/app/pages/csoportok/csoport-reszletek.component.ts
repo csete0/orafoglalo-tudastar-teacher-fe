@@ -164,11 +164,28 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
                   <app-icon name="link" class="w-6 h-6 block" />
                 </div>
                 <p class="text-sm">Meghívó kód: <code class="font-bold">{{ group.inviteCode }}</code></p>
+                @if (group.isJoinEnabled) {
+                  <span class="badge badge-success shrink-0">Aktív</span>
+                } @else {
+                  <span class="badge badge-neutral shrink-0">Jelentkezés letiltva</span>
+                }
               </div>
               <p class="text-sm break-all">Csatlakozási link: <code>{{ joinLink(group.inviteCode) }}</code></p>
-              <button (click)="regenerateInvite(group.id)" [disabled]="store.loading()" class="btn btn-primary">
-                Új kód generálása
-              </button>
+              <p class="text-xs text-text-muted">A kód nem jár le — a jelentkezést itt tudod ki- vagy bekapcsolni anélkül, hogy a kódot le kellene cserélned.</p>
+              <div class="flex gap-2">
+                <button (click)="regenerateInvite(group.id)" [disabled]="store.loading()" class="btn btn-primary">
+                  Új kód generálása
+                </button>
+                @if (group.isJoinEnabled) {
+                  <button (click)="setJoinEnabled(group.id, false)" [disabled]="store.loading()" class="btn btn-danger">
+                    Jelentkezés letiltása
+                  </button>
+                } @else {
+                  <button (click)="setJoinEnabled(group.id, true)" [disabled]="store.loading()" class="btn btn-primary">
+                    Jelentkezés engedélyezése
+                  </button>
+                }
+              </div>
             </div>
           }
         }
@@ -295,5 +312,12 @@ export class CsoportReszletekComponent implements OnInit {
   regenerateInvite(groupId: number): void {
     if (this.store.loading()) return;
     this.store.regenerateInvite(groupId, () => this.toastService.success('Új meghívó kód generálva.'));
+  }
+
+  setJoinEnabled(groupId: number, enabled: boolean): void {
+    if (this.store.loading()) return;
+    this.store.setJoinEnabled(groupId, enabled, () =>
+      this.toastService.success(enabled ? 'Jelentkezés engedélyezve.' : 'Jelentkezés letiltva.'),
+    );
   }
 }

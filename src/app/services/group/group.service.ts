@@ -39,6 +39,10 @@ export class GroupService {
     return this.http.post(`${this.baseUrl}/${id}/archive`, {});
   }
 
+  setJoinEnabled(id: number, enabled: boolean): Observable<unknown> {
+    return this.http.put(`${this.baseUrl}/${id}/join-enabled`, { enabled });
+  }
+
   // ── Diák oldal ────────────────────────────────────────────
   getMyGroups(): Observable<MyGroupDto[]> {
     return this.http.get<MyGroupDto[]>(this.myGroupsUrl);

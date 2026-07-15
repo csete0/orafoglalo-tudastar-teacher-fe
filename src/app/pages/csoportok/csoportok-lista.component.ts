@@ -47,6 +47,8 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                   </span>
                   @if (group.isArchived) {
                     <span class="badge badge-neutral shrink-0">Archivált</span>
+                  } @else if (!group.isJoinEnabled) {
+                    <span class="badge badge-neutral shrink-0">Jelentkezés letiltva</span>
                   }
                   <span class="text-sm text-text-muted shrink-0">{{ group.memberCount }} tag</span>
                   <app-icon name="arrow-right"
