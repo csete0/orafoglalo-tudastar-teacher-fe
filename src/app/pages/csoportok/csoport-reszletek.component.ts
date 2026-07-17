@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GroupStore } from '../../services/group/group.store';
@@ -39,7 +39,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
         @if (schoolStore.schools().length > 0) {
           <div class="flex items-center gap-2 mt-4 text-sm">
             <label class="text-text-muted">Intézmény:</label>
-            <select [ngModel]="group.schoolId" (ngModelChange)="changeSchool(group.id, group.name, $event)"
+            <select [ngModel]="displaySchoolId()" (ngModelChange)="changeSchool(group.id, group.name, $event)"
               class="input !w-auto">
               <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
               @for (school of schoolStore.schools(); track school.id) {
@@ -93,32 +93,38 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
           }
 
           @case ('eredmenyek') {
-            <div class="card overflow-hidden">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                    <th class="py-3 px-4">Diák</th>
-                    <th class="py-3 px-4">Vizsgák</th>
-                    <th class="py-3 px-4">Átlag %</th>
-                    <th class="py-3 px-4">Kvíz pontosság</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (student of report.groupActivity(); track student.userId) {
-                    <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                      <td class="py-2.5 px-4">
-                        <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                      </td>
-                      <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                      <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                      <td class="py-2.5 px-4">{{ student.quizAccuracyPercent ?? '–' }}</td>
-                    </tr>
-                  } @empty {
-                    <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+            @if (report.error()) {
+              <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
+            } @else {
+              <div class="card overflow-hidden">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                        <th class="py-3 px-4">Diák</th>
+                        <th class="py-3 px-4">Vizsgák</th>
+                        <th class="py-3 px-4">Átlag %</th>
+                        <th class="py-3 px-4">Kvíz pontosság</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (student of report.groupActivity(); track student.userId) {
+                        <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                          <td class="py-2.5 px-4">
+                            <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
+                          </td>
+                          <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
+                          <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
+                          <td class="py-2.5 px-4">{{ student.quizAccuracyPercent ?? '–' }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            }
           }
 
           @case ('ranglista') {
@@ -220,6 +226,18 @@ export class CsoportReszletekComponent implements OnInit {
 
   private groupId = 0;
 
+  // UI-TT-4: az intézmény-<select> korábban közvetlenül a store selectedGroup().schoolId-jára
+  // volt kötve — mivel Mégse esetén ez az érték SOHA nem változott, Angular nem hívta újra a
+  // writeValue()-t, és a <select> DOM-eleme a törölt/el nem mentett választáson maradt. Egy
+  // külön, a nézetet vezérlő signal-lal a Mégse-ág explicit vissza tudja állítani a látott
+  // értéket, akkor is, ha a mögöttes store-állapot közben nem változott.
+  readonly displaySchoolId = signal<number | null>(null);
+
+  private readonly syncDisplaySchoolId = effect(() => {
+    const group = this.store.selectedGroup();
+    this.displaySchoolId.set(group?.schoolId ?? null);
+  });
+
   ngOnInit(): void {
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
     if (this.store.groups().length === 0) {
@@ -289,20 +307,27 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   async changeSchool(groupId: number, groupName: string, schoolId: number | null): Promise<void> {
-    const previousSchoolId = this.store.selectedGroup()?.schoolId ?? null;
+    const previousSchoolId = this.displaySchoolId();
+    this.displaySchoolId.set(schoolId);
     if (schoolId !== null) {
       const schoolName = this.schoolStore.schools().find((s) => s.id === schoolId)?.name ?? '';
       const ok = await this.confirmService.ask({
         message: `Biztosan a(z) „${schoolName}” intézményhez kötöd ezt a csoportot? A tagok minden korábbi eredménye láthatóvá válik az intézmény igazgatója számára, és a diákok erről értesítést kapnak.`,
       });
-      if (!ok) return;
+      if (!ok) {
+        this.displaySchoolId.set(previousSchoolId);
+        return;
+      }
     } else if (previousSchoolId !== null) {
       const ok = await this.confirmService.ask({
         message: 'Biztosan visszavonod a csoport intézményhez-kötését? A csoport lekerül az intézményről, és az igazgató a továbbiakban nem látja a diákok eredményeit.',
         danger: true,
         confirmLabel: 'Kötés visszavonása',
       });
-      if (!ok) return;
+      if (!ok) {
+        this.displaySchoolId.set(previousSchoolId);
+        return;
+      }
     }
     this.store.update(groupId, { name: groupName, schoolId: schoolId ?? undefined }, () =>
       this.toastService.success('Csoport frissítve.'),

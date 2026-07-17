@@ -317,12 +317,18 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     const detail = this.store.selectedDetail();
     if (!detail) return [];
 
+    // UI-TT-3: a checkbox→radio átállás előtt KÉT típussal (SQL+Programozás) is
+    // menthető volt egy feladat — az .includes()-alapú szűrés ilyenkor mindkét
+    // típus-blokkba besorolta ugyanazt a feladatot (duplikáció). Csak a PONTOSAN
+    // egy típussal rendelkező feladatok kerülnek a saját típus-blokkjukba; minden
+    // más (0 vagy 2+ típus) az "Egyéb" gyűjtő-blokkba esik, ahogy azt már a fenti
+    // komment is dokumentálja.
     const sections = this.taskTypes.map((type) => ({
       id: type.id,
       label: type.label,
       icon: (type.id === 6 ? 'code' : 'database') as IconName,
       isOther: false,
-      tasks: detail.tasks.filter((t) => t.taskTypeIds.includes(type.id)),
+      tasks: detail.tasks.filter((t) => t.taskTypeIds.length === 1 && t.taskTypeIds[0] === type.id),
     }));
 
     const categorizedTaskIds = new Set(sections.flatMap((s) => s.tasks.map((t) => t.id)));

@@ -95,7 +95,7 @@ const LEVELS = [
           }
         </select>
 
-        <button type="submit" [disabled]="createForm.invalid" class="btn btn-primary">
+        <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
           Létrehozás
         </button>
       </form>
@@ -124,7 +124,7 @@ export class FeladatsorokListaComponent {
   }
 
   create(): void {
-    if (this.createForm.invalid) return;
+    if (this.createForm.invalid || this.store.loading()) return;
     const raw = this.createForm.getRawValue();
     this.store.create(
       {

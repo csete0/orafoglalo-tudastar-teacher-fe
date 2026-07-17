@@ -71,4 +71,22 @@ describe('IntezmenyekListaComponent', () => {
 
     expect(storeMock.create).not.toHaveBeenCalled();
   });
+
+  // UI-TT-6: a "Létrehozás" gomb korábban nem volt letiltva egy már folyamatban
+  // lévő kérés alatt — dupla kattintás duplikált intézményt hozhatott létre.
+  it('BUG UI-TT-6 javítva: store.loading() alatt a "Létrehozás" gomb letiltott és createSchool() no-op', () => {
+    configure();
+    storeMock.loading.set(true);
+    const fixture = TestBed.createComponent(IntezmenyekListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.createForm.controls.name.setValue('Teszt Gimnázium');
+    fixture.detectChanges();
+
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelectorAll('button[type="submit"]')[0];
+    expect(submitButton.disabled).toBe(true);
+
+    fixture.componentInstance.createSchool();
+    expect(storeMock.create).not.toHaveBeenCalled();
+  });
 });

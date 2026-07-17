@@ -155,30 +155,32 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
               <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
             } @else {
               <div class="card overflow-hidden">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                      <th class="py-3 px-4">Diák</th>
-                      <th class="py-3 px-4">Vizsgák</th>
-                      <th class="py-3 px-4">Átlag %</th>
-                      <th class="py-3 px-4">Sorozat</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (student of report.schoolActivity(); track student.userId) {
-                      <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                        <td class="py-2.5 px-4">
-                          <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                        </td>
-                        <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                        <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                        <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                        <th class="py-3 px-4">Diák</th>
+                        <th class="py-3 px-4">Vizsgák</th>
+                        <th class="py-3 px-4">Átlag %</th>
+                        <th class="py-3 px-4">Sorozat</th>
                       </tr>
-                    } @empty {
-                      <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
-                    }
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      @for (student of report.schoolActivity(); track student.userId) {
+                        <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                          <td class="py-2.5 px-4">
+                            <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
+                          </td>
+                          <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
+                          <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
+                          <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               </div>
             }
           }

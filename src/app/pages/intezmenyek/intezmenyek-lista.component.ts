@@ -70,7 +70,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
           @if (createForm.controls.name.hasError('blank')) {
             <p class="text-sm text-danger">Az intézmény neve nem állhat kizárólag szóközökből.</p>
           }
-          <button type="submit" [disabled]="createForm.invalid" class="btn btn-primary !px-3 !py-1.5">
+          <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary !px-3 !py-1.5">
             Létrehozás
           </button>
         </form>
@@ -99,7 +99,7 @@ export class IntezmenyekListaComponent {
   }
 
   createSchool(): void {
-    if (this.createForm.invalid) return;
+    if (this.createForm.invalid || this.store.loading()) return;
     this.store.create({ name: this.createForm.getRawValue().name }, () => {
       this.createForm.reset();
       this.toastService.success('Intézmény létrehozva.');

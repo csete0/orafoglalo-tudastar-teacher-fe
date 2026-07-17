@@ -527,4 +527,50 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.newSolutionDraft(1)).toEqual({ description: 'Beírt részfeladat-leírás', points: 8 });
     });
   });
+
+  // UI-TT-3: a checkbox→radio átállás előtt (9bf10a7 előtt) egy feladat KÉT típussal
+  // (SQL+Programozás) is menthető volt — a régi .includes()-alapú szűrés emiatt mindkét
+  // típus-blokkban megjelenítette ugyanazt a feladatot.
+  describe('typeSections() — kettős típusú feladatok (UI-TT-3)', () => {
+    it('BUG UI-TT-3 javítva: egy [5,6] taskTypeIds-ű feladat NEM jelenik meg sem a Programozás, sem az SQL blokkban, hanem az Egyébben', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'Kettős típusú feladat', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5, 6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      const sections = component.typeSections();
+      const programozas = sections.find((s) => s.id === 6);
+      const sql = sections.find((s) => s.id === 5);
+      const egyeb = sections.find((s) => s.isOther);
+
+      expect(programozas?.tasks.some((t) => t.id === 1)).toBe(false);
+      expect(sql?.tasks.some((t) => t.id === 1)).toBe(false);
+      expect(egyeb?.tasks.some((t) => t.id === 1)).toBe(true);
+    });
+
+    it('egyetlen típussal rendelkező feladat a saját típus-blokkjában jelenik meg, duplikáció nélkül', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'Programozás feladat', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      const sections = component.typeSections();
+      const totalOccurrences = sections.reduce((sum, s) => sum + s.tasks.filter((t) => t.id === 1).length, 0);
+
+      expect(totalOccurrences).toBe(1);
+      expect(sections.find((s) => s.id === 6)?.tasks.some((t) => t.id === 1)).toBe(true);
+    });
+  });
 });

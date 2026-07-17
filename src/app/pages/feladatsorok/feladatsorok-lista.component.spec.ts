@@ -88,4 +88,24 @@ describe('FeladatsorokListaComponent', () => {
 
     expect(storeMock.create).not.toHaveBeenCalled();
   });
+
+  // UI-TT-6: a "Létrehozás" gomb korábban nem volt letiltva egy már folyamatban
+  // lévő kérés alatt — dupla kattintás duplikált feladatsort hozhatott létre.
+  it('BUG UI-TT-6 javítva: store.loading() alatt a "Létrehozás" gomb letiltott és create() no-op', () => {
+    configure();
+    storeMock.loading.set(true);
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+
+    const { title, description } = fixture.componentInstance.createForm.controls;
+    title.setValue('Valódi cím');
+    description.setValue('Valódi leírás');
+    fixture.detectChanges();
+
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[type="submit"]');
+    expect(submitButton.disabled).toBe(true);
+
+    fixture.componentInstance.create();
+    expect(storeMock.create).not.toHaveBeenCalled();
+  });
 });
