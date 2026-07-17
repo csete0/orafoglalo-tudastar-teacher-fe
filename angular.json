@@ -36,6 +36,16 @@
                 { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" }
               ]
             },
+            "staging": {
+              "budgets": [
+                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "50kB" }
+              ],
+              "outputHashing": "all",
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.staging.ts" }
+              ]
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
@@ -51,6 +61,7 @@
           },
           "configurations": {
             "production": { "buildTarget": "teacher-fe:build:production" },
+            "staging": { "buildTarget": "teacher-fe:build:staging" },
             "development": { "buildTarget": "teacher-fe:build:development" }
           },
           "defaultConfiguration": "development"
