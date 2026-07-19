@@ -13,6 +13,11 @@ import { AuthService } from './auth.service';
 export class TokenService {
   private readonly authService = inject(AuthService);
 
+  // UI-TT-86: az origin ÖSSZES tabja/ablaka között közös zárnevet kell
+  // használni (nem tabId-specifikusat), hogy a Web Locks API ténylegesen
+  // kölcsönösen kizárja őket.
+  private static readonly CROSS_TAB_REFRESH_LOCK = 'patricks-teacher-auth-refresh';
+
   private tokenCache: { accessToken: string | null; timestamp: number } | null = null;
   private getAccessTokenPromise: Promise<string | null> | null = null;
   private getValidAccessTokenPromise: Promise<string | null> | null = null;
@@ -169,6 +174,42 @@ export class TokenService {
       return this.waitForRefresh();
     }
 
+    // UI-TT-86: a refreshInProgress mutex csak EZEN a tabon belül véd - a
+    // refresh-token cookie viszont origin-szintű (Path=/api/auth), tehát két
+    // nyitott tab UGYANAZT a cookie-t küldi, amíg egyik sem kapta vissza a
+    // rotált Set-Cookie-t. Enélkül két tab saját, egymástól független
+    // időzítője megbízhatóan egyszerre próbál frissíteni ugyanazzal a (már
+    // elavulófélben lévő) cookie-val - a backend ezt lopás-gyanúnak látja és
+    // a user TELJES munkamenetét visszavonja, a "nyertes" tab frissen kapott,
+    // sosem kompromittálódott tokenjével együtt. A Web Locks API-val (minden
+    // modern böngészőben elérhető) valódi, tab-ok közötti kölcsönös kizárást
+    // kapunk: amíg egy tab a zár birtokában frissít, a többi VÁR, majd a zár
+    // felszabadulása után előbb ELLENŐRZI, hogy közben már nem lett-e frissítve
+    // a token (ha igen, azt adja vissza, nem küld egy második, redundáns
+    // /api/auth/refresh hívást, ami a fenti okból elhasalna).
+    if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+      return navigator.locks.request(TokenService.CROSS_TAB_REFRESH_LOCK, () =>
+        this.refreshUnderLock(),
+      );
+    }
+
+    return this.doTokenRefresh();
+  }
+
+  private async refreshUnderLock(): Promise<string | null> {
+    const current = this.getFromStorage(STORAGE_KEYS.ACCESS_TOKEN);
+    if (current && this.isValidTokenFormat(current) && !this.shouldRefreshToken(current)) {
+      // Egy másik tab, amíg erre a tabra a zár várt, már elvégezte a
+      // frissítést - a friss tokent egyszerűen visszaadjuk, redundáns hívás
+      // (és az ezzel járó reuse-elutasítás) nélkül.
+      this.tokenCache = { accessToken: current, timestamp: Date.now() };
+      return current;
+    }
+
+    return this.doTokenRefresh();
+  }
+
+  private async doTokenRefresh(): Promise<string | null> {
     this.refreshInProgress = true;
 
     try {

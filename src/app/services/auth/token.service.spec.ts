@@ -72,4 +72,52 @@ describe('TokenService', () => {
     const validToken = await validTokenPromise;
     expect(validToken).toBe('own-refresh.token.value');
   });
+
+  // UI-TT-86: a refreshInProgress mutex csak tabon belül védett - két nyitott tab
+  // (origin-szintű, közös refresh-token cookie) egyszerre próbál frissíteni, a
+  // backend ezt lopás-gyanúnak látja és a "nyertes" tab friss tokenjét is
+  // visszavonja. A Web Locks API-val megszerzett zár alatt, mielőtt bármilyen
+  // hálózati hívás elindulna, ELLENŐRIZNI kell, hogy egy másik tab (amíg erre a
+  // tabra a zár várt) már nem végezte-e el a frissítést.
+  describe('UI-TT-86: cross-tab Web Locks koordináció', () => {
+    afterEach(() => {
+      delete (navigator as unknown as { locks?: unknown }).locks;
+    });
+
+    it('a Web Locks API elérhetősége esetén a zár birtokában végzi a frissítést', async () => {
+      let lockCallbackRan = false;
+      (navigator as unknown as { locks: { request: (name: string, cb: () => Promise<unknown>) => Promise<unknown> } }).locks = {
+        request: async (_name, cb) => {
+          lockCallbackRan = true;
+          return cb();
+        },
+      };
+
+      const refreshPromise = service.performTokenRefresh();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      refreshSubject.next({ accessToken: 'locked-refresh.token.value', user: undefined } as never);
+      refreshSubject.complete();
+
+      expect(await refreshPromise).toBe('locked-refresh.token.value');
+      expect(lockCallbackRan).toBe(true);
+    });
+
+    it('BUG UI-TT-86: ha a zár megszerzésekor a token közben (egy másik tab által) már frissült, nem küld redundáns refresh-hívást', async () => {
+      (navigator as unknown as { locks: { request: (name: string, cb: () => Promise<unknown>) => Promise<unknown> } }).locks = {
+        request: async (_name, cb) => {
+          // Azt szimuláljuk, hogy amíg ez a tab a zárra várt, egy MÁSIK tab már
+          // lefuttatta a saját frissítését, és friss (nem lejáró) tokent írt a
+          // közös localStorage-ba - a zár megszerzésekor ennek már ott kell lennie.
+          authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 10 * 60_000));
+          localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, 'header.payload.signature');
+          return cb();
+        },
+      };
+
+      const result = await service.performTokenRefresh();
+
+      expect(result).toBe('header.payload.signature');
+      expect(authServiceMock.refreshTokens).not.toHaveBeenCalled();
+    });
+  });
 });
