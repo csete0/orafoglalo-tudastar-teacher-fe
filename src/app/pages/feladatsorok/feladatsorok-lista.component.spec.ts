@@ -108,4 +108,38 @@ describe('FeladatsorokListaComponent', () => {
     fixture.componentInstance.create();
     expect(storeMock.create).not.toHaveBeenCalled();
   });
+
+  // UI-TT-79: a valós BE TaskSets.title oszlop nvarchar(250), a form korábban
+  // EGYÁLTALÁN nem alkalmazott hosszkorlátot - egy 251+ karakteres cím a BE-n
+  // nyers SqlException-be futott volna mentéskor.
+  it('BUG UI-TT-79 javítva: 250 karakternél hosszabb cím esetén a form érvénytelen, a gomb letiltva', () => {
+    configure();
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+
+    const { title, description } = fixture.componentInstance.createForm.controls;
+    title.setValue('a'.repeat(251));
+    description.setValue('Valódi leírás');
+    fixture.detectChanges();
+
+    expect(title.hasError('maxlength')).toBe(true);
+    expect(fixture.componentInstance.createForm.invalid).toBe(true);
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[type="submit"]');
+    expect(submitButton.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('A cím legfeljebb 250 karakter hosszú lehet.');
+  });
+
+  it('pontosan 250 karakteres cím esetén a form érvényes', () => {
+    configure();
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+
+    const { title, description } = fixture.componentInstance.createForm.controls;
+    title.setValue('a'.repeat(250));
+    description.setValue('Valódi leírás');
+    fixture.detectChanges();
+
+    expect(title.hasError('maxlength')).toBe(false);
+    expect(fixture.componentInstance.createForm.valid).toBe(true);
+  });
 });

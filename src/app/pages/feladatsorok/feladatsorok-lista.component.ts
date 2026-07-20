@@ -78,9 +78,12 @@ const LEVELS = [
 
       <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
         <h2 class="font-bold">Új feladatsor</h2>
-        <input formControlName="title" placeholder="Cím" class="input" />
+        <input formControlName="title" placeholder="Cím" maxlength="250" class="input" />
         @if (createForm.controls.title.hasError('blank')) {
           <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
+        }
+        @if (createForm.controls.title.hasError('maxlength')) {
+          <p class="text-sm text-danger">A cím legfeljebb 250 karakter hosszú lehet.</p>
         }
         <textarea formControlName="description" placeholder="Leírás" rows="3" class="input"></textarea>
         <select formControlName="levelId" class="input">
@@ -113,7 +116,9 @@ export class FeladatsorokListaComponent {
   readonly categories = toSignal(this.categoryService.getAll(), { initialValue: [] as PublicCategoryDto[] });
 
   readonly createForm = this.fb.nonNullable.group({
-    title: ['', [Validators.required, notBlankValidator()]],
+    // UI-TT-79: a BE nvarchar(250)-hez igazodó kemény korlát - enélkül a form
+    // bármilyen hosszúságú címet beengedett, jóval a DTO korlátján túl is.
+    title: ['', [Validators.required, notBlankValidator(), Validators.maxLength(250)]],
     description: ['', Validators.required],
     levelId: [2, Validators.required],
     subjectCategoryId: this.fb.control<number | null>(null),
