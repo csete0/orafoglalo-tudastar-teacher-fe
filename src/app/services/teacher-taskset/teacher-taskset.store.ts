@@ -55,6 +55,18 @@ export class TeacherTaskSetStore {
   }
 
   loadDetail(id: number, onSuccess?: () => void): void {
+    // UI-TT-72: MÁSIK feladatsorra navigáláskor a korábban betöltött adatot
+    // azonnal törölni kell, különben a válasz megérkezéséig az ELŐZŐ
+    // feladatsor adatlapja látszik az ÚJ URL alatt. DE ugyanazon id
+    // újratöltésekor (mutateAndReload()/publish() minden sikeres mentés után
+    // ide fut vissza) a régi adatot szándékosan megtartjuk - a loading() a
+    // UI-TT-45 fix óta ilyenkor is true marad, egy null selectedDetail a
+    // sablon @else if (loading()) ágán keresztül a TELJES szerkesztő űrlapot
+    // egy spinnerre cserélné minden egyes mentésnél.
+    if (this._selectedDetail()?.id !== id) {
+      this._selectedDetail.set(null);
+    }
+
     this._loading.set(true);
     this._error.set(null);
 

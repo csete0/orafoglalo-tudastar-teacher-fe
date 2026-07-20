@@ -96,4 +96,58 @@ describe('TeacherTaskSetStore', () => {
     expect(store.loading()).toBe(false);
     expect(serviceMock.getDetail).not.toHaveBeenCalled();
   });
+
+  // UI-TT-72: MÁSIK feladatsorra navigáláskor a korábban betöltött (A) adatot
+  // azonnal törölni kell - a válasz megérkezéséig a régi adatlap látszott az
+  // ÚJ (B) URL alatt.
+  it('BUG UI-TT-72: loadDetail(masIkId) a válasz megérkezéséig NEM a korábban betöltött feladatsor adatát adja vissza', () => {
+    configure();
+    const detailA = makeDetail({ id: 1, title: 'A feladatsor' });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailA));
+
+    store.loadDetail(1);
+    expect(store.selectedDetail()).toEqual(detailA);
+
+    const detailB$ = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(detailB$.asObservable());
+
+    store.loadDetail(2);
+
+    // A válasz még nem érkezett meg - NEM szabad A adatát mutatnia.
+    expect(store.selectedDetail()).toBeNull();
+
+    const detailB = makeDetail({ id: 2, title: 'B feladatsor' });
+    detailB$.next(detailB);
+    detailB$.complete();
+
+    expect(store.selectedDetail()).toEqual(detailB);
+  });
+
+  // Ugyanazon id újratöltésekor (mutateAndReload()/publish() minden sikeres
+  // mentés után ide fut vissza) a régi adatot SZÁNDÉKOSAN megtartjuk, amíg a
+  // friss válasz meg nem érkezik - loading() a UI-TT-45 fix óta ilyenkor is
+  // true marad, egy null selectedDetail a teljes szerkesztő űrlapot egy
+  // spinnerre cserélné minden egyes mentésnél.
+  it('loadDetail(ugyanazAzId) újratöltésnél a korábbi adatot megtartja a válasz megérkezéséig', () => {
+    configure();
+    const detailA = makeDetail({ id: 1, title: 'A feladatsor' });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailA));
+
+    store.loadDetail(1);
+    expect(store.selectedDetail()).toEqual(detailA);
+
+    const reload$ = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(reload$.asObservable());
+
+    store.loadDetail(1);
+
+    // Ugyanaz az id - a korábbi adat marad látható, amíg a friss válasz meg nem érkezik.
+    expect(store.selectedDetail()).toEqual(detailA);
+
+    const detailAUpdated = makeDetail({ id: 1, title: 'A feladatsor (frissítve)' });
+    reload$.next(detailAUpdated);
+    reload$.complete();
+
+    expect(store.selectedDetail()).toEqual(detailAUpdated);
+  });
 });
