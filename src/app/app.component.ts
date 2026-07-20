@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { AuthStore } from './services/auth/store/auth.store';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
 import { IconComponent, IconName } from './shared/icon/icon.component';
@@ -132,11 +134,27 @@ const ADMIN_LINKS: NavLink[] = [
 })
 export class AppComponent {
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   readonly authStore = inject(AuthStore);
 
   readonly teacherLinks = TEACHER_LINKS;
   readonly adminLinks = ADMIN_LINKS;
   readonly menuOpen = signal(false);
+
+  constructor() {
+    // UI-TT-78: a mobil lenyíló panel korábban csak a PANELEN BELÜLI linkekre
+    // (és logout()-ra) kattintva záródott be - a fejléc-logóra, a dashboard-
+    // kártyák saját linkjeire, VAGY a böngésző Vissza/Előre gombjára (popstate,
+    // ami sosem fut le (click) handleren keresztül) navigálva nyitva maradt,
+    // átfedve az újonnan betöltött oldal tartalmát. Egy Router.events/
+    // NavigationEnd-alapú zárás minden navigációs útvonalat lefed.
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.menuOpen.set(false));
+  }
 
   /** Magyar névsorrend: vezetéknév + keresztnév kezdőbetűje. */
   readonly monogram = computed(() => {

@@ -1,7 +1,11 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
 import { AuthStore } from './services/auth/store/auth.store';
+
+@Component({ standalone: true, template: '' })
+class BlankTestComponent {}
 
 describe('AppComponent', () => {
   let authStoreMock: {
@@ -30,7 +34,10 @@ describe('AppComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideRouter([]), { provide: AuthStore, useValue: authStoreMock }],
+      providers: [
+        provideRouter([{ path: 'dashboard', component: BlankTestComponent }]),
+        { provide: AuthStore, useValue: authStoreMock },
+      ],
     }).compileComponents();
   });
 
@@ -110,5 +117,25 @@ describe('AppComponent', () => {
     const monogram = fixture.nativeElement.querySelector('[data-testid="profile-monogram"]');
     expect(monogram).toBeTruthy();
     expect(monogram.textContent.trim()).toBe('TE');
+  });
+
+  // UI-TT-78: a mobil lenyíló panel korábban csak a PANELEN BELÜLI linkekre (és
+  // logout()-ra) kattintva záródott be - a fejléc-logóra, dashboard-kártyák saját
+  // linkjeire, VAGY a böngésző Vissza/Előre gombjára (popstate, sosem fut le (click)
+  // handleren) navigálva nyitva maradt. Egy Router.events/NavigationEnd-alapú zárás
+  // MINDEN navigációs útvonalat lefed, (click)-handlerektől függetlenül.
+  it('BUG UI-TT-78 javítva: a mobil menü BÁRMILYEN NavigationEnd-re bezáródik, nem csak a panelen belüli (click)-re', async () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.menuOpen.set(true);
+    expect(fixture.componentInstance.menuOpen()).toBe(true);
+
+    const router = TestBed.inject(Router);
+    await router.navigate(['/dashboard']);
+
+    expect(fixture.componentInstance.menuOpen()).toBe(false);
   });
 });
