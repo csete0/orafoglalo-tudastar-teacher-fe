@@ -329,8 +329,15 @@ export class CsoportReszletekComponent implements OnInit {
         return;
       }
     }
-    this.store.update(groupId, { name: groupName, schoolId: schoolId ?? undefined }, () =>
-      this.toastService.success('Csoport frissítve.'),
+    this.store.update(
+      groupId,
+      { name: groupName, schoolId: schoolId ?? undefined },
+      () => this.toastService.success('Csoport frissítve.'),
+      // UI-TT-73: mentés sikertelensége esetén a select-et vissza kell állítani a
+      // ténylegesen mentett (előző) értékre - az optimista beállítás (fenti
+      // displaySchoolId.set(schoolId)) enélkül a hibaüzenet mellett örökre a
+      // soha el nem mentett választáson maradt volna.
+      () => this.displaySchoolId.set(previousSchoolId),
     );
   }
 

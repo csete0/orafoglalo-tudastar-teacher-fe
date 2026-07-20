@@ -53,11 +53,20 @@ export class GroupStore {
     });
   }
 
-  update(id: number, request: CreateGroupRequest, onSuccess?: () => void): void {
-    this.mutate(this.service.update(id, request), (group) => {
-      this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
-      if (onSuccess) onSuccess();
-    });
+  update(
+    id: number,
+    request: CreateGroupRequest,
+    onSuccess?: () => void,
+    onError?: (message: string) => void,
+  ): void {
+    this.mutate(
+      this.service.update(id, request),
+      (group) => {
+        this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
+        if (onSuccess) onSuccess();
+      },
+      onError,
+    );
   }
 
   regenerateInvite(id: number, onSuccess?: () => void): void {
@@ -108,7 +117,11 @@ export class GroupStore {
     this._error.set(null);
   }
 
-  private mutate<T>(observable: Observable<T>, onSuccess: (value: T) => void): void {
+  private mutate<T>(
+    observable: Observable<T>,
+    onSuccess: (value: T) => void,
+    onError?: (message: string) => void,
+  ): void {
     this._loading.set(true);
     this._error.set(null);
 
@@ -120,7 +133,11 @@ export class GroupStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
+        error: (err) => {
+          const message = err.error?.errorMessage ?? 'A művelet sikertelen.';
+          this._error.set(message);
+          if (onError) onError(message);
+        },
       });
   }
 }

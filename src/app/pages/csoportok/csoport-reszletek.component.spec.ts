@@ -149,7 +149,35 @@ describe('CsoportReszletekComponent', () => {
 
     await fixture.componentInstance.changeSchool(1, 'Teszt Csoport', school.id);
 
-    expect(groupStoreMock.update).toHaveBeenCalledWith(1, { name: 'Teszt Csoport', schoolId: school.id }, expect.any(Function));
+    expect(groupStoreMock.update).toHaveBeenCalledWith(
+      1,
+      { name: 'Teszt Csoport', schoolId: school.id },
+      expect.any(Function),
+      expect.any(Function),
+    );
     expect(fixture.componentInstance.displaySchoolId()).toBe(school.id);
+  });
+
+  // BUG UI-TT-73: a UI-TT-4 fix (displaySchoolId + effect()) sikeres mentésnél helyes, DE
+  // store.update() hiba-ága korábban csak _error()-t állított be, a displaySchoolId-t nem
+  // érintette - a hibás, el nem mentett választáson maradt a <select>, a hibaüzenet mellett.
+  it('BUG UI-TT-73 javítva: store.update() sikertelensége esetén a displaySchoolId visszaáll az eredeti (mentett) értékre', async () => {
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
+    configure(makeGroup({ schoolId: undefined }), [school]);
+    groupStoreMock.update.mockImplementation((_id, _req, _onSuccess, onError) => {
+      groupStoreMock.error.set('A csoport frissítése sikertelen.');
+      onError?.('A csoport frissítése sikertelen.');
+    });
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.displaySchoolId()).toBeNull();
+
+    await fixture.componentInstance.changeSchool(1, 'Teszt Csoport', school.id);
+
+    // A store.update() hívás lezajlott, de a szerver hibát adott - a select-nek
+    // vissza kell állnia az eredeti (null), ténylegesen mentett állapotra.
+    expect(fixture.componentInstance.displaySchoolId()).toBeNull();
   });
 });
