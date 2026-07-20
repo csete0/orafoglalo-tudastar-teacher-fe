@@ -507,6 +507,44 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(submitButton.disabled).toBe(false);
     });
 
+    it('BUG UI-TT-81 javítva: whitespace-only leírás esetén a részfeladat "Hozzáadás" gombja (addSolution) is letiltva marad', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1); // a részfeladat-lista/hozzáadás form csak kibontott feladatnál renderelődik
+      fixture.componentInstance.setNewSolutionDescription(1, '   ');
+      fixture.detectChanges();
+
+      const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('input[name="newSolutionDescription"]')
+        .closest('form').querySelector('button[type="submit"]');
+      expect(submitButton.disabled).toBe(true);
+    });
+
+    it('valódi (nem-whitespace) részfeladat-leírás esetén a "Hozzáadás" (addSolution) gomb aktív', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.setNewSolutionDescription(1, 'Valódi részfeladat-leírás');
+      fixture.detectChanges();
+
+      const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('input[name="newSolutionDescription"]')
+        .closest('form').querySelector('button[type="submit"]');
+      expect(submitButton.disabled).toBe(false);
+    });
+
     it('addSolution() sikertelen/folyamatban lévő mentésnél is megőrzi a beírt leírás/pont draftot', () => {
       configure(
         makeDetail({

@@ -166,7 +166,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                 (ngModelChange)="setNewSolutionPoints(task.id, $event)" name="newSolutionPoints"
                                 class="input !px-2 !py-1" />
                             </div>
-                            <button type="submit" [disabled]="!newSolutionDraft(task.id).description"
+                            <button type="submit" [disabled]="isSolutionDraftDescriptionBlank(task.id)"
                               class="btn btn-primary !px-3 !py-1.5">
                               Hozzáadás
                             </button>
@@ -567,6 +567,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
    *  sosem "szivárog át" egy másik feladatra task-váltáskor (UI-TT-66). */
   newSolutionDraft(taskId: number): { description: string; points: number } {
     return (this.newSolutionDrafts[taskId] ??= { description: '', points: 5 });
+  }
+
+  /** UI-TT-81: a UI-TT-61 addTask-fixének testvér-hiánya - a "Hozzáadás" (addSolution)
+   *  gomb [disabled] állapotának is trim-elnie kell, különben whitespace-only leírás
+   *  mellett is kattintható marad, miközben a mögöttes addSolution() guard-ja már
+   *  helyesen trim-el és csendben visszatér - néma no-op. */
+  isSolutionDraftDescriptionBlank(taskId: number): boolean {
+    return !this.newSolutionDraft(taskId).description.trim();
   }
 
   setNewSolutionDescription(taskId: number, value: string): void {
