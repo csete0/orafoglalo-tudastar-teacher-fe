@@ -527,7 +527,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   addTask(taskSetId: number, typeId: number): void {
     const draft = this.newTaskDrafts[typeId];
-    if (!draft?.title.trim()) return;
+    // UI-TT-90: a backend CreateTeacherTaskRequest.Description mezője [Required] -
+    // a leírás nélküli beküldés korábban csak egy 400-zal derült ki, mert ez a guard
+    // (és az alábbi isTaskDraftTitleBlank()) kizárólag a címet ellenőrizte.
+    if (!draft?.title.trim() || !draft?.description.trim()) return;
     this.store.addTask(
       taskSetId,
       {
@@ -548,9 +551,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** UI-TT-61: a "Hozzáadás" gomb [disabled] állapotának is trim-elnie kell, hogy ne
    *  maradjon kattintható whitespace-only cím mellett — a mögöttes addTask() guard-ja
-   *  már helyesen trim-el, csendben visszatérne, a gomb tehát néma no-opot mutatna. */
+   *  már helyesen trim-el, csendben visszatérne, a gomb tehát néma no-opot mutatna.
+   *  UI-TT-90: a backend a leírást is kötelezővé teszi ([Required] Description), ezért
+   *  ez a gomb-gate innentől azt is ellenőrzi — enélkül a tanár csak a 400-as
+   *  válaszból tudta meg, hogy leírás nélkül nem menthető a feladat. */
   isTaskDraftTitleBlank(typeId: number): boolean {
-    return !this.newTaskDrafts[typeId]?.title.trim();
+    const draft = this.newTaskDrafts[typeId];
+    return !draft?.title.trim() || !draft?.description.trim();
   }
 
   async deleteTask(taskSetId: number, taskId: number): Promise<void> {

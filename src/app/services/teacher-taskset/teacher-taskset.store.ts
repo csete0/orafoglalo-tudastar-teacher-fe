@@ -20,6 +20,35 @@ import {
  * konzisztens újraépítés helyett ez a legkevésbé hibalehetőséges megoldás
  * egy belső, kis-adatmennyiségű eszköznél.
  */
+
+/**
+ * UI-TT-89/UI-TT-90: a backend hibaválaszai VÉGPONTONKÉNT eltérő alakúak -
+ * a legtöbb helyen `{ errorMessage: string }`, a publish() viszont
+ * `PublishResultDto`-t ad HTTP-hibaágon is (`{ errors: string[] }`), az
+ * ASP.NET DataAnnotations validáció pedig sztenderd `ValidationProblemDetails`-t
+ * (`{ errors: { [field: string]: string[] } }`). Korábban csak az `errorMessage`
+ * mezőt olvastuk ki, a másik két alak esetén a store csendben eldobta a
+ * konkrét backend-indokot, és a tanár csak egy tartalmatlan generikus
+ * üzenetet látott. Ez a helper mindhárom alakot (és a szótár-alakot) sorban
+ * megpróbálja, mielőtt a hívó által megadott generikus szöveghez folyamodna.
+ */
+function extractErrorMessage(err: any, fallback: string): string {
+  const body = err?.error;
+  if (typeof body?.errorMessage === 'string' && body.errorMessage.trim()) {
+    return body.errorMessage;
+  }
+  if (Array.isArray(body?.errors)) {
+    const joined = body.errors.filter((e: unknown) => typeof e === 'string' && e.trim()).join(' ');
+    if (joined) return joined;
+  } else if (body?.errors && typeof body.errors === 'object') {
+    const joined = Object.values(body.errors as Record<string, unknown>)
+      .flatMap((messages) => (Array.isArray(messages) ? messages : [messages]))
+      .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+      .join(' ');
+    if (joined) return joined;
+  }
+  return fallback;
+}
 @Injectable({ providedIn: 'root' })
 export class TeacherTaskSetStore {
   private readonly destroyRef = inject(DestroyRef);
@@ -50,7 +79,7 @@ export class TeacherTaskSetStore {
       )
       .subscribe({
         next: (taskSets) => this._taskSets.set(taskSets),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsorok betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A feladatsorok betöltése sikertelen.')),
       });
   }
 
@@ -82,7 +111,7 @@ export class TeacherTaskSetStore {
           this._selectedDetail.set(detail);
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsor betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A feladatsor betöltése sikertelen.')),
       });
   }
 
@@ -126,7 +155,7 @@ export class TeacherTaskSetStore {
           }
         },
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A publikálás sikertelen.');
+          this._error.set(extractErrorMessage(err, 'A publikálás sikertelen.'));
           this._loading.set(false);
         },
       });
@@ -192,7 +221,7 @@ export class TeacherTaskSetStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A művelet sikertelen.')),
       });
   }
 
@@ -212,7 +241,7 @@ export class TeacherTaskSetStore {
           this.loadDetail(taskSetId, onSuccess);
         },
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.');
+          this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
           this._loading.set(false);
         },
       });

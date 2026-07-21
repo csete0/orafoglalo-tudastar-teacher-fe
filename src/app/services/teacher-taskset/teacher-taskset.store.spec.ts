@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { TeacherTaskSetStore } from './teacher-taskset.store';
 import { TeacherTaskSetService } from './teacher-taskset.service';
 import { PublishResultDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
@@ -149,5 +149,44 @@ describe('TeacherTaskSetStore', () => {
     reload$.complete();
 
     expect(store.selectedDetail()).toEqual(detailAUpdated);
+  });
+
+  // UI-TT-89: a backend a publish validáció-hibáit a PublishResultDto `errors: string[]`
+  // mezejében küldi, NEM `errorMessage`-ben - a store hibakezelője emiatt a konkrét,
+  // hasznos backend-üzenetet csendben eldobta, és a tanár csak egy tartalmatlan
+  // "A publikálás sikertelen."-t látott.
+  it('BUG UI-TT-89: sikertelen publish() HTTP-hibaágán a backend `errors` tömbjének konkrét indoka helyett a tartalmatlan generikus üzenet jelenik meg', () => {
+    configure();
+    const httpError = {
+      error: { success: false, errors: ['A(z) „browserhunt-feladat-1” feladathoz legalább egy részfeladat (megoldás) kell.'] },
+    };
+    serviceMock.publish.mockReturnValue(throwError(() => httpError));
+
+    store.publish(1);
+
+    expect(store.loading()).toBe(false);
+    expect(store.error()).toContain('részfeladat');
+  });
+
+  // UI-TT-90: a backend CreateTeacherTaskRequest.Description mezője [Required], de a FE
+  // "Új feladat hozzáadása" formja a "Hozzáadás" gombot kizárólag a Cím alapján engedélyezte -
+  // a backend standard ASP.NET ValidationProblemDetails alakot ad vissza (mezőnév->üzenetek
+  // szótár), amit a store szintén nem olvasott ki.
+  it('BUG UI-TT-90: sikertelen addTask() HTTP-hibaágán a backend ValidationProblemDetails "Description required" indoka helyett a tartalmatlan generikus üzenet jelenik meg', () => {
+    configure();
+    const httpError = {
+      error: {
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1',
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: { Description: ['The Description field is required.'] },
+      },
+    };
+    serviceMock.addTask.mockReturnValue(throwError(() => httpError));
+
+    store.addTask(1, { title: 'browserhunt-sql-feladat-1', description: '', maxPoints: 10, taskTypeIds: [5] });
+
+    expect(store.loading()).toBe(false);
+    expect(store.error()).toContain('Description');
   });
 });

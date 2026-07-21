@@ -492,7 +492,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(submitButton.disabled).toBe(true);
     });
 
-    it('valódi (nem-whitespace) cím esetén a "Hozzáadás" gomb aktív', () => {
+    it('valódi (nem-whitespace) cím ÉS leírás esetén a "Hozzáadás" gomb aktív', () => {
       configure(makeDetail({ tasks: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -500,11 +500,35 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const titleInput: HTMLInputElement = fixture.nativeElement.querySelector('input[name="newTaskTitle-6"]');
       titleInput.value = 'Valódi feladatcím';
       titleInput.dispatchEvent(new Event('input'));
+      const descriptionInput: HTMLTextAreaElement = fixture.nativeElement.querySelector('textarea[name="newTaskDescription-6"]');
+      descriptionInput.value = 'Valódi leírás';
+      descriptionInput.dispatchEvent(new Event('input'));
       fixture.detectChanges();
 
       const form = titleInput.closest('form') as HTMLFormElement;
       const submitButton: HTMLButtonElement = form.querySelector('button[type="submit"]')!;
       expect(submitButton.disabled).toBe(false);
+    });
+
+    // UI-TT-90: a backend CreateTeacherTaskRequest.Description mezője [Required] - a "Hozzáadás"
+    // gomb korábban kizárólag a címet ellenőrizte, így üres leírás mellett is aktív maradt, és a
+    // tanár csak a beküldés utáni 400-as válaszból tudta meg, hogy a leírás is kötelező.
+    it('BUG UI-TT-90 javítva: valódi cím mellett whitespace-only leírás esetén a "Hozzáadás" gomb letiltva marad', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+
+      const titleInput: HTMLInputElement = fixture.nativeElement.querySelector('input[name="newTaskTitle-6"]');
+      titleInput.value = 'Valódi feladatcím';
+      titleInput.dispatchEvent(new Event('input'));
+      const descriptionInput: HTMLTextAreaElement = fixture.nativeElement.querySelector('textarea[name="newTaskDescription-6"]');
+      descriptionInput.value = '   ';
+      descriptionInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      const form = titleInput.closest('form') as HTMLFormElement;
+      const submitButton: HTMLButtonElement = form.querySelector('button[type="submit"]')!;
+      expect(submitButton.disabled).toBe(true);
     });
 
     it('BUG UI-TT-81 javítva: whitespace-only leírás esetén a részfeladat "Hozzáadás" gombja (addSolution) is letiltva marad', () => {
