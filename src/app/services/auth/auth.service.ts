@@ -13,15 +13,22 @@ import { LoginResponseDto, SignInModel } from '../../models/auth.model';
 export class AuthService {
   private readonly http = inject(HttpClient);
 
+  // AUTH-6: a teacher-fe és a diák/fő app ugyanazt a backend hostot hívja, a
+  // refreshToken cookie-nak pedig nincs Domain-attribútuma (csak Path=/api/auth) -
+  // a böngésző a portot cookie-hatókörnél figyelmen kívül hagyja, tehát a két app
+  // bejelentkezése korábban felülírta egymás cookie-ját (egy ugyanabban a böngészőben
+  // futó háttér-refresh a MÁSIK app aktuális userére válthatott át észrevétlenül).
+  // A "?app=teacher" (ugyanaz a minta, mint a signInWithProvider OAuth-hívásainál)
+  // app-onként külön nevű cookie-t választ a backenden, így ez többé nem történhet meg.
   signIn(model: SignInModel): Observable<LoginResponseDto> {
-    return this.http.post<LoginResponseDto>(`${environment.apiUrl}/auth/login`, model, {
+    return this.http.post<LoginResponseDto>(`${environment.apiUrl}/auth/login?app=teacher`, model, {
       withCredentials: true,
     });
   }
 
   refreshTokens(): Observable<LoginResponseDto> {
     return this.http.post<LoginResponseDto>(
-      `${environment.apiUrl}/auth/refresh`,
+      `${environment.apiUrl}/auth/refresh?app=teacher`,
       {},
       { withCredentials: true },
     );
@@ -30,7 +37,9 @@ export class AuthService {
   /**
    * A social-login redirect utan a backend altal HttpOnly cookie-ban
    * elhelyezett auto_login_token-t valtja be egy tenyleges munkamenetre
-   * (ugyanaz a végpont/mintázat, mint a diák-repóban).
+   * (ugyanaz a végpont/mintázat, mint a diák-repóban). Az "app" itt nem kell
+   * query-paramként, mert a backend a Google/Facebook/Apple callback óta már
+   * az auto_login_token-hez kötve, cache-ben tárolja (ld. AUTH-6 fix).
    */
   autoLogin(): Observable<LoginResponseDto> {
     return this.http.post<LoginResponseDto>(
@@ -41,7 +50,7 @@ export class AuthService {
   }
 
   logout(): Observable<unknown> {
-    return this.http.post(`${environment.apiUrl}/auth/logout`, {}, { withCredentials: true });
+    return this.http.post(`${environment.apiUrl}/auth/logout?app=teacher`, {}, { withCredentials: true });
   }
 
   /** Google/Facebook/Apple bejelentkezés indítása - a ?app=teacher jelzi a
