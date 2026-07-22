@@ -5,6 +5,7 @@ import { filter } from 'rxjs/operators';
 import { AuthStore } from './services/auth/store/auth.store';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
 import { IconComponent, IconName } from './shared/icon/icon.component';
+import { NotificationBellComponent } from './shared/notification-bell/notification-bell.component';
 import { ToastComponent } from './shared/toast/toast.component';
 
 interface NavLink {
@@ -29,7 +30,15 @@ const ADMIN_LINKS: NavLink[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, ToastComponent, ConfirmDialogComponent],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    IconComponent,
+    NotificationBellComponent,
+    ToastComponent,
+    ConfirmDialogComponent,
+  ],
   template: `
     <header class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -64,6 +73,7 @@ const ADMIN_LINKS: NavLink[] = [
 
           <!-- Profil-chip + kijelentkezés (desktop) -->
           <div class="hidden md:flex items-center gap-2 shrink-0">
+            <app-notification-bell />
             <div class="flex items-center gap-2" [title]="userEmail()">
               <div class="w-8 h-8 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center"
                 data-testid="profile-monogram">{{ monogram() }}</div>
@@ -75,11 +85,14 @@ const ADMIN_LINKS: NavLink[] = [
             </button>
           </div>
 
-          <!-- Mobil hamburger -->
-          <button (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
-            class="md:hidden btn btn-ghost !px-2">
-            <app-icon [name]="menuOpen() ? 'x' : 'menu'" class="w-6 h-6 block" />
-          </button>
+          <!-- Harang + hamburger (mobil) -->
+          <div class="md:hidden flex items-center gap-1">
+            <app-notification-bell />
+            <button (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
+              class="btn btn-ghost !px-2">
+              <app-icon [name]="menuOpen() ? 'x' : 'menu'" class="w-6 h-6 block" />
+            </button>
+          </div>
         }
       </div>
 
