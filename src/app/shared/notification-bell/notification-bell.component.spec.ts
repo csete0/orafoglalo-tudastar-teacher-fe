@@ -23,23 +23,31 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
 describe('NotificationBellComponent', () => {
   let storeMock: {
     notifications: ReturnType<typeof signal<Notification[]>>;
+    activeNotifications: ReturnType<typeof signal<Notification[]>>;
     unreadCount: ReturnType<typeof signal<number>>;
     loading: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
     load: ReturnType<typeof vi.fn>;
     markAsRead: ReturnType<typeof vi.fn>;
     markAllAsRead: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    clearError: ReturnType<typeof vi.fn>;
   };
 
-  function configure(notifications: Notification[] = []) {
+  // UI-TT-96: activeNotifications (a lejárt sorokat kiszűrő lista) alapértelmezetten
+  // megegyezik a notifications-szel - az explicit lejárat-tesztek felülírják.
+  function configure(notifications: Notification[] = [], activeNotifications: Notification[] = notifications) {
     storeMock = {
       notifications: signal(notifications),
-      unreadCount: signal(notifications.filter((n) => !n.isRead).length),
+      activeNotifications: signal(activeNotifications),
+      unreadCount: signal(activeNotifications.filter((n) => !n.isRead).length),
       loading: signal(false),
+      error: signal<string | null>(null),
       load: vi.fn(),
       markAsRead: vi.fn(),
       markAllAsRead: vi.fn(),
       delete: vi.fn(),
+      clearError: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -152,5 +160,41 @@ describe('NotificationBellComponent', () => {
         b.textContent.includes('Összes megjelölése'),
       ),
     ).toBe(true);
+  });
+
+  // UI-TT-96: a lista a store.activeNotifications()-t olvassa, nem a nyers
+  // store.notifications()-t - egy lejárt sor kiszűrve NEM jelenik meg a
+  // panelben, akkor sem, ha a store.notifications() még tartalmazza.
+  it('a lejárt (activeNotifications által kiszűrt) elem nem jelenik meg a panelben', () => {
+    const all = [makeNotification({ userNotificationId: 1, title: 'Lejárt' }), makeNotification({ userNotificationId: 2, title: 'Aktív' })];
+    const active = [all[1]];
+    const fixture = configure(all, active);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+    expect(panel.textContent).not.toContain('Lejárt');
+    expect(panel.textContent).toContain('Aktív');
+  });
+
+  // UI-TT-97: egy ténylegesen beállított store.error() a panelben látható
+  // hibaüzenetként jelenik meg, nem csak csendben elnyelve.
+  it('megjeleníti a store.error()-t, ha be van állítva', () => {
+    const fixture = configure([makeNotification()]);
+    storeMock.error.set('Az értesítés törlése sikertelen.');
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+    expect(panel.textContent).toContain('Az értesítés törlése sikertelen.');
+  });
+
+  it('NEM jelenít meg hibasávot, ha store.error() null', () => {
+    const fixture = configure([makeNotification()]);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+    expect(panel.textContent).not.toContain('sikertelen');
   });
 });

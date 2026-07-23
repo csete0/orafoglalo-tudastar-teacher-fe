@@ -33,9 +33,24 @@ export class NotificationStore {
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
 
-  readonly unreadCount = computed(
-    () => this._notifications().filter((n) => !n.isRead).length,
+  // UI-TT-96: a diák-fe UI-TS-69 fixe óta már kiszűri a lejárt (expiryDate <
+  // ma) sorokat a jelvényből ÉS a listából egyaránt - ez a store nulláról
+  // íródott és nem vette át ezt a szűrést, pedig a backend (NotificationRepository.
+  // GetNotificationsByUser) ugyanúgy sosem szűri ki a lejárt sorokat. Enélkül
+  // egy lejárt, olvasatlan sor (pl. egy 30 napos lejáratú badge-értesítés)
+  // örökre felduzzasztaná a jelvényt és a listában is örökre megmaradna.
+  readonly activeNotifications = computed(() => {
+    const now = new Date();
+    return this._notifications().filter(
+      (n) => !n.expiryDate || new Date(n.expiryDate) >= now,
+    );
+  });
+
+  readonly unreadActiveNotifications = computed(() =>
+    this.activeNotifications().filter((n) => !n.isRead),
   );
+
+  readonly unreadCount = computed(() => this.unreadActiveNotifications().length);
 
   load(): void {
     if (this._loading()) return;
@@ -57,44 +72,52 @@ export class NotificationStore {
   }
 
   markAsRead(userNotificationId: number): void {
-    // Optimista frissítés: nincs szükség újratöltésre, a válasz nem ad
-    // vissza tartalmat (204) - ugyanaz a minta, mint a diák-fe store-jában.
-    this._notifications.update((list) =>
-      list.map((n) =>
-        n.userNotificationId === userNotificationId
-          ? { ...n, isRead: true, readAt: new Date() }
-          : n,
-      ),
-    );
-
+    // UI-TT-97: a fájl-fejléc tévesen azt állította, hogy ez a diák-fe
+    // store-ját tükrözi - a diák-fe VALÓJÁBAN kizárólag a sikeres `next`
+    // ágban módosítja a helyi listát, hiba esetén az érintetlen marad. Ez a
+    // store korábban IGAZI, visszaállítás nélküli optimista frissítést
+    // végzett: a listát MÉG A HÁLÓZATI HÍVÁS ELINDÍTÁSA ELŐTT módosította, és
+    // hiba esetén sosem állította vissza - egy ténylegesen sikertelen
+    // megjelölés a tanár számára megkülönböztethetetlen volt egy valódi
+    // sikeres művelettől. A mutáció mostantól csak a sikeres válasz UTÁN fut.
     this.service
       .markAsRead(userNotificationId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
+        next: () =>
+          this._notifications.update((list) =>
+            list.map((n) =>
+              n.userNotificationId === userNotificationId
+                ? { ...n, isRead: true, readAt: new Date() }
+                : n,
+            ),
+          ),
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítés megjelölése sikertelen.')),
       });
   }
 
   markAllAsRead(): void {
-    this._notifications.update((list) =>
-      list.map((n) => (n.isRead ? n : { ...n, isRead: true, readAt: new Date() })),
-    );
-
     this.service
       .markAllAsRead()
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
+        next: () =>
+          this._notifications.update((list) =>
+            list.map((n) => (n.isRead ? n : { ...n, isRead: true, readAt: new Date() })),
+          ),
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítések megjelölése sikertelen.')),
       });
   }
 
   delete(userNotificationId: number): void {
-    this._notifications.update((list) => list.filter((n) => n.userNotificationId !== userNotificationId));
-
     this.service
       .deleteNotification(userNotificationId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
+        next: () =>
+          this._notifications.update((list) =>
+            list.filter((n) => n.userNotificationId !== userNotificationId),
+          ),
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítés törlése sikertelen.')),
       });
   }

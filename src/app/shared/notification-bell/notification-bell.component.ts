@@ -56,6 +56,15 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
             }
           </div>
 
+          @if (store.error()) {
+            <div class="flex items-start justify-between gap-2 px-4 py-2 text-xs text-danger bg-danger-subtle">
+              <span>{{ store.error() }}</span>
+              <button (click)="store.clearError()" aria-label="Hibaüzenet bezárása" class="shrink-0 hover:opacity-70">
+                <app-icon name="x" class="w-3 h-3 block" />
+              </button>
+            </div>
+          }
+
           @if (store.loading() && store.notifications().length === 0) {
             <p class="px-4 py-6 text-sm text-text-muted text-center">Betöltés...</p>
           } @else if (visibleNotifications().length === 0) {
@@ -100,7 +109,10 @@ export class NotificationBellComponent implements OnInit {
   // szűrés itt szükséges - a diák-fe-vel ellentétben (ahol soft-delete a
   // listában marad megjelölve) ez a lista mindig csak az aktuálisan
   // létező, még nem törölt sorokat mutatja.
-  readonly visibleNotifications = computed<Notification[]>(() => this.store.notifications());
+  // UI-TT-96: a store.activeNotifications() már kiszűri a lejárt (expiryDate
+  // < ma) sorokat is - ugyanaz a lista, amiből a jelvény-szám (unreadCount)
+  // is számol, hogy a kettő strukturálisan ne tudjon szétcsúszni.
+  readonly visibleNotifications = computed<Notification[]>(() => this.store.activeNotifications());
 
   ngOnInit(): void {
     this.store.load();

@@ -79,7 +79,7 @@ describe('NotificationStore', () => {
     expect(store.unreadCount()).toBe(2);
   });
 
-  it('markAsRead() azonnal (optimista frissítéssel) olvasottra állítja a megfelelő elemet', () => {
+  it('markAsRead() sikeres válasz UTÁN olvasottra állítja a megfelelő elemet', () => {
     configure();
     serviceMock.getNotifications.mockReturnValue(
       of([makeNotification({ userNotificationId: 1, isRead: false }), makeNotification({ userNotificationId: 2, isRead: false })]),
@@ -117,5 +117,86 @@ describe('NotificationStore', () => {
 
     expect(store.notifications().map((n) => n.userNotificationId)).toEqual([2]);
     expect(serviceMock.deleteNotification).toHaveBeenCalledWith(1);
+  });
+
+  // UI-TT-97: korábban IGAZI, visszaállítás nélküli optimista frissítést végzett -
+  // a lista MÉG A HÁLÓZATI HÍVÁS ELINDÍTÁSA ELŐTT módosult, hiba esetén sosem állt
+  // vissza. Egy ténylegesen sikertelen művelet a tanár számára megkülönböztethetetlen
+  // volt egy valódi sikeres művelettől.
+  it('markAsRead() hiba esetén NEM módosítja a listát, és beállítja az error()-t', () => {
+    configure();
+    serviceMock.getNotifications.mockReturnValue(
+      of([makeNotification({ userNotificationId: 1, isRead: false })]),
+    );
+    store.load();
+    serviceMock.markAsRead.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Megjelölés sikertelen.' } })));
+
+    store.markAsRead(1);
+
+    expect(store.notifications().find((n) => n.userNotificationId === 1)?.isRead).toBe(false);
+    expect(store.error()).toBe('Megjelölés sikertelen.');
+  });
+
+  it('markAllAsRead() hiba esetén NEM módosítja a listát, és beállítja az error()-t', () => {
+    configure();
+    serviceMock.getNotifications.mockReturnValue(
+      of([makeNotification({ userNotificationId: 1, isRead: false })]),
+    );
+    store.load();
+    serviceMock.markAllAsRead.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Megjelölés sikertelen.' } })));
+
+    store.markAllAsRead();
+
+    expect(store.notifications().find((n) => n.userNotificationId === 1)?.isRead).toBe(false);
+    expect(store.error()).toBe('Megjelölés sikertelen.');
+  });
+
+  it('delete() hiba esetén NEM távolítja el az elemet a listából, és beállítja az error()-t', () => {
+    configure();
+    serviceMock.getNotifications.mockReturnValue(
+      of([makeNotification({ userNotificationId: 1 })]),
+    );
+    store.load();
+    serviceMock.deleteNotification.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Törlés sikertelen.' } })));
+
+    store.delete(1);
+
+    expect(store.notifications().map((n) => n.userNotificationId)).toEqual([1]);
+    expect(store.error()).toBe('Törlés sikertelen.');
+  });
+
+  // UI-TT-96: a diák-fe UI-TS-69 fixe óta kiszűri a lejárt (expiryDate < ma)
+  // sorokat a jelvényből ÉS a listából - ez a store nulláról íródva nem vette
+  // át ezt a szűrést, pedig a backend sosem szűri ki a lejárt sorokat.
+  it('unreadCount NEM számítja bele a lejárt (expiryDate < ma) olvasatlan értesítéseket', () => {
+    configure();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    serviceMock.getNotifications.mockReturnValue(
+      of([
+        makeNotification({ userNotificationId: 1, isRead: false, expiryDate: yesterday }),
+        makeNotification({ userNotificationId: 2, isRead: false, expiryDate: nextWeek }),
+        makeNotification({ userNotificationId: 3, isRead: false }),
+      ]),
+    );
+
+    store.load();
+
+    expect(store.unreadCount()).toBe(2);
+  });
+
+  it('activeNotifications kiszűri a lejárt sorokat, de az olvasottakat/érvényeseket megtartja', () => {
+    configure();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    serviceMock.getNotifications.mockReturnValue(
+      of([
+        makeNotification({ userNotificationId: 1, expiryDate: yesterday }),
+        makeNotification({ userNotificationId: 2 }),
+      ]),
+    );
+
+    store.load();
+
+    expect(store.activeNotifications().map((n) => n.userNotificationId)).toEqual([2]);
   });
 });
