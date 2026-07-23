@@ -34,6 +34,8 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
           </div>
           @if (!group.isArchived) {
             <button (click)="archive(group.id)" class="btn btn-danger shrink-0">Archiválás</button>
+          } @else {
+            <button (click)="unarchive(group.id)" class="btn btn-primary shrink-0">Visszaállítás</button>
           }
         </div>
         @if (schoolStore.schools().length > 0) {
@@ -252,6 +254,11 @@ export class CsoportReszletekComponent implements OnInit {
 
   setTab(tab: Tab): void {
     this.tab.set(tab);
+    // UI-TT-67: a store.error() (a "Tagok" fül GroupStore-hibája) egy KÖZÖS,
+    // minden fülön látszó blokkban jelenik meg - fülváltás nélküli clearError()
+    // hívás nélkül egy korábbi fülről maradt hibaüzenet félrevezető kontextusban
+    // (pl. az Eredmények fülön) ottmaradt volna.
+    this.store.clearError();
     if (tab === 'tagok') this.store.loadMembers(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
@@ -293,9 +300,11 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   async archive(groupId: number): Promise<void> {
+    // UI-TT-34: az archiválásnak MOST MÁR van visszaállítási útja (unarchive) - a
+    // korábbi "VÉGLEGES, nem vonható vissza" szöveg ezt tévesen tagadta.
     const ok = await this.confirmService.ask({
       message:
-        'Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést. Ez a művelet VÉGLEGES, az archiválás nem vonható vissza.',
+        'Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést, amíg a csoport archivált - a csoport részletei oldalon bármikor visszaállítható.',
       danger: true,
       confirmLabel: 'Archiválás',
     });
@@ -304,6 +313,10 @@ export class CsoportReszletekComponent implements OnInit {
       this.toastService.success('Csoport archiválva.');
       this.router.navigateByUrl('/csoportok');
     });
+  }
+
+  unarchive(groupId: number): void {
+    this.store.unarchive(groupId, () => this.toastService.success('Csoport visszaállítva.'));
   }
 
   async changeSchool(groupId: number, groupName: string, schoolId: number | null): Promise<void> {

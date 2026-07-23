@@ -106,6 +106,16 @@ export class GroupStore {
     });
   }
 
+  // UI-TT-34: az archiválásnak eddig nem volt ellentétes irányú művelete - egy
+  // véletlenül archivált csoportot a tanár nem tudott a rendszeren belül
+  // visszaállítani.
+  unarchive(id: number, onSuccess?: () => void): void {
+    this.mutate(this.service.unarchive(id), () => {
+      this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: false } : g)));
+      if (onSuccess) onSuccess();
+    });
+  }
+
   setJoinEnabled(id: number, enabled: boolean, onSuccess?: () => void): void {
     this.mutate(this.service.setJoinEnabled(id, enabled), () => {
       this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isJoinEnabled: enabled } : g)));

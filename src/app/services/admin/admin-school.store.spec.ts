@@ -57,6 +57,22 @@ describe('AdminSchoolStore', () => {
     expect(store.loading()).toBe(false);
   });
 
+  // UI-TT-65: load() korábban egy sima next-only callbackkel subscribe-olt -
+  // hiba esetén az error()-je sosem állt be, ÉS egy kezeletlen RxJS-kivétel is
+  // landolt (a "ERROR HttpErrorResponse" konzol-tünet).
+  it('BUG UI-TT-65 javítva: load() hiba esetén beállítja az error jelzőt, nem dob kezeletlen kivételt', async () => {
+    serviceMock.getSchools.mockReturnValue(
+      throwError(() => ({ error: { errorMessage: 'Nincs jogosultság.' } })),
+    );
+
+    const store = TestBed.inject(AdminSchoolStore);
+    store.load();
+    await Promise.resolve();
+
+    expect(store.error()).toBe('Nincs jogosultság.');
+    expect(store.loading()).toBe(false);
+  });
+
   it('merge siker esetén elmenti az eredményt és újratölti a listát', async () => {
     serviceMock.getSchools.mockReturnValue(of([makeSchool({ id: 2, name: 'Cél Suli' })]));
     serviceMock.merge.mockReturnValue(of(makeMergeResult()));

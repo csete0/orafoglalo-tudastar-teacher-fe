@@ -21,7 +21,12 @@ export class AdminSchoolStore {
 
   load(): void {
     this._loading.set(true);
+    this._error.set(null);
 
+    // UI-TT-65: korábban egy sima next-only callbackkel subscribe-olt - hiba
+    // esetén a store error()-je sosem állt be (a admin némán "üres listát" látott
+    // volna), ÉS egy kezeletlen RxJS-kivétel is landolt (a "ERROR HttpErrorResponse"
+    // konzol-tünet).
     this.service
       .getSchools()
       .pipe(
@@ -29,7 +34,10 @@ export class AdminSchoolStore {
         finalize(() => this._loading.set(false)),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((schools) => this._schools.set(schools));
+      .subscribe({
+        next: (schools) => this._schools.set(schools),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az intézmények betöltése sikertelen.'),
+      });
   }
 
   /**

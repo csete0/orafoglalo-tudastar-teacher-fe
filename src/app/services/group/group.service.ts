@@ -39,6 +39,11 @@ export class GroupService {
     return this.http.post(`${this.baseUrl}/${id}/archive`, {});
   }
 
+  // UI-TT-34: az archiválásnak eddig nem volt ellentétes irányú művelete.
+  unarchive(id: number): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/${id}/unarchive`, {});
+  }
+
   setJoinEnabled(id: number, enabled: boolean): Observable<unknown> {
     return this.http.put(`${this.baseUrl}/${id}/join-enabled`, { enabled });
   }

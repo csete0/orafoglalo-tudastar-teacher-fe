@@ -36,6 +36,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     loadSchoolGroups: ReturnType<typeof vi.fn>;
     changeMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
+    clearError: ReturnType<typeof vi.fn>;
   };
   let reportStoreMock: {
     schoolActivity: ReturnType<typeof signal<unknown[]>>;
@@ -64,6 +65,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
       loadSchoolGroups: vi.fn(),
       changeMemberRole: vi.fn(),
       removeMember: vi.fn(),
+      clearError: vi.fn(),
     };
     reportStoreMock = {
       schoolActivity: signal([]),
@@ -159,6 +161,21 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Ehhez a riporthoz intézmény-admin szerep kell.');
     expect(fixture.nativeElement.textContent).not.toContain('Nincs adat.');
+  });
+
+  // UI-TT-67: a schoolStore.error() egy KÖZÖS, minden fülön látszó blokkban
+  // jelenik meg - setTab() korábban nem hívta a clearError()-t, ezért egy
+  // korábbi fülről (pl. "Tanárok") maradt hibaüzenet félrevezető kontextusban
+  // (pl. az "Áttekintés" fülön) ottmaradt volna.
+  it('BUG UI-TT-67 javítva: setTab() törli a SchoolStore korábbi hibáját', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.setTab('attekintes');
+
+    expect(schoolStoreMock.clearError).toHaveBeenCalled();
   });
 
   // BUG UI-TT-24: "Igazgatóvá tétel"/"Lefokozás" korábban megerősítés nélkül azonnal hívta a mutációt.

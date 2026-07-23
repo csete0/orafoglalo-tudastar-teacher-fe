@@ -35,9 +35,11 @@ describe('CsoportReszletekComponent', () => {
     loadMembers: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
     archive: ReturnType<typeof vi.fn>;
+    unarchive: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     regenerateInvite: ReturnType<typeof vi.fn>;
     setJoinEnabled: ReturnType<typeof vi.fn>;
+    clearError: ReturnType<typeof vi.fn>;
   };
   let reportStoreMock: {
     groupActivity: ReturnType<typeof signal<unknown[]>>;
@@ -63,9 +65,11 @@ describe('CsoportReszletekComponent', () => {
       loadMembers: vi.fn(),
       removeMember: vi.fn(),
       archive: vi.fn(),
+      unarchive: vi.fn(),
       update: vi.fn(),
       regenerateInvite: vi.fn(),
       setJoinEnabled: vi.fn(),
+      clearError: vi.fn(),
     };
     reportStoreMock = {
       groupActivity: signal([]),
@@ -179,5 +183,50 @@ describe('CsoportReszletekComponent', () => {
     // A store.update() hívás lezajlott, de a szerver hibát adott - a select-nek
     // vissza kell állnia az eredeti (null), ténylegesen mentett állapotra.
     expect(fixture.componentInstance.displaySchoolId()).toBeNull();
+  });
+
+  // UI-TT-34: az archiválásnak eddig nem volt ellentétes irányú UI-eleme sem -
+  // egy archivált csoport oldalán kizárólag egy tehetetlen "Archivált" badge
+  // maradt, semmilyen gomb nem tudta visszaállítani.
+  it('UI-TT-34 javítva: archivált csoportnál "Visszaállítás" gomb jelenik meg "Archiválás" helyett, és a store.unarchive()-ot hívja', () => {
+    configure(makeGroup({ isArchived: true }));
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const restoreButton = buttons.find((b) => b.textContent?.includes('Visszaállítás'));
+    expect(restoreButton).toBeTruthy();
+    expect(buttons.some((b) => b.textContent?.includes('Archiválás'))).toBe(false);
+
+    restoreButton!.click();
+
+    expect(groupStoreMock.unarchive).toHaveBeenCalledWith(1, expect.any(Function));
+  });
+
+  // UI-TT-67: a store.error() (GroupStore) egy KÖZÖS, minden fülön látszó
+  // blokkban jelenik meg - setTab() korábban nem hívta a clearError()-t, ezért
+  // egy korábbi fülről (pl. "Tagok") maradt hibaüzenet félrevezető kontextusban
+  // (pl. az "Eredmények" fülön) ottmaradt volna.
+  it('BUG UI-TT-67 javítva: setTab() törli a GroupStore korábbi hibáját', () => {
+    configure(makeGroup());
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.setTab('eredmenyek');
+
+    expect(groupStoreMock.clearError).toHaveBeenCalled();
+  });
+
+  it('nem archivált csoportnál "Archiválás" gomb jelenik meg, "Visszaállítás" nem', () => {
+    configure(makeGroup({ isArchived: false }));
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.textContent?.includes('Archiválás'))).toBe(true);
+    expect(buttons.some((b) => b.textContent?.includes('Visszaállítás'))).toBe(false);
   });
 });

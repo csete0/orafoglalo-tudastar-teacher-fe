@@ -257,6 +257,10 @@ export class IntezmenyReszletekComponent implements OnInit {
 
   setTab(tab: Tab): void {
     this.tab.set(tab);
+    // UI-TT-67: a school.error() egy KÖZÖS, minden fülön látszó blokkban jelenik
+    // meg - fülváltás nélküli clearError() hívás nélkül egy korábbi fülről
+    // maradt hibaüzenet félrevezető kontextusban ottmaradt volna.
+    this.school.clearError();
     if (tab === 'ranglista') this.loadLeaderboard(this.schoolId);
     if (tab === 'attekintes') this.report.loadSchoolActivity(this.schoolId);
     if (tab === 'csoportok') this.school.loadSchoolGroups(this.schoolId);
