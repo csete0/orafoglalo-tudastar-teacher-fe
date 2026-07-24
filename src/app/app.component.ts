@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { AuthStore } from './services/auth/store/auth.store';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
+import { HeaderDropdownCoordinatorService } from './shared/header-dropdown-coordinator.service';
 import { IconComponent, IconName } from './shared/icon/icon.component';
 import { NotificationBellComponent } from './shared/notification-bell/notification-bell.component';
 import { ToastComponent } from './shared/toast/toast.component';
@@ -148,6 +149,7 @@ const ADMIN_LINKS: NavLink[] = [
 export class AppComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dropdownCoordinator = inject(HeaderDropdownCoordinatorService);
   readonly authStore = inject(AuthStore);
 
   readonly teacherLinks = TEACHER_LINKS;
@@ -167,6 +169,25 @@ export class AppComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() => this.menuOpen.set(false));
+
+    // UI-TT-101: kölcsönös kizárás a harang-dropdownnal - ha a harang megnyílik,
+    // ez a menü záródjon be (és fordítva, ld. NotificationBellComponent), hogy
+    // a két egymástól független, azonos z-indexű lenyíló sose maradhasson
+    // EGYSZERRE nyitva (mobilon a hamburger-panel valós "Kilépés"/nav-linkjei
+    // korábban élők/kattinthatók maradtak a harang dropdownja "alatt/mögött").
+    effect(() => {
+      if (this.menuOpen()) {
+        this.dropdownCoordinator.open('menu');
+      } else {
+        this.dropdownCoordinator.close('menu');
+      }
+    });
+
+    effect(() => {
+      if (this.dropdownCoordinator.openDropdown() === 'bell') {
+        this.menuOpen.set(false);
+      }
+    });
   }
 
   /** Magyar névsorrend: vezetéknév + keresztnév kezdőbetűje. */

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
 import { AuthStore } from './services/auth/store/auth.store';
+import { HeaderDropdownCoordinatorService } from './shared/header-dropdown-coordinator.service';
 
 @Component({ standalone: true, template: '' })
 class BlankTestComponent {}
@@ -135,6 +136,60 @@ describe('AppComponent', () => {
 
     const router = TestBed.inject(Router);
     await router.navigate(['/dashboard']);
+
+    expect(fixture.componentInstance.menuOpen()).toBe(false);
+  });
+
+  // UI-TT-101: a mobil hamburger-menü és a fejléc harang-dropdownja (két
+  // egymástól független, azonos z-40-es lenyíló) korábban SEMMILYEN kölcsönös
+  // kizárást nem ismertek - egyszerre nyitva tartva a KÉSŐBB a DOM-fába kerülő
+  // hamburger-panel valós nav-linkjei/"Kilépés" gombja a harang dropdownja
+  // "alatt/mögött" élő, kattintható maradt. A HeaderDropdownCoordinatorService
+  // köti össze a két felületet, pontosan úgy, ahogy a menü már eddig is
+  // záródott Router/NavigationEnd-re (UI-TT-78).
+  it('BUG UI-TT-101 javítva: a menü megnyitása "menu"-ként jelzi magát a coordinatorban', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+    fixture.componentInstance.menuOpen.set(true);
+    fixture.detectChanges();
+
+    expect(coordinator.openDropdown()).toBe('menu');
+  });
+
+  it('BUG UI-TT-101 javítva: ha a harang dropdown megnyílik (coordinator "bell"), a nyitva lévő mobil hamburger-menü bezáródik', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.menuOpen.set(true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.menuOpen()).toBe(true);
+
+    const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+    coordinator.open('bell');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.menuOpen()).toBe(false);
+  });
+
+  it('BUG UI-TT-101 javítva: a valódi harang-gombra kattintva bezárul a nyitva lévő hamburger-menü', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.menuOpen.set(true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.menuOpen()).toBe(true);
+
+    const bellButton = fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement;
+    bellButton.click();
+    fixture.detectChanges();
 
     expect(fixture.componentInstance.menuOpen()).toBe(false);
   });

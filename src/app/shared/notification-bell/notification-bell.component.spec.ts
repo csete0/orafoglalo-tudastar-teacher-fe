@@ -4,6 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { NotificationBellComponent } from './notification-bell.component';
 import { NotificationStore } from '../../services/notification/notification.store';
 import { Notification } from '../../models/notification.model';
+import { HeaderDropdownCoordinatorService } from '../header-dropdown-coordinator.service';
 
 // UI-TT-82: a teacher-fe-nek eddig egyáltalán nem volt harang-ikonja/lenyíló
 // értesítés-listája. Ezek a tesztek a komponens megjelenítési/interakciós
@@ -196,5 +197,151 @@ describe('NotificationBellComponent', () => {
 
     const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
     expect(panel.textContent).not.toContain('sikertelen');
+  });
+
+  // UI-TT-100: a panel megnyitásakor a fókusz korábban SEHOVA nem került (a
+  // gombon maradt), így egy Tab a panel MÖGÖTTI, DOM-sorrendben rákövetkező
+  // testvér-elemre (élőben a "Kilépés" gombra) ugorhatott. Ezek a tesztek azt
+  // igazolják, amit jsdom valóban hitelesen ellenőrizni tud (a valós
+  // böngésző-layout/z-index-alapú takarás nem reprodukálható jsdomban, ld.
+  // ledger UI-TS-55/UI-TT-78/UI-TT-100/UI-TT-101 indoklása).
+  describe('UI-TT-100: fókusz-csapdázás', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('megnyitáskor a fókusz a panel első fókuszálható elemére kerül', () => {
+      vi.useFakeTimers();
+      const fixture = configure([makeNotification({ isRead: false })]);
+
+      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      vi.runAllTimers();
+
+      const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+      expect(panel).not.toBeNull();
+      expect(panel.contains(document.activeElement)).toBe(true);
+      expect(document.activeElement).not.toBeNull();
+    });
+
+    // Ez pontosan az élő reprodukció esete (browserhunt-teacher-20260710@example.com,
+    // "Nincs értesítésed." - nincs olvasatlan jelvény, tehát nincs "Összes
+    // megjelölése" gomb sem): ha a panelnek NINCS egyetlen fókuszálható eleme
+    // sem, a fókusz a panel konténerén ragad, nem a mögötte lévő elemeken.
+    it('üres listánál (nincs fókuszálható elem a panelben) a fókusz magán a panelen ragad', () => {
+      vi.useFakeTimers();
+      const fixture = configure([]);
+
+      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      vi.runAllTimers();
+
+      const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+      expect(panel.querySelectorAll('button, [href], input, select, textarea').length).toBe(0);
+      expect(document.activeElement).toBe(panel);
+    });
+
+    it('Escape bezárja a dropdownt és visszaadja a fókuszt a harang-gombra', () => {
+      vi.useFakeTimers();
+      const fixture = configure([makeNotification({ isRead: false })]);
+      const trigger = fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement;
+
+      trigger.click();
+      fixture.detectChanges();
+      vi.runAllTimers();
+
+      const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+      panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('Tab az utolsó fókuszálható elemről az elsőre viszi a fókuszt, nem hagyja el a panelt', () => {
+      vi.useFakeTimers();
+      const fixture = configure([makeNotification({ isRead: false, userNotificationId: 9 })]);
+
+      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      vi.runAllTimers();
+
+      const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+      const focusable = Array.from(panel.querySelectorAll('button')) as HTMLButtonElement[];
+      expect(focusable.length).toBeGreaterThan(1);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      last.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      panel.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(first);
+    });
+
+    it('Shift+Tab az első fókuszálható elemről az utolsóra viszi a fókuszt, nem hagyja el a panelt', () => {
+      vi.useFakeTimers();
+      const fixture = configure([makeNotification({ isRead: false, userNotificationId: 9 })]);
+
+      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      vi.runAllTimers();
+
+      const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
+      const focusable = Array.from(panel.querySelectorAll('button')) as HTMLButtonElement[];
+      expect(focusable.length).toBeGreaterThan(1);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      first.focus();
+      const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+      panel.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(last);
+    });
+  });
+
+  // UI-TT-101: a hamburger-menü és a harang dropdown korábban EGYMÁSTÓL
+  // FÜGGETLEN szignálok voltak, kölcsönös kizárás nélkül - a
+  // HeaderDropdownCoordinatorService köti össze őket (ugyanaz a minta, mint
+  // ahogy a mobil menü már eddig is záródott Router/NavigationEnd-re, UI-TT-78).
+  describe('UI-TT-101: kölcsönös kizárás a hamburger-menüvel', () => {
+    it('nyitáskor (toggle()) "bell"-ként jelzi magát a coordinatorban', () => {
+      const fixture = configure([]);
+      const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+
+      fixture.componentInstance.toggle();
+      fixture.detectChanges();
+
+      expect(coordinator.openDropdown()).toBe('bell');
+    });
+
+    it('záráskor (close()) törli magát a coordinatorból', () => {
+      const fixture = configure([]);
+      const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+
+      fixture.componentInstance.toggle();
+      fixture.detectChanges();
+      fixture.componentInstance.close();
+      fixture.detectChanges();
+
+      expect(coordinator.openDropdown()).toBeNull();
+    });
+
+    it('ha a coordinator "menu"-t jelez (a hamburger-menü megnyílt), a dropdown bezáródik', () => {
+      const fixture = configure([]);
+      const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+
+      fixture.componentInstance.open.set(true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.open()).toBe(true);
+
+      coordinator.open('menu');
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+    });
   });
 });
