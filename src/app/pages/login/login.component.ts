@@ -133,6 +133,19 @@ export class LoginComponent {
   }
 
   signInWithProvider(provider: 'google' | 'facebook' | 'apple'): void {
+    // UI-TT-113: a social-login egy TELJES oldal-navigációt indít (window.location.href,
+    // AuthStore.signInWithProvider), ami megsemmisíti az egész Angular-alkalmazás JS-
+    // állapotát — beleértve ezt a `returnUrl` mezőt is, amit a konstruktor a queryParams-ból
+    // már beolvasott a password-ág számára. E nélkül a mentés nélkül a mélylink szándéka
+    // visszaállíthatatlanul elveszne, és a felhasználó a sikeres OAuth-bejelentkezés után
+    // mindig a dashboardra kerülne vissza, függetlenül attól, milyen védett oldalról indult
+    // a bejelentkezés. A kulcsnév ('teacher_oauth_return_url') megegyezik az
+    // OauthCallbackComponent által visszaolvasottal — a párt csak együtt szabad módosítani.
+    // A '/dashboard' alapértéket nem érdemes elmenteni — ez az OauthCallbackComponent saját
+    // fallback-je is, az elmentése semmilyen extra információt nem hordozna.
+    if (this.returnUrl && this.returnUrl !== '/dashboard') {
+      sessionStorage.setItem('teacher_oauth_return_url', this.returnUrl);
+    }
     this.authStore.signInWithProvider(provider);
   }
 }

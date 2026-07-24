@@ -70,6 +70,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
           <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
         }
 
+        @if (schoolStore.error()) {
+          <p class="text-danger text-sm mb-4">{{ schoolStore.error() }}</p>
+        }
+
         @if (store.publishResult(); as result) {
           @if (!result.success) {
             <ul class="bg-danger-subtle border border-danger/40 rounded-xl p-4 mb-6 text-sm text-danger space-y-1">
@@ -267,7 +271,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
   readonly store = inject(TeacherTaskSetStore);
-  private readonly schoolStore = inject(SchoolStore);
+  readonly schoolStore = inject(SchoolStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
   // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
   // a schools() alapján dönt a megerősítő dialógusról (UI-TT-47 load-order race).
@@ -649,6 +653,17 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     // (UI-TT-47 load-order race). Ezért itt mindig megvárjuk a betöltés lezárását.
     if (this.schoolStore.loading()) {
       await firstValueFrom(this.schoolStoreLoading$.pipe(filter((loading) => !loading), take(1)));
+    }
+
+    // UI-TT-110: egy sikertelen schoolStore.loadMine() a loading()-ot ugyanúgy false-ra
+    // zárja, mint egy sikeres, de üres eredményű betöltés — a schools() mindkét esetben
+    // [] marad. E nélkül az ellenőrzés nélkül ez a két eset MEGKÜLÖNBÖZTETHETETLEN lenne,
+    // és egy ténylegesen intézményi tagságú tanár egy átmeneti hiba esetén megerősítés
+    // ÉS bármilyen hibajelzés NÉLKÜL azonnal publikálna — pont azt, amit a UI-TT-47 fix
+    // meg akart előzni. Amíg a tagság nem eldönthető, NEM publikálunk automatikusan.
+    if (this.schoolStore.error()) {
+      this.toastService.danger(this.schoolStore.error()!);
+      return;
     }
 
     if (this.schoolStore.schools().length > 0) {

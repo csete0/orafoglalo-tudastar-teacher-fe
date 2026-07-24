@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Subject, of, throwError } from 'rxjs';
 import { TeacherTaskSetStore } from './teacher-taskset.store';
 import { TeacherTaskSetService } from './teacher-taskset.service';
@@ -25,6 +26,7 @@ describe('TeacherTaskSetStore', () => {
     addTask: ReturnType<typeof vi.fn>;
     getDetail: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
+    uploadFile: ReturnType<typeof vi.fn>;
   };
   let store: TeacherTaskSetStore;
 
@@ -33,6 +35,7 @@ describe('TeacherTaskSetStore', () => {
       addTask: vi.fn(),
       getDetail: vi.fn(),
       publish: vi.fn(),
+      uploadFile: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -188,5 +191,27 @@ describe('TeacherTaskSetStore', () => {
 
     expect(store.loading()).toBe(false);
     expect(store.error()).toContain('Description');
+  });
+
+  // UI-TT-109: nginx `client_max_body_size`-t meghaladó feltöltés HTML-testű 413-at ad
+  // vissza, NEM JSON-t - a régi extractErrorMessage() csak a `{errorMessage}`/`{errors}`
+  // JSON-alakokat ismerte fel, ezért ez csendben a tartalmatlan "A művelet sikertelen."
+  // generikus üzenetre esett vissza, a tanár sosem tudta meg, hogy a fájl mérete volt a
+  // gond (és hogy a nginx-limit jóval alacsonyabb, mint a dokumentált app-szintű limitek).
+  it('BUG UI-TT-109: 413-as (nginx "Request Entity Too Large", nem-JSON HTML törzsű) uploadFile()-hiba esetén a dedikált "fájl túl nagy" üzenet jelenik meg, nem a tartalmatlan generikus szöveg', () => {
+    configure();
+    const httpError = new HttpErrorResponse({
+      status: 413,
+      statusText: 'Request Entity Too Large',
+      error: '<html>\n<head><title>413 Request Entity Too Large</title></head>\n<body>\n<center>413 Request Entity Too Large</center>\n<hr><center>nginx</center>\n</body>\n</html>\n',
+    });
+    serviceMock.uploadFile.mockReturnValue(throwError(() => httpError));
+
+    store.uploadFile(1, 'InputTxt', new File(['x'], 'nagy.txt'));
+
+    expect(store.loading()).toBe(false);
+    expect(serviceMock.getDetail).not.toHaveBeenCalled();
+    expect(store.error()).toBe('A feltöltött fájl mérete meghaladja a megengedett korlátot.');
+    expect(store.error()).not.toContain('sikertelen.');
   });
 });

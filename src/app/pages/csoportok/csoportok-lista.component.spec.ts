@@ -15,6 +15,7 @@ describe('CsoportokListaComponent', () => {
   };
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
+    error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
   };
 
@@ -26,7 +27,7 @@ describe('CsoportokListaComponent', () => {
       loadMine: vi.fn(),
       create: vi.fn(),
     };
-    schoolStoreMock = { schools: signal([]), loadMine: vi.fn() };
+    schoolStoreMock = { schools: signal([]), error: signal(null), loadMine: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [CsoportokListaComponent],
@@ -101,5 +102,22 @@ describe('CsoportokListaComponent', () => {
 
     fixture.componentInstance.create();
     expect(storeMock.create).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-112: harmadik előfordulás ugyanabból a családból, mint UI-TT-110/UI-TT-111 -
+  // a schoolStore itt az "Új csoport" űrlap intézmény-<select>-jét vezérli
+  // (`@if (schoolStore.schools().length > 0)`), de a komponens (sem TS, sem sablon)
+  // sosem olvassa a `schoolStore.error()`-t. Egy sikertelen schoolStore.loadMine()
+  // után a schools() örökre üres marad - a <select> csendben eltűnik, semmi nem
+  // jelzi a tanárnak, hogy a betöltés hibázott, nem pedig azt, hogy nincs
+  // intézményi tagsága.
+  it('BUG UI-TT-112: ha a schoolStore.loadMine() hibázik, az "Új csoport" űrlap intézmény-<select>-je csendben eltűnik, semmilyen hibaüzenet nem jelzi a sikertelen betöltést', () => {
+    configure();
+    schoolStoreMock.error.set('Az intézmények betöltése sikertelen.');
+    const fixture = TestBed.createComponent(CsoportokListaComponent);
+    fixture.detectChanges();
+
+    // Elvárás: a felhasználó lássa, hogy az intézmény-lista betöltése sikertelen volt.
+    expect(fixture.nativeElement.textContent).toContain('Az intézmények betöltése sikertelen.');
   });
 });

@@ -52,6 +52,9 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
         } @else if (group.schoolName) {
           <p class="text-text-muted mt-2">Intézmény: {{ group.schoolName }}</p>
         }
+        @if (schoolStore.error()) {
+          <p class="text-danger text-sm mt-4">{{ schoolStore.error() }}</p>
+        }
         <div class="hairline"></div>
 
         <nav class="flex gap-4 border-b border-border-default mb-6">

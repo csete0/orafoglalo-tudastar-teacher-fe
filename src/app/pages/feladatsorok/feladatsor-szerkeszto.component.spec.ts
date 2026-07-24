@@ -39,6 +39,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
     loading: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
   };
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
@@ -58,7 +59,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       addTask: vi.fn(),
       addSolution: vi.fn(),
     };
-    schoolStoreMock = { schools: signal([]), loading: signal(false), loadMine: vi.fn() };
+    schoolStoreMock = { schools: signal([]), loading: signal(false), error: signal(null), loadMine: vi.fn() };
     authorizedFileServiceMock = {
       resolveUrl: vi.fn((url: string) => of(`blob:resolved-${url}`)),
       revoke: vi.fn(),
@@ -264,6 +265,38 @@ describe('FeladatsorSzerkesztoComponent', () => {
     await publishPromise;
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
+    expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-110: a UI-TT-47 fix csak a schoolStore.loading() race-t kezeli - azt, hogy a
+  // schoolStore.loadMine() ténylegesen HIBÁVAL fusson le (pl. hálózati hiba/500), sosem
+  // vizsgálja. Egy sikertelen betöltés is loading()=false-ra és schools()=[]-re fut ki -
+  // ez a komponens szemszögéből MEGKÜLÖNBÖZTETHETETLEN attól, hogy a tanár ténylegesen
+  // nem tagja egyetlen intézménynek sem. A `schoolStore.error()`-t a komponens SEHOL nem
+  // olvassa (`grep -n "schoolStore.error" feladatsor-szerkeszto.component.ts` -> 0 találat),
+  // ezért egy TÉNYLEGESEN intézményi tagságú tanár egy átmeneti hiba esetén megerősítés
+  // ÉS bármilyen hibajelzés NÉLKÜL azonnal publikál - pont az a helyzet, amit a UI-TT-47
+  // fix meg akart előzni.
+  it('BUG UI-TT-110: ha a schoolStore.loadMine() HIBÁVAL fut le (nem csak lassan), a publish() ezt "nincs intézményi tagság"-ként kezeli, és megerősítés/hibajelzés NÉLKÜL azonnal publikál', async () => {
+    configure(makeDetail({ isPublished: false }));
+    // A schoolStore.loadMine() elbukott: a finalize() miatt loading() lezárult, de a
+    // schools() SOSEM töltődött fel - ugyanaz a jel-állapot, mint egy ténylegesen
+    // intézmény nélküli tanárnál, csak itt egy hiba miatt maradt üres.
+    schoolStoreMock.loading.set(false);
+    schoolStoreMock.schools.set([]);
+    schoolStoreMock.error.set('Az intézmények betöltése sikertelen.');
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await component.publish(1);
+    fixture.detectChanges();
+
+    // Elvárás: a tanár lássa, hogy az intézményi-tagság ellenőrzése sikertelen volt.
+    expect(fixture.nativeElement.textContent).toContain('Az intézmények betöltése sikertelen.');
+    // Elvárás: amíg nem tudjuk eldönteni, kell-e megerősítés, a store.publish() NE
+    // fusson le automatikusan, megerősítés-kérés nélkül.
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
   });
 

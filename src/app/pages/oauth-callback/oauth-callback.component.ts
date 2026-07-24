@@ -42,6 +42,17 @@ export class OauthCallbackComponent implements OnInit {
     this.authStore.autoLogin(
       () => {
         this.toastService.success('Sikeres bejelentkezés!');
+        // UI-TT-113: a LoginComponent.signInWithProvider() a teljes oldal-navigáció
+        // (OAuth-redirect) előtt elmenti a mélylink-célt ide, mert a redirect
+        // megsemmisíti az addigi Angular JS-állapotot. Ha van elmentett cél, oda kell
+        // navigálni a hardcode-olt '/dashboard' helyett — utána a kulcsot törölni kell,
+        // hogy ne szivárogjon át egy KÉSŐBBI, ezzel össze nem függő bejelentkezésbe.
+        const savedReturnUrl = sessionStorage.getItem('teacher_oauth_return_url');
+        if (savedReturnUrl) {
+          sessionStorage.removeItem('teacher_oauth_return_url');
+          this.router.navigate([savedReturnUrl], { replaceUrl: true });
+          return;
+        }
         this.router.navigate(['/dashboard'], { replaceUrl: true });
       },
       (message) => {

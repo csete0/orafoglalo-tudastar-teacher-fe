@@ -51,6 +51,11 @@ describe('CsoportReszletekComponent', () => {
     error: ReturnType<typeof signal<string | null>>;
     loadGroupLeaderboard: ReturnType<typeof vi.fn>;
   };
+  let schoolStoreMock: {
+    schools: ReturnType<typeof signal<SchoolDto[]>>;
+    error: ReturnType<typeof signal<string | null>>;
+    loadMine: ReturnType<typeof vi.fn>;
+  };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
 
   function configure(group: GroupDto, schools: SchoolDto[] = []) {
@@ -81,6 +86,11 @@ describe('CsoportReszletekComponent', () => {
       error: signal(null),
       loadGroupLeaderboard: vi.fn(),
     };
+    schoolStoreMock = {
+      schools: signal(schools),
+      error: signal(null),
+      loadMine: vi.fn(),
+    };
 
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(true) };
 
@@ -89,7 +99,7 @@ describe('CsoportReszletekComponent', () => {
       providers: [
         provideRouter([]),
         { provide: GroupStore, useValue: groupStoreMock },
-        { provide: SchoolStore, useValue: { schools: signal(schools), loadMine: vi.fn() } },
+        { provide: SchoolStore, useValue: schoolStoreMock },
         { provide: ReportStore, useValue: reportStoreMock },
         { provide: LeaderboardStore, useValue: leaderboardStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
@@ -217,6 +227,26 @@ describe('CsoportReszletekComponent', () => {
     fixture.componentInstance.setTab('eredmenyek');
 
     expect(groupStoreMock.clearError).toHaveBeenCalled();
+  });
+
+  // UI-TT-111: a SchoolStore.loadMine()-t (ngOnInit) sikertelenség esetén a komponens
+  // SEHOL nem jelzi - a `schoolStore.error()`-t sem a sablon, sem a TS SOSEM olvassa
+  // (grep -n "schoolStore.error" csoport-reszletek.component.ts -> 0 találat). Egy
+  // sikertelen betöltés a schools()-t örökre üresen hagyja, ami a sablon `@if
+  // (schoolStore.schools().length > 0)` ága miatt az EGÉSZ intézmény-hozzárendelő
+  // <select>-et eltünteti - a tanár egyetlen visszajelzést sem kap arról, hogy a
+  // funkció (a csoport intézményhez kötése) miért nem elérhető, és nem tudja
+  // megkülönböztetni ezt attól az esettől, amikor ő ténylegesen nem tagja semmilyen
+  // intézménynek.
+  it('BUG UI-TT-111: ha a schoolStore.loadMine() hibázik, az intézmény-hozzárendelő UI csendben eltűnik, semmilyen hibaüzenet nem jelzi a sikertelen betöltést', () => {
+    configure(makeGroup({ schoolId: undefined }), []);
+    schoolStoreMock.error.set('Az intézmények betöltése sikertelen.');
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    // Elvárás: a felhasználó lássa, hogy az intézmény-lista betöltése sikertelen volt.
+    expect(fixture.nativeElement.textContent).toContain('Az intézmények betöltése sikertelen.');
   });
 
   it('nem archivált csoportnál "Archiválás" gomb jelenik meg, "Visszaállítás" nem', () => {

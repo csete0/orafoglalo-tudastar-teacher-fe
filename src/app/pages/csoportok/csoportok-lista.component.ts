@@ -87,6 +87,8 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               <option [ngValue]="school.id">{{ school.name }}</option>
             }
           </select>
+        } @else if (schoolStore.error()) {
+          <p class="text-danger text-sm">{{ schoolStore.error() }}</p>
         }
 
         <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
