@@ -5,6 +5,7 @@ import { SchoolStore } from '../../services/school/school.store';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -89,6 +90,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 export class IntezmenyekListaComponent {
   private readonly fb = inject(FormBuilder);
   private readonly toastService = inject(ToastService);
+  private readonly confirmService = inject(ConfirmService);
   readonly store = inject(SchoolStore);
 
   readonly createForm = this.fb.nonNullable.group({ name: ['', [Validators.required, notBlankValidator()]] });
@@ -106,8 +108,23 @@ export class IntezmenyekListaComponent {
     });
   }
 
-  joinSchool(): void {
+  // UI-TT-102: a meghívó kóddal való csatlakozás a háttérben azonnal láthatóvá teszi a
+  // tanár MÁR publikált feladatsorait az intézmény MEGLÉVŐ csoportjainak diákjai számára
+  // (a jogosultságot a backend élőben, lekérdezéskor értékeli ki) — a testvér-műveletekhez
+  // (changeSchool(), publish()) hasonlóan összemérhető láthatósági hatással jár, ezért ez is
+  // megerősítést igényel a submit előtt. Az intézmény neve itt még NEM ismert — a form csak
+  // a meghívó kódot veszi fel, a SchoolDto (és így a név) csak a sikeres store.join() válaszában
+  // érkezik meg —, ezért a szöveg szándékosan nem nevez meg konkrét intézményt.
+  async joinSchool(): Promise<void> {
     if (this.joinForm.invalid) return;
+
+    const ok = await this.confirmService.ask({
+      message:
+        'Biztosan csatlakozol az intézményhez? A már publikált feladatsoraid azonnal láthatóvá válnak az intézmény meglévő csoportjainak diákjai számára.',
+      confirmLabel: 'Csatlakozás',
+    });
+    if (!ok) return;
+
     this.store.join({ code: this.joinForm.getRawValue().code }, () => {
       this.joinForm.reset();
       this.toastService.success('Sikeresen csatlakoztál az intézményhez.');

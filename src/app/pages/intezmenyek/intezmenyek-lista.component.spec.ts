@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { IntezmenyekListaComponent } from './intezmenyek-lista.component';
 import { SchoolStore } from '../../services/school/school.store';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 
 describe('IntezmenyekListaComponent', () => {
   let storeMock: {
@@ -13,6 +14,7 @@ describe('IntezmenyekListaComponent', () => {
     create: ReturnType<typeof vi.fn>;
     join: ReturnType<typeof vi.fn>;
   };
+  let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
 
   function configure() {
     storeMock = {
@@ -24,9 +26,15 @@ describe('IntezmenyekListaComponent', () => {
       join: vi.fn(),
     };
 
+    confirmServiceMock = { ask: vi.fn().mockResolvedValue(true) };
+
     TestBed.configureTestingModule({
       imports: [IntezmenyekListaComponent],
-      providers: [provideRouter([]), { provide: SchoolStore, useValue: storeMock }],
+      providers: [
+        provideRouter([]),
+        { provide: SchoolStore, useValue: storeMock },
+        { provide: ConfirmService, useValue: confirmServiceMock },
+      ],
     });
   }
 
@@ -88,5 +96,45 @@ describe('IntezmenyekListaComponent', () => {
 
     fixture.componentInstance.createSchool();
     expect(storeMock.create).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-102: a csatlakozás a háttérben azonnal láthatóvá teszi a tanár már publikált
+  // feladatsorait az intézmény meglévő csoportjainak diákjai számára - ehhez, a
+  // testvér-műveletekhez (changeSchool(), publish()) hasonlóan, megerősítés szükséges.
+  it('BUG UI-TT-102 javítva: joinSchool() megerősítő dialógust jelenít meg a store.join() hívása előtt', async () => {
+    configure();
+    const fixture = TestBed.createComponent(IntezmenyekListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.joinForm.controls.code.setValue('ABCD1234');
+    await fixture.componentInstance.joinSchool();
+
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
+    expect(storeMock.join).toHaveBeenCalledWith({ code: 'ABCD1234' }, expect.any(Function));
+  });
+
+  it('a dialógus elutasítása esetén joinSchool() NEM hívja meg a store.join()-t, és nem üríti a formot', async () => {
+    configure();
+    confirmServiceMock.ask.mockResolvedValue(false);
+    const fixture = TestBed.createComponent(IntezmenyekListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.joinForm.controls.code.setValue('ABCD1234');
+    await fixture.componentInstance.joinSchool();
+
+    expect(storeMock.join).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.joinForm.controls.code.value).toBe('ABCD1234');
+  });
+
+  it('a dialógus elfogadása esetén joinSchool() a form aktuális kódjával hívja meg a store.join()-t', async () => {
+    configure();
+    const fixture = TestBed.createComponent(IntezmenyekListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.joinForm.controls.code.setValue('XYZ98765');
+    await fixture.componentInstance.joinSchool();
+
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
+    expect(storeMock.join).toHaveBeenCalledWith({ code: 'XYZ98765' }, expect.any(Function));
   });
 });
