@@ -35,7 +35,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
           @if (!group.isArchived) {
             <button (click)="archive(group.id)" class="btn btn-danger shrink-0">Archiválás</button>
           } @else {
-            <button (click)="unarchive(group.id)" class="btn btn-primary shrink-0">Visszaállítás</button>
+            <button (click)="unarchive(group.id)" [disabled]="store.loading()" class="btn btn-primary shrink-0">Visszaállítás</button>
           }
         </div>
         @if (schoolStore.schools().length > 0) {

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AdminTeacherStore } from './admin-teacher.store';
 import { AdminTeacherService } from './admin-teacher.service';
 import { AdminTaskSetDto, TeacherProfileAdminDto } from '../../models/teacher-moderation.model';
@@ -159,5 +159,43 @@ describe('AdminTeacherStore', () => {
     await Promise.resolve();
 
     expect(store.taskSets()[0].isPublished).toBe(false);
+  });
+
+  // UI-TT-117: az AdminApplicationStore.approve()/reject()-től eltérően (ld.
+  // admin-application.store.spec.ts "loading true ... egy átfedő ... hívás nem
+  // indít második kérést" tesztjeit, UI-TT-11 óta) az AdminTeacherStore
+  // setActive()/setQuota()/takedownTaskSet() metódusai SOSEM ellenőriznek
+  // semmilyen "már folyamatban van egy kérés" jelet, mielőtt új HTTP-hívást
+  // indítanának — egy átfedő második hívás (pl. dupla-kattintás a "Mentés"/
+  // "Aktiválás" gombon, amit a admin-tanarok.component.ts sem véd
+  // [disabled]-lel) VALÓDI második hálózati kérést indít. Élőben,
+  // browser_evaluate-tel egy JS-ticken belüli natív dupla .click()-kel a
+  // "Mentés" (kvóta) gombon bizonyítva: KÉT külön POST /api/admin/teachers/
+  // {id}/quota ment ki, mindkettő 200 OK-t kapott (staging, tt_staging DB,
+  // 2026-07-25). Ez a teszt ugyanezt a mintát reprodukálja a store szintjén,
+  // Subject-tel szimulálva egy még-nem-lezárt első kérést.
+  it('BUG UI-TT-117: setQuota()-nál egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', async () => {
+    serviceMock.getTeachers.mockReturnValue(of([makeTeacher()]));
+    const quotaSubject = new Subject<unknown>();
+    serviceMock.setQuota.mockReturnValue(quotaSubject.asObservable());
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.load();
+    await Promise.resolve();
+
+    store.setQuota(1, 7, null);
+    expect(serviceMock.setQuota).toHaveBeenCalledTimes(1);
+
+    // dupla-kattintás, amíg az első kérés még folyamatban van (nincs válasz)
+    store.setQuota(1, 7, null);
+
+    // A helyes viselkedés (mint az AdminApplicationStore.approve()-nál) az
+    // lenne, hogy a második, átfedő hívás NEM indít újabb kérést, amíg az első
+    // válasza meg nem érkezik — ez itt MEGBUKIK, mert nincs ilyen guard.
+    expect(serviceMock.setQuota).toHaveBeenCalledTimes(1);
+
+    quotaSubject.next({});
+    quotaSubject.complete();
+    await Promise.resolve();
   });
 });

@@ -35,6 +35,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     publish: ReturnType<typeof vi.fn>;
     addTask: ReturnType<typeof vi.fn>;
     addSolution: ReturnType<typeof vi.fn>;
+    uploadFile: ReturnType<typeof vi.fn>;
   };
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
@@ -58,6 +59,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // akarják bizonyítani (UI-TT-25).
       addTask: vi.fn(),
       addSolution: vi.fn(),
+      // Alapból NEM hívja meg az onSuccess callback-et (folyamatban lévő kérést szimulál),
+      // ugyanaz a konvenció, mint addTask/addSolution mockjánál.
+      uploadFile: vi.fn(),
     };
     schoolStoreMock = { schools: signal([]), loading: signal(false), error: signal(null), loadMine: vi.fn() };
     authorizedFileServiceMock = {
@@ -298,6 +302,51 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // Elvárás: amíg nem tudjuk eldönteni, kell-e megerősítés, a store.publish() NE
     // fusson le automatikusan, megerősítés-kérés nélkül.
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-118: a UI-TT-117 (admin-tanarok kvóta-Mentés) testvér-hiánya, de itt a
+  // ConfirmService-t magát kerüli meg a kód, nem csak hiányzik a hívása. A publish()
+  // KIZÁRÓLAG akkor kér megerősítést a ConfirmService-en keresztül, ha
+  // `schoolStore.schools().length > 0` (ld. feladatsor-szerkeszto.component.ts:669-676) —
+  // egy intézményhez NEM kötött tanárnál ez az ág teljesen ki van hagyva, a kód egyenesen
+  // a `this.store.publish()`-ra fut. Ez azt jelenti, hogy ennél a tanár-szegmensnél a
+  // ConfirmService "véletlen" dupla-kattintás elleni védelme (amit a UI-TT-117 ledger-bejegyzés
+  // a Felfüggesztés/Aktiválás/Takedown gomboknál élőben igazolt — a resolveFn null-ozása miatt
+  // egy második egyidejű ask()-hívás az elsőt automatikusan elutasítottként zárja) SOHA nem lép
+  // életbe, mert az ask() magát sosem hívjuk meg. Az EGYETLEN védelem a "Publikálás" gomb
+  // `[disabled]="detail.isPublished || store.loading()"` kötése — ez viszont csak akkor
+  // működik, ha Angular change detection lefut a két kattintás ESEMÉNYE közt, hogy a
+  // `disabled` attribútum ténylegesen frissüljön a DOM-ban. A `TeacherTaskSetStore.publish()`
+  // maga sem ellenőriz "folyamatban lévő kérés" jelet induláskor (`teacher-taskset.store.ts:
+  // 147-148`: `this._loading.set(true)` feltétel nélkül, nincs előtte `if (this._loading())
+  // return;` — szemben pl. az `AdminApplicationStore.approve()`-jal, UI-TT-11 óta). Egy
+  // ugyanabban a JS-tickben lezajló szinkron dupla-hívás (amit egy natív dupla-kattintás két
+  // click-eseménye produkál, ha azok Angular CD-ciklus nélkül, egymás után futnak le — ugyanaz
+  // a jelenség, amit egy korábbi kör a "Mentés" gombon `browser_evaluate`-tel élőben
+  // bizonyított) ezért VALÓDI két `store.publish()`-hívást, azaz két külön hálózati kérést
+  // eredményez.
+  it('BUG UI-TT-118: publish() intézmény nélküli tanárnál (schools()===[]) teljesen kihagyja a ConfirmService-t, ezért egy szinkron dupla-hívás VALÓDI két store.publish() hívást indít - a [disabled] gomb-őr csak a két kattintás közti change-detection ciklusra támaszkodik, a store.publish() maga nem véd "folyamatban lévő kérés" ellen', () => {
+    configure(makeDetail({ isPublished: false }));
+    schoolStoreMock.loading.set(false);
+    schoolStoreMock.schools.set([]); // nincs intézményi tagság -> a confirm-ág teljesen ki van hagyva
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Szinkron dupla-hívás - a publish() ebben az ágban (schools()===[], schoolStore nem
+    // "loading") elejétől végig szinkron fut (nincs `await`, amíg el nem éri a
+    // `this.store.publish()`-t), ezért két egymás utáni, NEM await-elt hívás pontosan azt
+    // szimulálja, amikor egy natív dupla-kattintás két click-eseménye ugyanabban a JS-tickben
+    // fut le, mielőtt az Angular change detection frissítené a [disabled] DOM-attribútumot.
+    component.publish(1);
+    component.publish(1);
+
+    expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+    // Elvárás: legfeljebb EGY store.publish()-hívás fusson le dupla-kattintásra. A jelenlegi
+    // kód (nincs guard sem a komponensben, sem a store.publish()-ban) mindkét hívást átengedi,
+    // ezért ez az assert jelenleg BUKIK (2 hívás 1 helyett).
+    expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
   });
 
   it('egy független sikeres mentés/hozzáadás utáni újratöltés NEM dobja el egy másik, még el nem mentett kódrészlet-piszkozatot (UI-TT-40)', () => {
@@ -684,6 +733,54 @@ describe('FeladatsorSzerkesztoComponent', () => {
       component.addSolution(1, 1);
 
       expect(taskSetStoreMock.addSolution).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('UI-TT-123: uploadFile() nem védett a store.loading()-guarddal, szemben az addTask()/addSolution() UI-TT-115 fixével', () => {
+    // uploadFile() (feladatsor-szerkeszto.component.ts) — az addTask()/addSolution() UI-TT-115
+    // fixétől eltérően — sem a metódus elején nem néz `if (this.store.loading()) return;`-t,
+    // sem a "Fájlok" szekció fájl-inputjai nincsenek `[disabled]="store.loading()"`-hoz kötve
+    // (feladatsor-szerkeszto.component.ts .html, a négy `<input type="file">`). Egy lassú
+    // hálózaton egy türelmetlen tanár, aki a rossz fájlt választotta ki, VAGY egy megszokásból
+    // kétszer megnyitott fájl-választó ablakot használva ugyanahhoz a `kind`-hoz gyorsan
+    // egymás után két fájlt tölt fel, MIELŐTT az első kérés visszatérne — a store.uploadFile()
+    // ekkor kétszer hívódik meg egyidejűleg. A backend UI-TT-63 fixe (SERIALIZABLE tranzakció)
+    // ugyan megakadályozza a duplikált DB-sort/kvóta-túllépést, DE a VÉGSŐ, ténylegesen
+    // megmaradó fájl ilyenkor attól függ, melyik HTTP-válasz ér célba UTOLJÁRA a szerveren —
+    // nem attól, melyik feltöltést a tanár ténylegesen "utolsónak/helyesnek" szánta. Emiatt egy
+    // félreklikkelt, majd gyorsan javított feltöltésnél a tanár a HELYES fájlhoz tartozó
+    // "Fájl feltöltve." sikertoastot láthatja, miközben végül mégis a HIBÁS (korábban
+    // véletlenül kiválasztott) fájl marad tárolva — pont azt a fajta versenyhelyzetet, amit a
+    // guard a testvér addTask()/addSolution() formoknál (UI-TT-115) már kizár azzal, hogy a
+    // második kattintást/eseményt csendben, no-opként eldobja.
+    it('BUG (ÚJ, UI-TT-123): egy második file-input "change" esemény, MÍG az első feltöltés még folyamatban van (store.loading()===true), KÉTSZER hívja meg a store.uploadFile()-t ugyanahhoz a fájl-típushoz', () => {
+      configure(makeDetail({ tasks: [], files: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      const wrongFile = new File(['create table x'], 'wrong.sql', { type: 'application/sql' });
+      const correctFile = new File(['create table y'], 'correct.sql', { type: 'application/sql' });
+
+      // Első fájlválasztás (a tanár véletlenül a rossz fájlt választja) — a mock uploadFile()
+      // alapból NEM hívja meg onSuccess-t, tehát a kérés "folyamatban van". A VALÓS store-ban ez
+      // szinkron módon már true-ra állítaná a `loading` jelet (mutateAndReload) — ezt itt
+      // explicit szimuláljuk, mielőtt a második, javító fájlválasztás megtörténne.
+      component.uploadFile(1, 'CreateSql', {
+        target: { files: [wrongFile], value: '' } as unknown as HTMLInputElement,
+      } as unknown as Event);
+      taskSetStoreMock.loading.set(true);
+
+      // Második, gyors egymás-utáni fájlválasztás UGYANAHHOZ a `kind`-hoz, MÍG az első kérés
+      // még folyamatban van (a tanár rájön, hogy rossz fájlt választott, és azonnal javít).
+      // Egy idempotencia-védett file-inputnak ekkor csendben no-op-nak kellene lennie
+      // (ugyanúgy, mint az addTask()/addSolution() UI-TT-115 fixe után) — ehelyett mindkét
+      // feltöltés ténylegesen elindul.
+      component.uploadFile(1, 'CreateSql', {
+        target: { files: [correctFile], value: '' } as unknown as HTMLInputElement,
+      } as unknown as Event);
+
+      expect(taskSetStoreMock.uploadFile).toHaveBeenCalledTimes(1);
     });
   });
 

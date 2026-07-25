@@ -43,11 +43,18 @@ export class AdminTeacherStore {
   }
 
   setActive(teacherProfileId: number, isActive: boolean, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
+    this._loading.set(true);
     this._error.set(null);
 
     this.service
       .setActive(teacherProfileId, isActive)
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        take(1),
+        finalize(() => this._loading.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: () => {
           this._teachers.update((list) =>
@@ -65,11 +72,18 @@ export class AdminTeacherStore {
     maxStorageBytes: number | null,
     onSuccess?: () => void,
   ): void {
+    if (this._loading()) return;
+
+    this._loading.set(true);
     this._error.set(null);
 
     this.service
       .setQuota(teacherProfileId, maxTaskSets, maxStorageBytes)
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        take(1),
+        finalize(() => this._loading.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: () => {
           this._teachers.update((list) =>
@@ -107,11 +121,18 @@ export class AdminTeacherStore {
   }
 
   takedownTaskSet(taskSetId: number, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
+    this._loading.set(true);
     this._error.set(null);
 
     this.service
       .takedownTaskSet(taskSetId)
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        take(1),
+        finalize(() => this._loading.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: () => {
           this._taskSets.update((list) =>

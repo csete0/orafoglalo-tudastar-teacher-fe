@@ -110,6 +110,8 @@ export class GroupStore {
   // véletlenül archivált csoportot a tanár nem tudott a rendszeren belül
   // visszaállítani.
   unarchive(id: number, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
     this.mutate(this.service.unarchive(id), () => {
       this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: false } : g)));
       if (onSuccess) onSuccess();

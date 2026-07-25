@@ -91,6 +91,8 @@ export class SchoolStore {
   }
 
   regenerateInvite(id: number, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
     this.mutate(this.service.regenerateTeacherInvite(id), (school) => {
       this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
       if (onSuccess) onSuccess();

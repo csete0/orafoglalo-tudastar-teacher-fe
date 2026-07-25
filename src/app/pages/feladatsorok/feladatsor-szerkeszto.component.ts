@@ -251,7 +251,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
             @for (kindOption of fileKinds; track kindOption.kind) {
               <div class="card !rounded-xl p-3">
                 <label class="text-sm block mb-1">{{ kindOption.label }}</label>
-                <input type="file" [accept]="kindOption.accept"
+                <input type="file" [accept]="kindOption.accept" [disabled]="store.loading()"
                   (change)="uploadFile(detail.id, kindOption.kind, $event)"
                   class="text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
               </div>
@@ -277,6 +277,17 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
   // a schools() alapján dönt a megerősítő dialógusról (UI-TT-47 load-order race).
   private readonly schoolStoreLoading$ = toObservable(this.schoolStore.loading);
+
+  // UI-TT-118: a publish() saját, a store.loading()-tól független re-entrancy guardja —
+  // ld. publish() metódus komment. Biztonsági háló, hogy ez a flag SOHA ne ragadjon be
+  // "true"-n (pl. egy sikertelen store.publish() után, aminek nincs onError callback
+  // paramétere): amint a store.loading() lezárul (siker VAGY hiba), visszaáll false-ra.
+  private _publishing = false;
+  private readonly resetPublishingOnLoadEnd = effect(() => {
+    if (!this.store.loading()) {
+      this._publishing = false;
+    }
+  });
 
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
@@ -632,6 +643,11 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   uploadFile(taskSetId: number, kind: TeacherFileKind, event: Event): void {
+    // UI-TT-123: az addTask()/addSolution() UI-TT-115 mintáját követve — dupla-kattintás/
+    // gyors egymás-utáni fájlválasztás elleni idempotencia guard, amíg az első feltöltés
+    // még folyamatban van (store.loading()).
+    if (this.store.loading()) return;
+
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -654,6 +670,19 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   async publish(taskSetId: number): Promise<void> {
+    // UI-TT-118: a "Publikálás" gomb [disabled]="... || store.loading()" kötése csak
+    // akkor véd, ha Angular change detection lefut a két kattintás ESEMÉNYE közt — egy
+    // ugyanabban a JS-tickben lezajló szinkron dupla-hívás ellen nem. Intézményhez NEM
+    // kötött tanárnál (schools()===[]) a ConfirmService.ask()-ág (ami a resolver
+    // null-ozása miatt "véletlenül" is véd egy átfedő második hívás ellen) teljesen ki
+    // van hagyva, ezért itt egy saját, a store-tól független re-entrancy guardra van
+    // szükség, hogy egy ilyen szinkron dupla-kattintás ne indítson két store.publish()
+    // hívást (ld. TeacherTaskSetStore.publish() saját loading-guardja is, ami a
+    // "valódi" HTTP-szintű védelmet adja — ez a guard a fenti korai-visszatérési ágakat
+    // is lefedi, amiket a store guardja önmagában nem érne el).
+    if (this._publishing) return;
+    this._publishing = true;
+
     // A schoolStore.loadMine() a konstruktorban indul, a taskset-detail betöltésétől
     // FÜGGETLENÜL — ha a publish() a schools() még be-nem-töltött (üres) kezdőállapotán
     // dönt, egy ténylegesen intézményi tagságú tanár megerősítés NÉLKÜL publikálna
@@ -670,6 +699,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     // meg akart előzni. Amíg a tagság nem eldönthető, NEM publikálunk automatikusan.
     if (this.schoolStore.error()) {
       this.toastService.danger(this.schoolStore.error()!);
+      this._publishing = false;
       return;
     }
 
@@ -679,8 +709,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
           'Publikálás után az intézményed MINDEN iskolai csoportjának diákjai is elérik ezt a feladatsort (tartalom-megosztás). Folytatod?',
         confirmLabel: 'Publikálás',
       });
-      if (!confirmed) return;
+      if (!confirmed) {
+        this._publishing = false;
+        return;
+      }
     }
-    this.store.publish(taskSetId, () => this.toastService.success('Feladatsor publikálva.'));
+    this.store.publish(taskSetId, () => {
+      this._publishing = false;
+      this.toastService.success('Feladatsor publikálva.');
+    });
   }
 }

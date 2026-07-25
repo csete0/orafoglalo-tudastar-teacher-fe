@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { SchoolStore } from './school.store';
 import { SchoolService } from './school.service';
 import { SchoolDto } from '../../models/school.model';
@@ -27,6 +27,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     getSchoolGroups: ReturnType<typeof vi.fn>;
     changeMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
+    regenerateTeacherInvite: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -39,6 +40,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
       getSchoolGroups: vi.fn(),
       changeMemberRole: vi.fn(),
       removeMember: vi.fn(),
+      regenerateTeacherInvite: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [SchoolStore, { provide: SchoolService, useValue: serviceMock }],
@@ -218,5 +220,47 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
 
     expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
     expect(store.schools()).toHaveLength(0);
+  });
+
+  // UI-TT-120: az intézményi tanári meghívó-kód regenerálása
+  // (`IntezmenyReszletekComponent.regenerateInvite()`,
+  // intezmeny-reszletek.component.ts:358-360, "Új kód generálása" gomb,
+  // intezmeny-reszletek.component.ts:73) a testvér `GroupStore.regenerateInvite()`
+  // (csoport-reszletek.component.ts) UI-TT-6-ban talált és 2026-07-17-ben
+  // [disabled]="store.loading()"-tal kijavított mintájával ellentétben ITT
+  // SEMMILYEN védelmet nem kapott: sem a gomb (nincs `[disabled]` binding),
+  // sem a komponens (nincs `if (this.school.loading()) return;` guard),
+  // sem maga a `SchoolStore.regenerateInvite()` (a közös `mutate()` helperen
+  // át fut, ami sosem ellenőriz semmilyen "már folyamatban van egy kérés"
+  // jelet). Egy dupla-kattintás KÉT külön valódi
+  // POST /api/schools/{id}/regenerate-teacher-invite kérést indít - a
+  // korábban már megosztott/kimásolt kód csendben, figyelmeztetés nélkül
+  // érvénytelenné válik.
+  it('BUG UI-TT-120: regenerateInvite()-nál egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, teacherInviteCode: 'OLD1234' })]));
+    const regenSubject = new Subject<SchoolDto>();
+    serviceMock.regenerateTeacherInvite.mockReturnValue(regenSubject.asObservable());
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    // Első kattintás az "Új kód generálása" gombon.
+    store.regenerateInvite(1);
+    expect(serviceMock.regenerateTeacherInvite).toHaveBeenCalledTimes(1);
+
+    // Dupla-kattintás, amíg az első kérés még folyamatban van (nincs válasz) -
+    // ugyanabban a JS-tickben, await nélkül.
+    store.regenerateInvite(1);
+
+    // A helyes viselkedés az lenne, hogy a második, átfedő hívás NEM indít
+    // újabb kérést, amíg az első válasza meg nem érkezik - ez itt MEGBUKIK,
+    // mert nincs ilyen guard.
+    expect(serviceMock.regenerateTeacherInvite).toHaveBeenCalledTimes(1);
+
+    regenSubject.next(makeSchool({ id: 1, teacherInviteCode: 'NEW5678' }));
+    regenSubject.complete();
+    await Promise.resolve();
   });
 });

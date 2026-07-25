@@ -27,6 +27,7 @@ describe('TeacherTaskSetStore', () => {
     getDetail: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
+    upsertSolutionSnippets: ReturnType<typeof vi.fn>;
   };
   let store: TeacherTaskSetStore;
 
@@ -36,6 +37,7 @@ describe('TeacherTaskSetStore', () => {
       getDetail: vi.fn(),
       publish: vi.fn(),
       uploadFile: vi.fn(),
+      upsertSolutionSnippets: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -213,5 +215,39 @@ describe('TeacherTaskSetStore', () => {
     expect(serviceMock.getDetail).not.toHaveBeenCalled();
     expect(store.error()).toBe('A feltöltött fájl mérete meghaladja a megengedett korlátot.');
     expect(store.error()).not.toContain('sikertelen.');
+  });
+
+  // UI-TT-121: a "Kódrészletek mentése" gomb (feladatsor-szerkeszto.component.ts:154,
+  // saveSnippets() -> store.upsertSolutionSnippets()) - a UI-TT-115-ben javított
+  // addTask()/addSolution()-nal ellentétben - SEMMILYEN védelmet nem kapott dupla-
+  // kattintás ellen: a gombnak nincs `[disabled]` bindingja, a `saveSnippets()`
+  // komponens-metódus nem ellenőrzi induláskor a `store.loading()`-ot, és maga a
+  // `TeacherTaskSetStore.upsertSolutionSnippets()` (a közös `mutateAndReload()`-on
+  // át) sem tartalmaz semmilyen "már folyamatban van egy kérés" guardot. Egy gyors
+  // dupla-kattintás KÉT külön valódi PUT/POST kérést indít ugyanarra a solution-re
+  // (a testvér `upsertCompleteSolutionSnippets()`/`uploadFile()` metódusok - amik
+  // szintén a mutateAndReload()-on mennek át - ugyanettől a hiánytól szenvednek,
+  // ugyanaz a gyökérok).
+  it('BUG UI-TT-121: upsertSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', () => {
+    configure();
+    const snippetsSubject = new Subject<unknown>();
+    serviceMock.upsertSolutionSnippets.mockReturnValue(snippetsSubject.asObservable());
+    serviceMock.getDetail.mockReturnValue(of(makeDetail()));
+
+    // Első kattintás a "Kódrészletek mentése" gombon.
+    store.upsertSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+    expect(serviceMock.upsertSolutionSnippets).toHaveBeenCalledTimes(1);
+
+    // Dupla-kattintás, amíg az első kérés még folyamatban van (nincs válasz) -
+    // ugyanabban a JS-tickben, await nélkül.
+    store.upsertSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+
+    // A helyes viselkedés az lenne, hogy a második, átfedő hívás NEM indít
+    // újabb kérést, amíg az első válasza meg nem érkezik - ez itt MEGBUKIK,
+    // mert nincs ilyen guard.
+    expect(serviceMock.upsertSolutionSnippets).toHaveBeenCalledTimes(1);
+
+    snippetsSubject.next({});
+    snippetsSubject.complete();
   });
 });

@@ -70,7 +70,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                   <app-icon name="link" class="w-4 h-4 block text-primary" />
                   Tanári meghívó kód: <code class="font-bold">{{ s.teacherInviteCode }}</code>
                 </span>
-                <button (click)="regenerateInvite(s.id)" class="text-primary hover:underline">Új kód generálása</button>
+                <button (click)="regenerateInvite(s.id)" [disabled]="school.loading()" class="text-primary hover:underline">Új kód generálása</button>
               </div>
             }
 
@@ -356,6 +356,7 @@ export class IntezmenyReszletekComponent implements OnInit {
   }
 
   regenerateInvite(schoolId: number): void {
+    if (this.school.loading()) return;
     this.school.regenerateInvite(schoolId, () => this.toastService.success('Új tanári meghívó kód generálva.'));
   }
 }
