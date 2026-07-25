@@ -101,7 +101,12 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
               @for (n of visibleNotifications(); track n.userNotificationId) {
                 <li class="border-b border-border-subtle last:border-b-0">
                   <div (click)="onItemClick(n)"
-                       class="flex items-start gap-2.5 px-4 py-3 cursor-pointer transition-colors hover:bg-bg-elevated"
+                       tabindex="0"
+                       role="button"
+                       [attr.aria-label]="n.title"
+                       (keydown.enter)="onItemClick(n)"
+                       (keydown.space)="onItemKeydownSpace($event, n)"
+                       class="flex items-start gap-2.5 px-4 py-3 cursor-pointer transition-colors hover:bg-bg-elevated outline-none focus-visible:ring-2 focus-visible:ring-primary"
                        [class.bg-primary-subtle]="!n.isRead">
                     <div class="icon-tile w-8 h-8 shrink-0 text-primary bg-primary-subtle">
                       <app-icon [name]="iconFor(n)" class="w-4 h-4 block" />
@@ -261,6 +266,18 @@ export class NotificationBellComponent implements OnInit {
     if (n.actionUrl) {
       this.router.navigateByUrl(n.actionUrl);
     }
+  }
+
+  /** UI-TT-NEXT: az értesítés-sor (mark-as-read + actionUrl-navigáció egyetlen
+   *  kiváltója) korábban csupasz `<div (click)>` volt, tabindex/role/keydown
+   *  nélkül - ugyanaz az anti-minta, mint a UI-TS-130/UI-TS-131-nél (topic-card,
+   *  nav-profile-dropdown). Space lenyomásakor a natív böngésző-viselkedés az
+   *  oldalt görgetné (mintha a sor egy natív `<button>` lenne) - ezt kell itt
+   *  megelőzni, mielőtt ugyanazt az `onItemClick`-et hívjuk, amit az Enter és a
+   *  kattintás is használ. */
+  onItemKeydownSpace(event: Event, n: Notification): void {
+    event.preventDefault();
+    this.onItemClick(n);
   }
 
   onDeleteClick(event: Event, userNotificationId: number): void {

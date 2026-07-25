@@ -623,6 +623,70 @@ describe('FeladatsorSzerkesztoComponent', () => {
     });
   });
 
+  describe('dupla-kattintás / idempotencia védelem hiánya (ÚJ LELET, még nincs ledger-ID)', () => {
+    // Kontraszt: a publish() gomb helyesen [disabled]="detail.isPublished || store.loading()"
+    // (feladatsor-szerkeszto.component.html:62), a csoport/feladatsor/intézmény-létrehozó
+    // formok és a regenerateInvite()/setJoinEnabled() mind szinkron `if (store.loading())
+    // return;` guard-dal védettek. Az addTask()/addSolution() párnak ez a mintája HIÁNYZIK:
+    // sem a komponens-metódus nem néz store.loading()-ot, sem a "Hozzáadás" submit-gomb
+    // [disabled]-je nincs hozzá kötve (.html:173, :218 — csak a draft üresség-ellenőrzést
+    // nézik, ld. isTaskDraftTitleBlank()/isSolutionDraftDescriptionBlank()). A mögöttes
+    // TeacherTaskSetStore.addTask()/addSolution() a mutateAndReload()-on át egy NEM
+    // idempotens POST-ot indít (teacher-taskset.service.ts addTask()/addSolution() —
+    // mindegyik hívás új sort szúr be), és maga a mutateAndReload() sem védekezik
+    // újrabelépés ellen (teacher-taskset.store.ts:238-257 — nincs "if (this._loading())
+    // return" az elején, csak feltétel nélkül true-ra állítja).
+    it('BUG (ÚJ): dupla-kattintás/gyors kettős Enter az "Új feladat hozzáadása" formon KÉTSZER hívja meg a store.addTask()-ot, miközben az első kérés még folyamatban van (duplikált feladat-sor a backenden)', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.newTaskDrafts[6] = { title: 'Duplikált feladat', description: 'Duplikált leírás', maxPoints: 10 };
+
+      // Első kattintás/Enter (a form submitja) — a mock addTask() alapból NEM hívja meg
+      // onSuccess-t, tehát a kérés "folyamatban van". A VALÓS store-ban ez a hívás szinkron
+      // módon már true-ra állítaná a `loading` jelet (mutateAndReload, store.ts:239) —
+      // ezt itt explicit szimuláljuk, mielőtt a második kattintás megtörténne.
+      component.addTask(1, 6);
+      taskSetStoreMock.loading.set(true);
+
+      // Második, gyors egymás-utáni kattintás/Enter, MÍG az első kérés még folyamatban van
+      // (pl. lassú hálózat miatt türelmetlen tanár). Egy idempotencia-védett gombnak ekkor
+      // csendben no-op-nak kellene lennie.
+      component.addTask(1, 6);
+
+      expect(taskSetStoreMock.addTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('BUG (ÚJ): dupla-kattintás/gyors kettős Enter az "Új részfeladat" (addSolution) formon KÉTSZER hívja meg a store.addSolution()-t, miközben az első kérés még folyamatban van (duplikált részfeladat-sor a backenden)', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.setNewSolutionDescription(1, 'Duplikált részfeladat-leírás');
+      component.setNewSolutionPoints(1, 8);
+
+      // Első kattintás/Enter — a mock addSolution() alapból NEM hívja meg onSuccess-t
+      // (folyamatban lévő kérést szimulál). A valós store ilyenkor már szinkron true-ra
+      // állítaná a `loading` jelet (mutateAndReload, store.ts:239).
+      component.addSolution(1, 1);
+      taskSetStoreMock.loading.set(true);
+
+      // Második, gyors egymás-utáni kattintás/Enter, MÍG az első kérés még folyamatban van.
+      component.addSolution(1, 1);
+
+      expect(taskSetStoreMock.addSolution).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // UI-TT-3: a checkbox→radio átállás előtt (9bf10a7 előtt) egy feladat KÉT típussal
   // (SQL+Programozás) is menthető volt — a régi .includes()-alapú szűrés emiatt mindkét
   // típus-blokkban megjelenítette ugyanazt a feladatot.
@@ -666,6 +730,66 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       expect(totalOccurrences).toBe(1);
       expect(sections.find((s) => s.id === 6)?.tasks.some((t) => t.id === 1)).toBe(true);
+    });
+  });
+
+  // UI-TT-114: a UI-TS-117/118/119/120 hibacsalád ("8 támogatott Judge0-nyelv, de nem minden
+  // felszínen van végigvezetve") ötödik, teacher-fe-oldali előfordulása. A student-fe
+  // `LanguageMapperService.judge0ToBackendLanguageId` térképe szerint a C nyelvnek van érvényes,
+  // működő backend nyelv-id-je (12 — ld. `48: 12, 49: 12, 50: 12, 75: 12` és a fordított
+  // `12: 50, // C` bejegyzés a `language-mapper.service.ts`-ben), tehát a C ugyanolyan
+  // "elsőosztályú" választható nyelv, mint C#/C++/Java/JavaScript/Python/SQL. Ennek ellenére
+  // ez a komponens (`feladatsor-szerkeszto.component.ts` 16-23. sor) saját, hardcode-olt
+  // `LANGUAGES` tömbje (`readonly languages`) KIHAGYJA a C-t (backend id 12) - csak 6 nyelvet
+  // sorol fel (Python=2, C#=5, JavaScript=7, C++=8, Java=10, SQL=6). Gyakorlati hatás: a tanár
+  // a részfeladat/összevont-megoldás kódrészlet-szerkesztőben SOSEM tud C-nyelvű referencia-kódot
+  // megadni egyetlen feladathoz sem - a nyelvenkénti textarea-rács egyszerűen nem jelenít meg C
+  // mezőt -, miközben a diák-oldali szerkesztő a C-t a többi 7 nyelvvel egyenrangúan kínálja.
+  describe('nyelvenkénti kódrészlet-szerkesztő nyelvlistája (UI-TT-114)', () => {
+    it('BUG UI-TT-114: a "languages" lista nem tartalmazza a C nyelvet (érvényes backend id: 12), pedig a többi 6 érvényes Judge0-nyelv (Python/C#/JavaScript/C++/Java/SQL) mind szerepel benne', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      const cEntry = component.languages.find((l) => l.id === 12);
+      expect(cEntry).toBeDefined();
+    });
+
+    it('BUG UI-TT-114: a részfeladat kódrészlet-rácsban nincs C-nyelvű textarea-mező, miközben Python/C#/JavaScript/C++/Java/SQL mind megjelenik', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            {
+              id: 1,
+              title: 'F1',
+              description: 'd',
+              maxPoints: 10,
+              taskOrder: 1,
+              taskTypeIds: [6],
+              completeSolutionSnippets: [],
+              solutions: [{ id: 101, description: 'd', snippets: [] }],
+            },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+
+      const labels: string[] = Array.from(fixture.nativeElement.querySelectorAll('label')).map(
+        (el: any) => el.textContent?.trim(),
+      );
+
+      expect(labels).toContain('Python');
+      expect(labels).toContain('C#');
+      expect(labels).toContain('JavaScript');
+      expect(labels).toContain('C++');
+      expect(labels).toContain('Java');
+      expect(labels).toContain('SQL');
+      // A tényleges (hibás) állapot szerint 'C' NINCS a listában - ez a bukó elvárás.
+      expect(labels).toContain('C');
     });
   });
 });

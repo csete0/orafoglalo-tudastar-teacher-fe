@@ -20,6 +20,7 @@ const LANGUAGES: { id: number; name: string }[] = [
   { id: 8, name: 'C++' },
   { id: 10, name: 'Java' },
   { id: 6, name: 'SQL' },
+  { id: 12, name: 'C' },
 ];
 const SQL_LANGUAGE_ID = 6;
 
@@ -170,7 +171,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                 (ngModelChange)="setNewSolutionPoints(task.id, $event)" name="newSolutionPoints"
                                 class="input !px-2 !py-1" />
                             </div>
-                            <button type="submit" [disabled]="isSolutionDraftDescriptionBlank(task.id)"
+                            <button type="submit" [disabled]="isSolutionDraftDescriptionBlank(task.id) || store.loading()"
                               class="btn btn-primary !px-3 !py-1.5">
                               Hozzáadás
                             </button>
@@ -215,7 +216,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <input type="number" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
                             [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
                         </div>
-                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id)"
+                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id) || store.loading()"
                           class="btn btn-primary !px-3 !py-1.5">
                           Hozzáadás
                         </button>
@@ -530,6 +531,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   addTask(taskSetId: number, typeId: number): void {
+    // UI-TT-115: a publish()/csoport-létrehozó formok mintáját követve — dupla-kattintás/
+    // gyors kettős Enter védelme, amíg az első kérés még folyamatban van (store.loading()),
+    // különben a mögöttes mutateAndReload()-os POST nem idempotens, duplikált sort szúrna be.
+    if (this.store.loading()) return;
     const draft = this.newTaskDrafts[typeId];
     // UI-TT-90: a backend CreateTeacherTaskRequest.Description mezője [Required] -
     // a leírás nélküli beküldés korábban csak egy 400-zal derült ki, mert ez a guard
@@ -597,6 +602,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   addSolution(taskSetId: number, taskId: number): void {
+    // UI-TT-115: az addTask() testvér-fixe — ugyanaz a dupla-kattintás/idempotencia guard.
+    if (this.store.loading()) return;
     const draft = this.newSolutionDraft(taskId);
     if (!draft.description.trim()) return;
     this.store.addSolution(

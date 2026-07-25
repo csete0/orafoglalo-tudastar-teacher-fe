@@ -139,6 +139,28 @@ describe('NotificationBellComponent', () => {
     expect(storeMock.markAsRead).not.toHaveBeenCalled();
   });
 
+  // UI-TT-NEXT: az értesítés-sor (a mark-as-read + actionUrl-navigáció
+  // egyetlen kiváltója) csupasz <div (click)>-ként van megvalósítva, tabindex,
+  // role vagy (keydown.enter)/(keydown.space) nélkül - ugyanaz az anti-minta,
+  // mint a UI-TS-130/UI-TS-131-nél (topic-card, nav-profile-dropdown). Élőben
+  // (Playwright, Tab-only navigáció) igazolva: a panel megnyitása után a fókusz
+  // egyenesen az "Összes megjelölése olvasottként" gombról a sor "Törlés"
+  // gombjára ugrik, MAGÁT a sort (onItemClick) sosem érinti - billentyűzettel
+  // az értesítés so sem olvasható el/nyitható meg, csak törölhető.
+  it('UI-TT-NEXT: az értesítés-sor (li div, onItemClick) billentyűzettel fókuszálható kell legyen (button vagy tabindex="0")', () => {
+    const fixture = configure([makeNotification({ userNotificationId: 5, isRead: false })]);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+
+    const itemEl = fixture.nativeElement.querySelector('li div') as HTMLElement;
+    expect(itemEl).not.toBeNull();
+
+    const isNativeButton = itemEl.tagName === 'BUTTON';
+    const hasTabIndexZero = itemEl.getAttribute('tabindex') === '0';
+
+    expect(isNativeButton || hasTabIndexZero).toBe(true);
+  });
+
   it('"Összes megjelölése olvasottként" gomb NEM jelenik meg, ha nincs olvasatlan elem', () => {
     const fixture = configure([makeNotification({ isRead: true })]);
     fixture.componentInstance.open.set(true);
