@@ -64,4 +64,44 @@ describe('OauthCallbackComponent', () => {
 
     sessionStorage.removeItem('teacher_oauth_return_url');
   });
+
+  // UI-TT-122: a `login.component.ts` saját kommentje szerint a
+  // 'teacher_oauth_return_url' kulcsot kifejezetten azért kell törölni sikeres
+  // bejelentkezés UTÁN, "hogy ne szivárogjon át egy KÉSŐBBI, ezzel össze nem
+  // függő bejelentkezésbe" — de ez a törlés a `ngOnInit` MINDKÉT hiba-ágából
+  // (nincs social-auth siker paraméter; autoLogin hiba-callback) hiányzott.
+  it('BUG UI-TT-122: sikertelen OAuth-callback (nincs social-auth siker paraméter) törli a korábban elmentett returnUrl-t', () => {
+    configure({ error: 'access_denied' });
+    sessionStorage.setItem('teacher_oauth_return_url', '/csoportok/42');
+
+    const fixture = TestBed.createComponent(OauthCallbackComponent);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    fixture.detectChanges();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/login'], { replaceUrl: true });
+    expect(toastMock.danger).toHaveBeenCalled();
+    // A hibás/megszakított kísérlethez tartozó elmentett cél ne éljen tovább.
+    expect(sessionStorage.getItem('teacher_oauth_return_url')).toBeNull();
+
+    sessionStorage.removeItem('teacher_oauth_return_url');
+  });
+
+  it('BUG UI-TT-122 (autoLogin hiba-ág): a backend-oldali autoLogin-hiba esetén is törli a returnUrl-t', () => {
+    configure({ google_authentication: 'success' });
+    sessionStorage.setItem('teacher_oauth_return_url', '/csoportok/42');
+
+    const fixture = TestBed.createComponent(OauthCallbackComponent);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    fixture.detectChanges();
+
+    const [, onError] = authStoreMock.autoLogin.mock.calls[0];
+    onError('Sikertelen bejelentkezés.');
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/login'], { replaceUrl: true });
+    expect(sessionStorage.getItem('teacher_oauth_return_url')).toBeNull();
+
+    sessionStorage.removeItem('teacher_oauth_return_url');
+  });
 });

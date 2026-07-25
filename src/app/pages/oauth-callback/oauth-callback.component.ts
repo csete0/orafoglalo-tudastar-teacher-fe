@@ -35,6 +35,10 @@ export class OauthCallbackComponent implements OnInit {
       if (params['error']) {
         this.toastService.danger('A bejelentkezés nem sikerült. Próbáld újra.');
       }
+      // UI-TT-122: egy megszakított/sikertelen OAuth-kísérlet elmentett
+      // mélylink-célja se élje túl ezt a kísérletet, különben átszivárogna
+      // egy KÉSŐBBI, ezzel össze nem függő sikeres bejelentkezésbe.
+      sessionStorage.removeItem('teacher_oauth_return_url');
       this.router.navigate(['/login'], { replaceUrl: true });
       return;
     }
@@ -57,6 +61,10 @@ export class OauthCallbackComponent implements OnInit {
       },
       (message) => {
         this.toastService.danger(message);
+        // UI-TT-122: lásd fent - a backend-oldali autoLogin-hiba esetén is
+        // törölni kell az elmentett returnUrl-t, ne szivárogjon át egy
+        // KÉSŐBBI, ezzel össze nem függő sikeres bejelentkezésbe.
+        sessionStorage.removeItem('teacher_oauth_return_url');
         this.router.navigate(['/login'], { replaceUrl: true });
       },
     );

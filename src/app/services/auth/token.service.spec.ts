@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
+import { Subject, throwError } from 'rxjs';
 import { TokenService } from './token.service';
 import { AuthService } from './auth.service';
 import { STORAGE_KEYS } from '../../models/auth.model';
@@ -119,5 +119,32 @@ describe('TokenService', () => {
       expect(result).toBe('header.payload.signature');
       expect(authServiceMock.refreshTokens).not.toHaveBeenCalled();
     });
+  });
+
+  // UI-TT-125 (same bug as student-fe's UI-TS-157): when a PROACTIVE refresh
+  // (triggered because the token is close to expiry, not because a request
+  // already got a 401) genuinely fails - e.g. the refresh cookie was already
+  // revoked server-side - performTokenRefresh() correctly clears the token
+  // from storage/cache and reports failure via onTokenRefreshFailed.
+  // fetchValidAccessToken() then fell back to `newToken || accessToken`,
+  // returning the OLD access token that its own call chain just wiped a
+  // moment earlier, instead of null.
+  it('BUG UI-TT-125: getValidAccessToken sikertelen proaktív refresh után NEM adhatja vissza a már törölt, elavult access tokent', async () => {
+    // Alapból (beforeEach) egy közel lejáró tokennel indulunk, ami
+    // shouldRefreshToken()===true-t ad -> proaktív refresh indul.
+    authServiceMock.refreshTokens.mockReturnValue({
+      pipe: () => throwError(() => new Error('refresh token revoked')),
+    });
+
+    const onFailed = vi.fn().mockResolvedValue(undefined);
+    service.onTokenRefreshFailed = onFailed;
+
+    const result = await service.getValidAccessToken();
+
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)).toBeNull();
+
+    // Helyesen null-t kellene visszaadnia, nem az imént törölt 'old.token.value'-t.
+    expect(result).toBeNull();
   });
 });

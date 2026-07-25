@@ -192,7 +192,22 @@ export class SchoolStore {
       )
       .subscribe({
         next: onSuccess,
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.'),
+        error: (err) => {
+          // UI-TT-126: a backend minden admin-only mutációnál frissen
+          // újraellenőrzi a hívó TÉNYLEGES szerepét, és elutasítja, ha az
+          // időközben (pl. egy másik admin által, másik eszközön/lapon)
+          // megváltozott. A kliens ezt csak úgy tudja meg, ha egy ilyen
+          // elutasítás után újratölti a myRole-t hordozó `_schools`-t - ellenkező
+          // esetben az `isSelectedAdmin()`-re épülő admin-UI (badge, tag-kezelő
+          // gombok, intézmény szerkesztése/törlése, meghívó-kód regenerálása)
+          // hibásan admin-állapotban maradna a backend kifejezett elutasítása
+          // után is, a teljes oldal-újratöltésig. A `loadMine()` egy egyszerű,
+          // sosem hibázó GET, tehát ez nem okozhat végtelen ciklust. `loadMine()`
+          // maga is nullázza az error-t indításkor, ezért a hibaüzenetet UTÁNA
+          // állítjuk be, hogy a hívó lássa, miért utasította el a backend.
+          this.loadMine();
+          this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.');
+        },
       });
   }
 }

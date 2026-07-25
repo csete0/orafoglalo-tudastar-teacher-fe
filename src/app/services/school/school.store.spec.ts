@@ -263,4 +263,43 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     regenSubject.complete();
     await Promise.resolve();
   });
+
+  // BUG UI-TT-126: a kliens az `isSelectedAdmin` (SchoolDto.myRole-ból számított) jelet
+  // úgy kezeli, mintha szerver-ellenőrzött igazság lenne, miközben csak a legutóbbi
+  // sikeres `loadMine()` válaszának pillanatfelvétele. A backend
+  // (`SchoolService.RequireMembershipAsync`, `adminOnly: true`) MINDEN egyes
+  // admin-műveletnél frissen, helyesen újraellenőrzi a hívó tényleges szerepét, és
+  // egy, időközben (pl. egy másik admin által, egy másik eszközön/lapon) Teacher-re
+  // lefokozott tanár kérését friss, érthető hibával utasítja el - tehát ez NEM egy
+  // biztonsági rés, a backend a valódi kapu. A hiba a kliens UX-ében van: a
+  // `mutate()` helper hiba-ága csak `this._error.set(...)`-et hívott, SOHA nem
+  // hívta meg `loadMine()`-t - szemben a SIKERES `changeMemberRole`/`removeMember`
+  // onSuccess-ével, ami pont egy ilyen "a myRole időközben megváltozott" eset
+  // kezelésére frissíti a `_schools`-t. Emiatt egy demotált admin munkamenetében az
+  // `isSelectedAdmin()` (és a rá épülő admin-only UI) HIBÁSAN admin-állapotban
+  // maradt a backend kifejezett elutasítása UTÁN is, a teljes oldal-újratöltésig.
+  it('BUG UI-TT-126: egy "már nem vagy admin" backend-elutasítás után a store újratölti a myRole-t, isSelectedAdmin() false-ra vált', async () => {
+    serviceMock.getMine
+      .mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]))
+      .mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Teacher' })]));
+    serviceMock.changeMemberRole.mockReturnValue(
+      throwError(() => ({ error: { errorMessage: 'Ehhez a művelethez intézmény-admin (igazgató) szerep kell.' } })),
+    );
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+    expect(store.isSelectedAdmin()).toBe(true);
+
+    // Időközben (egy másik lapon/eszközön) egy MÁSIK admin lefokozta ezt a tanárt -
+    // a kliens ezt nem tudhatja, amíg meg nem próbál egy admin-műveletet, és a
+    // backend ténylegesen vissza nem utasítja.
+    store.changeMemberRole(1, 42, { role: 'Teacher' });
+    await Promise.resolve();
+
+    expect(store.error()).toBe('Ehhez a művelethez intézmény-admin (igazgató) szerep kell.');
+    expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
+    expect(store.isSelectedAdmin()).toBe(false);
+  });
 });

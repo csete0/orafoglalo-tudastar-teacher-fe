@@ -163,7 +163,12 @@ export class TokenService {
         return this.waitForRefresh();
       }
       const newToken = await this.performTokenRefresh();
-      return newToken || accessToken;
+      // UI-TT-125: ha a proaktív refresh ténylegesen sikertelen (pl. a
+      // refresh-token cookie-t már visszavonták), a performTokenRefresh()
+      // ekkorra már törölte a tárolt tokent és jelezte a hibát - itt NEM
+      // szabad visszaesni a már elavult `accessToken`-re, mert az egy halott
+      // munkamenethez tartozó tokent csatolna a következő kéréshez.
+      return newToken;
     }
 
     return accessToken;
