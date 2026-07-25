@@ -123,4 +123,67 @@ describe('AdminApplicationStore', () => {
     expect(store.applications().length).toBe(1);
     expect(store.loading()).toBe(false);
   });
+
+  // UI-TT-124: a `load()` metódusnak - a testvér `approve()`/`reject()`-től
+  // eltérően (ld. fenti UI-TT-11 tesztek) - EGYÁLTALÁN NINCS `loading`-őre, a
+  // `setStatusFilter()` pedig feltétel nélkül meghívja `load()`-ot minden
+  // kattintásnál (admin-jelentkezesek.component.html: a "Elfogadva"/
+  // "Elutasítva"/"Függőben"/"Összes" fül-gombok közvetlenül
+  // `store.setStatusFilter(option.value)`-t hívják). Ha az admin gyorsan
+  // egymás után két KÜLÖNBÖZŐ szűrőt választ (pl. "Elfogadva" majd
+  // "Elutasítva"), MINDKÉT `getApplications()` hívás ténylegesen elindul (nincs
+  // guard, ami blokkolná) - a végeredmény attól függ, MELYIK válasz érkezik
+  // meg UTOLJÁRA a hálózaton, NEM attól, melyik szűrőt választotta utoljára a
+  // felhasználó. Ha a KORÁBBAN elindított "Elfogadva" kérés válasza érkezik meg
+  // KÉSŐBB, a store `applications()` jele "Elfogadva" státuszú sorokat mutat,
+  // miközben a `statusFilter()` jel (és a UI aktív fül-kiemelése) "Elutasítva"-t
+  // állít - a lista tartalma és a kiválasztott fül ellentmond egymásnak.
+  it('BUG UI-TT-124: gyors szűrő-váltás (Elfogadva -> Elutasítva) esetén, ha az Elfogadva-kérés válasza érkezik meg később, a lista Elfogadva-adatokat mutat "Elutasítva" szűrő mellett', async () => {
+    const approvedResponse = new Subject<TeacherApplicationAdminDto[]>();
+    const rejectedResponse = new Subject<TeacherApplicationAdminDto[]>();
+    serviceMock.getApplications
+      .mockReturnValueOnce(of([])) // kezdeti "pending" load() a konstruktor-szerű beállítás miatt nem kell itt
+      .mockReturnValueOnce(approvedResponse)
+      .mockReturnValueOnce(rejectedResponse);
+
+    const store = TestBed.inject(AdminApplicationStore);
+    store.load();
+    await Promise.resolve();
+
+    // Az admin az "Elfogadva" fülre kattint - a load() FELTÉTEL NÉLKÜL elindul,
+    // nincs `if (this._loading()) return` guard, mint approve()/reject()-nél
+    store.setStatusFilter('approved');
+    expect(store.statusFilter()).toBe('approved');
+    expect(serviceMock.getApplications).toHaveBeenCalledWith('approved');
+
+    // MIELŐTT az "Elfogadva" válasza megérkezne, az admin átvált az
+    // "Elutasítva" fülre - a store NEM blokkolja ezt a második hívást sem
+    store.setStatusFilter('rejected');
+    expect(store.statusFilter()).toBe('rejected');
+    expect(serviceMock.getApplications).toHaveBeenCalledWith('rejected');
+    expect(serviceMock.getApplications).toHaveBeenCalledTimes(3);
+
+    // A hálózaton a válaszok FORDÍTOTT sorrendben érkeznek: előbb az
+    // "Elutasítva" (később indított, de gyorsabb) kérés válasza...
+    rejectedResponse.next([makeApplication({ id: 2, status: 'Rejected' })]);
+    rejectedResponse.complete();
+    await Promise.resolve();
+
+    expect(store.statusFilter()).toBe('rejected');
+    expect(store.applications().map((a) => a.status)).toEqual(['Rejected']);
+
+    // ...majd UTÁNA érkezik meg a KORÁBBAN elindított, de már elavult
+    // "Elfogadva" kérés válasza
+    approvedResponse.next([makeApplication({ id: 1, status: 'Approved' })]);
+    approvedResponse.complete();
+    await Promise.resolve();
+
+    // A JAVÍTOTT viselkedés: a UI aktív fülkiemelése "Elutasítva"-t mutat...
+    expect(store.statusFilter()).toBe('rejected');
+    // ...ÉS a generációs-számláló miatt a KÉSŐBB beérkező, de már ELAVULT
+    // ("Elfogadva" szűrésű) válasz NEM írja felül a ténylegesen legutóbb
+    // kiválasztott "Elutasítva" szűrő listáját - a lista helyesen "Elutasítva"
+    // jelentkezéseket mutat, a fül-kiemeléssel összhangban.
+    expect(store.applications().map((a) => a.status)).toEqual(['Rejected']);
+  });
 });
