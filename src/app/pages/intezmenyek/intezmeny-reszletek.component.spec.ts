@@ -37,6 +37,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     changeMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
     clearError: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
   };
   let reportStoreMock: {
     schoolActivity: ReturnType<typeof signal<unknown[]>>;
@@ -66,6 +67,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
       changeMemberRole: vi.fn(),
       removeMember: vi.fn(),
       clearError: vi.fn(),
+      delete: vi.fn(),
     };
     reportStoreMock = {
       schoolActivity: signal([]),
@@ -202,5 +204,24 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(schoolStoreMock.changeMemberRole).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-35 (mis-triage correction): a 2026-07-17-i triázs kizárólag a backend-oldali
+  // értesítés-küldést ellenőrizte (SchoolService.DeleteAsync mostantól korrektül értesíti
+  // a többi aktív tanár-tagot) - az EREDETI lelet FE-fele (a megerősítő dialógus nem
+  // nevezi meg, hogy más aktív tanárok is elveszítik a tagságukat) VÁLTOZATLANUL nyitva
+  // maradt. Az elvárt viselkedés a szomszédos leave() mintáját követi (ami explicit
+  // megnevezi a csoport-elvesztés következményét).
+  it('deleteSchool() a megerősítő dialógusban megemlítené a többi aktív tanár tagságának elvesztését, ha van másik tag', async () => {
+    configure(makeSchool({ myRole: 'Admin', groupCount: 0, teacherCount: 2 }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.deleteSchool(1, 0);
+
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
+    const askArg = confirmServiceMock.ask.mock.calls[0][0];
+    expect(askArg.message).toMatch(/más|kolléga|tanár.*tagság|tagság.*elveszít/i);
   });
 });

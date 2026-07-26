@@ -53,7 +53,11 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
                   <td class="py-2.5 px-4">{{ exam.startedAt | date: 'yyyy.MM.dd' }}</td>
                   <td class="py-2.5 px-4">
                     @if (exam.isCompleted) {
-                      {{ exam.scorePercent ?? '–' }}%
+                      <!-- UI-TT-37 (mis-triage correction): a százalékjel korábban a
+                           nullish-coalescing fallback-jén KÍVÜL volt - egy befejezett,
+                           de null scorePercent-ű vizsgánál (TotalMax=0) "–%"-ot
+                           mutatott a várt "–" helyett. -->
+                      {{ exam.scorePercent != null ? exam.scorePercent + '%' : '–' }}
                     } @else {
                       <span class="badge badge-warning">folyamatban</span>
                     }

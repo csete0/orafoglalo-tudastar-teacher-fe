@@ -332,8 +332,17 @@ export class IntezmenyReszletekComponent implements OnInit {
       this.toastService.warning('Az intézmény csak akkor törölhető, ha nincs hozzá kötött csoport.', 5000);
       return;
     }
+    // UI-TT-35 (mis-triage correction): a BE (SchoolService.DeleteAsync) már értesíti a
+    // többi aktív tanár-tagot a törlésről, de a megerősítő dialógus ezt eddig nem
+    // nevezte meg - a szomszédos leave() explicit szól a következményről, ez a
+    // törlés-ág viszont a generikus szöveget adta, függetlenül attól, van-e másik
+    // aktív tag, aki elveszíti a tagságát.
+    const otherActiveTeacherCount = (this.school.selectedSchool()?.teacherCount ?? 1) - 1;
+    const message = otherActiveTeacherCount > 0
+      ? `Biztosan törlöd az intézményt? A(z) ${otherActiveTeacherCount} másik aktív tanár kolléga is elveszíti a tagságát.`
+      : 'Biztosan törlöd az intézményt?';
     const ok = await this.confirmService.ask({
-      message: 'Biztosan törlöd az intézményt?',
+      message,
       danger: true,
       confirmLabel: 'Törlés',
     });
