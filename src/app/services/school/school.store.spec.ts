@@ -327,6 +327,57 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     await Promise.resolve();
   });
 
+  // UI-TT-138: a UI-TT-120 fix `regenerateInvite()`-hoz a store-szintű, MINDEN
+  // metódus között megosztott `_loading` jelet adta guard-ként (`if
+  // (this._loading()) return;`, majd a közös `mutate()` helper, ami maga is
+  // ugyanezt a jelet állítja `loadMine()`/`loadMembers()`/
+  // `loadSchoolGroups()`-szal és az ÖSSZES többi mutáló metódussal
+  // (create/join/update/delete/leave/removeMember/changeMemberRole)
+  // megegyezően). Ez pontosan a kampányban sokszor megtalált "megosztott
+  // _loading guard" hibacsalád (UI-TS-151-155/196/198/199-201, UI-TT-136/137)
+  // egy újabb, a SAJÁT UI-TT-120 fixétől SZÁRMAZÓ előfordulása:
+  // `regenerateInvite()` az EGYETLEN metódus, ami explicit ellenőrzi ezt a
+  // közös jelet, ezért BÁRMELY másik, ÉPPEN FOLYAMATBAN LÉVŐ, teljesen
+  // független store-művelet (pl. az `/intezmenyek/:id` oldal ngOnInit-jében
+  // szinte egyszerre induló `loadMembers()`/`loadSchoolGroups()`) csendben
+  // meghiúsítja az "Új kód generálása" gomb kattintását - a tanár nem kap
+  // hibaüzenetet, egyszerűen nem történik semmi.
+  it('BUG UI-TT-138: loadMembers() folyamatban léte alatt egy FÜGGETLEN regenerateInvite() hívás csendben no-op-ol, mert mindkettő ugyanazt a megosztott _loading jelet nézi', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, teacherInviteCode: 'OLD1234' })]));
+    const membersSubject = new Subject<unknown>();
+    serviceMock.getMembers.mockReturnValue(membersSubject.asObservable());
+    serviceMock.regenerateTeacherInvite.mockReturnValue(of(makeSchool({ id: 1, teacherInviteCode: 'NEW5678' })));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    // Az oldal betöltésekor elindul a tagok listájának lekérése - a válasz még
+    // nem érkezett meg.
+    store.loadMembers(1);
+    expect(store.loading()).toBe(true);
+
+    // A tanár - MIELŐTT a tagok betöltődnének - a teljesen FÜGGETLEN "Új kód
+    // generálása" gombra kattint.
+    store.regenerateInvite(1);
+
+    // BUG: a regenerateTeacherInvite() HTTP-hívás soha nem indul el, a
+    // meghívó-kód változatlan marad - a tanár kattintása látszólag
+    // hatástalan marad, semmilyen hibaüzenet vagy visszajelzés nélkül.
+    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
+    expect(store.selectedSchool()?.teacherInviteCode).toBe('OLD1234');
+
+    membersSubject.next([]);
+    membersSubject.complete();
+    await Promise.resolve();
+
+    // Csak a teljesen független `loadMembers()` lezárulása UTÁN indulhatna el
+    // a kódregenerálás - egy türelmetlen tanár, aki nem kattint újra, sosem
+    // tudja meg, hogy a kérése el sem indult.
+    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
+  });
+
   // BUG UI-TT-126: a kliens az `isSelectedAdmin` (SchoolDto.myRole-ból számított) jelet
   // úgy kezeli, mintha szerver-ellenőrzött igazság lenne, miközben csak a legutóbbi
   // sikeres `loadMine()` válaszának pillanatfelvétele. A backend
