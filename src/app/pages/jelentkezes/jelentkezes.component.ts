@@ -8,6 +8,7 @@ import { TeacherApplicationStore } from '../../services/teacher-application/teac
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -38,7 +39,7 @@ const POLL_INTERVAL_MS = 5000;
           <a routerLink="/dashboard" class="btn btn-primary">Ugrás a vezérlőpultra</a>
         </div>
       } @else if (store.isApproved()) {
-        <div class="card p-6">
+        <div class="card p-6" role="status" aria-live="polite">
           <div class="flex items-center gap-3 mb-4">
             <div class="icon-tile icon-tile-success">
               <app-icon name="check" class="w-6 h-6 block" />
@@ -56,7 +57,7 @@ const POLL_INTERVAL_MS = 5000;
           </button>
         </div>
       } @else if (store.isPending()) {
-        <div class="card p-6">
+        <div class="card p-6" role="status" aria-live="polite">
           <div class="flex items-center gap-3 mb-2">
             <div class="icon-tile icon-tile-warning">
               <app-icon name="inbox" class="w-6 h-6 block" />
@@ -69,7 +70,7 @@ const POLL_INTERVAL_MS = 5000;
         </div>
       } @else {
         @if (store.isRejected()) {
-          <div class="bg-danger-subtle border border-danger/40 rounded-xl p-4 mb-4">
+          <div class="bg-danger-subtle border border-danger/40 rounded-xl p-4 mb-4" role="status" aria-live="polite">
             <p class="text-danger font-bold">A korábbi jelentkezésedet elutasítottuk.</p>
             @if (store.application()?.rejectionReason) {
               <p class="text-sm text-text-muted mt-1">Indoklás: {{ store.application()?.rejectionReason }}</p>
@@ -108,7 +109,7 @@ export class JelentkezesComponent {
   readonly store = inject(TeacherApplicationStore);
 
   readonly form = this.fb.nonNullable.group({
-    motivation: ['', [Validators.required, Validators.minLength(20)]],
+    motivation: ['', [Validators.required, Validators.minLength(20), notBlankValidator()]],
     institutionName: [''],
   });
 

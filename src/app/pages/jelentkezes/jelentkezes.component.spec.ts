@@ -163,4 +163,75 @@ describe('JelentkezesComponent', () => {
       expect(fixture.componentInstance.enterAsTeacherError()).toBeNull();
     });
   });
+
+  /**
+   * UI-TT-128 (ARIA/screen-reader-szemantika lencse, "dinamikus állapot nem
+   * jelentve `aria-live` régión" altípus - a UI-TT-127 mintája, most a
+   * tanári-jelentkezés oldalon). A konstruktor (jelentkezes.component.ts:57-66)
+   * 5 másodpercenként (`POLL_INTERVAL_MS`) újratölti a jelentkezés státuszát,
+   * AMÍG `store.isPending()` igaz - ha eközben a jelentkezést elbírálják
+   * (elfogadva/elutasítva), a `@else if (store.isApproved())`/`isPending()`
+   * ág (jelentkezes.component.ts sablonja) egy TELJESEN MÁS DOM-blokkra
+   * cserélődik ("Jelentkezésed elbírálás alatt." -> "Tanári jelentkezésed
+   * elfogadva!"), miközben a diák a lapon marad, esetleg máshova fókuszálva
+   * (pl. egy másik fülre váltva). A teljes komponens sablonjában nincs
+   * `aria-live`/`role="status"`/`role="alert"` - egy screen-reader-felhasználó
+   * SOSEM értesül a háttérben, a saját beavatkozása NÉLKÜL bekövetkező
+   * státuszváltásról, csak akkor, ha kézzel újra a tartalomhoz navigál.
+   */
+  it('BUG UI-TT-128: a jelentkezés-státusz háttérben (pollozással) történő megváltozása (pending -> approved) nincs aria-live/role=alert/role=status régióban jelezve', () => {
+    configure({ application: null, checked: true, isPending: true });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    // Kezdetben "elbírálás alatt" állapot látszik.
+    expect(fixture.nativeElement.textContent).toContain('Jelentkezésed elbírálás alatt.');
+
+    // A háttérben (a store saját pollozása szimulálva) a jelentkezés
+    // elfogadásra kerül - a felhasználó SEMMILYEN saját interakciót nem
+    // végzett, ez egy tisztán háttérben, a poll-ciklus miatt bekövetkező
+    // állapotváltás.
+    storeMock.isPending.set(false);
+    storeMock.isApproved.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Tanári jelentkezésed elfogadva!');
+
+    // A háttérben történt kritikus státuszváltásnak egy aria-live/role=alert/
+    // role=status régióban kellene lennie, hogy egy screen-reader-felhasználó
+    // értesüljön róla a saját fókuszától/beavatkozásától függetlenül. BUKIK:
+    // a teljes renderelt DOM-ban egyetlen ilyen elem sincs.
+    const liveRegions = fixture.nativeElement.querySelectorAll(
+      '[aria-live], [role="alert"], [role="status"]',
+    );
+    expect(liveRegions.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * UI-TT-132: a repó saját
+   * `notBlankValidator`-ját (`shared/validators/not-blank.validator.ts`, a
+   * UI-TT-60 fixje) a `csoportok-lista`/`feladatsorok-lista`/`intezmenyek-lista`
+   * komponensek mind alkalmazzák a saját cím/név mezőjükön, DE a `motivation`
+   * mezőn (jelentkezes.component.ts:111) csak `Validators.required` +
+   * `Validators.minLength(20)` fut - egy 20+ hosszú, KIZÁRÓLAG szóközökből álló
+   * bemutatkozás mindkettőn átmegy (a `minLength` a whitespace karaktereket is
+   * számolja), a submit gomb aktívvá válik, a form.invalid `false`. A backend
+   * (`TeacherApplicationService.ApplyAsync`,
+   * `string.IsNullOrWhiteSpace(request.Motivation)`) viszont elutasítja - a
+   * felhasználó csak egy felesleges, sikertelen kör-út után kap hibaüzenetet,
+   * pontosan az a UX-hiba, amit a `notBlankValidator` a testvér-formokon már
+   * megelőz. BUKIK: a form ma érvényesnek jelzi a kizárólag szóközökből álló
+   * bemutatkozást.
+   */
+  it('BUG UI-TT-132: 20+ hosszú, kizárólag szóközökből álló bemutatkozást a kliens-oldali validáció érvényesnek jelzi, holott a backend elutasítaná', () => {
+    configure({ application: null, checked: true });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.form.controls.motivation.setValue(' '.repeat(25));
+
+    // Helyesen invalid-nak KELLENE lennie (ahogy a notBlankValidator a testvér-formokon
+    // biztosítja) - BUKIK: ma `false`, a submit gomb aktív marad.
+    expect(fixture.componentInstance.form.invalid).toBe(true);
+  });
 });
