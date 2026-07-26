@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { catchError, of } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
@@ -113,7 +114,14 @@ export class FeladatsorokListaComponent {
   readonly store = inject(TeacherTaskSetStore);
 
   readonly levels = LEVELS;
-  readonly categories = toSignal(this.categoryService.getAll(), { initialValue: [] as PublicCategoryDto[] });
+  // UI-TT-133: catchError NÉLKÜL a toSignal() a forrás Observable hibáját minden KÖVETKEZŐ
+  // signal-olvasáskor újra-dobja (Angular rxjs-interop dokumentált viselkedése) - a categories()
+  // a sablon @for ciklusában feltétel nélkül olvasódik, tehát egy GET /public/categories hiba a
+  // TELJES oldal (meglévő lista + form) renderelését eldöntötte volna, nem csak a legördülőt.
+  readonly categories = toSignal(
+    this.categoryService.getAll().pipe(catchError(() => of([] as PublicCategoryDto[]))),
+    { initialValue: [] as PublicCategoryDto[] },
+  );
 
   readonly createForm = this.fb.nonNullable.group({
     // UI-TT-79: a BE nvarchar(250)-hez igazodó kemény korlát - enélkül a form
