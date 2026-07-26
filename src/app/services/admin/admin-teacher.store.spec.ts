@@ -273,4 +273,51 @@ describe('AdminTeacherStore', () => {
     expect(store.taskSets()).toEqual([]);
     expect(store.taskSetsLoading()).toBe(false);
   });
+
+  // UI-TT-136: a UI-TT-117 fix (f5fd3c4) a `setActive()`/`setQuota()`/
+  // `takedownTaskSet()` mindhárom metódusnak UGYANAZT az egyetlen, store-szintű
+  // `_loading` jelet adta guard-ként - ugyanazt, amit a `load()` is használ.
+  // Ez pontosan a kampányban sokszor megtalált "megosztott _loading guard"
+  // hibacsalád (ld. UI-TS-151-155/196/198/199/200/201) egy újabb, a SAJÁT
+  // korábbi fixétől SZÁRMAZÓ előfordulása: mivel a négy metódus (load,
+  // setActive, setQuota, takedownTaskSet) EGYETLEN közös boole jelzőt oszt meg,
+  // bármelyik metódus egy MÁSIK, teljesen független entitáson/műveleten
+  // elindított hívása csendben no-op-ol, amíg az első válasza meg nem érkezik -
+  // nincs hibaüzenet, nincs sorba állítás, az admin egyszerűen nem lát
+  // reakciót a kattintására. Ez a lista-nézet miatt könnyen kiváltható: az
+  // `/admin/tanarok` oldal betöltésekor induló `load()` (vagy egy korábban
+  // elindított másik admin-akció) alatt bármelyik SOR bármelyik gombja
+  // (Felfüggesztés/Aktiválás/Kvóta-mentés) csendben hatástalan marad.
+  it('UI-TT-136 javítva: setActive(tanár A) folyamatban léte alatt egy FÜGGETLEN setQuota(tanár B) hívás NEM no-op-ol - entitásonkénti guard', async () => {
+    serviceMock.getTeachers.mockReturnValue(
+      of([makeTeacher({ id: 1 }), makeTeacher({ id: 2 })]),
+    );
+    const setActiveSubject = new Subject<unknown>();
+    serviceMock.setActive.mockReturnValue(setActiveSubject.asObservable());
+    serviceMock.setQuota.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.load();
+    await Promise.resolve();
+
+    // Az admin felfüggeszti az 1-es tanárt - a kérés még nem tért vissza.
+    store.setActive(1, false);
+    expect(serviceMock.setActive).toHaveBeenCalledTimes(1);
+    expect(store.loading()).toBe(true);
+
+    // Az admin - MIELŐTT az előző kérés visszatérne - egy TELJESEN MÁS tanár
+    // (2-es) kvótáját próbálja menteni egy másik sorban.
+    store.setQuota(2, 5, null);
+
+    // HELYES viselkedés: a setQuota() saját ("setQuota:2") kulcson fut, a
+    // setActive("setActive:1") folyamatban léte nem blokkolja - a hívás
+    // azonnal elindul.
+    expect(serviceMock.setQuota).toHaveBeenCalledTimes(1);
+
+    setActiveSubject.next({});
+    setActiveSubject.complete();
+    await Promise.resolve();
+
+    expect(store.teachers().find((t) => t.id === 2)?.maxTaskSets).toBe(5);
+  });
 });
