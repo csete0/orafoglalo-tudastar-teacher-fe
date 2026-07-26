@@ -63,11 +63,12 @@ const BYTES_PER_MB = 1048576;
                     Aktiválás
                   </button>
                 }
-                <button (click)="toggleQuotaEdit(teacher)"
+                <button (click)="toggleQuotaEdit(teacher)" [attr.aria-expanded]="quotaEditId() === teacher.id"
                   class="text-sm text-primary hover:underline whitespace-nowrap">
                   Kvóta {{ quotaEditId() === teacher.id ? '▲' : '▼' }}
                 </button>
                 <button (click)="store.selectTeacher(teacher.id)"
+                  [attr.aria-expanded]="store.selectedTeacherId() === teacher.id"
                   class="text-sm text-primary hover:underline whitespace-nowrap">
                   Feladatsorai {{ store.selectedTeacherId() === teacher.id ? '▲' : '▼' }}
                 </button>

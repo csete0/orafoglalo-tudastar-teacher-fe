@@ -99,7 +99,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
           @for (section of typeSections(); track section.id) {
             <div class="card !rounded-xl mb-4 overflow-hidden">
-              <button (click)="toggleSection(section.id)"
+              <button (click)="toggleSection(section.id)" [attr.aria-expanded]="isSectionExpanded(section.id)"
                 class="w-full flex items-center justify-between gap-2 p-4 text-left group">
                 <span class="flex items-center gap-3 min-w-0">
                   <div class="icon-tile shrink-0"
@@ -118,7 +118,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   @for (task of section.tasks; track task.id) {
                     <div class="bg-bg-element rounded-xl p-4">
                       <div class="flex justify-between items-start gap-2">
-                        <button (click)="toggleTask(task.id)" class="text-left flex-1 flex items-start gap-2 group">
+                        <button (click)="toggleTask(task.id)" [attr.aria-expanded]="expandedTaskId() === task.id"
+                          class="text-left flex-1 flex items-start gap-2 group">
                           <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
                             [class.-rotate-90]="expandedTaskId() !== task.id" />
                           <span class="min-w-0 flex-1">

@@ -889,4 +889,62 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(labels).toContain('C');
     });
   });
+
+  // UI-TT-129: a UI-TS-179-nél (student-fe) már azonosított "aria-expanded hiánya" harmonika-
+  // altípus első teacher-fe előfordulása. A "Feladatok" blokk két, egymástól független szintjén
+  // (típusonkénti szekció-fejléc ÉS az azon belüli feladat-sor fejléce) is ugyanaz a minta: a
+  // fejléc egy <button (click)> ami egy boolean-jellegű signalt (expandedSections/expandedTaskId)
+  // billent, a hozzá tartozó chevron ikon [class.-rotate-90]-nel el is forog az állapot szerint -
+  // de a gombon magán SOSEM jelenik meg [attr.aria-expanded], ezért egy screen reader-felhasználó
+  // egyik állapotában sem tudja megállapítani, hogy az adott szekció/feladat éppen nyitva vagy
+  // csukva van-e.
+  describe('szekció-/feladat-fejléc lenyitó gombjain hiányzó aria-expanded (UI-TT-129)', () => {
+    it('BUG (ÚJ, UI-TT-129): a típus-szekció fejléc gombján (toggleSection, 102. sor) nincs aria-expanded, csak a chevron-ikon forog [class.-rotate-90]-nel', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      const sectionToggleButton = buttons.find((b) => b.textContent?.includes('Programozás'));
+      expect(sectionToggleButton).toBeDefined();
+      // Alapból nyitva van a Programozás szekció (isSectionExpanded(6) === true) - a komponens
+      // állapota szerint a gombnak aria-expanded="true"-t kellene hordoznia.
+      expect(component.isSectionExpanded(6)).toBe(true);
+
+      // Bukó elvárás: a valós DOM-ban a gombon NINCS jelen az aria-expanded attribútum, holott a
+      // fenti belső állapot szerint jelen kellene lennie, "true" értékkel.
+      expect(sectionToggleButton!.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('BUG (ÚJ, UI-TT-129): a feladat-sor fejléc gombján (toggleTask, 121. sor) sincs aria-expanded, holott az expandedTaskId signal a chevron-forgatás ÉS a részfeladatok megjelenítése mögött is ugyanaz', () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.expandedTaskId()).toBe(1);
+
+      const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      const taskToggleButton = buttons.find((b) => b.textContent?.includes('F1'));
+      expect(taskToggleButton).toBeDefined();
+
+      // Bukó elvárás: toggleTask(1) után a feladat nyitva van (expandedTaskId()===1, a részfeladatok
+      // ténylegesen renderelve is vannak), de a gombon NINCS aria-expanded="true".
+      expect(taskToggleButton!.getAttribute('aria-expanded')).toBe('true');
+    });
+  });
 });
