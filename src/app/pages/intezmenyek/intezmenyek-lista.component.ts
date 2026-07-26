@@ -79,7 +79,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
         <form [formGroup]="joinForm" (ngSubmit)="joinSchool()" class="card p-5 space-y-2">
           <h2 class="font-bold">Csatlakozás kóddal</h2>
           <input formControlName="code" placeholder="Meghívó kód" class="input" />
-          <button type="submit" [disabled]="joinForm.invalid" class="btn btn-primary !px-3 !py-1.5">
+          <button type="submit" [disabled]="joinForm.invalid || store.loading()" class="btn btn-primary !px-3 !py-1.5">
             Csatlakozás
           </button>
         </form>
@@ -116,14 +116,18 @@ export class IntezmenyekListaComponent {
   // a meghívó kódot veszi fel, a SchoolDto (és így a név) csak a sikeres store.join() válaszában
   // érkezik meg —, ezért a szöveg szándékosan nem nevez meg konkrét intézményt.
   async joinSchool(): Promise<void> {
-    if (this.joinForm.invalid) return;
+    if (this.joinForm.invalid || this.store.loading()) return;
 
     const ok = await this.confirmService.ask({
       message:
         'Biztosan csatlakozol az intézményhez? A már publikált feladatsoraid azonnal láthatóvá válnak az intézmény meglévő csoportjainak diákjai számára.',
       confirmLabel: 'Csatlakozás',
     });
-    if (!ok) return;
+    // Az await alatt egy korábbi, még folyamatban lévő join() időközben
+    // elindulhatott (pl. a createSchool()-nál már bevált mintát követve) -
+    // a store.loading()-ot a confirm feloldása UTÁN is újra kell nézni,
+    // mielőtt egy második valódi kérést indítanánk.
+    if (!ok || this.store.loading()) return;
 
     this.store.join({ code: this.joinForm.getRawValue().code }, () => {
       this.joinForm.reset();

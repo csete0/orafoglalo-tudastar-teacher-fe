@@ -202,7 +202,20 @@ export class TeacherTaskSetStore {
     this.mutateAndReload(this.service.upsertSolutionSnippets(solutionId, snippets), taskSetId, onSuccess);
   }
 
+  // UI-TT-121 testvér-eset: ez a metódus - a fenti upsertSolutionSnippets()-szel
+  // ellentétben - eddig NEM kapta meg a "már folyamatban van egy kérés" guardot.
+  // A guard szándékosan ITT, a mutateAndReload()-hívás ELŐTT fut (nem magába
+  // mutateAndReload()-ba központosítva) - a `this.service...(...)` hívás a
+  // mutateAndReload(...) argumentumaként AZONNAL, a metódus-hívás pillanatában
+  // kiértékelődne (a JS az argumentumokat a hívás előtt kiértékeli), tehát egy
+  // mutateAndReload()-on belüli guard már túl későn futna: a service-metódus
+  // (és az általa becsomagolt HttpClient-hívás létrehozása) MÁR megtörtént
+  // volna, mielőtt a guard blokkolhatná - csak a `.subscribe()` marad el, ami
+  // a valós hálózati kérést ELINDÍTÓ lépés (az Angular HttpClient observable-jei
+  // "cold"-ak), de a mock/teszt szintjén ez már megkülönböztethetetlen lenne
+  // egy ténylegesen elindított második hívástól.
   upsertCompleteSolutionSnippets(taskSetId: number, taskId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
+    if (this._loading()) return;
     this.mutateAndReload(this.service.upsertCompleteSolutionSnippets(taskId, snippets), taskSetId, onSuccess);
   }
 

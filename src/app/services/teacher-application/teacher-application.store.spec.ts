@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { TeacherApplicationStore } from './teacher-application.store';
 import { TeacherApplicationService } from './teacher-application.service';
 import { TeacherApplicationDto } from '../../models/teacher-application.model';
@@ -88,6 +88,47 @@ describe('TeacherApplicationStore', () => {
 
     expect(store.error()).toBe('Már van elbírálásra váró jelentkezésed.');
     expect(store.application()).toBeNull();
+  });
+
+  // JelentkezesComponent 5 másodpercenként pollozza loadMine()-t, amíg isPending() igaz -
+  // korábban semmi nem védte a válaszok kiérkezésének sorrendjét: ha egy KORÁBBAN indított
+  // (de lassabb) hívás válasza egy KÉSŐBB indított (de gyorsabb) hívás válasza UTÁN
+  // érkezett meg, a régi ("Pending") adat csendben felülírta volna a már megérkezett friss
+  // ("Approved") állapotot.
+  it('BUG-fix: két átfedő loadMine()-hívás közül a KÉSŐBB indított (de hamarabb megérkező) válasza nyer, a KORÁBBAN indított, de KÉSŐBB megérkező elavult válasz nem írja felül', async () => {
+    const firstResponse = new Subject<TeacherApplicationDto>();
+    const secondResponse = new Subject<TeacherApplicationDto>();
+    serviceMock.getMine
+      .mockReturnValueOnce(firstResponse)
+      .mockReturnValueOnce(secondResponse);
+
+    const store = TestBed.inject(TeacherApplicationStore);
+
+    // Első (pollozási) hívás elindul...
+    store.loadMine();
+    // ...majd MIELŐTT visszaérne, egy második (a következő 5mp-es poll-tick) is elindul.
+    store.loadMine();
+    expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
+
+    // A hálózaton a válaszok FORDÍTOTT sorrendben érkeznek: előbb a KÉSŐBB indított
+    // hívás (friss "Approved" állapot)...
+    secondResponse.next(makeApplication({ status: 'Approved' }));
+    secondResponse.complete();
+    await Promise.resolve();
+
+    expect(store.status()).toBe('Approved');
+
+    // ...majd UTÁNA érkezik meg a KORÁBBAN indított, de már elavult hívás válasza
+    // (stale "Pending" állapot).
+    firstResponse.next(makeApplication({ status: 'Pending' }));
+    firstResponse.complete();
+    await Promise.resolve();
+
+    // A JAVÍTOTT viselkedés: az elavult, később megérkező válasz NEM írja felül a
+    // ténylegesen legutóbb indított híváséból már beállított "Approved" állapotot.
+    expect(store.status()).toBe('Approved');
+    expect(store.loading()).toBe(false);
+    expect(store.checked()).toBe(true);
   });
 
   it('isApproved/isRejected computed helyesen tükrözi a státuszt', async () => {

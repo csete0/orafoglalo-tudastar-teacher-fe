@@ -98,6 +98,26 @@ describe('IntezmenyekListaComponent', () => {
     expect(storeMock.create).not.toHaveBeenCalled();
   });
 
+  // A "Csatlakozás kóddal" gomb - a testvér "Létrehozás" gombbal (UI-TT-6) ellentétben -
+  // nem volt letiltva egy már folyamatban lévő store.loading() alatt: a joinForm.invalid
+  // egyedül nem véd egy dupla-kattintás ellen, ha a form már érvényesen ki van töltve.
+  it('store.loading() alatt a "Csatlakozás" gomb letiltott és joinSchool() no-op', async () => {
+    configure();
+    storeMock.loading.set(true);
+    const fixture = TestBed.createComponent(IntezmenyekListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.joinForm.controls.code.setValue('ABCD1234');
+    fixture.detectChanges();
+
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelectorAll('button[type="submit"]')[1];
+    expect(submitButton.disabled).toBe(true);
+
+    await fixture.componentInstance.joinSchool();
+    expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+    expect(storeMock.join).not.toHaveBeenCalled();
+  });
+
   // UI-TT-102: a csatlakozás a háttérben azonnal láthatóvá teszi a tanár már publikált
   // feladatsorait az intézmény meglévő csoportjainak diákjai számára - ehhez, a
   // testvér-műveletekhez (changeSchool(), publish()) hasonlóan, megerősítés szükséges.

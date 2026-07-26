@@ -28,6 +28,7 @@ describe('TeacherTaskSetStore', () => {
     publish: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
     upsertSolutionSnippets: ReturnType<typeof vi.fn>;
+    upsertCompleteSolutionSnippets: ReturnType<typeof vi.fn>;
   };
   let store: TeacherTaskSetStore;
 
@@ -38,6 +39,7 @@ describe('TeacherTaskSetStore', () => {
       publish: vi.fn(),
       uploadFile: vi.fn(),
       upsertSolutionSnippets: vi.fn(),
+      upsertCompleteSolutionSnippets: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -246,6 +248,34 @@ describe('TeacherTaskSetStore', () => {
     // újabb kérést, amíg az első válasza meg nem érkezik - ez itt MEGBUKIK,
     // mert nincs ilyen guard.
     expect(serviceMock.upsertSolutionSnippets).toHaveBeenCalledTimes(1);
+
+    snippetsSubject.next({});
+    snippetsSubject.complete();
+  });
+
+  // UI-TT-121 testvér-eset: a "Kódrészletek mentése" fixje idáig KIZÁRÓLAG
+  // upsertSolutionSnippets()-et védte (egy saját, duplikált guarddal) - a
+  // közös mutateAndReload()-on átmenő upsertCompleteSolutionSnippets()
+  // ("Összevont megoldás mentése" gomb) ugyanettől a hiánytól szenvedett,
+  // sosem lett önállóan bizonyítva/javítva. A fix a guardot magába
+  // mutateAndReload()-ba központosítja, hogy ez a testvér-metódus (és
+  // bármely jövőbeli új hívó) automatikusan védve legyen.
+  it('BUG UI-TT-121 testvér-eset: upsertCompleteSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', () => {
+    configure();
+    const snippetsSubject = new Subject<unknown>();
+    serviceMock.upsertCompleteSolutionSnippets.mockReturnValue(snippetsSubject.asObservable());
+    serviceMock.getDetail.mockReturnValue(of(makeDetail()));
+
+    // Első kattintás az "Összevont megoldás mentése" gombon.
+    store.upsertCompleteSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+    expect(serviceMock.upsertCompleteSolutionSnippets).toHaveBeenCalledTimes(1);
+
+    // Dupla-kattintás, amíg az első kérés még folyamatban van (nincs válasz).
+    store.upsertCompleteSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+
+    // A helyes viselkedés: a második, átfedő hívás NEM indít újabb kérést,
+    // amíg az első válasza meg nem érkezik.
+    expect(serviceMock.upsertCompleteSolutionSnippets).toHaveBeenCalledTimes(1);
 
     snippetsSubject.next({});
     snippetsSubject.complete();
