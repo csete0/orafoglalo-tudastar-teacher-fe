@@ -48,6 +48,7 @@ export class AuthStore {
 
     this.ensureInitialization();
     this.startTokenRefreshMonitoring();
+    this.setupStorageListener();
   }
 
   // ==================== TOKEN API (interceptor számára) ====================
@@ -114,6 +115,27 @@ export class AuthStore {
       timer(0, TIMING_CONFIG.REFRESH_CHECK_INTERVAL)
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(() => this.ngZone.run(() => this.checkAndRefreshToken()));
+    });
+  }
+
+  // ==================== CROSS-TAB SZINKRON ====================
+
+  /** Ha egy MÁSIK tab kijelentkezik (törli a token/user localStorage-kulcsokat),
+   *  a natív 'storage' esemény ezt a tabot is azonnal értesíti — enélkül
+   *  isAuthenticated hamisan true maradna a másik tab kijelentkezése után. */
+  private setupStorageListener(): void {
+    this.ngZone.runOutsideAngular(() => {
+      window.addEventListener('storage', (event) => {
+        if (event.key === STORAGE_KEYS.ACCESS_TOKEN || event.key === STORAGE_KEYS.USER_DATA) {
+          this.ngZone.run(() => {
+            if (!event.newValue) {
+              this.performCompleteSignOut();
+            } else {
+              this.initializeAuthState();
+            }
+          });
+        }
+      });
     });
   }
 

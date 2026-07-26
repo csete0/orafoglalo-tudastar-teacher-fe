@@ -180,8 +180,12 @@ export class AdminTanarokComponent {
 
   saveQuota(teacherProfileId: number): void {
     // A number-input üresen null-t ad — az a "korlátlan". Negatívot a min="0"
-    // mellett itt is blokkolunk, a backend úgyis elutasítaná.
-    if ((this.quotaTaskSets ?? 0) < 0 || (this.quotaStorageMb ?? 0) < 0) return;
+    // mellett itt is blokkolunk, hogy a kérés el se induljon — de emiatt itt kell
+    // visszajelzést is adni, különben az admin semmit sem lát történni.
+    if ((this.quotaTaskSets ?? 0) < 0 || (this.quotaStorageMb ?? 0) < 0) {
+      this.toastService.warning('A kvóta nem lehet negatív.');
+      return;
+    }
 
     const maxStorageBytes = this.quotaStorageMb === null ? null : this.quotaStorageMb * BYTES_PER_MB;
     this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes, () =>

@@ -38,7 +38,7 @@ describe('AdminTanarokComponent', () => {
     takedownTaskSet: ReturnType<typeof vi.fn>;
   };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
-  let toastServiceMock: { success: ReturnType<typeof vi.fn> };
+  let toastServiceMock: { success: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn> };
 
   function configure(teachers: TeacherProfileAdminDto[]) {
     storeMock = {
@@ -55,7 +55,7 @@ describe('AdminTanarokComponent', () => {
       takedownTaskSet: vi.fn(),
     };
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(false) };
-    toastServiceMock = { success: vi.fn() };
+    toastServiceMock = { success: vi.fn(), warning: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [AdminTanarokComponent],
@@ -103,5 +103,39 @@ describe('AdminTanarokComponent', () => {
     // Bukó elvárás: store.selectedTeacherId()===1 alatt a feladatsor-lista ténylegesen nyitva van,
     // de a gombon nincs aria-expanded="true".
     expect(taskSetsToggleButton!.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  // UI-TT-134 fix: saveQuota() (181-191. sor) negatív értéknél korábban feltétel nélkül, néma
+  // korai return-nel futott ki — sem store.setQuota() nem hívódott, sem toast/hibaüzenet nem
+  // jelent meg, az admin számára a "Mentés" gomb kattintása megkülönböztethetetlen volt attól,
+  // mintha el sem sült volna. A fix a korai return elé egy figyelmeztető toastot iktat be.
+  it('saveQuota() negatív "Max feladatsor" értéknél figyelmeztető toastot ad, és nem hívja meg store.setQuota()-t', () => {
+    configure([makeTeacher({ id: 1, maxTaskSets: 10 })]);
+    const fixture = TestBed.createComponent(AdminTanarokComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleQuotaEdit(makeTeacher({ id: 1, maxTaskSets: 10 }));
+    fixture.componentInstance.quotaTaskSets = -5;
+    fixture.componentInstance.saveQuota(1);
+    fixture.detectChanges();
+
+    expect(storeMock.setQuota).not.toHaveBeenCalled();
+    expect(toastServiceMock.warning).toHaveBeenCalledWith('A kvóta nem lehet negatív.');
+    // A panel is nyitva marad — az admin még módosíthatja az érvénytelen értéket.
+    expect(fixture.componentInstance.quotaEditId()).toBe(1);
+  });
+
+  it('saveQuota() negatív "Max tárhely" értéknél is figyelmeztető toastot ad, és nem hívja meg store.setQuota()-t', () => {
+    configure([makeTeacher({ id: 1 })]);
+    const fixture = TestBed.createComponent(AdminTanarokComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleQuotaEdit(makeTeacher({ id: 1 }));
+    fixture.componentInstance.quotaStorageMb = -1;
+    fixture.componentInstance.saveQuota(1);
+    fixture.detectChanges();
+
+    expect(storeMock.setQuota).not.toHaveBeenCalled();
+    expect(toastServiceMock.warning).toHaveBeenCalledWith('A kvóta nem lehet negatív.');
   });
 });

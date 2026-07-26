@@ -179,6 +179,35 @@ describe('AuthStore', () => {
     expect(callback).toHaveBeenCalled();
   });
 
+  it('cross-tab kijelentkezés: egy MÁSIK tabban törölt access_token localStorage-kulcsra érkező natív "storage" eseményre a store kijelentkezteti ezt a tabot is (isAuthenticated=false)', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ roles: ['teacher'] }));
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
+    // Egy MÁSIK böngésző-tab kijelentkezett: a valós böngésző-viselkedésnek
+    // megfelelően a natív 'storage' esemény csak a TÖBBI tabban tüzel, az
+    // access_token kulcs törlésével (newValue: null).
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: STORAGE_KEYS.ACCESS_TOKEN,
+        newValue: null,
+        oldValue: 'access.tok.en',
+        storageArea: window.localStorage,
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.isAuthenticated()).toBe(false);
+    expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
+  });
+
   it('refreshToken utáni "Belépés tanárként" folyamat: onTokenRefreshed frissíti a currentUser roles-t', async () => {
     const store = TestBed.inject(AuthStore);
     await store.ensureInitialization();
