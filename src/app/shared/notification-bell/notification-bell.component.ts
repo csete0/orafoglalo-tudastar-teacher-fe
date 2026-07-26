@@ -52,11 +52,12 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
   imports: [IconComponent],
   template: `
     <div class="relative">
-      <button #triggerBtn (click)="toggle()" aria-label="Értesítések" title="Értesítések"
+      <button #triggerBtn (click)="toggle()" [attr.aria-label]="bellAriaLabel()" title="Értesítések"
+              aria-haspopup="true" [attr.aria-expanded]="open()"
               class="btn btn-ghost !px-2 relative">
         <app-icon name="bell" class="w-5 h-5 block" />
         @if (store.unreadCount() > 0) {
-          <span data-testid="notification-unread-badge"
+          <span data-testid="notification-unread-badge" aria-live="polite" aria-atomic="true"
                 class="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full
                        bg-danger text-white text-[0.65rem] leading-[1.1rem] font-bold text-center">
             {{ store.unreadCount() > 9 ? '9+' : store.unreadCount() }}
@@ -149,6 +150,15 @@ export class NotificationBellComponent implements OnInit {
   // < ma) sorokat is - ugyanaz a lista, amiből a jelvény-szám (unreadCount)
   // is számol, hogy a kettő strukturálisan ne tudjon szétcsúszni.
   readonly visibleNotifications = computed<Notification[]>(() => this.store.activeNotifications());
+
+  // UI-TT-127: a harang gomb elérhető neve korábban a statikus "Értesítések" string volt,
+  // sosem tükrözte az olvasatlan darabszámot - egy screen-reader-felhasználó a gombra
+  // fókuszálva semmit sem hallott az olvasatlan jelvényről, amit egy látó felhasználó
+  // azonnal észrevesz (piros badge). Most a darabszám (ha > 0) az elérhető névbe is bekerül.
+  readonly bellAriaLabel = computed<string>(() => {
+    const count = this.store.unreadCount();
+    return count > 0 ? `Értesítések (${count} olvasatlan)` : 'Értesítések';
+  });
 
   constructor() {
     // UI-TT-100: nyitáskor a fókusz a panel első fókuszálható elemére kerül

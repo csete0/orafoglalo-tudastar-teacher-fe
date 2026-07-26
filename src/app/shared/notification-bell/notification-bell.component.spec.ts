@@ -81,12 +81,30 @@ describe('NotificationBellComponent', () => {
     const fixture = configure([makeNotification({ title: 'Teszt értesítés' })]);
     expect(fixture.nativeElement.querySelector('[data-testid="notification-panel"]')).toBeNull();
 
-    fixture.nativeElement.querySelector('button[aria-label="Értesítések"]').click();
+    fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]').click();
     fixture.detectChanges();
 
     const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
     expect(panel).not.toBeNull();
     expect(panel.textContent).toContain('Teszt értesítés');
+  });
+
+  // UI-TT-131: ugyanaz az "aria-expanded hiánya" mintázat, mint UI-TT-129/UI-TT-130-nál, csak itt
+  // nem egy harmonika-fejléc, hanem magán a harang-gombon (triggerBtn, `open()` signal) - a gomb
+  // nyitja/csukja a lenyíló értesítés-panelt, de sem aria-expanded, sem aria-haspopup nincs rajta,
+  // az `aria-label="Értesítések"` MINDKÉT állapotban (nyitva/csukva) ugyanaz a statikus szöveg marad.
+  it('BUG (ÚJ, UI-TT-131): a harang-gombon (triggerBtn) nincs aria-expanded, holott a gomb ténylegesen nyitja/csukja az értesítés-panelt (open() signal)', () => {
+    const fixture = configure([makeNotification({ title: 'Teszt értesítés' })]);
+    const bellButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]');
+
+    bellButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.open()).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-testid="notification-panel"]')).not.toBeNull();
+
+    // Bukó elvárás: a panel ténylegesen nyitva van, de a gombon nincs aria-expanded="true".
+    expect(bellButton.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('egy olvasatlan elemre kattintva markAsRead()-et hív és bezárja a panelt', () => {
@@ -236,7 +254,7 @@ describe('NotificationBellComponent', () => {
       vi.useFakeTimers();
       const fixture = configure([makeNotification({ isRead: false })]);
 
-      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       vi.runAllTimers();
 
@@ -254,7 +272,7 @@ describe('NotificationBellComponent', () => {
       vi.useFakeTimers();
       const fixture = configure([]);
 
-      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       vi.runAllTimers();
 
@@ -266,7 +284,7 @@ describe('NotificationBellComponent', () => {
     it('Escape bezárja a dropdownt és visszaadja a fókuszt a harang-gombra', () => {
       vi.useFakeTimers();
       const fixture = configure([makeNotification({ isRead: false })]);
-      const trigger = fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement;
+      const trigger = fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement;
 
       trigger.click();
       fixture.detectChanges();
@@ -284,7 +302,7 @@ describe('NotificationBellComponent', () => {
       vi.useFakeTimers();
       const fixture = configure([makeNotification({ isRead: false, userNotificationId: 9 })]);
 
-      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       vi.runAllTimers();
 
@@ -306,7 +324,7 @@ describe('NotificationBellComponent', () => {
       vi.useFakeTimers();
       const fixture = configure([makeNotification({ isRead: false, userNotificationId: 9 })]);
 
-      (fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       vi.runAllTimers();
 
@@ -364,6 +382,35 @@ describe('NotificationBellComponent', () => {
       fixture.detectChanges();
 
       expect(fixture.componentInstance.open()).toBe(false);
+    });
+  });
+
+  // BUG UI-TT-127: the unread-count badge (data-testid="notification-unread-badge")
+  // is purely visual - the trigger button's aria-label is the static "Értesítések"
+  // string, never updated to reflect the count, and the badge <span> itself sits
+  // outside any aria-live region. A sighted user sees a red "3" appear on the bell
+  // the moment a new notification arrives (even without opening the panel); a
+  // screen-reader user gets no announcement at all and, on focusing the button,
+  // hears only "Értesítések, button" with no indication that anything is unread.
+  describe('olvasatlan jelvény nem érhető el screen readerrel (UI-TT-127)', () => {
+    it('BUG: a harang gomb elérhető neve nem tükrözi az olvasatlan darabszámot', () => {
+      const fixture = configure([makeNotification({ isRead: false })]);
+      const trigger: HTMLButtonElement = fixture.nativeElement.querySelector('button[aria-label]');
+      expect(trigger).toBeTruthy();
+
+      const accessibleName = trigger.getAttribute('aria-label') || '';
+      expect(accessibleName).toContain('1');
+    });
+
+    it('BUG: az olvasatlan jelvény nincs aria-live régióban', () => {
+      const fixture = configure([makeNotification({ isRead: false })]);
+      const badge: HTMLElement = fixture.nativeElement.querySelector(
+        '[data-testid="notification-unread-badge"]',
+      );
+      expect(badge).toBeTruthy();
+
+      const liveRegionAncestor = badge.closest('[aria-live]');
+      expect(liveRegionAncestor).toBeTruthy();
     });
   });
 });
