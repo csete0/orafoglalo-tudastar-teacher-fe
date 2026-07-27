@@ -33,6 +33,7 @@ export class AuthStore {
   private readonly _error = signal<AuthError | null>(null);
 
   private initializationPromise?: Promise<void>;
+  private suppressAutoRedirectOnRefreshFailure = false;
 
   readonly authCheckComplete = computed(() => this._authCheckComplete());
   readonly isAuthenticated = computed(() => this._isAuthenticated());
@@ -46,7 +47,7 @@ export class AuthStore {
   constructor() {
     this.tokenService.onTokenRefreshed = async (response) => this.handleSuccessfulRefresh(response);
     this.tokenService.onTokenRefreshFailed = async () => {
-      this.signOutLocallyWithoutClearingStorage();
+      this.signOutLocallyWithoutClearingStorage(!this.suppressAutoRedirectOnRefreshFailure);
     };
 
     this.ensureInitialization();
@@ -62,6 +63,30 @@ export class AuthStore {
 
   async refreshToken(): Promise<string | null> {
     return this.tokenService.performTokenRefresh();
+  }
+
+  /** UI-TT-16/UI-TT-144 interakció: néhány hívó (pl. "Belépés tanárként" a
+   *  jelentkezés oldalon) a sikertelen refresh-t a SAJÁT, dedikált inline
+   *  hibakezelő UI-jával akarja kezelni, nem a megosztott
+   *  `onTokenRefreshFailed`-hook automatikus `/login`-redirectjével (ami a
+   *  cross-tab logout/mismatch esetekhez lett hozzáadva). Ez a metódus a
+   *  hívás idejére elnyomja azt a redirectet, a hiba-jelzést (isAuthenticated
+   *  flip false-ra) viszont NEM - a hívó ebből tudja meg, hogy a refresh
+   *  elbukott, és maga dönt a megjelenítésről.
+   *
+   *  Elfogadott, ritka él-eset: ha EBBEN a pillanatban egy MÁSIK (ambiens,
+   *  háttérben induló) refresh-hiba is lezárul, az is elnyomásra kerülne -
+   *  ez a flag nincs hívásonként elkülönítve. A gyakorlatban elhanyagolható
+   *  (a háttér-monitor és egy explicit gombnyomás egybeesése rendkívül
+   *  ritka), és a `finally` blokk biztosítja, hogy a hívás lezárása UTÁN
+   *  minden KÉSŐBBI, ehhez nem kapcsolódó hiba ismét helyesen navigál. */
+  async refreshTokenWithoutAutoRedirect(): Promise<string | null> {
+    this.suppressAutoRedirectOnRefreshFailure = true;
+    try {
+      return await this.tokenService.performTokenRefresh();
+    } finally {
+      this.suppressAutoRedirectOnRefreshFailure = false;
+    }
   }
 
   // ==================== INICIALIZÁCIÓ ====================
@@ -307,14 +332,14 @@ export class AuthStore {
    *  tényleges érvénytelenné válásának közös pontja (nem fut le Tab B-nél,
    *  aki épp legitim módon jelentkezett be - ld. fenti mismatch-ág), itt a
    *  helyes hely az elnavigálásra is. */
-  private signOutLocallyWithoutClearingStorage(): void {
+  private signOutLocallyWithoutClearingStorage(navigateOnSignOut = true): void {
     const wasAuthenticated = this._isAuthenticated() === true;
 
     this._loginResponse.set(null);
     this._isAuthenticated.set(false);
     this._error.set(null);
 
-    if (wasAuthenticated) {
+    if (wasAuthenticated && navigateOnSignOut) {
       this.router.navigateByUrl('/login');
     }
   }

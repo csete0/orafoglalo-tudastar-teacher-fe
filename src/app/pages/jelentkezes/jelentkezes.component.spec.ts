@@ -1,10 +1,25 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { signal } from '@angular/core';
+import { throwError, of } from 'rxjs';
 import { JelentkezesComponent } from './jelentkezes.component';
 import { TeacherApplicationStore } from '../../services/teacher-application/teacher-application.store';
 import { AuthStore } from '../../services/auth/store/auth.store';
+import { AuthService } from '../../services/auth/auth.service';
+import { STORAGE_KEYS, TeacherUserLoginDto } from '../../models/auth.model';
 import { TeacherApplicationDto } from '../../models/teacher-application.model';
+
+function makeAuthUser(overrides: Partial<TeacherUserLoginDto> = {}): TeacherUserLoginDto {
+  return {
+    id: 1,
+    userName: 'tanar',
+    email: 'tanar@example.com',
+    firstName: 'Teszt',
+    lastName: 'Tanár',
+    roles: ['teacher'],
+    ...overrides,
+  };
+}
 
 function makeRejectedApplication(overrides: Partial<TeacherApplicationDto> = {}): TeacherApplicationDto {
   return {
@@ -35,6 +50,7 @@ describe('JelentkezesComponent', () => {
   let authStoreMock: {
     hasTeacherRole: ReturnType<typeof signal<boolean>>;
     refreshToken: ReturnType<typeof vi.fn>;
+    refreshTokenWithoutAutoRedirect: ReturnType<typeof vi.fn>;
   };
 
   function configure(options: {
@@ -60,6 +76,7 @@ describe('JelentkezesComponent', () => {
     authStoreMock = {
       hasTeacherRole: signal(options.hasTeacherRole ?? false),
       refreshToken: vi.fn().mockResolvedValue('new-token'),
+      refreshTokenWithoutAutoRedirect: vi.fn().mockResolvedValue('new-token'),
     };
 
     TestBed.configureTestingModule({
@@ -133,7 +150,7 @@ describe('JelentkezesComponent', () => {
   describe('enterAsTeacher()', () => {
     it('BUG UI-TT-16: sikertelen refresh esetén NEM navigál a dashboardra, hanem hibaüzenetet jelenít meg', async () => {
       configure({ application: null, checked: true, isApproved: true });
-      authStoreMock.refreshToken.mockResolvedValue(null);
+      authStoreMock.refreshTokenWithoutAutoRedirect.mockResolvedValue(null);
 
       const fixture = TestBed.createComponent(JelentkezesComponent);
       const router = TestBed.inject(Router);
@@ -150,7 +167,7 @@ describe('JelentkezesComponent', () => {
 
     it('sikeres refresh esetén a dashboardra navigál, hiba nélkül', async () => {
       configure({ application: null, checked: true, isApproved: true });
-      authStoreMock.refreshToken.mockResolvedValue('new-token');
+      authStoreMock.refreshTokenWithoutAutoRedirect.mockResolvedValue('new-token');
 
       const fixture = TestBed.createComponent(JelentkezesComponent);
       const router = TestBed.inject(Router);
@@ -161,6 +178,115 @@ describe('JelentkezesComponent', () => {
 
       expect(navigateSpy).toHaveBeenCalledWith('/dashboard', { replaceUrl: true });
       expect(fixture.componentInstance.enterAsTeacherError()).toBeNull();
+    });
+
+    // UI-TT-16/UI-TT-144 interakció-regresszió: a fenti két teszt teljesen
+    // mockolja az AuthStore-t, ezért SOSEM futtatja át a valódi
+    // AuthStore -> TokenService.doTokenRefresh() hibaláncot, amit a
+    // UI-TT-144 fix (2026-07-27, `7fc0a46`) módosított - pontosan ez a rés
+    // miatt nem vette észre a régi tesztkészlet, hogy a megosztott
+    // `onTokenRefreshFailed` hook mostantól automatikusan /login-ra navigál.
+    // Ez a blokk a VALÓDI AuthStore/TokenService láncot használja, csak a
+    // HTTP-réteget (AuthService) mockolja.
+    describe('valódi AuthStore/TokenService lánc (nem mockolt AuthStore)', () => {
+      function configureWithRealAuthStore(authServiceMock: Partial<AuthService>) {
+        storeMock = {
+          application: signal(null),
+          loading: signal(false),
+          error: signal(null),
+          checked: signal(true),
+          status: signal(null),
+          isPending: signal(false),
+          isApproved: signal(true),
+          isRejected: signal(false),
+          loadMine: vi.fn(),
+          apply: vi.fn(),
+        };
+
+        localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, 'access.tok.en');
+        localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(makeAuthUser()));
+
+        TestBed.configureTestingModule({
+          imports: [JelentkezesComponent],
+          providers: [
+            provideRouter([]),
+            AuthStore,
+            { provide: TeacherApplicationStore, useValue: storeMock },
+            { provide: AuthService, useValue: authServiceMock },
+          ],
+        });
+      }
+
+      afterEach(() => {
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+      });
+
+      it(
+        'UI-TT-16/UI-TT-144 regresszió-fix: a VALÓDI lánc token-refresh hibája NEM navigál /login-ra, hanem az inline enterAsTeacherError-t állítja be',
+        async () => {
+          configureWithRealAuthStore({
+            // Érvényes, nem lejárt token az inicializációhoz - a munkamenet
+            // MÁR authentikált (isAuthenticated=true), MIELŐTT enterAsTeacher()
+            // fut, hogy a fixet ténylegesen igazoló true->false átmenetet
+            // mérjük (egy sosem-authentikált állapotból induló teszt a
+            // meglévő `wasAuthenticated` védelem miatt hamis-pozitívan
+            // "átmenne" a fix nélkül is).
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            refreshTokens: vi.fn(() => throwError(() => new Error('hálózati hiba'))),
+          } as unknown as Partial<AuthService>);
+
+          const fixture = TestBed.createComponent(JelentkezesComponent);
+          const router = TestBed.inject(Router);
+          const navigateSpy = vi.spyOn(router, 'navigateByUrl');
+          fixture.detectChanges();
+
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+          expect(authStore.isAuthenticated()).toBe(true);
+
+          await fixture.componentInstance.enterAsTeacher();
+          fixture.detectChanges();
+
+          // A régi hiba pontosan ez volt: a megosztott onTokenRefreshFailed
+          // hook (UI-TT-144 óta) automatikusan elnavigált /login-ra, mielőtt
+          // ez a komponens a saját, dedikált hibaüzenetét megjeleníthette
+          // volna - ezt kellett elnyomni refreshTokenWithoutAutoRedirect()-tel.
+          expect(navigateSpy).not.toHaveBeenCalledWith('/login');
+          expect(navigateSpy).not.toHaveBeenCalledWith('/dashboard', { replaceUrl: true });
+          expect(fixture.componentInstance.enterAsTeacherError()).toBeTruthy();
+          expect(authStore.isAuthenticated()).toBe(false);
+        },
+        10000,
+      );
+
+      it(
+        'UI-TT-144 nem regresszált: egy ettől FÜGGETLEN, ambiens token-refresh-hiba a VALÓDI láncban továbbra is /login-ra navigál',
+        async () => {
+          configureWithRealAuthStore({
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            refreshTokens: vi.fn(() => throwError(() => new Error('lejárt refresh-token'))),
+          } as unknown as Partial<AuthService>);
+
+          const fixture = TestBed.createComponent(JelentkezesComponent);
+          const router = TestBed.inject(Router);
+          const navigateSpy = vi.spyOn(router, 'navigateByUrl');
+          fixture.detectChanges();
+
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+          expect(authStore.isAuthenticated()).toBe(true);
+
+          // Ez a hívás NEM az enterAsTeacher()-ből indul (a sima
+          // refreshToken()-t hívja, nem a suppress-variánst) - egy háttérben
+          // (pl. proaktív refresh-monitorozás) induló, független hibát szimulál.
+          await authStore.refreshToken();
+
+          expect(authStore.isAuthenticated()).toBe(false);
+          expect(navigateSpy).toHaveBeenCalledWith('/login');
+        },
+        10000,
+      );
     });
   });
 

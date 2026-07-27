@@ -152,7 +152,13 @@ export class JelentkezesComponent {
 
   async enterAsTeacher(): Promise<void> {
     this.enterAsTeacherError.set(null);
-    const newToken = await this.authStore.refreshToken();
+    // UI-TT-16/UI-TT-144: a sima refreshToken() a megosztott
+    // onTokenRefreshFailed-hookon keresztül sikertelen refresh esetén
+    // automatikusan /login-ra navigálna (a cross-tab logout/mismatch
+    // eseteknek szánt védelem) - ez itt elnyomná az alábbi dedikált
+    // hibaüzenetet. A `WithoutAutoRedirect` variáns elnyomja azt a
+    // redirectet erre az egy hívásra, a hiba-jelzést viszont megkapjuk.
+    const newToken = await this.authStore.refreshTokenWithoutAutoRedirect();
     if (!newToken) {
       // UI-TT-16: sikertelen refresh esetén a TokenService a munkamenetet
       // már törölte (onTokenRefreshFailed) — ne navigáljunk tovább néma

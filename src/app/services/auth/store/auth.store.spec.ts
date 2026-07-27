@@ -395,6 +395,59 @@ describe('AuthStore', () => {
     expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
+  it('UI-TT-16/UI-TT-144 regresszió-fix: refreshTokenWithoutAutoRedirect() sikertelen refresh esetén NEM navigál el, de a jel flip-el false-ra', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ roles: ['teacher'] }));
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
+    // A valódi TokenService.doTokenRefresh() a saját catch ágában HÍVJA az
+    // onTokenRefreshFailed hookot, MIELŐTT performTokenRefresh() null-lal
+    // felold - ezt szimuláljuk itt, hogy a tényleges hívási sorrendet teszteljük.
+    tokenServiceMock.performTokenRefresh.mockImplementation(async () => {
+      await tokenServiceMock.onTokenRefreshFailed!();
+      return null;
+    });
+
+    const result = await store.refreshTokenWithoutAutoRedirect();
+
+    expect(result).toBeNull();
+    expect(store.isAuthenticated()).toBe(false);
+    // A hívó (pl. "Belépés tanárként") a saját dedikált inline hibaüzenetét
+    // mutatja - a megosztott auto-redirect NEM futhat le emellett/helyette.
+    expect(routerMock.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('UI-TT-16/UI-TT-144 regresszió-fix: a redirect-elnyomás NEM ragad be - egy KÉSŐBBI, független ambiens refresh-hiba a hívás lezárása után továbbra is elnavigál', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ roles: ['teacher'] }));
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
+    // A saját hívás sikerrel zárul (nem hiba) - a suppress-flagnek utána
+    // vissza kell állnia.
+    tokenServiceMock.performTokenRefresh.mockResolvedValue('new.tok.en');
+    await store.refreshTokenWithoutAutoRedirect();
+    expect(routerMock.navigateByUrl).not.toHaveBeenCalled();
+
+    // Egy KÉSŐBBI, ehhez a híváshoz nem kapcsolódó, háttérben induló
+    // refresh-kísérlet sikertelen - ennek MÁR el kell navigálnia.
+    await tokenServiceMock.onTokenRefreshFailed!();
+
+    expect(store.isAuthenticated()).toBe(false);
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
+  });
+
   it('refreshToken utáni "Belépés tanárként" folyamat: onTokenRefreshed frissíti a currentUser roles-t', async () => {
     const store = TestBed.inject(AuthStore);
     await store.ensureInitialization();
