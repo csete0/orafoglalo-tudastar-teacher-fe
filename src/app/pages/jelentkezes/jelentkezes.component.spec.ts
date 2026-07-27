@@ -360,4 +360,62 @@ describe('JelentkezesComponent', () => {
     // biztosítja) - BUKIK: ma `false`, a submit gomb aktív marad.
     expect(fixture.componentInstance.form.invalid).toBe(true);
   });
+
+  /**
+   * BE-DATETIME-UTC-MARKER-MISSING-ON-DB-READ (0.A validációs kör, P2): a "Beadva:"
+   * időbélyeg PONTOSAN 2 órát ugrott ugyanazon a változatlan jelentkezésen a beadás utáni
+   * első render (18:40) és az 5 másodperces poll újratöltése (16:40) között.
+   *
+   * A gyökérok a BACKENDEN volt: a POST a memóriában létrehozott entitást adta vissza
+   * (Kind=Utc -> "Z"-vel sorosodik), a GET viszont az adatbázisból olvasta vissza
+   * (EF Core -> Kind=Unspecified -> "Z" NÉLKÜL sorosodik), a JS pedig a "Z" nélküli
+   * alakot HELYI időként értelmezi. Javítva egy globális JSON-konverterrel, ami minden
+   * kimenő időbélyeget "Z"-vel ír ki.
+   *
+   * Ezek a tesztek a FRONTEND-oldali szerződést őrzik: a komponens a kapott UTC
+   * időbélyeget helyi időre konvertálva jelenítse meg (DatePipe), és NE a nyers ISO
+   * falióra-értéket írja ki - különben a backend javítása hiába történt meg.
+   */
+  function expectedLocalText(iso: string): string {
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  it('függőben lévő jelentkezésnél a "Beadva" időbélyeget helyi időre konvertálva jeleníti meg, nem nyers UTC-ként', () => {
+    // Pontosan az az időpont, amin a hibát élesben megfigyeltük (DB: 16:40:28 UTC).
+    const createdAt = '2026-07-27T16:40:28Z';
+    configure({
+      application: makeRejectedApplication({ status: 'Pending', createdAt, decidedAt: undefined }),
+      isPending: true,
+    });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain(expectedLocalText(createdAt));
+  });
+
+  it('ugyanazt az időpontot azonosan jeleníti meg, akár a beadás válaszából, akár a poll újratöltésből érkezik', () => {
+    // A backend javítása után mindkét útvonal ugyanazt a "Z"-végű alakot küldi - a
+    // nézetnek ezért bit-re azonos szöveget kell adnia. A hiba idején a poll-ág
+    // "Z" nélküli alakot kapott, és emiatt 2 órával korábbit írt ki.
+    const render = (createdAt: string): string => {
+      configure({
+        application: makeRejectedApplication({ status: 'Pending', createdAt, decidedAt: undefined }),
+        isPending: true,
+      });
+      const fixture = TestBed.createComponent(JelentkezesComponent);
+      fixture.detectChanges();
+      const text: string = fixture.nativeElement.textContent;
+      TestBed.resetTestingModule();
+      return text;
+    };
+
+    const fromApply = render('2026-07-27T16:40:28.1234567Z');
+    const fromPoll = render('2026-07-27T16:40:28.0000000Z');
+
+    expect(fromApply).toContain(expectedLocalText('2026-07-27T16:40:28Z'));
+    expect(fromPoll).toContain(expectedLocalText('2026-07-27T16:40:28Z'));
+  });
 });
