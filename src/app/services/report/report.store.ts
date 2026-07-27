@@ -16,6 +16,20 @@ export class ReportStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // Ugyanaz a hiba-osztály, mint a LeaderboardStore/TeacherApplicationStore
+  // (UI-TT-124-mintájú) generációs-számláló fixje: mivel ez a store `providedIn:
+  // 'root'` és a `takeUntilDestroyed(this.destroyRef)` a STORE saját (gyakorlatilag
+  // örökké élő) DestroyRef-jéhez kötött, nem a fogyasztó komponenséhez, egy
+  // entitásról (pl. Csoport A) egy másikra (Csoport B) való átnavigálás NEM
+  // szakítja meg Csoport A még folyamatban lévő HTTP hívását. Ha az később, Csoport
+  // B már megjelenített, helyes válasza UTÁN érkezik meg, csendben felülírná azt.
+  // Külön generáció-számláló loaderenkénti, mert a 4 metódus egymástól független
+  // entitásokat tölt be különböző signalokba.
+  private _groupActivityGeneration = 0;
+  private _schoolActivityGeneration = 0;
+  private _studentDetailGeneration = 0;
+  private _taskSetResultsGeneration = 0;
+
   readonly groupActivity = computed(() => this._groupActivity());
   readonly schoolActivity = computed(() => this._schoolActivity());
   readonly studentDetail = computed(() => this._studentDetail());
@@ -24,6 +38,7 @@ export class ReportStore {
   readonly error = computed(() => this._error());
 
   loadGroupActivity(groupId: number, from?: Date, to?: Date): void {
+    const generation = ++this._groupActivityGeneration;
     this._loading.set(true);
     this._error.set(null);
     this._groupActivity.set([]);
@@ -32,16 +47,25 @@ export class ReportStore {
       .getGroupActivity(groupId, from, to)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._groupActivityGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (activity) => this._groupActivity.set(activity),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A csoport-aktivitás betöltése sikertelen.'),
+        next: (activity) => {
+          if (generation !== this._groupActivityGeneration) return;
+          this._groupActivity.set(activity);
+        },
+        error: (err) => {
+          if (generation !== this._groupActivityGeneration) return;
+          this._error.set(err.error?.errorMessage ?? 'A csoport-aktivitás betöltése sikertelen.');
+        },
       });
   }
 
   loadSchoolActivity(schoolId: number, from?: Date, to?: Date): void {
+    const generation = ++this._schoolActivityGeneration;
     this._loading.set(true);
     this._error.set(null);
     this._schoolActivity.set([]);
@@ -50,16 +74,25 @@ export class ReportStore {
       .getSchoolActivity(schoolId, from, to)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._schoolActivityGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (activity) => this._schoolActivity.set(activity),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'Ehhez a riporthoz intézmény-admin szerep kell.'),
+        next: (activity) => {
+          if (generation !== this._schoolActivityGeneration) return;
+          this._schoolActivity.set(activity);
+        },
+        error: (err) => {
+          if (generation !== this._schoolActivityGeneration) return;
+          this._error.set(err.error?.errorMessage ?? 'Ehhez a riporthoz intézmény-admin szerep kell.');
+        },
       });
   }
 
   loadStudentActivity(studentUserId: number, from?: Date, to?: Date): void {
+    const generation = ++this._studentDetailGeneration;
     this._loading.set(true);
     this._error.set(null);
     this._studentDetail.set(null);
@@ -68,16 +101,25 @@ export class ReportStore {
       .getStudentActivity(studentUserId, from, to)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._studentDetailGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (detail) => this._studentDetail.set(detail),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A diák adatainak betöltése sikertelen.'),
+        next: (detail) => {
+          if (generation !== this._studentDetailGeneration) return;
+          this._studentDetail.set(detail);
+        },
+        error: (err) => {
+          if (generation !== this._studentDetailGeneration) return;
+          this._error.set(err.error?.errorMessage ?? 'A diák adatainak betöltése sikertelen.');
+        },
       });
   }
 
   loadTaskSetResults(taskSetId: number): void {
+    const generation = ++this._taskSetResultsGeneration;
     this._loading.set(true);
     this._error.set(null);
     this._taskSetResults.set(null);
@@ -86,12 +128,20 @@ export class ReportStore {
       .getTaskSetResults(taskSetId)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._taskSetResultsGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (results) => this._taskSetResults.set(results),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az eredmény-mátrix betöltése sikertelen.'),
+        next: (results) => {
+          if (generation !== this._taskSetResultsGeneration) return;
+          this._taskSetResults.set(results);
+        },
+        error: (err) => {
+          if (generation !== this._taskSetResultsGeneration) return;
+          this._error.set(err.error?.errorMessage ?? 'Az eredmény-mátrix betöltése sikertelen.');
+        },
       });
   }
 

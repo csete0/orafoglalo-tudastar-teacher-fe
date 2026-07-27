@@ -148,6 +148,54 @@ describe('ReportStore', () => {
     expect(store.studentDetail()).toBeNull();
   });
 
+  it('loadGroupActivity: egy korábban indított, de KÉSŐBB megérkező hívás válasza nem írja felül egy közben elindított, MÁR megérkezett újabb csoport adatait', async () => {
+    const groupAResponse = new Subject<StudentActivitySummaryDto[]>();
+    const groupBResponse = new Subject<StudentActivitySummaryDto[]>();
+    serviceMock.getGroupActivity.mockReturnValueOnce(groupAResponse).mockReturnValueOnce(groupBResponse);
+
+    // A tanár megnyitja "A" csoport Eredmények fülét (lassú hálózat)...
+    store.loadGroupActivity(1);
+    // ...majd MIELŐTT a válasz megérkezne, átnavigál "B" csoport Eredmények fülére.
+    store.loadGroupActivity(2);
+    expect(serviceMock.getGroupActivity).toHaveBeenCalledTimes(2);
+
+    // "B" gyors válasza előbb érkezik meg és helyesen megjelenik.
+    const groupBResult = [makeSummary({ userId: 2, name: 'B csoport diákja' })];
+    groupBResponse.next(groupBResult);
+    groupBResponse.complete();
+    await Promise.resolve();
+    expect(store.groupActivity()).toEqual(groupBResult);
+
+    // "A" elavult, KÉSŐN érkező válasza nem írhatja felül "B" már megjelenített adatait.
+    const groupAResult = [makeSummary({ userId: 1, name: 'A csoport diákja' })];
+    groupAResponse.next(groupAResult);
+    groupAResponse.complete();
+    await Promise.resolve();
+    expect(store.groupActivity()).toEqual(groupBResult);
+  });
+
+  it('loadSchoolActivity: egy korábban indított, de KÉSŐBB megérkező hívás válasza nem írja felül egy közben elindított, MÁR megérkezett újabb intézmény adatait', async () => {
+    const schoolAResponse = new Subject<StudentActivitySummaryDto[]>();
+    const schoolBResponse = new Subject<StudentActivitySummaryDto[]>();
+    serviceMock.getSchoolActivity.mockReturnValueOnce(schoolAResponse).mockReturnValueOnce(schoolBResponse);
+
+    store.loadSchoolActivity(10);
+    store.loadSchoolActivity(20);
+    expect(serviceMock.getSchoolActivity).toHaveBeenCalledTimes(2);
+
+    const schoolBResult = [makeSummary({ userId: 4, name: 'B intézmény diákja' })];
+    schoolBResponse.next(schoolBResult);
+    schoolBResponse.complete();
+    await Promise.resolve();
+    expect(store.schoolActivity()).toEqual(schoolBResult);
+
+    const schoolAResult = [makeSummary({ userId: 3, name: 'A intézmény diákja' })];
+    schoolAResponse.next(schoolAResult);
+    schoolAResponse.complete();
+    await Promise.resolve();
+    expect(store.schoolActivity()).toEqual(schoolBResult);
+  });
+
   it('clearError üríti a hibaüzenetet', async () => {
     serviceMock.getGroupActivity.mockReturnValue(throwError(() => ({ error: {} })));
     store.loadGroupActivity(10);
