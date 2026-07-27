@@ -40,6 +40,18 @@ export class SchoolStore {
     () => this._schools().find((s) => s.id === this._selectedSchoolId()) ?? null,
   );
 
+  // UI-TT-149: ugyanaz a hiba-osztály, mint a ReportStore/LeaderboardStore/
+  // TeacherApplicationStore (UI-TT-107/148) generációs-számláló fixje: mivel ez
+  // a store `providedIn: 'root'` és a `takeUntilDestroyed(this.destroyRef)` a
+  // STORE saját (gyakorlatilag örökké élő) DestroyRef-jéhez kötött, nem a
+  // fogyasztó komponenséhez, egy intézményről (pl. A) egy másikra (B) való
+  // átnavigálás NEM szakítja meg A még folyamatban lévő HTTP hívását. Ha az
+  // később, B már megjelenített, helyes válasza UTÁN érkezik meg, csendben
+  // felülírná azt. Külön generáció-számláló a két metódushoz, mert egymástól
+  // független signalokba töltenek.
+  private _membersGeneration = 0;
+  private _schoolGroupsGeneration = 0;
+
   /** Igazgató-e a bejelentkezett tanár a kiválasztott intézményben — adat, nem role. */
   readonly isSelectedAdmin = computed(() => this.selectedSchool()?.myRole === 'Admin');
 
@@ -123,18 +135,27 @@ export class SchoolStore {
   }
 
   loadMembers(id: number): void {
+    const generation = ++this._membersGeneration;
     this._loading.set(true);
     this._error.set(null);
     this.service
       .getMembers(id)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._membersGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (members) => this._members.set(members),
-        error: (err) => this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.')),
+        next: (members) => {
+          if (generation !== this._membersGeneration) return;
+          this._members.set(members);
+        },
+        error: (err) => {
+          if (generation !== this._membersGeneration) return;
+          this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.'));
+        },
       });
   }
 
@@ -168,18 +189,27 @@ export class SchoolStore {
   }
 
   loadSchoolGroups(id: number): void {
+    const generation = ++this._schoolGroupsGeneration;
     this._loading.set(true);
     this._error.set(null);
     this.service
       .getSchoolGroups(id)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._schoolGroupsGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (groups) => this._schoolGroups.set(groups),
-        error: (err) => this._error.set(extractErrorMessage(err, 'Az intézmény csoportjainak betöltése sikertelen.')),
+        next: (groups) => {
+          if (generation !== this._schoolGroupsGeneration) return;
+          this._schoolGroups.set(groups);
+        },
+        error: (err) => {
+          if (generation !== this._schoolGroupsGeneration) return;
+          this._error.set(extractErrorMessage(err, 'Az intézmény csoportjainak betöltése sikertelen.'));
+        },
       });
   }
 

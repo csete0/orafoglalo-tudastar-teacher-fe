@@ -161,6 +161,50 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     expect(store.error()).toBe('Nincs jogosultságod.');
   });
 
+  // UI-TT-149: loadMembers()/loadSchoolGroups() generációs-számláló nélkül futott,
+  // ugyanaz a hiba-osztály, mint UI-TT-107/UI-TT-148-nál.
+  it('loadMembers(A) majd loadMembers(B) esetén B KORÁBBI válasza után érkező elavult A-válasz nem írja felül B adatait', async () => {
+    const subjectA = new Subject<import('../../models/school.model').SchoolMemberDto[]>();
+    const subjectB = new Subject<import('../../models/school.model').SchoolMemberDto[]>();
+    serviceMock.getMembers.mockReturnValueOnce(subjectA.asObservable()).mockReturnValueOnce(subjectB.asObservable());
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMembers(1);
+    store.loadMembers(2);
+
+    subjectB.next([{ teacherProfileId: 2, displayName: 'B iskola tanára', role: 'Teacher', joinedAt: '', groupCount: 0 }]);
+    subjectB.complete();
+    await Promise.resolve();
+    expect(store.members()[0].displayName).toBe('B iskola tanára');
+
+    subjectA.next([{ teacherProfileId: 1, displayName: 'A iskola tanára', role: 'Teacher', joinedAt: '', groupCount: 0 }]);
+    subjectA.complete();
+    await Promise.resolve();
+
+    expect(store.members()[0].displayName).toBe('B iskola tanára');
+  });
+
+  it('loadSchoolGroups(A) majd loadSchoolGroups(B) esetén B KORÁBBI válasza után érkező elavult A-válasz nem írja felül B adatait', async () => {
+    const subjectA = new Subject<import('../../models/school.model').SchoolGroupDto[]>();
+    const subjectB = new Subject<import('../../models/school.model').SchoolGroupDto[]>();
+    serviceMock.getSchoolGroups.mockReturnValueOnce(subjectA.asObservable()).mockReturnValueOnce(subjectB.asObservable());
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadSchoolGroups(1);
+    store.loadSchoolGroups(2);
+
+    subjectB.next([{ groupId: 2, name: 'B csoport', teacherDisplayName: '', memberCount: 0, isArchived: false }]);
+    subjectB.complete();
+    await Promise.resolve();
+    expect(store.schoolGroups()[0].name).toBe('B csoport');
+
+    subjectA.next([{ groupId: 1, name: 'A csoport', teacherDisplayName: '', memberCount: 0, isArchived: false }]);
+    subjectA.complete();
+    await Promise.resolve();
+
+    expect(store.schoolGroups()[0].name).toBe('B csoport');
+  });
+
   // BUG UI-TT-9: loadMembers()/loadSchoolGroups() sosem törölte az előző mutáció hibáját indításkor.
   it('egy sikertelen mutáció után egy KÉSŐBBI, SIKERES loadMembers() törli a régi hibaüzenetet', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
