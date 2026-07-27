@@ -154,7 +154,17 @@ export class AuthStore {
                 'Kijelentkeztünk, mert egy másik fiók jelentkezett be ezen az eszközön.',
                 5000,
               );
-              this.performCompleteSignOut();
+              // Regresszió-fix: itt NEM performCompleteSignOut()-ot hívunk. A
+              // localStorage EBBEN a pillanatban már a MÁSIK tab friss, érvényes
+              // munkamenetét tartalmazza (ő írta felül) - egy tokenService.clearTokens()
+              // hívás innen letörölné AZT a legitim, éppen csak most létrejött
+              // munkamenetet is, mert a token/user kulcsok origin-szintűek, nem
+              // tab-szintűek. Ez saját magát becsapó "storage" eseményt váltana ki
+              // a másik tabban, ami így - egy sikeres bejelentkezés UTÁN közvetlenül -
+              // magát is csendben kijelentkeztetné. Ezért itt csak EZEN a tabon
+              // (memóriában) állítjuk vissza a nem-hitelesített állapotot, a
+              // megosztott storage-hoz nem nyúlunk.
+              this.signOutLocallyWithoutClearingStorage();
               return;
             }
 
@@ -277,10 +287,17 @@ export class AuthStore {
 
   private async performCompleteSignOut(callback?: () => void): Promise<void> {
     await this.tokenService.clearTokens();
+    this.signOutLocallyWithoutClearingStorage();
+    if (callback) callback();
+  }
+
+  /** Csak ennek a tabnak az in-memory állapotát állítja vissza
+   *  nem-hitelesítettre - a megosztott (origin-szintű) localStorage-ot
+   *  szándékosan érintetlenül hagyja. Ld. a hívóhely kommentjét. */
+  private signOutLocallyWithoutClearingStorage(): void {
     this._loginResponse.set(null);
     this._isAuthenticated.set(false);
     this._error.set(null);
-    if (callback) callback();
   }
 
   clearError(): void {

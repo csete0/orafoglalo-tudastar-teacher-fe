@@ -255,8 +255,50 @@ describe('AuthStore', () => {
     // láthatatlanul egy másik felhasználóéra.
     expect(store.isAuthenticated()).toBe(false);
     expect(store.currentUser()).toBeNull();
-    expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
+    // Regresszió-fix: a mismatch-ág NEM hívhatja a clearTokens()-t, mert a
+    // localStorage ilyenkor már a MÁSIK tab friss, legitim munkamenetét
+    // tartalmazza - ld. a következő teszt a pontos forgatókönyvre.
+    expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
     expect(TestBed.inject(ToastService).toast()?.message).toContain('másik fiók');
+  });
+
+  it('regresszió-fix: a mismatch-kényszerkijelentkezés NEM törli a megosztott localStorage-ot, mert az már a MÁSIK tab friss, legitim munkamenetét tartalmazza', async () => {
+    // Tab "A" saját, legitim munkamenete: user 1051.
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'a.access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ id: 1051 }));
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
+    // Tab "B" időközben ÉRVÉNYESEN bejelentkezett egy másik userrel (1076),
+    // felülírva a megosztott token/user kulcsokat - ez a jelenlegi (valós)
+    // állapot a storage-ban, amíg ez a teszt fut.
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'b.access.tok.en' : null,
+    );
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ id: 1076 }));
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: STORAGE_KEYS.ACCESS_TOKEN,
+        newValue: 'b.access.tok.en',
+        oldValue: 'a.access.tok.en',
+        storageArea: window.localStorage,
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Tab A helyesen csendben (memóriában) kijelentkezik...
+    expect(store.isAuthenticated()).toBe(false);
+    // ...de EZ SOSEM hívhatja a clearTokens()-t: az törölné Tab B friss,
+    // érvényes munkamenetét is, mivel a kulcsok origin-szintűek. A régi hiba
+    // pontosan ez volt: Tab A kijelentkezése "visszaharapott" Tab B-re.
+    expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
   });
 
   it('UI-TT-142 fix mellett a LEGITIM eset (ugyanaz a user frissült egy másik tabban, pl. token-refresh) továbbra is helyesen működik', async () => {
