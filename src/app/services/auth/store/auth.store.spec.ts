@@ -4,6 +4,7 @@ import { AuthStore } from './auth.store';
 import { AuthService } from '../auth.service';
 import { TokenService } from '../token.service';
 import { STORAGE_KEYS, TeacherUserLoginDto, LoginResponseDto } from '../../../models/auth.model';
+import { ToastService } from '../../../shared/toast/toast.service';
 
 function makeUser(overrides: Partial<TeacherUserLoginDto> = {}): TeacherUserLoginDto {
   return {
@@ -206,6 +207,97 @@ describe('AuthStore', () => {
 
     expect(store.isAuthenticated()).toBe(false);
     expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
+  });
+
+  it('UI-TT-142 fix: ha egy MÁSIK tab EGY MÁSIK, teljesen független fiókkal jelentkezik be ugyanazon origin alatt, ez a tab NEM veszi át csendben az idegen identitást, hanem kényszerített teljes kijelentkezés történik', async () => {
+    // Tab "A" saját, legitim munkamenete: "Admin Tanár" (id 1051, admin+teacher).
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'admin.access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(
+      makeUser({ id: 1051, email: 'admin@example.com', roles: ['student', 'teacher', 'admin'] }),
+    );
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+    expect(store.currentUser()?.id).toBe(1051);
+    expect(store.hasAdminRole()).toBe(true);
+
+    // Egy MÁSIK tabban egy HARMADIK, ezzel a munkamenettel semmilyen
+    // kapcsolatban nem álló felhasználó (id 1076, sima "student", nulla
+    // jogosultság) jelentkezik be ugyanazon origin alatt - ez felülírja a
+    // megosztott "teacher_access_token"/"teacher_user_data"
+    // localStorage-kulcsokat, ami natív 'storage' eseményt vált ki EBBEN a
+    // tabban is (newValue truthy, NEM egy kijelentkezés/törlés).
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'other.users.access.tok.en' : null,
+    );
+    tokenServiceMock.getStoredUser.mockReturnValue(
+      makeUser({ id: 1076, email: 'other-unrelated-user@example.com', roles: ['student'] }),
+    );
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: STORAGE_KEYS.ACCESS_TOKEN,
+        newValue: 'other.users.access.tok.en',
+        oldValue: 'admin.access.tok.en',
+        storageArea: window.localStorage,
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // FIX UTÁN: a más fiók feltűnése ezen az origin-en kényszerített teljes
+    // kijelentkezést vált ki (ugyanúgy, mint a token-törlés ág), NEM egy
+    // csendes identitás-átvételt - az admin munkamenet nem "cserélődik le"
+    // láthatatlanul egy másik felhasználóéra.
+    expect(store.isAuthenticated()).toBe(false);
+    expect(store.currentUser()).toBeNull();
+    expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
+    expect(TestBed.inject(ToastService).toast()?.message).toContain('másik fiók');
+  });
+
+  it('UI-TT-142 fix mellett a LEGITIM eset (ugyanaz a user frissült egy másik tabban, pl. token-refresh) továbbra is helyesen működik', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'old.access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(
+      makeUser({ id: 42, email: 'tanar@example.com', roles: ['teacher'] }),
+    );
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+    expect(store.currentUser()?.id).toBe(42);
+
+    // Egy MÁSIK tabban UGYANAZ a user frissítette a tokenjét (pl. proaktív
+    // refresh) - a user-id nem változik, csak a token-string.
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'refreshed.access.tok.en' : null,
+    );
+    tokenServiceMock.getStoredUser.mockReturnValue(
+      makeUser({ id: 42, email: 'tanar@example.com', roles: ['teacher'] }),
+    );
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: STORAGE_KEYS.ACCESS_TOKEN,
+        newValue: 'refreshed.access.tok.en',
+        oldValue: 'old.access.tok.en',
+        storageArea: window.localStorage,
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Ugyanazon user token-frissülésénél NEM szabad kényszerített
+    // kijelentkezésnek történnie - a munkamenetnek élnie kell tovább.
+    expect(store.isAuthenticated()).toBe(true);
+    expect(store.currentUser()?.id).toBe(42);
+    expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
   });
 
   it('refreshToken utáni "Belépés tanárként" folyamat: onTokenRefreshed frissíti a currentUser roles-t', async () => {

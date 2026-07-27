@@ -6,6 +6,7 @@ import { timer } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { TokenService } from '../token.service';
 import { LoginResponseDto, SignInModel, STORAGE_KEYS, TeacherUserLoginDto, TIMING_CONFIG } from '../../../models/auth.model';
+import { ToastService } from '../../../shared/toast/toast.service';
 
 type AuthError = { message: string; timestamp: Date };
 
@@ -21,6 +22,7 @@ export class AuthStore {
   private readonly authService = inject(AuthService);
   private readonly tokenService = inject(TokenService);
   private readonly ngZone = inject(NgZone);
+  private readonly toastService = inject(ToastService);
 
   private readonly _authCheckComplete = signal(false);
   private readonly _isAuthenticated = signal<boolean | null>(null);
@@ -130,9 +132,33 @@ export class AuthStore {
           this.ngZone.run(() => {
             if (!event.newValue) {
               this.performCompleteSignOut();
-            } else {
-              this.initializeAuthState();
+              return;
             }
+
+            // UI-TT-142: a `teacher_access_token`/`teacher_user_data` kulcsok
+            // origin-szintűek (nem tab-szintűek) - egy MÁSIK tabban történő
+            // bejelentkezés felülírja őket ennek a tabnak is. Az `else` ág
+            // korábban feltétel nélkül átvette az így megjelenő új
+            // identitást (initializeAuthState() a friss localStorage-tartalmat
+            // olvasná be) - ha az új tárolt user ID-je ELTÉR a jelenleg
+            // tartott identitásétól, ez NEM "a saját munkamenetem frissült
+            // máshol", hanem "egy másik fiók vált aktívvá ezen a böngészőn" -
+            // ilyenkor a helyes válasz egy kényszerített teljes kijelentkezés,
+            // ugyanúgy, mint a fenti `!event.newValue` ágnál, NEM egy csendes
+            // identitás-csere.
+            const currentUserId = this.currentUser()?.id;
+            const newUserId = this.tokenService.getStoredUser()?.id;
+
+            if (currentUserId != null && newUserId != null && newUserId !== currentUserId) {
+              this.toastService.warning(
+                'Kijelentkeztünk, mert egy másik fiók jelentkezett be ezen az eszközön.',
+                5000,
+              );
+              this.performCompleteSignOut();
+              return;
+            }
+
+            this.initializeAuthState();
           });
         }
       });
