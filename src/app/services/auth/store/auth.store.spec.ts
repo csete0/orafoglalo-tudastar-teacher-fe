@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AuthStore } from './auth.store';
 import { AuthService } from '../auth.service';
@@ -36,6 +37,7 @@ describe('AuthStore', () => {
     onTokenRefreshed?: (response: LoginResponseDto) => Promise<void>;
     onTokenRefreshFailed?: () => Promise<void>;
   };
+  let routerMock: { navigateByUrl: ReturnType<typeof vi.fn> };
 
   function configure() {
     authServiceMock = {
@@ -55,11 +57,14 @@ describe('AuthStore', () => {
       isRefreshInProgress: false,
     };
 
+    routerMock = { navigateByUrl: vi.fn() };
+
     TestBed.configureTestingModule({
       providers: [
         AuthStore,
         { provide: AuthService, useValue: authServiceMock },
         { provide: TokenService, useValue: tokenServiceMock },
+        { provide: Router, useValue: routerMock },
       ],
     });
   }
@@ -167,9 +172,17 @@ describe('AuthStore', () => {
   });
 
   it('logout: törli a tokeneket és isAuthenticated=false lesz', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser());
     authServiceMock.logout.mockReturnValue(of({}));
 
     const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
     const callback = vi.fn();
     store.logout(callback);
     await Promise.resolve();
@@ -178,6 +191,11 @@ describe('AuthStore', () => {
     expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
     expect(store.isAuthenticated()).toBe(false);
     expect(callback).toHaveBeenCalled();
+    // UI-TT-144: a kijelentkezés a védett oldalról is elnavigál, nem csak a
+    // fejlécet frissíti - a callback (app.component logout()) mellett a
+    // store maga is felelős ezért, hogy minden hívóhely (cross-tab, mismatch,
+    // token-refresh-hiba) "ingyen" megkapja.
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
   it('cross-tab kijelentkezés: egy MÁSIK tabban törölt access_token localStorage-kulcsra érkező natív "storage" eseményre a store kijelentkezteti ezt a tabot is (isAuthenticated=false)', async () => {
@@ -207,6 +225,10 @@ describe('AuthStore', () => {
 
     expect(store.isAuthenticated()).toBe(false);
     expect(tokenServiceMock.clearTokens).toHaveBeenCalled();
+    // UI-TT-144: a védett oldalról is el kell navigálni, nem csak a jelet
+    // flip-elni - a tartalma korábban változatlanul, kattinthatóan a
+    // képernyőn maradt.
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
   it('UI-TT-142 fix: ha egy MÁSIK tab EGY MÁSIK, teljesen független fiókkal jelentkezik be ugyanazon origin alatt, ez a tab NEM veszi át csendben az idegen identitást, hanem kényszerített teljes kijelentkezés történik', async () => {
@@ -260,6 +282,10 @@ describe('AuthStore', () => {
     // tartalmazza - ld. a következő teszt a pontos forgatókönyvre.
     expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
     expect(TestBed.inject(ToastService).toast()?.message).toContain('másik fiók');
+    // UI-TT-144: a mismatch-ág is elnavigál a védett oldalról, ugyanúgy mint
+    // a fenti valódi cross-tab logout eset - csak a storage-törlés maradt ki,
+    // az elnavigálás mindkét ágon indokolt és biztonságos.
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
   it('regresszió-fix: a mismatch-kényszerkijelentkezés NEM törli a megosztott localStorage-ot, mert az már a MÁSIK tab friss, legitim munkamenetét tartalmazza', async () => {
@@ -299,6 +325,10 @@ describe('AuthStore', () => {
     // érvényes munkamenetét is, mivel a kulcsok origin-szintűek. A régi hiba
     // pontosan ez volt: Tab A kijelentkezése "visszaharapott" Tab B-re.
     expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
+    // UI-TT-144: Tab A-nak viszont el KELL navigálnia a nála épp nyitva lévő
+    // védett oldalról - korábban ez elmaradt, és a tartalom (pl. diáklista,
+    // "Eltávolítás" gombokkal) tovább látszott/kattintható maradt.
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
   it('UI-TT-142 fix mellett a LEGITIM eset (ugyanaz a user frissült egy másik tabban, pl. token-refresh) továbbra is helyesen működik', async () => {
@@ -340,6 +370,29 @@ describe('AuthStore', () => {
     expect(store.isAuthenticated()).toBe(true);
     expect(store.currentUser()?.id).toBe(42);
     expect(tokenServiceMock.clearTokens).not.toHaveBeenCalled();
+    // UI-TT-144: mivel itt a munkamenet NEM szűnt meg, semmilyen elnavigálás
+    // nem indokolt - Tab B (a legitim, tovább élő munkamenet tulajdonosa)
+    // sosem eshet át ezen az ágon, hiszen isAuthenticated()-je nem vált false-ra.
+    expect(routerMock.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('UI-TT-144: token-refresh sikertelensége (pl. lejárt refresh-token menet közben) is elnavigál a védett oldalról, nem csak a jelet flip-eli', async () => {
+    tokenServiceMock.getFromStorage.mockImplementation((key: string) =>
+      key === STORAGE_KEYS.ACCESS_TOKEN ? 'access.tok.en' : null,
+    );
+    authServiceMock.getTokenExpiry.mockReturnValue(new Date(Date.now() + 60 * 60_000));
+    tokenServiceMock.getStoredUser.mockReturnValue(makeUser({ roles: ['teacher'] }));
+
+    const store = TestBed.inject(AuthStore);
+    await store.ensureInitialization();
+    expect(store.isAuthenticated()).toBe(true);
+
+    // A tokenService ezt hívná meg, ha egy háttérben futó proaktív
+    // token-refresh sikertelen (pl. a refresh-token is lejárt/érvénytelen).
+    await tokenServiceMock.onTokenRefreshFailed!();
+
+    expect(store.isAuthenticated()).toBe(false);
+    expect(routerMock.navigateByUrl).toHaveBeenCalledWith('/login');
   });
 
   it('refreshToken utáni "Belépés tanárként" folyamat: onTokenRefreshed frissíti a currentUser roles-t', async () => {

@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal, computed, inject, DestroyRef, NgZone } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { finalize, take } from 'rxjs/operators';
 import { timer } from 'rxjs';
 import { AuthService } from '../auth.service';
@@ -23,6 +24,7 @@ export class AuthStore {
   private readonly tokenService = inject(TokenService);
   private readonly ngZone = inject(NgZone);
   private readonly toastService = inject(ToastService);
+  private readonly router = inject(Router);
 
   private readonly _authCheckComplete = signal(false);
   private readonly _isAuthenticated = signal<boolean | null>(null);
@@ -44,8 +46,7 @@ export class AuthStore {
   constructor() {
     this.tokenService.onTokenRefreshed = async (response) => this.handleSuccessfulRefresh(response);
     this.tokenService.onTokenRefreshFailed = async () => {
-      this._isAuthenticated.set(false);
-      this._loginResponse.set(null);
+      this.signOutLocallyWithoutClearingStorage();
     };
 
     this.ensureInitialization();
@@ -293,11 +294,29 @@ export class AuthStore {
 
   /** Csak ennek a tabnak az in-memory állapotát állítja vissza
    *  nem-hitelesítettre - a megosztott (origin-szintű) localStorage-ot
-   *  szándékosan érintetlenül hagyja. Ld. a hívóhely kommentjét. */
+   *  szándékosan érintetlenül hagyja. Ld. a hívóhely kommentjét.
+   *
+   *  UI-TT-144: idáig egyetlen hívóhely sem navigált el a jelenleg nyitva
+   *  lévő védett oldalról, amikor a munkamenet menet közben érvénytelenné
+   *  vált (sem a valódi cross-tab logout, sem a fenti mismatch-ág, sem a
+   *  token-refresh-hiba). Az `authGuard` csak route-AKTIVÁLÁSKOR fut le, a
+   *  `<router-outlet>` sosem volt `isAuthenticated()`-hez kötve - a már
+   *  megjelenített védett tartalom (pl. diáklista, "Eltávolítás" gombokkal)
+   *  a fejléc frissülése után is látható/kattintható maradt, amíg valaki
+   *  manuálisan nem navigált. Mivel ez a metódus pontosan a saját munkamenet
+   *  tényleges érvénytelenné válásának közös pontja (nem fut le Tab B-nél,
+   *  aki épp legitim módon jelentkezett be - ld. fenti mismatch-ág), itt a
+   *  helyes hely az elnavigálásra is. */
   private signOutLocallyWithoutClearingStorage(): void {
+    const wasAuthenticated = this._isAuthenticated() === true;
+
     this._loginResponse.set(null);
     this._isAuthenticated.set(false);
     this._error.set(null);
+
+    if (wasAuthenticated) {
+      this.router.navigateByUrl('/login');
+    }
   }
 
   clearError(): void {
