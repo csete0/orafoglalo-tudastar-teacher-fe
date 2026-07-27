@@ -38,6 +38,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     removeMember: ReturnType<typeof vi.fn>;
     clearError: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
   };
   let reportStoreMock: {
     schoolActivity: ReturnType<typeof signal<unknown[]>>;
@@ -68,6 +69,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
       removeMember: vi.fn(),
       clearError: vi.fn(),
       delete: vi.fn(),
+      update: vi.fn(),
     };
     reportStoreMock = {
       schoolActivity: signal([]),
@@ -223,5 +225,57 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     const askArg = confirmServiceMock.ask.mock.calls[0][0];
     expect(askArg.message).toMatch(/más|kolléga|tanár.*tagság|tagság.*elveszít/i);
+  });
+
+  // UI-TT-146: a backend a Name mezőt [MaxLength(255)]-tel korlátozza; az "Intézmény
+  // szerkesztése" (rename) mező korábban csak egy üres-ellenőrzést kapott, hosszkorlátot
+  // nem — egy 256+ karakteres név csak a beküldés után bukott, egy semmitmondó
+  // "A művelet sikertelen." üzenettel.
+  it('BUG UI-TT-146 javítva: 255 karakternél hosszabb átnevezés esetén a "Mentés" gomb letiltva marad, inline hibaüzenettel, saveEdit() no-op', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    // A `[(ngModel)]`-hez kötött mezőt a valós DOM `input`-eseményen keresztül állítjuk,
+    // ahogy egy tényleges felhasználói gépelés is tenné - a komponens `editName` mezőjének
+    // közvetlen, teszt-oldali felülírása ennél a mélyen egymásba ágyazott (`@if...as` +
+    // `@switch` + `@if`) sablonszerkezetnél nem futtatja újra megbízhatóan a beágyazott
+    // nézeteket egyetlen `detectChanges()`-ciklus alatt.
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input.input.flex-1');
+    input.value = 'a'.repeat(256);
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editName.length).toBe(256);
+    const saveButton = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Mentés'),
+    ) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Az intézmény neve legfeljebb 255 karakter hosszú lehet.');
+
+    fixture.componentInstance.saveEdit(1);
+    expect(schoolStoreMock.update).not.toHaveBeenCalled();
+  });
+
+  it('pontosan 255 karakteres átnevezés esetén a "Mentés" gomb aktív, saveEdit() meghívja a store.update()-et', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input.input.flex-1');
+    input.value = 'a'.repeat(255);
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editName.length).toBe(255);
+    const saveButton = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Mentés'),
+    ) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(false);
+
+    fixture.componentInstance.saveEdit(1);
+    expect(schoolStoreMock.update).toHaveBeenCalledWith(1, { name: 'a'.repeat(255) }, expect.any(Function));
   });
 });

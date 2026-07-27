@@ -103,9 +103,12 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
               <div class="card p-5">
                 <h2 class="font-bold mb-3">Intézmény szerkesztése</h2>
                 <div class="flex gap-2 mb-3">
-                  <input [(ngModel)]="editName" placeholder="Név" class="input flex-1" />
-                  <button (click)="saveEdit(s.id)" class="btn btn-primary">Mentés</button>
+                  <input [(ngModel)]="editName" placeholder="Név" maxlength="255" class="input flex-1" />
+                  <button (click)="saveEdit(s.id)" [disabled]="!editName.trim() || editName.length > 255" class="btn btn-primary">Mentés</button>
                 </div>
+                @if (editName.length > 255) {
+                  <p class="text-sm text-danger mb-3">Az intézmény neve legfeljebb 255 karakter hosszú lehet.</p>
+                }
                 <button (click)="deleteSchool(s.id, s.groupCount)" class="text-sm text-danger hover:underline">
                   Intézmény törlése
                 </button>
@@ -321,7 +324,7 @@ export class IntezmenyReszletekComponent implements OnInit {
   }
 
   saveEdit(schoolId: number): void {
-    if (!this.editName.trim()) return;
+    if (!this.editName.trim() || this.editName.length > 255) return;
     this.school.update(schoolId, { name: this.editName.trim() }, () =>
       this.toastService.success('Intézmény átnevezve.'),
     );

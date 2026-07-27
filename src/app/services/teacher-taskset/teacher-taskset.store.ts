@@ -12,6 +12,7 @@ import {
   TeacherTaskSetDetailDto,
   TeacherTaskSetDto,
 } from '../../models/teacher-content.model';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /**
  * A mutáló metódusok (feladat/megoldás/snippet/fájl) minden sikeres hívás
@@ -20,45 +21,6 @@ import {
  * konzisztens újraépítés helyett ez a legkevésbé hibalehetőséges megoldás
  * egy belső, kis-adatmennyiségű eszköznél.
  */
-
-/**
- * UI-TT-89/UI-TT-90: a backend hibaválaszai VÉGPONTONKÉNT eltérő alakúak -
- * a legtöbb helyen `{ errorMessage: string }`, a publish() viszont
- * `PublishResultDto`-t ad HTTP-hibaágon is (`{ errors: string[] }`), az
- * ASP.NET DataAnnotations validáció pedig sztenderd `ValidationProblemDetails`-t
- * (`{ errors: { [field: string]: string[] } }`). Korábban csak az `errorMessage`
- * mezőt olvastuk ki, a másik két alak esetén a store csendben eldobta a
- * konkrét backend-indokot, és a tanár csak egy tartalmatlan generikus
- * üzenetet látott. Ez a helper mindhárom alakot (és a szótár-alakot) sorban
- * megpróbálja, mielőtt a hívó által megadott generikus szöveghez folyamodna.
- */
-function extractErrorMessage(err: any, fallback: string): string {
-  // UI-TT-109: egy nginx `client_max_body_size`-t meghaladó fájlfeltöltés HTML-testű
-  // 413-at ad vissza (nem JSON-t) — a body?.errorMessage/body?.errors ellenőrzések erre
-  // értelemszerűen sosem illenek rá, ezért ez korábban csendben a tartalmatlan `fallback`
-  // üzenetre esett vissza, és a tanár sosem tudta meg, hogy a fájl mérete volt a gond
-  // (és a nginx-limit jóval alacsonyabb, mint a dokumentált, kind-onkénti app-szintű
-  // limitek). A státuszkódot a body-értelmezés ELŐTT kell ellenőrizni, mert a body ebben
-  // az esetben irreleváns/nem-parseolható.
-  if (err?.status === 413) {
-    return 'A feltöltött fájl mérete meghaladja a megengedett korlátot.';
-  }
-  const body = err?.error;
-  if (typeof body?.errorMessage === 'string' && body.errorMessage.trim()) {
-    return body.errorMessage;
-  }
-  if (Array.isArray(body?.errors)) {
-    const joined = body.errors.filter((e: unknown) => typeof e === 'string' && e.trim()).join(' ');
-    if (joined) return joined;
-  } else if (body?.errors && typeof body.errors === 'object') {
-    const joined = Object.values(body.errors as Record<string, unknown>)
-      .flatMap((messages) => (Array.isArray(messages) ? messages : [messages]))
-      .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
-      .join(' ');
-    if (joined) return joined;
-  }
-  return fallback;
-}
 @Injectable({ providedIn: 'root' })
 export class TeacherTaskSetStore {
   private readonly destroyRef = inject(DestroyRef);

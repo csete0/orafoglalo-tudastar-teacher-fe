@@ -67,9 +67,12 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <form [formGroup]="createForm" (ngSubmit)="createSchool()" class="card p-5 space-y-2">
           <h2 class="font-bold">Új intézmény</h2>
-          <input formControlName="name" placeholder="Intézmény neve" class="input" />
+          <input formControlName="name" placeholder="Intézmény neve" maxlength="255" class="input" />
           @if (createForm.controls.name.hasError('blank')) {
             <p class="text-sm text-danger">Az intézmény neve nem állhat kizárólag szóközökből.</p>
+          }
+          @if (createForm.controls.name.hasError('maxlength')) {
+            <p class="text-sm text-danger">Az intézmény neve legfeljebb 255 karakter hosszú lehet.</p>
           }
           <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary !px-3 !py-1.5">
             Létrehozás
@@ -93,7 +96,9 @@ export class IntezmenyekListaComponent {
   private readonly confirmService = inject(ConfirmService);
   readonly store = inject(SchoolStore);
 
-  readonly createForm = this.fb.nonNullable.group({ name: ['', [Validators.required, notBlankValidator()]] });
+  readonly createForm = this.fb.nonNullable.group({
+    name: ['', [Validators.required, notBlankValidator(), Validators.maxLength(255)]],
+  });
   readonly joinForm = this.fb.nonNullable.group({ code: ['', Validators.required] });
 
   constructor() {

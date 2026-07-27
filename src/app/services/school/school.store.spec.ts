@@ -116,6 +116,25 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     expect(onSuccess).toHaveBeenCalled();
   });
 
+  // UI-TT-146: a backend egy 255 karakternél hosszabb intézménynévre sztenderd ASP.NET
+  // `ValidationProblemDetails`-t ad vissza (`{ errors: { Name: [...] } }`), nem
+  // `{ errorMessage }`-et — a mutate()-nak korábban csak az utóbbi alakot ismerte fel,
+  // ezért a valódi backend-indok helyett mindig a generikus "A művelet sikertelen."
+  // üzenetre esett vissza.
+  it('BUG UI-TT-146 javítva: create() ValidationProblemDetails hibaválasz esetén a mezőszintű üzenetet mutatja, nem a generikus fallbacket', async () => {
+    serviceMock.getMine.mockReturnValue(of([]));
+    serviceMock.create.mockReturnValue(
+      throwError(() => ({ error: { errors: { Name: ['A Name mező legfeljebb 255 karakter hosszú lehet.'] } } })),
+    );
+
+    const store = TestBed.inject(SchoolStore);
+    store.create({ name: 'a'.repeat(256) });
+    await Promise.resolve();
+
+    expect(store.error()).toBe('A Name mező legfeljebb 255 karakter hosszú lehet.');
+    expect(store.error()).not.toContain('sikertelen.');
+  });
+
   it('delete után az intézmény kikerül a listából és a kiválasztás törlődik', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
     serviceMock.delete.mockReturnValue(of({}));

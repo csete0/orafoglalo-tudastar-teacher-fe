@@ -75,6 +75,40 @@ describe('CsoportokListaComponent', () => {
     expect(submitButton.disabled).toBe(false);
   });
 
+  // UI-TT-146: a backend a Name mezőt [MaxLength(255)]-tel korlátozza; a kliens-oldali
+  // formnak korábban semmilyen hosszkorlátja nem volt, így egy 256+ karakteres név
+  // csak a beküldés után, egy semmitmondó "A művelet sikertelen." üzenettel bukott.
+  it('BUG UI-TT-146 javítva: 255 karakternél hosszabb név esetén a "Létrehozás" gomb letiltva marad, inline hibaüzenettel', () => {
+    configure();
+    const fixture = TestBed.createComponent(CsoportokListaComponent);
+    fixture.detectChanges();
+
+    // Két lépésben állítjuk be az értéket (előbb egy VALÓS, majd a túl hosszú érték),
+    // ugyanazon okból, mint a fenti "blank" tesztnél - egyetlen hibás állapotból egy
+    // másik hibás állapotba váltás nem biztos, hogy egy detectChanges()-ciklus alatt látszik.
+    fixture.componentInstance.createForm.controls.name.setValue('Valid Name First');
+    fixture.detectChanges();
+
+    fixture.componentInstance.createForm.controls.name.setValue('a'.repeat(256));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.createForm.invalid).toBe(true);
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[type="submit"]');
+    expect(submitButton.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('A csoport neve legfeljebb 255 karakter hosszú lehet.');
+  });
+
+  it('pontosan 255 karakteres név esetén a form érvényes', () => {
+    configure();
+    const fixture = TestBed.createComponent(CsoportokListaComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.createForm.controls.name.setValue('a'.repeat(255));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.createForm.valid).toBe(true);
+  });
+
   it('create() whitespace-only névvel NEM hívja meg a store.create()-et', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);

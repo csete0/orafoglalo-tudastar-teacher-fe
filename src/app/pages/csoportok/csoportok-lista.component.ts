@@ -75,9 +75,12 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
       <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
         <h2 class="font-bold">Új csoport</h2>
-        <input formControlName="name" placeholder="Csoport neve (pl. 11.A)" class="input" />
+        <input formControlName="name" placeholder="Csoport neve (pl. 11.A)" maxlength="255" class="input" />
         @if (createForm.controls.name.hasError('blank')) {
           <p class="text-sm text-danger">A csoport neve nem állhat kizárólag szóközökből.</p>
+        }
+        @if (createForm.controls.name.hasError('maxlength')) {
+          <p class="text-sm text-danger">A csoport neve legfeljebb 255 karakter hosszú lehet.</p>
         }
 
         @if (schoolStore.schools().length > 0) {
@@ -105,7 +108,7 @@ export class CsoportokListaComponent {
   readonly schoolStore = inject(SchoolStore);
 
   readonly createForm = this.fb.nonNullable.group({
-    name: ['', [Validators.required, notBlankValidator()]],
+    name: ['', [Validators.required, notBlankValidator(), Validators.maxLength(255)]],
     schoolId: this.fb.control<number | null>(null),
   });
 

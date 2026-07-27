@@ -11,6 +11,7 @@ import {
   SchoolGroupDto,
   SchoolMemberDto,
 } from '../../models/school.model';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /**
  * Adat-vezérelt szerep-állapot: a `MyRole` az adott intézmény DTO-jának
@@ -55,7 +56,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (schools) => this._schools.set(schools),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az intézmények betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'Az intézmények betöltése sikertelen.')),
       });
   }
 
@@ -127,7 +128,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (members) => this._members.set(members),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A tagok betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.')),
       });
   }
 
@@ -172,7 +173,7 @@ export class SchoolStore {
       )
       .subscribe({
         next: (groups) => this._schoolGroups.set(groups),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az intézmény csoportjainak betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'Az intézmény csoportjainak betöltése sikertelen.')),
       });
   }
 
@@ -206,7 +207,7 @@ export class SchoolStore {
           // maga is nullázza az error-t indításkor, ezért a hibaüzenetet UTÁNA
           // állítjuk be, hogy a hívó lássa, miért utasította el a backend.
           this.loadMine();
-          this._error.set(err.error?.errorMessage ?? 'A művelet sikertelen.');
+          this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
         },
       });
   }

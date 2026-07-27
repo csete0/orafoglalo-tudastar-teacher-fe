@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { GroupStore } from './group.store';
 import { GroupService } from './group.service';
 import { GroupDto } from '../../models/group.model';
@@ -21,6 +21,7 @@ describe('GroupStore', () => {
   let serviceMock: {
     getMine: ReturnType<typeof vi.fn>;
     unarchive: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
   };
   let store: GroupStore;
 
@@ -28,6 +29,7 @@ describe('GroupStore', () => {
     serviceMock = {
       getMine: vi.fn(),
       unarchive: vi.fn(),
+      create: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -75,5 +77,22 @@ describe('GroupStore', () => {
 
     unarchiveSubject.next({});
     unarchiveSubject.complete();
+  });
+
+  // UI-TT-146: a backend egy 255 karakternél hosszabb csoportnévre sztenderd ASP.NET
+  // `ValidationProblemDetails`-t ad vissza (`{ errors: { Name: [...] } }`), nem
+  // `{ errorMessage }`-et — a mutate()-nak korábban csak az utóbbi alakot ismerte fel,
+  // ezért a valódi backend-indok helyett mindig a generikus "A művelet sikertelen."
+  // üzenetre esett vissza.
+  it('BUG UI-TT-146 javítva: create() ValidationProblemDetails hibaválasz esetén a mezőszintű üzenetet mutatja, nem a generikus fallbacket', () => {
+    serviceMock.getMine.mockReturnValue(of([]));
+    serviceMock.create.mockReturnValue(
+      throwError(() => ({ error: { errors: { Name: ['A Name mező legfeljebb 255 karakter hosszú lehet.'] } } })),
+    );
+
+    store.create({ name: 'a'.repeat(256) });
+
+    expect(store.error()).toBe('A Name mező legfeljebb 255 karakter hosszú lehet.');
+    expect(store.error()).not.toContain('sikertelen.');
   });
 });

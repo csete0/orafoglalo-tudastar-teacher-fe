@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { GroupService } from './group.service';
 import { CreateGroupRequest, GroupDto, GroupMemberDto } from '../../models/group.model';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 @Injectable({ providedIn: 'root' })
 export class GroupStore {
@@ -37,7 +38,7 @@ export class GroupStore {
       )
       .subscribe({
         next: (groups) => this._groups.set(groups),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A csoportok betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A csoportok betöltése sikertelen.')),
       });
   }
 
@@ -88,7 +89,7 @@ export class GroupStore {
       )
       .subscribe({
         next: (members) => this._members.set(members),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A tagok betöltése sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.')),
       });
   }
 
@@ -146,7 +147,7 @@ export class GroupStore {
       .subscribe({
         next: onSuccess,
         error: (err) => {
-          const message = err.error?.errorMessage ?? 'A művelet sikertelen.';
+          const message = extractErrorMessage(err, 'A művelet sikertelen.');
           this._error.set(message);
           if (onError) onError(message);
         },
