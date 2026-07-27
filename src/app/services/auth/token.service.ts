@@ -174,7 +174,18 @@ export class TokenService {
     return accessToken;
   }
 
-  async performTokenRefresh(): Promise<string | null> {
+  /**
+   * @param force  A hívó kikényszeríti a VALÓDI, hálózati refresh-t akkor is,
+   *   ha a jelenlegi token még messze van a lejárattól. Erre azért van szükség,
+   *   mert két, alapvetően különböző szándék fut ugyanezen a metóduson:
+   *   (a) ambiens/proaktív frissítés ("frissíts, ha már közel a lejárat") —
+   *       itt a `refreshUnderLock` rövidzárja helyes és kívánatos optimalizáció;
+   *   (b) imperatív claim-újrakérés ("a szerepköreim MOST változtak a szerveren,
+   *       adj új tokent") — itt a lejárati idő teljesen irreleváns, a rövidzár
+   *       viszont némán elnyelte a kérést (UI-TT-150).
+   *   Alapértelmezés `false`: minden meglévő, ambiens hívó viselkedése változatlan.
+   */
+  async performTokenRefresh(force = false): Promise<string | null> {
     if (this.refreshInProgress) {
       return this.waitForRefresh();
     }
@@ -194,16 +205,21 @@ export class TokenService {
     // /api/auth/refresh hívást, ami a fenti okból elhasalna).
     if (typeof navigator !== 'undefined' && navigator.locks?.request) {
       return navigator.locks.request(TokenService.CROSS_TAB_REFRESH_LOCK, () =>
-        this.refreshUnderLock(),
+        this.refreshUnderLock(force),
       );
     }
 
     return this.doTokenRefresh();
   }
 
-  private async refreshUnderLock(): Promise<string | null> {
+  private async refreshUnderLock(force = false): Promise<string | null> {
     const current = this.getFromStorage(STORAGE_KEYS.ACCESS_TOKEN);
-    if (current && this.isValidTokenFormat(current) && !this.shouldRefreshToken(current)) {
+    // UI-TT-150: `force` esetén ezt a rövidzárat ÁT KELL ugrani. A rövidzár
+    // feltételezése ("ha a token még friss, valaki más már elvégezte helyettünk
+    // a munkát") csak az ambiens frissítésre igaz; egy claim-változás utáni
+    // imperatív kérésnél a token frissessége semmit nem mond arról, hogy a
+    // benne lévő szerepkörök naprakészek-e.
+    if (!force && current && this.isValidTokenFormat(current) && !this.shouldRefreshToken(current)) {
       // Egy másik tab, amíg erre a tabra a zár várt, már elvégezte a
       // frissítést - a friss tokent egyszerűen visszaadjuk, redundáns hívás
       // (és az ezzel járó reuse-elutasítás) nélkül.

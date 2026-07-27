@@ -158,7 +158,13 @@ export class JelentkezesComponent {
     // eseteknek szánt védelem) - ez itt elnyomná az alábbi dedikált
     // hibaüzenetet. A `WithoutAutoRedirect` variáns elnyomja azt a
     // redirectet erre az egy hívásra, a hiba-jelzést viszont megkapjuk.
-    const newToken = await this.authStore.refreshTokenWithoutAutoRedirect();
+    // UI-TT-150: `force: true` KÖTELEZŐ itt. Enélkül a TokenService
+    // `refreshUnderLock()` rövidzára némán visszaadta a MEGLÉVŐ tokent (mert az
+    // még messze volt a lejárattól), hálózati hívás nélkül — így a frissen
+    // megkapott `teacher` szerepkör sosem került bele a tokenbe, a lenti
+    // navigáció pedig a roleGuard-on visszapattant ide. A gomb kívülről nézve
+    // teljesen némán, visszajelzés nélkül nem csinált semmit.
+    const newToken = await this.authStore.refreshTokenWithoutAutoRedirect(true);
     if (!newToken) {
       // UI-TT-16: sikertelen refresh esetén a TokenService a munkamenetet
       // már törölte (onTokenRefreshFailed) — ne navigáljunk tovább néma
@@ -168,6 +174,20 @@ export class JelentkezesComponent {
       );
       return;
     }
+
+    // UI-TT-150: a refresh sikeres volt, de ettől még nem biztos, hogy a
+    // `teacher` szerepkör tényleg benne van az új tokenben (pl. a jóváhagyást
+    // szerver-oldalon visszavonták, vagy egy épp folyamatban lévő ambiens
+    // refresh eredményét kaptuk vissza, ami még a jóváhagyás ELŐTT indult).
+    // Ilyenkor a /dashboard-ra navigálás a roleGuard-on visszapattanna ide,
+    // magyarázat nélkül — inkább mondjuk meg, mi történt.
+    if (!this.authStore.hasTeacherRole()) {
+      this.enterAsTeacherError.set(
+        'A tanári jogosultság még nem érvényesült. Próbáld újra néhány másodperc múlva.',
+      );
+      return;
+    }
+
     this.router.navigateByUrl('/dashboard', { replaceUrl: true });
   }
 }

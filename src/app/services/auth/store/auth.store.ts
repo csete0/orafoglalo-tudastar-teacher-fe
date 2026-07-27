@@ -80,10 +80,10 @@ export class AuthStore {
    *  (a háttér-monitor és egy explicit gombnyomás egybeesése rendkívül
    *  ritka), és a `finally` blokk biztosítja, hogy a hívás lezárása UTÁN
    *  minden KÉSŐBBI, ehhez nem kapcsolódó hiba ismét helyesen navigál. */
-  async refreshTokenWithoutAutoRedirect(): Promise<string | null> {
+  async refreshTokenWithoutAutoRedirect(force = false): Promise<string | null> {
     this.suppressAutoRedirectOnRefreshFailure = true;
     try {
-      return await this.tokenService.performTokenRefresh();
+      return await this.tokenService.performTokenRefresh(force);
     } finally {
       this.suppressAutoRedirectOnRefreshFailure = false;
     }

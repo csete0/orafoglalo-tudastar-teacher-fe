@@ -165,8 +165,15 @@ describe('JelentkezesComponent', () => {
       expect(fixture.nativeElement.textContent).toContain(fixture.componentInstance.enterAsTeacherError());
     });
 
+    // UI-TT-150: a `hasTeacherRole: true` NEM a teszt gyengítése, hanem a
+    // fixture valósághűvé tétele. A sikeres ág definíció szerint azt jelenti,
+    // hogy a refresh a MÁR jóváhagyott tanári szerepkört tartalmazó tokent adta
+    // vissza (a valódi láncban a `handleSuccessfulRefresh` frissíti is a
+    // `roles()`-t) - a korábbi fixture egy lehetetlen állapotot modellezett
+    // ("sikeres tanári belépés, de a store szerint nem vagyok tanár"), és pont
+    // ezért nem tűnt fel neki, hogy a komponens sosem ellenőrizte a szerepkört.
     it('sikeres refresh esetén a dashboardra navigál, hiba nélkül', async () => {
-      configure({ application: null, checked: true, isApproved: true });
+      configure({ application: null, checked: true, isApproved: true, hasTeacherRole: true });
       authStoreMock.refreshTokenWithoutAutoRedirect.mockResolvedValue('new-token');
 
       const fixture = TestBed.createComponent(JelentkezesComponent);
@@ -284,6 +291,179 @@ describe('JelentkezesComponent', () => {
 
           expect(authStore.isAuthenticated()).toBe(false);
           expect(navigateSpy).toHaveBeenCalledWith('/login');
+        },
+        10000,
+      );
+    });
+
+    /**
+     * UI-TT-150. A fenti "valódi lánc" blokk SEM vette észre ezt a hibát, mert
+     * a `navigator.locks` a teszt-környezetben (jsdom) NINCS definiálva —
+     * ellenőrzött tény, nem feltételezés —, így a tesztek a
+     * `TokenService.performTokenRefresh()` NEM-zárolt ágán futottak
+     * (`doTokenRefresh()` közvetlenül), miközben minden valódi böngésző a
+     * `refreshUnderLock()` ágra megy. A hiba pontosan abban a rövidzárban élt,
+     * amit csak a zárolt ág futtat — vagyis egy egész kódág volt szisztematikusan
+     * teszteletlen. Ez a blokk minimális `navigator.locks` stubbal KIKÉNYSZERÍTI
+     * a zárolt ágat, hogy ez az osztály ne tudjon még egyszer észrevétlenül
+     * visszaregresszálni.
+     */
+    describe('zárolt (navigator.locks) ág — UI-TT-150', () => {
+      let locksRequestSpy: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        locksRequestSpy = vi.fn(async (_name: string, cb: () => Promise<unknown>) => cb());
+        Object.defineProperty(navigator, 'locks', {
+          value: { request: locksRequestSpy },
+          configurable: true,
+          writable: true,
+        });
+      });
+
+      afterEach(() => {
+        delete (navigator as unknown as Record<string, unknown>)['locks'];
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+      });
+
+      function configureLocked(authServiceMock: Partial<AuthService>) {
+        storeMock = {
+          application: signal(null),
+          loading: signal(false),
+          error: signal(null),
+          checked: signal(true),
+          status: signal(null),
+          isPending: signal(false),
+          isApproved: signal(true),
+          isRejected: signal(false),
+          loadMine: vi.fn(),
+          apply: vi.fn(),
+        };
+
+        localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, 'access.tok.en');
+        localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(makeAuthUser({ roles: ['student'] })));
+
+        TestBed.configureTestingModule({
+          imports: [JelentkezesComponent],
+          providers: [
+            provideRouter([]),
+            AuthStore,
+            { provide: TeacherApplicationStore, useValue: storeMock },
+            { provide: AuthService, useValue: authServiceMock },
+          ],
+        });
+      }
+
+      it(
+        'BUG UI-TT-150: a lejárattól MESSZE lévő token ellenére is VALÓDI hálózati refresh-t indít (a zárolt ág rövidzára nem nyelheti el)',
+        async () => {
+          const refreshTokens = vi.fn(() =>
+            of({ accessToken: 'new.tok.en', user: makeAuthUser({ roles: ['teacher'] }), isAuthenticated: true }),
+          );
+          configureLocked({
+            // 60 perc a lejáratig, a REFRESH_THRESHOLD 5 perc -> shouldRefreshToken() === false.
+            // PONTOSAN ez az éles helyzet, amiben a gomb némán nem csinált semmit.
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            refreshTokens,
+          } as unknown as Partial<AuthService>);
+
+          const fixture = TestBed.createComponent(JelentkezesComponent);
+          const router = TestBed.inject(Router);
+          const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+          fixture.detectChanges();
+
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+          expect(refreshTokens).not.toHaveBeenCalled();
+
+          await fixture.componentInstance.enterAsTeacher();
+
+          // A fix nélkül ez 0 hívás volt: a rövidzár visszaadta a régi tokent.
+          expect(refreshTokens).toHaveBeenCalledTimes(1);
+          expect(locksRequestSpy).toHaveBeenCalled();
+          expect(navigateSpy).toHaveBeenCalledWith('/dashboard', { replaceUrl: true });
+          expect(fixture.componentInstance.enterAsTeacherError()).toBeNull();
+        },
+        10000,
+      );
+
+      it(
+        'UI-TT-150 nem regresszál: az AMBIENS (nem kikényszerített) refresh a zárolt ágon TOVÁBBRA IS rövidzár — nincs fölösleges hálózati hívás',
+        async () => {
+          const refreshTokens = vi.fn(() =>
+            of({ accessToken: 'new.tok.en', user: makeAuthUser(), isAuthenticated: true }),
+          );
+          configureLocked({
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            refreshTokens,
+          } as unknown as Partial<AuthService>);
+
+          TestBed.createComponent(JelentkezesComponent).detectChanges();
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+
+          // A sima refreshToken() az ambiens hívó - a friss token miatt a
+          // rövidzárnak el KELL nyelnie, különben minden háttér-frissítés
+          // fölösleges /api/auth/refresh hívást generálna.
+          await authStore.refreshToken();
+
+          expect(refreshTokens).not.toHaveBeenCalled();
+        },
+        10000,
+      );
+
+      it(
+        'UI-TT-145 immár ténylegesen elérhető: a kikényszerített refresh HIBÁJA inline hibaüzenetet ad, NEM /login-redirectet',
+        async () => {
+          configureLocked({
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            refreshTokens: vi.fn(() => throwError(() => new Error('hálózati hiba'))),
+          } as unknown as Partial<AuthService>);
+
+          const fixture = TestBed.createComponent(JelentkezesComponent);
+          const router = TestBed.inject(Router);
+          const navigateSpy = vi.spyOn(router, 'navigateByUrl');
+          fixture.detectChanges();
+
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+
+          await fixture.componentInstance.enterAsTeacher();
+          fixture.detectChanges();
+
+          expect(navigateSpy).not.toHaveBeenCalledWith('/login');
+          expect(navigateSpy).not.toHaveBeenCalledWith('/dashboard', { replaceUrl: true });
+          expect(fixture.componentInstance.enterAsTeacherError()).toBeTruthy();
+        },
+        10000,
+      );
+
+      it(
+        'UI-TT-150: sikeres refresh UTÁN is hiányzó teacher-szerepkörnél hibát jelez, nem navigál a roleGuard-ra visszapattanni',
+        async () => {
+          configureLocked({
+            getTokenExpiry: vi.fn().mockReturnValue(new Date(Date.now() + 60 * 60_000)),
+            // A refresh sikeres, de a szerver szerint a user MÉG MINDIG csak diák
+            // (pl. a jóváhagyást visszavonták, vagy egy a jóváhagyás ELŐTT indult
+            // ambiens refresh eredményét kaptuk vissza).
+            refreshTokens: vi.fn(() =>
+              of({ accessToken: 'new.tok.en', user: makeAuthUser({ roles: ['student'] }), isAuthenticated: true }),
+            ),
+          } as unknown as Partial<AuthService>);
+
+          const fixture = TestBed.createComponent(JelentkezesComponent);
+          const router = TestBed.inject(Router);
+          const navigateSpy = vi.spyOn(router, 'navigateByUrl');
+          fixture.detectChanges();
+
+          const authStore = TestBed.inject(AuthStore);
+          await authStore.ensureInitialization();
+
+          await fixture.componentInstance.enterAsTeacher();
+          fixture.detectChanges();
+
+          expect(navigateSpy).not.toHaveBeenCalledWith('/dashboard', { replaceUrl: true });
+          expect(fixture.componentInstance.enterAsTeacherError()).toBeTruthy();
         },
         10000,
       );
