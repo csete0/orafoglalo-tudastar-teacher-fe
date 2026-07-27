@@ -321,4 +321,74 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
     expect(store.isSelectedAdmin()).toBe(false);
   });
+
+  // BUG UI-TT-147: a közös `mutate()` helper KÜLSŐ `finalize()`-a a
+  // `removeMember()`/`changeMemberRole()` SIKER-ágából szinkron módon indított
+  // beágyazott `loadMine()` által frissen true-ra állított `_loading`-ot
+  // AZONNAL vissza állította false-ra, MIELŐTT a beágyazott GET ténylegesen
+  // befejeződött volna (az RxJS a `next`/`error` callbacket a `finalize()`
+  // ELŐTT futtatja le) - ugyanaz a hibaosztály, mint amit a
+  // `TeacherTaskSetStore.mutateAndReload()` és az `AdminSchoolStore.merge()`
+  // már korábban explicit módon elkerült (lásd azok "Nincs finalize() itt"
+  // megjegyzését). Emiatt a `regenerateInvite()` saját
+  // `if (this._loading()) return;` guardja (UI-TT-120 fix) ebben a rövid
+  // ablakban hatástalan volt.
+  it('BUG UI-TT-147: removeMember() sikere utáni beágyazott loadMine() alatt a loading() true marad (nem áll vissza korán false-ra)', async () => {
+    serviceMock.getMine.mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]));
+    const removeSubject = new Subject<unknown>();
+    serviceMock.removeMember.mockReturnValue(removeSubject.asObservable());
+    const reloadSubject = new Subject<SchoolDto[]>();
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    store.removeMember(1, 42);
+    expect(store.loading()).toBe(true);
+
+    // A removeMember() válasza megérkezik - ez szinkron módon elindítja a
+    // beágyazott loadMine()-t (getMine második hívása), aminek a válasza még
+    // NEM érkezett meg.
+    serviceMock.getMine.mockReturnValueOnce(reloadSubject.asObservable());
+    removeSubject.next({});
+    removeSubject.complete();
+
+    // A HELYES viselkedés: loading() MÉG true, mert a beágyazott reload még
+    // folyamatban van - ez a hibás verzióban itt false-ra váltott volna.
+    expect(store.loading()).toBe(true);
+    expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
+
+    // Amíg a beágyazott reload folyamatban van, egy "Új kód generálása"
+    // kattintás guardjának (UI-TT-120) is blokkolnia kell - ez a hibás
+    // verzióban ÁTMENT volna, mert a loading() időközben tévesen false volt.
+    store.regenerateInvite(1);
+    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
+
+    reloadSubject.next([makeSchool({ id: 1, myRole: 'Admin' })]);
+    reloadSubject.complete();
+    await Promise.resolve();
+
+    expect(store.loading()).toBe(false);
+  });
+
+  it('create() sikere után loading() false-ra vált (nincs beágyazott reload, a hívó saját magát állítja vissza)', async () => {
+    serviceMock.getMine.mockReturnValue(of([]));
+    const createSubject = new Subject<SchoolDto>();
+    serviceMock.create.mockReturnValue(createSubject.asObservable());
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+
+    store.create({ name: 'Új Iskola' } as never);
+    expect(store.loading()).toBe(true);
+
+    createSubject.next(makeSchool({ id: 2, name: 'Új Iskola' }));
+    createSubject.complete();
+    await Promise.resolve();
+
+    expect(store.loading()).toBe(false);
+    expect(store.schools().some((s) => s.id === 2)).toBe(true);
+  });
 });

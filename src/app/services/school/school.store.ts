@@ -70,6 +70,7 @@ export class SchoolStore {
     this.mutate(this.service.create(request), (school) => {
       this._schools.update((list) => [...list, school]);
       if (onSuccess) onSuccess(school);
+      this._loading.set(false);
     });
   }
 
@@ -81,6 +82,7 @@ export class SchoolStore {
           : [...list, school],
       );
       if (onSuccess) onSuccess(school);
+      this._loading.set(false);
     });
   }
 
@@ -88,6 +90,7 @@ export class SchoolStore {
     this.mutate(this.service.update(id, request), (school) => {
       this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
       if (onSuccess) onSuccess();
+      this._loading.set(false);
     });
   }
 
@@ -97,6 +100,7 @@ export class SchoolStore {
     this.mutate(this.service.regenerateTeacherInvite(id), (school) => {
       this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
       if (onSuccess) onSuccess();
+      this._loading.set(false);
     });
   }
 
@@ -105,6 +109,7 @@ export class SchoolStore {
       this._schools.update((list) => list.filter((s) => s.id !== id));
       if (this._selectedSchoolId() === id) this.select(null);
       if (onSuccess) onSuccess();
+      this._loading.set(false);
     });
   }
 
@@ -113,6 +118,7 @@ export class SchoolStore {
       this._schools.update((list) => list.filter((s) => s.id !== id));
       if (this._selectedSchoolId() === id) this.select(null);
       if (onSuccess) onSuccess();
+      this._loading.set(false);
     });
   }
 
@@ -181,16 +187,24 @@ export class SchoolStore {
     this._error.set(null);
   }
 
+  // UI-TT-147: NINCS finalize() itt (szándékosan, ugyanaz a minta, mint
+  // TeacherTaskSetStore.mutateAndReload()-nál / AdminSchoolStore.merge()-nél) —
+  // hiba esetén ez a helper MINDIG loadMine()-t hív (lásd lent), siker esetén
+  // pedig egyes hívók (removeMember/changeMemberRole) SZINTÉN loadMine()-t
+  // hívnak a saját onSuccess-ükből. Egy outer finalize() ilyenkor a nested
+  // loadMine() ÁLTAL frissen true-ra állított _loading-ot azonnal vissza
+  // állítaná false-ra, MIELŐTT a beágyazott GET ténylegesen befejeződne — ez
+  // a `regenerateInvite()`/mások saját `if (this._loading()) return;` guardját
+  // hatástalanná tette egy rövid, de valós versenyhelyzet-ablakban. Azok a
+  // hívók, amelyek NEM indítanak beágyazott újratöltést (create/join/update/
+  // regenerateInvite/delete/leave), ezért maguk állítják vissza a
+  // `_loading`-ot a saját onSuccess-ük végén.
   private mutate<T>(observable: Observable<T>, onSuccess: (value: T) => void): void {
     this._loading.set(true);
     this._error.set(null);
 
     observable
-      .pipe(
-        take(1),
-        finalize(() => this._loading.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: onSuccess,
         error: (err) => {
@@ -206,6 +220,9 @@ export class SchoolStore {
           // sosem hibázó GET, tehát ez nem okozhat végtelen ciklust. `loadMine()`
           // maga is nullázza az error-t indításkor, ezért a hibaüzenetet UTÁNA
           // állítjuk be, hogy a hívó lássa, miért utasította el a backend.
+          // A `_loading`-ot itt NEM állítjuk vissza kézzel — a loadMine()
+          // saját finalize()-a teszi ezt meg, amikor a beágyazott GET
+          // ténylegesen befejeződik (UI-TT-147).
           this.loadMine();
           this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
         },
