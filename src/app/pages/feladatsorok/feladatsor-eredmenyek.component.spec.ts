@@ -5,6 +5,7 @@ import { FeladatsorEredmenyekComponent } from './feladatsor-eredmenyek.component
 import { ReportStore } from '../../services/report/report.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherAttemptReviewDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 
 function makeResults(): TeacherTaskSetResultsDto {
@@ -352,5 +353,42 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.review()).toBeNull();
+  });
+
+  it('a CSV-export gomb a betöltött mátrixot adja át az export-szolgáltatásnak', () => {
+    configure(makeResults());
+    const exportSpy = vi.spyOn(
+      TestBed.inject(ResultsCsvExportService),
+      'exportTaskSetResults',
+    ).mockImplementation(() => {});
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const exportButton = [...fixture.nativeElement.querySelectorAll('button')].find((b) =>
+      (b as HTMLElement).textContent?.includes('Exportálás CSV-be'),
+    ) as HTMLButtonElement;
+    exportButton.click();
+
+    expect(exportSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ taskSetId: 1, title: 'Teszt feladatsor' }),
+    );
+  });
+
+  it('üres mátrixnál figyelmeztet és nem indít exportot (nem néma no-op)', () => {
+    configure({ ...makeResults(), students: [] });
+    const exportSpy = vi.spyOn(
+      TestBed.inject(ResultsCsvExportService),
+      'exportTaskSetResults',
+    ).mockImplementation(() => {});
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const exportButton = [...fixture.nativeElement.querySelectorAll('button')].find((b) =>
+      (b as HTMLElement).textContent?.includes('Exportálás CSV-be'),
+    ) as HTMLButtonElement;
+    exportButton.click();
+
+    expect(exportSpy).not.toHaveBeenCalled();
+    expect(toastMock.warning).toHaveBeenCalled();
   });
 });

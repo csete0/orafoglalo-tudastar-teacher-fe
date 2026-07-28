@@ -2,9 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, s
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
-import { TaskResultCellDto, TeacherAttemptReviewDto } from '../../models/report.model';
+import {
+  TaskResultCellDto,
+  TeacherAttemptReviewDto,
+  TeacherTaskSetResultsDto,
+} from '../../models/report.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 
 /** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
@@ -19,8 +24,16 @@ const MAX_FEEDBACK_LENGTH = 2000;
   template: `
     @if (report.taskSetResults(); as results) {
       <div class="max-w-5xl mx-auto px-4 py-10">
-        <h1 class="page-title truncate">{{ results.title }} — eredmények</h1>
-        <p class="text-sm text-text-muted mt-1">Tagonkénti eredmény-mátrix (diákok × feladatok)</p>
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div class="min-w-0">
+            <h1 class="page-title truncate">{{ results.title }} — eredmények</h1>
+            <p class="text-sm text-text-muted mt-1">Tagonkénti eredmény-mátrix (diákok × feladatok)</p>
+          </div>
+          <button type="button" (click)="exportCsv(results)" class="btn shrink-0"
+            title="Az eredmények letöltése CSV-ben, osztálynaplóba importálható formában.">
+            Exportálás CSV-be
+          </button>
+        </div>
         <div class="hairline"></div>
 
         <div class="card overflow-hidden">
@@ -245,6 +258,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
+  private readonly csvExport = inject(ResultsCsvExportService);
   readonly report = inject(ReportStore);
 
   /** A backend ugyanezt a korlátot kényszeríti ki (TeacherAttemptReviewService). */
@@ -399,6 +413,17 @@ export class FeladatsorEredmenyekComponent implements OnInit {
       this.draftFeedback = '';
       this.toastService.success('Visszaállítva az AI pontjára.');
     });
+  }
+
+  /** Az eredmény-mátrix letöltése CSV-ben (osztálynaplóba importálható). */
+  exportCsv(results: TeacherTaskSetResultsDto): void {
+    if (results.students.length === 0) {
+      // Soha ne legyen néma no-op (UI-TT-134): üres mátrixnál a letöltés
+      // elindulna, de a tanár egy fejlécet tartalmazó fájlt kapna magyarázat nélkül.
+      this.toastService.warning('Nincs exportálható eredmény.');
+      return;
+    }
+    this.csvExport.exportTaskSetResults(results);
   }
 
   formatDuration(totalSeconds: number): string {
