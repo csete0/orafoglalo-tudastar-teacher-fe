@@ -298,12 +298,17 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   readonly maxFeedbackLength = MAX_FEEDBACK_LENGTH;
 
   /**
-   * FIGYELEM — getter, nem mező. Egy IMPORTÁLT `const` KÖZVETLEN mező-hozzárendelése
-   * ebben a build-beállításban némán `undefined`-ot ad (a mező létrejön, csak üres),
-   * miközben ugyanaz a konstans modul-szinten és függvényhívásban helyesen 50.
-   * Mérve: `maxFeedbackLength` (AZONOS fájlbeli const) = 2000 ✓, ez mezőként = undefined ✗.
-   * Ugyanez a hiba élt a `date-range-filter.component.ts` `options` mezőjében is.
-   * A getter a renderelés idején olvas, ezért helyes — NE alakítsd vissza mezővé.
+   * FIGYELEM — getter, nem mező. Mezőként a TESZTKÖRNYEZETBEN némán `undefined`,
+   * és a sablonban üresen renderel (`... diák % alatt`).
+   *
+   * Mérve (2026-07-28): a `@angular/build:unit-test` + Vitest chunk-darabolásának
+   * mellékhatása, nem nyelvi szemantika — a mező-alak izoláltan és 8 spec fájllal
+   * még helyes, csak a teljes suite-ban (45 spec) áll elő az `undefined`.
+   * A `maxFeedbackLength` azért nem érintett, mert AZONOS fájlbeli const, így
+   * sosem kerül külön chunk-ba.
+   *
+   * A PRODUKCIÓS BUILD NEM ÉRINTETT — részletes indoklás a
+   * `date-range-filter.component.ts` azonos getterénél.
    */
   get weakThresholdPercent(): number {
     return WEAK_THRESHOLD_PERCENT;

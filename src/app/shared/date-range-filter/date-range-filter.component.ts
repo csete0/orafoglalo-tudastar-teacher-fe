@@ -60,12 +60,24 @@ export class DateRangeFilterComponent {
 
   /**
    * FIGYELEM — getter, nem mező. Mezőként (`readonly options = REPORT_RANGE_OPTIONS;`)
-   * ez némán `undefined` volt ebben a build-beállításban: az importált `const`
-   * KÖZVETLEN mező-hozzárendelése nem áll be, miközben modul-szinten és
-   * függvényhívásban helyes. Következmény: a `@for (option of options; ...)` egy
-   * `undefined`-on iterált, így a gyorsszűrő gombok EGYÁLTALÁN NEM jelentek meg.
-   * (A `rangeKey` azért működött, mert a konstans egy függvényhívás argumentuma.)
-   * A getter a renderelés idején olvas — NE alakítsd vissza mezővé.
+   * a TESZTKÖRNYEZETBEN némán `undefined` lesz, és a `@for (option of options; ...)`
+   * üresen renderel.
+   *
+   * Mérve (2026-07-28): a hiba a `@angular/build:unit-test` + Vitest chunk-darabolásától
+   * függ, NEM a nyelvi szemantikától. Ugyanez a mező-alak
+   *   - izoláltan futtatva (1 spec)      → HELYES
+   *   - 8 spec fájllal együtt            → HELYES
+   *   - a teljes suite-tal (45 spec)     → undefined
+   * Vagyis egy modul-darabszám-küszöb fölött a teszt-bundler olyan chunk-sorrendet
+   * állít elő, amiben a konstans a mező-inicializálás pillanatában még nincs kiértékelve.
+   *
+   * A PRODUKCIÓS BUILD NEM ÉRINTETT: az ESM garantálja, hogy egy levél-modul
+   * (`report-date-range.ts`-nek nulla importja van) az importálója ELŐTT értékelődik ki,
+   * és az `ng build` kimenetében a konstans ugyanabba a chunk-ba kerül, mint az osztály
+   * (`options=V;` ahol `V=[...]` helyi változó). Élesben a mező-alak is működne.
+   *
+   * A getter a renderelés idején olvas, ezért mindkét környezetben helyes — hagyd így,
+   * amíg a teszt-toolchain viselkedése meg nem változik.
    */
   get options(): readonly ReportRangeOption[] {
     return REPORT_RANGE_OPTIONS;
