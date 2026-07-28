@@ -152,7 +152,14 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                   </div>
                                 }
                               </div>
+                              <!-- UI-TT-141: a store upsertSolutionSnippets()-je a MINDEN mutáló
+                                   metódus által megosztott loading-jelzőn korai-return-nel véd.
+                                   E kötés nélkül egy MÁSIK feladat/megoldás törlése közben ide
+                                   kattintva a mentés teljesen láthatatlanul no-op maradt: nincs
+                                   hálózati hívás, nincs toast, és a gomb sem tűnt letiltottnak —
+                                   a tanár azt hihette, mentett. -->
                               <button (click)="saveSnippets(detail.id, solution)"
+                                [disabled]="store.loading()"
                                 class="btn btn-primary mt-2 !px-3 !py-1">
                                 Kódrészletek mentése
                               </button>
@@ -192,7 +199,11 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                 </div>
                               }
                             </div>
+                            <!-- UI-TT-141 testvér-esete, ld. a "Kódrészletek mentése" gomb
+                                 kommentjét: ugyanaz a láthatatlan no-op a megosztott
+                                 loading-guardon. -->
                             <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
+                              [disabled]="store.loading()"
                               class="btn btn-primary mt-2 !px-3 !py-1">
                               Összevont megoldás mentése
                             </button>

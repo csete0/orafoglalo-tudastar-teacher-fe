@@ -947,4 +947,70 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(taskToggleButton!.getAttribute('aria-expanded')).toBe('true');
     });
   });
+
+  // UI-TT-141: a store `upsertSolutionSnippets()`/`upsertCompleteSolutionSnippets()`-je a
+  // UI-TT-121 fix óta korai-return-nel véd a MINDEN mutáló metódus által megosztott
+  // `_loading` jelzőn. A testvér `addTask`/`addSolution`/`uploadFile` gombok HELYESEN
+  // kötik a `[disabled]`-jüket `store.loading()`-hoz, e kettő viszont NEM — így ha a tanár
+  // épp egy MÁSIK feladatot/megoldást töröl, és közben a kódrészlet mentésére kattint, a
+  // hívás csendben elakad a guardon: nincs hálózati kérés, nincs toast, és a gomb
+  // vizuálisan sem tűnik letiltottnak. A tanár azt hiheti, hogy mentett.
+  describe('kódrészlet-mentő gombok letiltása folyamatban lévő művelet alatt (UI-TT-141)', () => {
+    function configureWithSolution() {
+      configure(
+        makeDetail({
+          tasks: [
+            {
+              id: 1,
+              title: 'F1',
+              description: 'd',
+              maxPoints: 10,
+              taskOrder: 1,
+              taskTypeIds: [6],
+              completeSolutionSnippets: [],
+              solutions: [{ id: 11, description: 'r1', snippets: [] }],
+            },
+          ],
+        }),
+      );
+    }
+
+    function snippetButtons(fixture: { nativeElement: HTMLElement }) {
+      const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      return {
+        kodreszletek: buttons.find((b) => b.textContent?.includes('Kódrészletek mentése')),
+        osszevont: buttons.find((b) => b.textContent?.includes('Összevont megoldás mentése')),
+      };
+    }
+
+    it('BUG UI-TT-141 javítva: folyamatban lévő művelet alatt MINDKÉT kódrészlet-mentő gomb letiltott', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+
+      // Egy MÁSIK művelet (pl. feladat-törlés) van folyamatban.
+      taskSetStoreMock.loading.set(true);
+      fixture.detectChanges();
+
+      const { kodreszletek, osszevont } = snippetButtons(fixture);
+      expect(kodreszletek).toBeDefined();
+      expect(osszevont).toBeDefined();
+      expect(kodreszletek!.disabled).toBe(true);
+      expect(osszevont!.disabled).toBe(true);
+    });
+
+    it('nyugalmi állapotban mindkét kódrészlet-mentő gomb használható marad', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+
+      const { kodreszletek, osszevont } = snippetButtons(fixture);
+      expect(kodreszletek!.disabled).toBe(false);
+      expect(osszevont!.disabled).toBe(false);
+    });
+  });
 });
