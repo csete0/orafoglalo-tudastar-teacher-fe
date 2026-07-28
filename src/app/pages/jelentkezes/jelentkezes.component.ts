@@ -9,8 +9,19 @@ import { AuthStore } from '../../services/auth/store/auth.store';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
+import { ToastService } from '../../shared/toast/toast.service';
 
 const POLL_INTERVAL_MS = 5000;
+
+/**
+ * A tulajdonos által vállalt maximális elbírálási idő. EGY helyen definiálva, hogy a
+ * várakozó képernyő és a jelentkezőnek küldött visszaigazoló email ne csússzon szét.
+ * A backend oldali párja a `TeacherApplicationService.DecisionTurnaroundHours`.
+ */
+const DECISION_TURNAROUND_HOURS = 24;
+
+/** Kapcsolattartási cím a sürgős esetekre — ugyanaz, mint a backend SupportEmail-je. */
+const SUPPORT_EMAIL = 'info@orafoglalo.hu';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,8 +75,22 @@ const POLL_INTERVAL_MS = 5000;
             </div>
             <p class="font-bold">Jelentkezésed elbírálás alatt.</p>
           </div>
-          <p class="text-sm text-text-muted">
+          <p class="text-sm text-text-muted mb-4">
             Beadva: {{ store.application()?.createdAt | date: 'yyyy.MM.dd HH:mm' }}
+          </p>
+
+          <!-- 0.C audit: a várakozó képernyő korábban CSAK a fenti két sort mutatta -
+               se azt, hogy mi következik, se azt, hogy meddig tart, se azt, hogy kihez
+               fordulhat a jelentkező. Aki bezárta a böngészőt, semmilyen visszajelzést
+               nem kapott többé. -->
+          <p class="text-sm text-text-muted mb-2">
+            Minden jelentkezést személyesen nézünk át — legkésőbb
+            <strong>{{ turnaroundHours }} órán belül válaszolunk</strong>, és a döntésről
+            emailben is értesítünk.
+          </p>
+          <p class="text-sm text-text-muted">
+            Addig nincs teendőd. Ha sürgős, írj ide:
+            <a [href]="'mailto:' + supportEmail" class="text-primary hover:underline">{{ supportEmail }}</a>
           </p>
         </div>
       } @else {
@@ -105,8 +130,12 @@ const POLL_INTERVAL_MS = 5000;
 export class JelentkezesComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly toastService = inject(ToastService);
   readonly authStore = inject(AuthStore);
   readonly store = inject(TeacherApplicationStore);
+
+  readonly turnaroundHours = DECISION_TURNAROUND_HOURS;
+  readonly supportEmail = SUPPORT_EMAIL;
 
   readonly form = this.fb.nonNullable.group({
     motivation: ['', [Validators.required, Validators.minLength(20), notBlankValidator()]],
@@ -144,10 +173,17 @@ export class JelentkezesComponent {
     if (this.form.invalid) return;
 
     const raw = this.form.getRawValue();
-    this.store.apply({
-      motivation: raw.motivation,
-      institutionName: raw.institutionName || undefined,
-    });
+    // 0.C audit: a store már régóta támogat egy onSuccess callbacket, de a submit()
+    // sosem adott át egyet - a beadás egyetlen visszajelzése az volt, hogy a nézet
+    // átvált a várakozó kártyára. Egy explicit toast egyértelművé teszi, hogy a
+    // beküldés tényleg megtörtént.
+    this.store.apply(
+      {
+        motivation: raw.motivation,
+        institutionName: raw.institutionName || undefined,
+      },
+      () => this.toastService.success('Jelentkezésed beérkezett, hamarosan válaszolunk.'),
+    );
   }
 
   async enterAsTeacher(): Promise<void> {

@@ -8,6 +8,7 @@ import { AuthStore } from '../../services/auth/store/auth.store';
 import { AuthService } from '../../services/auth/auth.service';
 import { STORAGE_KEYS, TeacherUserLoginDto } from '../../models/auth.model';
 import { TeacherApplicationDto } from '../../models/teacher-application.model';
+import { ToastService } from '../../shared/toast/toast.service';
 
 function makeAuthUser(overrides: Partial<TeacherUserLoginDto> = {}): TeacherUserLoginDto {
   return {
@@ -597,5 +598,56 @@ describe('JelentkezesComponent', () => {
 
     expect(fromApply).toContain(expectedLocalText('2026-07-27T16:40:28Z'));
     expect(fromPoll).toContain(expectedLocalText('2026-07-27T16:40:28Z'));
+  });
+
+  // ── 0.C audit: a beadás és a várakozás visszajelzés nélkül zajlott ──
+  //
+  // A submit() sosem adott át onSuccess callbacket a store-nak (pedig az támogatja),
+  // a várakozó kártya pedig csak annyit mondott: "Jelentkezésed elbírálás alatt" +
+  // a beadás időpontja. Se azt nem tudta meg a jelentkező, mi következik, se azt,
+  // meddig tart, se azt, kihez fordulhat.
+
+  it('sikeres beadás után visszajelző toastot mutat', () => {
+    configure({ application: null, checked: true });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    component.form.setValue({
+      motivation: 'Tíz éve tanítok informatikát, szeretnék saját feladatsorokat készíteni.',
+      institutionName: 'Teszt Gimnázium',
+    });
+
+    // A store-mock az onSuccess-t a második argumentumban kapja - hívjuk meg,
+    // ahogy a valódi store tenné egy sikeres válasz után.
+    component.submit();
+
+    expect(storeMock.apply).toHaveBeenCalled();
+    const onSuccess = storeMock.apply.mock.calls[0][1];
+    expect(onSuccess).toBeTypeOf('function');
+
+    const toastService = TestBed.inject(ToastService);
+    const successSpy = vi.spyOn(toastService, 'success');
+    onSuccess();
+
+    expect(successSpy).toHaveBeenCalledOnce();
+  });
+
+  it('a várakozó képernyő kiírja a 24 órás vállalást és a kapcsolattartási címet', () => {
+    configure({
+      application: makeRejectedApplication({ status: 'Pending', decidedAt: undefined }),
+      isPending: true,
+    });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('24 órán belül');
+    expect(text).toContain('info@orafoglalo.hu');
+
+    // A kapcsolattartási cím valódi, kattintható mailto legyen, ne csak szöveg.
+    const mailto = fixture.nativeElement.querySelector('a[href^="mailto:"]');
+    expect(mailto).not.toBeNull();
+    expect(mailto.getAttribute('href')).toBe('mailto:info@orafoglalo.hu');
   });
 });
