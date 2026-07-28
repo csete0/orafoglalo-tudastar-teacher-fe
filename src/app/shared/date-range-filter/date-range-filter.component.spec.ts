@@ -78,4 +78,28 @@ describe('DateRangeFilterComponent', () => {
     expect(emitted[0].from).toBeInstanceOf(Date);
     expect(emitted[0].to).toBeInstanceOf(Date);
   });
+
+  // Regresszió: az `options` KÖZVETLEN mezőként (`readonly options =
+  // REPORT_RANGE_OPTIONS;`) némán `undefined` volt ebben a build-beállításban, így a
+  // `@for (option of options; ...)` semmin iterált és a gyorsszűrő gombok EGYÁLTALÁN
+  // NEM jelentek meg — miközben a 7. fázis mind a 21 tesztje zöld maradt, mert
+  // egyik sem a renderelt gombokra asszertált. Ezek a tesztek a DOM-ot nézik.
+  it('mind a négy gyorsszűrő lehetőség megjelenik a legördülőben', () => {
+    const fixture = TestBed.createComponent(DateRangeFilterComponent);
+    fixture.detectChanges();
+
+    const labels = [...fixture.nativeElement.querySelectorAll('select#range-key option')].map((o) =>
+      (o as HTMLElement).textContent?.trim(),
+    );
+
+    expect(labels).toEqual(['Teljes időszak', 'Utolsó 30 nap', 'Ebben a félévben', 'Egyéni időszak']);
+  });
+
+  it('az options nem undefined (a mező-hozzárendelés csapdája)', () => {
+    const fixture = TestBed.createComponent(DateRangeFilterComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.options).toBeDefined();
+    expect(fixture.componentInstance.options.length).toBe(4);
+  });
 });

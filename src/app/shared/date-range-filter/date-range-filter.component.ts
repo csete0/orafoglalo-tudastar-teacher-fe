@@ -6,6 +6,7 @@ import {
   REPORT_RANGE_OPTIONS,
   ReportDateRange,
   ReportRangeKey,
+  ReportRangeOption,
   resolveRange,
   validateRange,
 } from '../date-range/report-date-range';
@@ -57,7 +58,19 @@ export class DateRangeFilterComponent {
 
   readonly rangeChange = output<ReportDateRange>();
 
-  readonly options = REPORT_RANGE_OPTIONS;
+  /**
+   * FIGYELEM — getter, nem mező. Mezőként (`readonly options = REPORT_RANGE_OPTIONS;`)
+   * ez némán `undefined` volt ebben a build-beállításban: az importált `const`
+   * KÖZVETLEN mező-hozzárendelése nem áll be, miközben modul-szinten és
+   * függvényhívásban helyes. Következmény: a `@for (option of options; ...)` egy
+   * `undefined`-on iterált, így a gyorsszűrő gombok EGYÁLTALÁN NEM jelentek meg.
+   * (A `rangeKey` azért működött, mert a konstans egy függvényhívás argumentuma.)
+   * A getter a renderelés idején olvas — NE alakítsd vissza mezővé.
+   */
+  get options(): readonly ReportRangeOption[] {
+    return REPORT_RANGE_OPTIONS;
+  }
+
   readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
   readonly customFrom = signal<string>('');
   readonly customTo = signal<string>('');
