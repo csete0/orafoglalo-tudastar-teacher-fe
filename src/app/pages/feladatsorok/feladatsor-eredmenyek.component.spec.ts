@@ -3,7 +3,9 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { FeladatsorEredmenyekComponent } from './feladatsor-eredmenyek.component';
 import { ReportStore } from '../../services/report/report.store';
-import { TeacherTaskSetResultsDto } from '../../models/report.model';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { TeacherAttemptReviewDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 
 function makeResults(): TeacherTaskSetResultsDto {
   return {
@@ -22,8 +24,8 @@ function makeResults(): TeacherTaskSetResultsDto {
         totalEarnedPoints: 12,
         totalMaxPoints: 15,
         taskResults: [
-          { taskId: 1, isCompleted: true, earnedPoints: 10, maxPoints: 10 },
-          { taskId: 2, isCompleted: true, earnedPoints: 2, maxPoints: 5 },
+          { taskId: 1, attemptId: 101, isCompleted: true, earnedPoints: 10, maxPoints: 10, isOverridden: false },
+          { taskId: 2, attemptId: 102, isCompleted: true, earnedPoints: 2, maxPoints: 5, isOverridden: true },
         ],
       },
       {
@@ -32,38 +34,97 @@ function makeResults(): TeacherTaskSetResultsDto {
         hasSession: false,
         isCompleted: false,
         taskResults: [
-          { taskId: 1, isCompleted: false },
-          { taskId: 2, isCompleted: false },
+          { taskId: 1, isCompleted: false, isOverridden: false },
+          { taskId: 2, isCompleted: false, isOverridden: false },
         ],
       },
     ],
   };
 }
 
+function makeReview(overrides: Partial<TeacherAttemptReviewDto> = {}): TeacherAttemptReviewDto {
+  return {
+    attemptId: 101,
+    taskId: 1,
+    taskTitle: 'Első feladat',
+    studentUserId: 1,
+    studentDisplayName: 'Kiss Anna',
+    earnedPoints: 10,
+    aiEarnedPoints: 10,
+    maxPoints: 10,
+    scorePercent: 100,
+    aiFeedback: 'Jó megoldás.',
+    aiStrengths: 'Tiszta szerkezet.',
+    aiWeaknesses: null,
+    aiScoredAt: '2026-07-28T10:00:00Z',
+    aiModel: 'gpt-4o',
+    studentCode: 'print("hello")',
+    teacherFeedback: null,
+    reviewedAt: null,
+    reviewedByTeacherName: null,
+    isOverridden: false,
+    timeSpentSeconds: 3725,
+    visitCount: 4,
+    solutionViewedAt: null,
+    cheatsheetOpenCount: 2,
+    runCount: 6,
+    successfulRunCount: 4,
+    failedRunCount: 2,
+    ...overrides,
+  };
+}
+
 describe('FeladatsorEredmenyekComponent', () => {
   let reportStoreMock: {
     taskSetResults: ReturnType<typeof signal<TeacherTaskSetResultsDto | null>>;
+    attemptReview: ReturnType<typeof signal<TeacherAttemptReviewDto | null>>;
     loading: ReturnType<typeof signal<boolean>>;
+    reviewLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadTaskSetResults: ReturnType<typeof vi.fn>;
+    loadAttemptReview: ReturnType<typeof vi.fn>;
+    clearAttemptReview: ReturnType<typeof vi.fn>;
+    overrideScore: ReturnType<typeof vi.fn>;
+    revertOverride: ReturnType<typeof vi.fn>;
   };
+  let toastMock: { success: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn>; danger: ReturnType<typeof vi.fn> };
+  let confirmMock: { ask: ReturnType<typeof vi.fn> };
 
   function configure(results: TeacherTaskSetResultsDto | null) {
     reportStoreMock = {
       taskSetResults: signal(results),
+      attemptReview: signal<TeacherAttemptReviewDto | null>(null),
       loading: signal(false),
+      reviewLoading: signal(false),
       error: signal(null),
       loadTaskSetResults: vi.fn(),
+      loadAttemptReview: vi.fn(),
+      clearAttemptReview: vi.fn(),
+      overrideScore: vi.fn(),
+      revertOverride: vi.fn(),
     };
+    toastMock = { success: vi.fn(), warning: vi.fn(), danger: vi.fn() };
+    confirmMock = { ask: vi.fn().mockResolvedValue(true) };
 
     TestBed.configureTestingModule({
       imports: [FeladatsorEredmenyekComponent],
       providers: [
         provideRouter([]),
         { provide: ReportStore, useValue: reportStoreMock },
+        { provide: ToastService, useValue: toastMock },
+        { provide: ConfirmService, useValue: confirmMock },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
       ],
     });
+  }
+
+  /** Megnyitja az első diák első cellájának panelját, és beállítja a nézetét. */
+  function openFirstCell(fixture: ReturnType<typeof TestBed.createComponent<FeladatsorEredmenyekComponent>>,
+                         review = makeReview()) {
+    const cellButton = fixture.nativeElement.querySelectorAll('tbody button')[0] as HTMLButtonElement;
+    cellButton.click();
+    reportStoreMock.attemptReview.set(review);
+    fixture.detectChanges();
   }
 
   it('betöltéskor meghívja a loadTaskSetResults-t a route id-vel', () => {
@@ -97,5 +158,199 @@ describe('FeladatsorEredmenyekComponent', () => {
 
     expect(nagyRow.textContent).toContain('nem kezdte el');
     expect(nagyRow.className).toContain('opacity-50');
+  });
+
+  // ── Tanári értékelő panel (2. fázis + 6. fázis munkafolyamat-blokk) ──────────
+
+  it('cellára kattintva a helyes attemptId-vel tölti be az értékelő nézetet', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const cellButton = fixture.nativeElement.querySelectorAll('tbody button')[0] as HTMLButtonElement;
+    cellButton.click();
+
+    expect(reportStoreMock.loadAttemptReview).toHaveBeenCalledWith(101);
+  });
+
+  it('beadás nélküli cellához nem rajzol gombot', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
+    const nagyRow = Array.from(rows).find((r) => (r as HTMLElement).textContent?.includes('Nagy Béla')) as HTMLElement;
+
+    expect(nagyRow.querySelectorAll('button').length).toBe(0);
+  });
+
+  it('a panel megjeleníti az AI-értékelést és a munkafolyamat-adatokat', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Jó megoldás.');
+    expect(text).toContain('Tiszta szerkezet.');
+    expect(text).toContain('Munkafolyamat');
+    expect(text).toContain('1 ó 2 p');
+    expect(text).toContain('Segédlet megnyitva:');
+  });
+
+  // A munkafolyamat-blokk NYERS adat, nem bizonyíték: egy "gyanús" címke téves
+  // vádhoz vezethet egy valós diák ellen. Ezt a tesztet szándékosan a
+  // megfogalmazásra írjuk, nem csak a számokra.
+  it('a munkafolyamat-blokk nem címkéz és nem sugall csalást', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({ solutionViewedAt: '2026-07-28T10:05:00Z', cheatsheetOpenCount: 9 }));
+
+    const text = (fixture.nativeElement.textContent as string).toLowerCase();
+    expect(text).not.toContain('gyanú');
+    expect(text).not.toContain('gyanús');
+    expect(text).not.toContain('csalás');
+    // az adat viszont ott van, következtetés nélkül
+    expect(text).toContain('mintamegoldást megnézte: igen');
+  });
+
+  it('nem értékelt beadásnál nem 0-t, hanem "Nem értékelt"-et mutat', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({ earnedPoints: null, aiEarnedPoints: null, scorePercent: null }));
+
+    expect(fixture.nativeElement.textContent).toContain('Nem értékelt');
+  });
+
+  it('max feletti pontszámnál figyelmeztet és nem küld kérést', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = 11; // maxPoints = 10
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
+    expect(toastMock.warning).toHaveBeenCalled();
+  });
+
+  it('negatív pontszámnál figyelmeztet és nem küld kérést', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = -1;
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
+    expect(toastMock.warning).toHaveBeenCalled();
+  });
+
+  it('érvényes pontszámot elment, és a mátrix frissítéséhez a taskSetId-t is átadja', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = 8;
+    component.draftFeedback = 'Szép munka.';
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
+      1,
+      101,
+      { earnedPoints: 8, teacherFeedback: 'Szép munka.' },
+      expect.any(Function),
+    );
+  });
+
+  it('csak szöveges értékelés is menthető, pontszám megadása nélkül', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = null;
+    component.draftFeedback = 'Egyetértek az AI pontjával, de figyelj a névválasztásra.';
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
+      1,
+      101,
+      { earnedPoints: null, teacherFeedback: 'Egyetértek az AI pontjával, de figyelj a névválasztásra.' },
+      expect.any(Function),
+    );
+  });
+
+  it('üres pontszám ÉS üres szöveg esetén figyelmeztet, nem küld üres kérést', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = null;
+    component.draftFeedback = '   ';
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
+    expect(toastMock.warning).toHaveBeenCalled();
+  });
+
+  it('a visszaállítás megerősítést kér, és elutasításkor nem hív store-t', async () => {
+    configure(makeResults());
+    confirmMock.ask.mockResolvedValue(false);
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({ isOverridden: true }));
+
+    await fixture.componentInstance.revert(makeReview({ isOverridden: true }));
+
+    expect(confirmMock.ask).toHaveBeenCalled();
+    expect(reportStoreMock.revertOverride).not.toHaveBeenCalled();
+  });
+
+  it('megerősített visszaállítás meghívja a store-t', async () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({ isOverridden: true }));
+
+    await fixture.componentInstance.revert(makeReview({ isOverridden: true }));
+
+    expect(reportStoreMock.revertOverride).toHaveBeenCalledWith(1, 101, expect.any(Function));
+  });
+
+  it('a felülbírált cella "tanári" jelzést kap a mátrixban', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons = fixture.nativeElement.querySelectorAll('tbody button');
+    // A 2. cella (taskId 2) isOverridden: true
+    expect((buttons[1] as HTMLElement).textContent).toContain('tanári');
+    expect((buttons[0] as HTMLElement).textContent).not.toContain('tanári');
+  });
+
+  it('másik cella panelját nem tölti fel egy korábbi cella válasza', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    // A 2. cellát nyitjuk meg (attemptId 102), de a store-ba a RÉGI (101) válasz érkezik.
+    const buttons = fixture.nativeElement.querySelectorAll('tbody button');
+    (buttons[1] as HTMLButtonElement).click();
+    reportStoreMock.attemptReview.set(makeReview({ attemptId: 101, taskTitle: 'Első feladat' }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.review()).toBeNull();
   });
 });

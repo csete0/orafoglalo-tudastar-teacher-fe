@@ -35,9 +35,17 @@ export interface TeacherTaskColumnDto {
 
 export interface TaskResultCellDto {
   taskId: number;
+  /**
+   * A cellához tartozó beadás (`ExamTaskAttempt`) azonosítója; hiányzik, ha a diák
+   * hozzá sem kezdett ehhez a feladathoz. Enélkül a cella SEMMILYEN azonosítót nem
+   * hordozott, így a tanári értékelő panel nem tudott megcímezni egy konkrét beadást.
+   */
+  attemptId?: number;
   isCompleted: boolean;
   earnedPoints?: number;
   maxPoints?: number;
+  /** Igaz, ha a pontszámot tanár bírálta felül. */
+  isOverridden: boolean;
 }
 
 export interface StudentTaskSetResultRowDto {
@@ -55,4 +63,60 @@ export interface TeacherTaskSetResultsDto {
   title: string;
   tasks: TeacherTaskColumnDto[];
   students: StudentTaskSetResultRowDto[];
+}
+
+/**
+ * Egy diák egy vizsgafeladat-beadásának tanári értékelő nézete.
+ * A backend `TeacherAttemptReviewDto` párja — a mezőneveknek egyeznie kell vele.
+ */
+export interface TeacherAttemptReviewDto {
+  attemptId: number;
+  taskId: number;
+  taskTitle: string;
+  studentUserId: number;
+  studentDisplayName: string;
+
+  /** Az érvényes (effektív) pontszám — felülbírálás után a tanáré. Hiányzik/null = nincs kiértékelve. */
+  earnedPoints: number | null;
+  /** Az AI eredeti pontja. null = az AI nem értékelt (token-limit vagy hiba). */
+  aiEarnedPoints: number | null;
+  maxPoints: number;
+  /** null, ha nincs pontszám vagy nincs nevező — sosem 0. Ld. EXAM-11/EXAM-16. */
+  scorePercent: number | null;
+
+  aiFeedback: string | null;
+  aiStrengths: string | null;
+  aiWeaknesses: string | null;
+  aiScoredAt: string | null;
+  aiModel: string | null;
+
+  studentCode: string | null;
+
+  teacherFeedback: string | null;
+  reviewedAt: string | null;
+  reviewedByTeacherName: string | null;
+  isOverridden: boolean;
+
+  // ── Munkafolyamat ──────────────────────────────────────────────────────────
+  // NYERS VISELKEDÉSI ADAT, NEM BIZONYÍTÉK. Tilos "csalás-gyanúnak" nevezni, és
+  // tilos automatikus gyanú-pontszámot vagy címkét képezni belőle: egy gyors
+  // beadás lehet felkészültség, egy hosszú szünet lehet gondolkodás vagy egy
+  // megzavaró tanterem. A felület MUTASSA az adatot, a következtetést hagyja a
+  // tanárra — egy "gyanús" címke téves vádhoz vezethet egy valós diák ellen.
+  timeSpentSeconds: number;
+  visitCount: number;
+  /** Megnézte-e a mintamegoldást a vizsga alatt (null = nem). */
+  solutionViewedAt: string | null;
+  cheatsheetOpenCount: number;
+  runCount: number;
+  successfulRunCount: number;
+  failedRunCount: number;
+}
+
+/** Tanári pont-felülbírálás kérése. Legalább az egyik mező kötelező. */
+export interface TeacherScoreOverrideRequest {
+  /** null = a pontszám marad, csak szöveges értékelés érkezik. */
+  earnedPoints: number | null;
+  /** null = nem ír szöveget. */
+  teacherFeedback: string | null;
 }

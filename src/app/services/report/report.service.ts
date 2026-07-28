@@ -3,7 +3,13 @@ import { inject, Injectable } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { StudentActivityDetailDto, StudentActivitySummaryDto, TeacherTaskSetResultsDto } from '../../models/report.model';
+import {
+  StudentActivityDetailDto,
+  StudentActivitySummaryDto,
+  TeacherAttemptReviewDto,
+  TeacherScoreOverrideRequest,
+  TeacherTaskSetResultsDto,
+} from '../../models/report.model';
 
 @Injectable({ providedIn: 'root' })
 export class ReportService {
@@ -33,6 +39,24 @@ export class ReportService {
 
   getTaskSetResults(taskSetId: number): Observable<TeacherTaskSetResultsDto> {
     return this.http.get<TeacherTaskSetResultsDto>(`${this.baseUrl}/task-sets/${taskSetId}/results`);
+  }
+
+  getAttemptReview(attemptId: number): Observable<TeacherAttemptReviewDto> {
+    return this.http.get<TeacherAttemptReviewDto>(`${this.baseUrl}/exam-attempts/${attemptId}/review`);
+  }
+
+  /** A válasz a FRISSÍTETT értékelő nézet — a hívónak nem kell külön újratöltenie a panelt. */
+  overrideScore(attemptId: number, request: TeacherScoreOverrideRequest): Observable<TeacherAttemptReviewDto> {
+    return this.http.put<TeacherAttemptReviewDto>(
+      `${this.baseUrl}/exam-attempts/${attemptId}/score-override`,
+      request,
+    );
+  }
+
+  revertOverride(attemptId: number): Observable<TeacherAttemptReviewDto> {
+    return this.http.delete<TeacherAttemptReviewDto>(
+      `${this.baseUrl}/exam-attempts/${attemptId}/score-override`,
+    );
   }
 
   private dateRangeParams(from?: Date, to?: Date): HttpParams {
