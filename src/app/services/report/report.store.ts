@@ -45,6 +45,15 @@ export class ReportStore {
   // a lassabb, korábbi válasz felülírná a már megjelenített újat.
   private _attemptReviewGeneration = 0;
 
+  // UI-TT-72 mintája, a 7. fázis dátumszűrőjéhez kiterjesztve. Az alábbi három
+  // loadert mostantól nem csak navigációkor hívjuk, hanem UGYANARRA az entitásra
+  // is, csak más `from`/`to` szűrővel. Ha ilyenkor is töröljük az adatot, a tábla
+  // minden szűrő-váltáskor felvillan üresen ("Nincs adat.") vagy spinnerre vált —
+  // ezért csak akkor törlünk, ha ténylegesen MÁSIK entitásra váltottunk.
+  private _groupActivityId: number | null = null;
+  private _schoolActivityId: number | null = null;
+  private _studentDetailId: number | null = null;
+
   readonly groupActivity = computed(() => this._groupActivity());
   readonly schoolActivity = computed(() => this._schoolActivity());
   readonly studentDetail = computed(() => this._studentDetail());
@@ -58,7 +67,10 @@ export class ReportStore {
     const generation = ++this._groupActivityGeneration;
     this._loading.set(true);
     this._error.set(null);
-    this._groupActivity.set([]);
+    if (this._groupActivityId !== groupId) {
+      this._groupActivity.set([]);
+      this._groupActivityId = groupId;
+    }
 
     this.service
       .getGroupActivity(groupId, from, to)
@@ -85,7 +97,10 @@ export class ReportStore {
     const generation = ++this._schoolActivityGeneration;
     this._loading.set(true);
     this._error.set(null);
-    this._schoolActivity.set([]);
+    if (this._schoolActivityId !== schoolId) {
+      this._schoolActivity.set([]);
+      this._schoolActivityId = schoolId;
+    }
 
     this.service
       .getSchoolActivity(schoolId, from, to)
@@ -112,7 +127,10 @@ export class ReportStore {
     const generation = ++this._studentDetailGeneration;
     this._loading.set(true);
     this._error.set(null);
-    this._studentDetail.set(null);
+    if (this._studentDetailId !== studentUserId) {
+      this._studentDetail.set(null);
+      this._studentDetailId = studentUserId;
+    }
 
     this.service
       .getStudentActivity(studentUserId, from, to)

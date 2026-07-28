@@ -1,16 +1,18 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
 import { StudentActivityDetailDto } from '../../models/report.model';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import { ReportDateRange } from '../../shared/date-range/report-date-range';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-diak-reszletek',
   standalone: true,
-  imports: [DatePipe, IconComponent, LocalSpinnerComponent],
+  imports: [DatePipe, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
   template: `
     @if (store.studentDetail(); as detail) {
       <div class="max-w-2xl mx-auto px-4 py-10">
@@ -20,6 +22,8 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
           <h1 class="page-title truncate">{{ detail.name }}</h1>
         </div>
         <div class="hairline"></div>
+
+        <app-date-range-filter (rangeChange)="applyRange($event)" />
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
           @for (stat of stats(detail); track stat.label) {
@@ -82,9 +86,15 @@ export class DiakReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly store = inject(ReportStore);
 
+  private userId = 0;
+
   ngOnInit(): void {
-    const userId = Number(this.route.snapshot.paramMap.get('userId'));
-    this.store.loadStudentActivity(userId);
+    this.userId = Number(this.route.snapshot.paramMap.get('userId'));
+    this.store.loadStudentActivity(this.userId);
+  }
+
+  applyRange(range: ReportDateRange): void {
+    this.store.loadStudentActivity(this.userId, range.from, range.to);
   }
 
   initials(name: string): string {

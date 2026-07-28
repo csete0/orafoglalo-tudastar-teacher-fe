@@ -11,6 +11,8 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import { ReportDateRange } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
 
@@ -18,7 +20,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -98,6 +100,7 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
           }
 
           @case ('eredmenyek') {
+            <app-date-range-filter (rangeChange)="applyRange(group.id, $event)" />
             @if (report.error()) {
               <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
             } @else {
@@ -263,8 +266,16 @@ export class CsoportReszletekComponent implements OnInit {
     // (pl. az Eredmények fülön) ottmaradt volna.
     this.store.clearError();
     if (tab === 'tagok') this.store.loadMembers(this.groupId);
-    if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId);
+    if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
+  }
+
+  /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */
+  readonly range = signal<ReportDateRange>({});
+
+  applyRange(groupId: number, range: ReportDateRange): void {
+    this.range.set(range);
+    this.report.loadGroupActivity(groupId, range.from, range.to);
   }
 
   loadLeaderboard(groupId: number): void {

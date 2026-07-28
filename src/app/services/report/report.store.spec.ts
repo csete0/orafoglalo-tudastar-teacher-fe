@@ -205,4 +205,84 @@ describe('ReportStore', () => {
     store.clearError();
     expect(store.error()).toBeNull();
   });
+
+  // ── 7. fázis: dátum-tartomány szűrő ─────────────────────────
+  //
+  // A szűrő-váltás UGYANARRA az entitásra hívja újra a loadert, csak más
+  // paraméterrel — tehát két kérés versenyezhet ugyanazon az id-n. Ez a
+  // generáció-számláló eddig csak entitás-váltásra volt bizonyítva.
+
+  it('loadGroupActivity: a szűrő-váltás átadja a from/to paramétereket a service-nek', () => {
+    serviceMock.getGroupActivity.mockReturnValue(of([]));
+    const from = new Date(2026, 0, 1);
+    const to = new Date(2026, 5, 1);
+
+    store.loadGroupActivity(7, from, to);
+
+    expect(serviceMock.getGroupActivity).toHaveBeenCalledWith(7, from, to);
+  });
+
+  it('loadGroupActivity: UGYANAZON a csoporton szűrőt váltva a késve érkező RÉGI válasz nem írja felül az újat', async () => {
+    const regiSzuro = new Subject<StudentActivitySummaryDto[]>();
+    const ujSzuro = new Subject<StudentActivitySummaryDto[]>();
+    serviceMock.getGroupActivity.mockReturnValueOnce(regiSzuro).mockReturnValueOnce(ujSzuro);
+
+    // Ugyanaz a csoport (id=1), csak más időszak.
+    store.loadGroupActivity(1, new Date(2026, 0, 1), new Date(2026, 1, 1));
+    store.loadGroupActivity(1, new Date(2026, 3, 1), new Date(2026, 4, 1));
+
+    const ujEredmeny = [makeSummary({ userId: 2, name: 'Új szűrő' })];
+    ujSzuro.next(ujEredmeny);
+    ujSzuro.complete();
+    await Promise.resolve();
+    expect(store.groupActivity()).toEqual(ujEredmeny);
+
+    regiSzuro.next([makeSummary({ userId: 1, name: 'Régi szűrő' })]);
+    regiSzuro.complete();
+    await Promise.resolve();
+    expect(store.groupActivity()).toEqual(ujEredmeny);
+  });
+
+  it('loadGroupActivity: UGYANAZON a csoporton szűrőt váltva a régi adat LÁTSZIK, amíg az új meg nem érkezik', () => {
+    const elsoValasz = new Subject<StudentActivitySummaryDto[]>();
+    serviceMock.getGroupActivity.mockReturnValueOnce(elsoValasz).mockReturnValueOnce(new Subject());
+
+    store.loadGroupActivity(1);
+    const elsoEredmeny = [makeSummary({ userId: 1, name: 'Első' })];
+    elsoValasz.next(elsoEredmeny);
+    elsoValasz.complete();
+    expect(store.groupActivity()).toEqual(elsoEredmeny);
+
+    // UI-TT-72 mintája: szűrő-váltás UGYANARRA a csoportra nem ürítheti ki a
+    // táblát, különben minden váltásnál felvillanna a "Nincs adat." üres állapot.
+    store.loadGroupActivity(1, new Date(2026, 0, 1));
+    expect(store.groupActivity()).toEqual(elsoEredmeny);
+  });
+
+  it('loadGroupActivity: MÁSIK csoportra váltva viszont azonnal ürít', () => {
+    const elsoValasz = new Subject<StudentActivitySummaryDto[]>();
+    serviceMock.getGroupActivity.mockReturnValueOnce(elsoValasz).mockReturnValueOnce(new Subject());
+
+    store.loadGroupActivity(1);
+    elsoValasz.next([makeSummary({ userId: 1 })]);
+    elsoValasz.complete();
+    expect(store.groupActivity().length).toBe(1);
+
+    store.loadGroupActivity(2);
+    expect(store.groupActivity()).toEqual([]);
+  });
+
+  it('loadStudentActivity: szűrő-váltáskor a régi részletek LÁTSZANAK, nem villan spinner', () => {
+    const elsoValasz = new Subject<StudentActivityDetailDto>();
+    serviceMock.getStudentActivity.mockReturnValueOnce(elsoValasz).mockReturnValueOnce(new Subject());
+
+    store.loadStudentActivity(5);
+    const detail = makeDetail({ userId: 5 });
+    elsoValasz.next(detail);
+    elsoValasz.complete();
+    expect(store.studentDetail()).toEqual(detail);
+
+    store.loadStudentActivity(5, new Date(2026, 0, 1));
+    expect(store.studentDetail()).toEqual(detail);
+  });
 });

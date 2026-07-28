@@ -10,6 +10,8 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import { ReportDateRange } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
 
@@ -23,7 +25,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -154,6 +156,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
           }
 
           @case ('attekintes') {
+            <app-date-range-filter (rangeChange)="applyRange($event)" />
             @if (report.error()) {
               <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
             } @else {
@@ -265,12 +268,20 @@ export class IntezmenyReszletekComponent implements OnInit {
     // maradt hibaüzenet félrevezető kontextusban ottmaradt volna.
     this.school.clearError();
     if (tab === 'ranglista') this.loadLeaderboard(this.schoolId);
-    if (tab === 'attekintes') this.report.loadSchoolActivity(this.schoolId);
+    if (tab === 'attekintes') this.report.loadSchoolActivity(this.schoolId, this.range().from, this.range().to);
     if (tab === 'csoportok') this.school.loadSchoolGroups(this.schoolId);
   }
 
   loadLeaderboard(schoolId: number): void {
     this.leaderboard.loadSchoolLeaderboard(schoolId, this.category, this.period);
+  }
+
+  /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */
+  readonly range = signal<ReportDateRange>({});
+
+  applyRange(range: ReportDateRange): void {
+    this.range.set(range);
+    this.report.loadSchoolActivity(this.schoolId, range.from, range.to);
   }
 
   initials(name: string): string {
