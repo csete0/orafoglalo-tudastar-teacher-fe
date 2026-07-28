@@ -11,6 +11,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { weakestTasks, WEAK_THRESHOLD_PERCENT } from '../../shared/task-analysis/task-weakness';
 
 /** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
 const MAX_FEEDBACK_LENGTH = 2000;
@@ -36,6 +37,35 @@ const MAX_FEEDBACK_LENGTH = 2000;
         </div>
         <div class="hairline"></div>
 
+        <!-- ── Leggyengébben teljesített feladatok ──
+             A mátrix megmutatja az adatot, de nem MONDJA MEG, mit kell újratanítani.
+             Ha nincs egyetlen értékelt beadás sem, a blokk NEM jelenik meg: egy
+             beadás nélküli feladatsornál "0%"-ot mutatni hazugság lenne, nem üres
+             állapot. -->
+        @if (weakest(); as weak) {
+          @if (weak.length > 0) {
+            <div class="card mb-4 p-4">
+              <h2 class="text-xs uppercase tracking-wide text-text-muted mb-2">
+                Leggyengébben teljesített feladatok
+              </h2>
+              <ul class="flex flex-col gap-1.5">
+                @for (task of weak; track task.taskId) {
+                  <li class="flex items-baseline gap-2 flex-wrap text-sm">
+                    <span class="font-medium">{{ task.taskOrder }}. {{ task.title }}</span>
+                    <span class="text-text-muted">átlag {{ task.averagePercent }}%</span>
+                    @if (task.belowThresholdCount > 0) {
+                      <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5">
+                        {{ task.belowThresholdCount }} / {{ task.evaluatedCount }} diák
+                        {{ weakThresholdPercent }}% alatt
+                      </span>
+                    }
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        }
+
         <div class="card overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm border-collapse">
@@ -44,7 +74,10 @@ const MAX_FEEDBACK_LENGTH = 2000;
                 <th class="py-3 px-4">Diák</th>
                 <th class="py-3 px-4">Összesen</th>
                 @for (task of results.tasks; track task.taskId) {
-                  <th class="py-3 px-4 whitespace-nowrap">{{ task.taskOrder }}. {{ task.title }}</th>
+                  <th class="py-3 px-4 whitespace-nowrap"
+                    [class.text-warning]="task.taskId === weakestTaskId()">
+                    {{ task.taskOrder }}. {{ task.title }}
+                  </th>
                 }
               </tr>
             </thead>
@@ -263,6 +296,28 @@ export class FeladatsorEredmenyekComponent implements OnInit {
 
   /** A backend ugyanezt a korlátot kényszeríti ki (TeacherAttemptReviewService). */
   readonly maxFeedbackLength = MAX_FEEDBACK_LENGTH;
+
+  /**
+   * FIGYELEM — getter, nem mező. Egy IMPORTÁLT `const` KÖZVETLEN mező-hozzárendelése
+   * ebben a build-beállításban némán `undefined`-ot ad (a mező létrejön, csak üres),
+   * miközben ugyanaz a konstans modul-szinten és függvényhívásban helyesen 50.
+   * Mérve: `maxFeedbackLength` (AZONOS fájlbeli const) = 2000 ✓, ez mezőként = undefined ✗.
+   * Ugyanez a hiba élt a `date-range-filter.component.ts` `options` mezőjében is.
+   * A getter a renderelés idején olvas, ezért helyes — NE alakítsd vissza mezővé.
+   */
+  get weakThresholdPercent(): number {
+    return WEAK_THRESHOLD_PERCENT;
+  }
+
+  /**
+   * A leggyengébben teljesített feladatok — a már letöltött mátrixból számolva,
+   * új végpont nélkül. `computed`, ezért minden mátrix-frissítés (pl. egy
+   * pont-felülbírálás mentése) után magától újraszámol.
+   */
+  readonly weakest = computed(() => weakestTasks(this.report.taskSetResults()));
+
+  /** A leggyengébb feladat oszlopát halványan kiemeljük a mátrix fejlécében is. */
+  readonly weakestTaskId = computed(() => this.weakest()[0]?.taskId ?? null);
 
   private taskSetId = 0;
 

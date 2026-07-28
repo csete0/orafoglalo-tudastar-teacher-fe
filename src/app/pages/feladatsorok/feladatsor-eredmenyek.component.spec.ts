@@ -391,4 +391,55 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(exportSpy).not.toHaveBeenCalled();
     expect(toastMock.warning).toHaveBeenCalled();
   });
+
+  // 5. fázis — gyengepont-elemzés. A számítás egységtesztjei a
+  // `shared/task-analysis/task-weakness.spec.ts`-ben vannak; itt csak a
+  // megjelenítés/elrejtés viselkedését rögzítjük.
+
+  it('a gyengepont-blokk a leggyengébb feladatot mutatja a küszöb alatti számmal', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Leggyengébben teljesített feladatok');
+    // A 2. feladat 2/5 = 40%, az 1. feladat 10/10 = 100% → a 2. a leggyengébb.
+    expect(fixture.componentInstance.weakest()[0].title).toBe('Második feladat');
+    expect(text).toContain('átlag 40%');
+    expect(text).toContain('1 / 1 diák 50% alatt');
+  });
+
+  it('beadás nélküli feladatsornál a blokk NEM jelenik meg (nem mutat 0%-ot)', () => {
+    const results = makeResults();
+    // Egyetlen diák sem kezdte el: minden cella befejezetlen, pontszám nélkül.
+    results.students = results.students.map((s) => ({
+      ...s,
+      hasSession: false,
+      isCompleted: false,
+      taskResults: s.taskResults.map((c) => ({
+        ...c,
+        isCompleted: false,
+        earnedPoints: undefined,
+      })),
+    }));
+    configure(results);
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.weakest()).toEqual([]);
+    expect(fixture.nativeElement.textContent).not.toContain('Leggyengébben teljesített feladatok');
+  });
+
+  it('a leggyengébb feladat oszlopa kiemelést kap a mátrix fejlécében', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const headers = [...fixture.nativeElement.querySelectorAll('thead th')] as HTMLElement[];
+    const weakestHeader = headers.find((h) => h.textContent?.includes('Második feladat'));
+    const strongestHeader = headers.find((h) => h.textContent?.includes('Első feladat'));
+
+    expect(weakestHeader?.classList.contains('text-warning')).toBe(true);
+    expect(strongestHeader?.classList.contains('text-warning')).toBe(false);
+  });
 });
