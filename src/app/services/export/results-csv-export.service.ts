@@ -22,6 +22,13 @@ const OVERRIDE_MARKER = '*';
 /** Nincs adat. Sosem `0`: a "nincs értékelve" és a "0 pontot ért el" két külön állapot. */
 const NO_VALUE = '–';
 
+/**
+ * A diák elkezdte, de még nem fejezte be a feladatsort. Ugyanaz a szó, amit a
+ * mátrix is kiír (`feladatsor-eredmenyek.component.ts`, UI-TT-49 badge), hogy a
+ * képernyő és az export ne mondjon mást ugyanarról a diákról.
+ */
+const IN_PROGRESS = 'folyamatban';
+
 @Injectable({ providedIn: 'root' })
 export class ResultsCsvExportService {
   /** Letölti az eredmény-mátrixot CSV-ként. */
@@ -53,6 +60,15 @@ export class ResultsCsvExportService {
 
     if (!student.hasSession) {
       cells.push('nem kezdte el', NO_VALUE);
+    } else if (!student.isCompleted) {
+      // A még folyamatban lévő diák összesítője FÉLKÉSZ: a mátrix ezért ír mellé
+      // "folyamatban" badge-et (UI-TT-49). A képernyőn a szám és a figyelmeztetés
+      // egyszerre látszik, egy CSV-cellában viszont a szám magában marad — és ez az
+      // a fájl, amiből a tanár a naplóba másol. Egy "0" vagy egy részleges "3,3%"
+      // itt kész érdemjegynek látszik, ezért az összesítő helyett a státuszt írjuk ki.
+      // A részeredmény NEM vész el: a feladat-oszlopok cellánként továbbra is
+      // pontosan mutatják, mit ért el eddig.
+      cells.push(IN_PROGRESS, NO_VALUE);
     } else {
       const earned = student.totalEarnedPoints;
       const max = student.totalMaxPoints;

@@ -145,6 +145,52 @@ describe('ResultsCsvExportService', () => {
     expect(studentLine).not.toContain('0');
   });
 
+  it('a még folyamatban lévő diák nem exportálódik 0 pontként', () => {
+    const results = makeResults();
+    results.students[0].isCompleted = false;
+    // A backend a már megkísérelt feladatokból összegez — ez egy FÉLKÉSZ részeredmény.
+    results.students[0].totalEarnedPoints = 2;
+    results.students[0].totalMaxPoints = 20;
+
+    const csv = service.buildCsv(results);
+    const cells = csv.split('\r\n')[1].split(';');
+
+    expect(cells[1]).toBe('folyamatban');
+    expect(cells[2]).toBe('–');
+    // A félrevezető részösszeg és a belőle számolt százalék nem kerülhet ki.
+    expect(cells[1]).not.toContain('2 / 20');
+    expect(cells[2]).not.toBe('10');
+  });
+
+  it('a folyamatban lévő diák részeredménye a feladat-oszlopokban megmarad', () => {
+    const results = makeResults();
+    results.students[0].isCompleted = false;
+    results.students[0].taskResults = [
+      { taskId: 1, attemptId: 101, isCompleted: true, earnedPoints: 2, maxPoints: 10, isOverridden: false },
+      { taskId: 2, isCompleted: false, isOverridden: false },
+    ];
+
+    const cells = service.buildCsv(results).split('\r\n')[1].split(';');
+
+    // Csak az összesítőt hallgatjuk el, a cellánkénti valóságot nem.
+    expect(cells[3]).toBe('2/10');
+    expect(cells[4]).toBe('–');
+  });
+
+  it('a befejezett, de 0 pontot elért diák VALÓDI 0-t kap, nem "folyamatban"-t', () => {
+    const results = makeResults();
+    results.students[0].isCompleted = true;
+    results.students[0].totalEarnedPoints = 0;
+    results.students[0].totalMaxPoints = 20;
+
+    const cells = service.buildCsv(results).split('\r\n')[1].split(';');
+
+    // Ez a lényeg: a "nem tudjuk még" és a "tényleg nullát ért el" két külön állapot.
+    expect(cells[1]).toBe('0 / 20');
+    expect(cells[2]).toBe('0');
+    expect(cells[1]).not.toContain('folyamatban');
+  });
+
   it('az oszlopok a fejléc sorrendjét követik akkor is, ha a taskResults sorrendje eltér', () => {
     const results = makeResults();
     // Fordított sorrendű cellák — az exportnak taskId szerint kell párosítania.
