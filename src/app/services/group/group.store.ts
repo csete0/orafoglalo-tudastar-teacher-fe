@@ -17,6 +17,16 @@ export class GroupStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // UI-TT-107: ugyanaz a stale-response hibaosztály, mint a ReportStore/SchoolStore
+  // (UI-TT-148/149) generációs-számláló fixjénél. A store `providedIn: 'root'`, és a
+  // `takeUntilDestroyed(this.destroyRef)` a STORE saját (gyakorlatilag örökké élő)
+  // DestroyRef-jéhez kötött, nem a fogyasztó komponenséhez — ezért egy MÁSIK csoportra
+  // navigálás NEM szakítja meg az előző csoport még folyamatban lévő tagnévsor-hívását.
+  // Ha az A csoport válasza a MÁR megjelenített B csoporté UTÁN érkezik meg, csendben
+  // felülírná a `_members`-t, miközben a `selectedGroup()` továbbra is B-t mutatja: a
+  // tanár B csoport oldalán A csoport diákjait látná.
+  private _membersGeneration = 0;
+
   readonly groups = computed(() => this._groups());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
@@ -78,18 +88,27 @@ export class GroupStore {
   }
 
   loadMembers(id: number): void {
+    const generation = ++this._membersGeneration;
     this._loading.set(true);
     this._error.set(null);
     this.service
       .getMembers(id)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._membersGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (members) => this._members.set(members),
-        error: (err) => this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.')),
+        next: (members) => {
+          if (generation !== this._membersGeneration) return;
+          this._members.set(members);
+        },
+        error: (err) => {
+          if (generation !== this._membersGeneration) return;
+          this._error.set(extractErrorMessage(err, 'A tagok betöltése sikertelen.'));
+        },
       });
   }
 

@@ -32,6 +32,17 @@ export class TeacherTaskSetStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // UI-TT-105: minden sikeres mutáció a `mutateAndReload()`-on át elindít egy SAJÁT
+  // `loadDetail()` GET-et. Két gyors egymás utáni mutációnál (pl. egy feladat
+  // hozzáadása, majd egy MÁSIK törlése, mielőtt az első reload lefutna) két
+  // párhuzamos GET verseng, és ha a RÉGEBBI válasza ér célba utoljára, csendben
+  // felülírja a store-t — egy ténylegesen törölt feladat visszatér a szerkesztőbe.
+  // Ugyanaz a generációs-számláló minta zárja ki, mint a ReportStore/SchoolStore
+  // (UI-TT-148/149) esetében: csak a LEGUTÓBB indított `loadDetail()` válasza
+  // érvényesül. A számláló a `loadDetail()`-en ül, mert minden versengő GET ott
+  // indul (közvetlen navigáció, `mutateAndReload()` és `publish()` egyaránt).
+  private _detailGeneration = 0;
+
   readonly taskSets = computed(() => this._taskSets());
   readonly selectedDetail = computed(() => this._selectedDetail());
   readonly publishResult = computed(() => this._publishResult());
@@ -68,6 +79,7 @@ export class TeacherTaskSetStore {
       this._selectedDetail.set(null);
     }
 
+    const generation = ++this._detailGeneration;
     this._loading.set(true);
     this._error.set(null);
 
@@ -75,15 +87,24 @@ export class TeacherTaskSetStore {
       .getDetail(id)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          if (generation === this._detailGeneration) this._loading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (detail) => {
+          // Egy elavult reload válasza sem a store-t nem frissítheti, sem az
+          // `onSuccess`-t nem sütheti el (az a hívó oldalán toastot/navigációt
+          // válthat ki egy már túlhaladott művelet nevében).
+          if (generation !== this._detailGeneration) return;
           this._selectedDetail.set(detail);
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(extractErrorMessage(err, 'A feladatsor betöltése sikertelen.')),
+        error: (err) => {
+          if (generation !== this._detailGeneration) return;
+          this._error.set(extractErrorMessage(err, 'A feladatsor betöltése sikertelen.'));
+        },
       });
   }
 

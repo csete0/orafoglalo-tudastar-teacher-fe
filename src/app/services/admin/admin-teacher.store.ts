@@ -17,6 +17,15 @@ export class AdminTeacherStore {
   private readonly _taskSets = signal<AdminTaskSetDto[]>([]);
   private readonly _taskSetsLoading = signal(false);
 
+  // UI-TT-108: ugyanaz a stale-response hibaosztály, mint a ReportStore/SchoolStore
+  // (UI-TT-148/149) fixjénél, de itt a KÖVETKEZMÉNY súlyosabb: nem csak megtévesztő
+  // olvasási nézet, hanem egy VALÓS admin-mutáció rossz célpontra alkalmazása. Ha az
+  // admin A tanárra kattint, majd — még A `getTaskSets()`-e előtt — B-re, és A válasza
+  // ér célba utoljára, A feladatsor-listája felülírja B-ét, miközben a
+  // `selectedTeacherId()` B-t mutat: egy innen indított `takedownTaskSet()` A tanár
+  // tartalmát vonná vissza B helyett.
+  private _taskSetsGeneration = 0;
+
   readonly teachers = computed(() => this._teachers());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
@@ -97,11 +106,17 @@ export class AdminTeacherStore {
 
   selectTeacher(teacherProfileId: number): void {
     if (this._selectedTeacherId() === teacherProfileId) {
+      // A generációt a BEZÁRÓ ágon is léptetni kell: ha a sor összecsukásakor még
+      // folyamatban van egy `getTaskSets()`, a késve érkező válasza enélkül
+      // visszatöltené a listát egy már deszelektált tanárhoz.
+      this._taskSetsGeneration++;
       this._selectedTeacherId.set(null);
       this._taskSets.set([]);
+      this._taskSetsLoading.set(false);
       return;
     }
 
+    const generation = ++this._taskSetsGeneration;
     this._selectedTeacherId.set(teacherProfileId);
     this._taskSets.set([]);
     this._taskSetsLoading.set(true);
@@ -111,12 +126,20 @@ export class AdminTeacherStore {
       .getTaskSets(teacherProfileId)
       .pipe(
         take(1),
-        finalize(() => this._taskSetsLoading.set(false)),
+        finalize(() => {
+          if (generation === this._taskSetsGeneration) this._taskSetsLoading.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (taskSets) => this._taskSets.set(taskSets),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feladatsorok betöltése sikertelen.'),
+        next: (taskSets) => {
+          if (generation !== this._taskSetsGeneration) return;
+          this._taskSets.set(taskSets);
+        },
+        error: (err) => {
+          if (generation !== this._taskSetsGeneration) return;
+          this._error.set(err.error?.errorMessage ?? 'A feladatsorok betöltése sikertelen.');
+        },
       });
   }
 

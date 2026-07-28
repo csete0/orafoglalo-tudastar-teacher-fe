@@ -198,4 +198,55 @@ describe('AdminTeacherStore', () => {
     quotaSubject.complete();
     await Promise.resolve();
   });
+
+  // UI-TT-108: két gyors egymás utáni tanár-kiválasztásnál a KORÁBBAN indított
+  // `getTaskSets()` válasza — ha később ér célba — felülírta a MÁR megjelenített,
+  // újabb tanár listáját. A `selectedTeacherId()` közben B-t mutatta, tehát egy
+  // innen indított `takedownTaskSet()` A tanár tartalmát vonta volna vissza.
+  it('BUG UI-TT-108 javítva: selectTeacher — a késve érkező RÉGI tanár feladatsorai nem írják felül az újabbat', async () => {
+    const aValasz = new Subject<AdminTaskSetDto[]>();
+    const bValasz = new Subject<AdminTaskSetDto[]>();
+    serviceMock.getTaskSets.mockReturnValueOnce(aValasz).mockReturnValueOnce(bValasz);
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.selectTeacher(1);
+    store.selectTeacher(2);
+    expect(serviceMock.getTaskSets).toHaveBeenCalledTimes(2);
+
+    const bFeladatsorok = [makeTaskSet({ id: 200, title: 'B tanár feladatsora' })];
+    bValasz.next(bFeladatsorok);
+    bValasz.complete();
+    await Promise.resolve();
+    expect(store.taskSets()).toEqual(bFeladatsorok);
+
+    aValasz.next([makeTaskSet({ id: 100, title: 'A tanár feladatsora' })]);
+    aValasz.complete();
+    await Promise.resolve();
+
+    // A megjelenített lista és a kiválasztott tanár mostantól garantáltan egyezik —
+    // ez az, ami a rossz célpontú `takedownTaskSet()`-et kizárja.
+    expect(store.taskSets()).toEqual(bFeladatsorok);
+    expect(store.selectedTeacherId()).toBe(2);
+  });
+
+  // A bezáró (deszelektáló) ág is léptet generációt: enélkül egy még folyamatban
+  // lévő lekérdezés késve érkező válasza visszatöltötte volna a listát egy már
+  // becsukott sorhoz.
+  it('BUG UI-TT-108 javítva: a sor becsukása után késve érkező válasz nem tölti vissza a listát', async () => {
+    const aValasz = new Subject<AdminTaskSetDto[]>();
+    serviceMock.getTaskSets.mockReturnValueOnce(aValasz);
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.selectTeacher(1);
+    store.selectTeacher(1); // ugyanaz az id → deszelektál
+
+    expect(store.selectedTeacherId()).toBeNull();
+
+    aValasz.next([makeTaskSet({ id: 100 })]);
+    aValasz.complete();
+    await Promise.resolve();
+
+    expect(store.taskSets()).toEqual([]);
+    expect(store.taskSetsLoading()).toBe(false);
+  });
 });

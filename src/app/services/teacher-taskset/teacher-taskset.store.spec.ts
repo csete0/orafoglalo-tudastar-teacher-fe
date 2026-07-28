@@ -280,4 +280,61 @@ describe('TeacherTaskSetStore', () => {
     snippetsSubject.next({});
     snippetsSubject.complete();
   });
+
+  // UI-TT-105: minden mutáció a `mutateAndReload()`-on át SAJÁT `loadDetail()` GET-et
+  // indít. Két gyors egymás utáni mutációnál a két reload verseng, és ha a RÉGEBBI
+  // válasza ér célba utoljára, felülírja a store-t — egy ténylegesen törölt feladat
+  // visszatér a szerkesztőbe. A `deleteTask` itt szándékosan a `loading()`-guard
+  // NÉLKÜLI úton fut (a guard csak a snippet-mentőkön van), tehát a két reload
+  // ténylegesen párhuzamosan él.
+  it('BUG UI-TT-105 javítva: két versengő reload közül a késve érkező RÉGEBBI válasz nem írja felül az újabbat', async () => {
+    configure();
+    const elsoReload = new Subject<TeacherTaskSetDetailDto>();
+    const masodikReload = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(elsoReload).mockReturnValueOnce(masodikReload);
+
+    // Két, egymást gyorsan követő, MÁR lefutott mutáció reloadja.
+    store.loadDetail(1);
+    store.loadDetail(1);
+    expect(serviceMock.getDetail).toHaveBeenCalledTimes(2);
+
+    // A frissebb (második) reload ér célba előbb — ez a helyes, aktuális állapot.
+    const ujAllapot = makeDetail({ taskCount: 1, title: 'Törlés utáni állapot' });
+    masodikReload.next(ujAllapot);
+    masodikReload.complete();
+    await Promise.resolve();
+    expect(store.selectedDetail()).toEqual(ujAllapot);
+
+    // A régebbi reload elavult válasza NEM állíthatja vissza a törölt feladatot.
+    elsoReload.next(makeDetail({ taskCount: 2, title: 'Elavult állapot' }));
+    elsoReload.complete();
+    await Promise.resolve();
+    expect(store.selectedDetail()).toEqual(ujAllapot);
+  });
+
+  // Az elavult reload az `onSuccess`-t sem sütheti el: az a hívó oldalán toastot
+  // vagy navigációt válthatna ki egy már túlhaladott művelet nevében.
+  it('BUG UI-TT-105 javítva: az elavult reload nem hívja meg az onSuccess callbacket', async () => {
+    configure();
+    const elsoReload = new Subject<TeacherTaskSetDetailDto>();
+    const masodikReload = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(elsoReload).mockReturnValueOnce(masodikReload);
+
+    const elsoOnSuccess = vi.fn();
+    const masodikOnSuccess = vi.fn();
+
+    store.loadDetail(1, elsoOnSuccess);
+    store.loadDetail(1, masodikOnSuccess);
+
+    masodikReload.next(makeDetail());
+    masodikReload.complete();
+    await Promise.resolve();
+
+    elsoReload.next(makeDetail());
+    elsoReload.complete();
+    await Promise.resolve();
+
+    expect(masodikOnSuccess).toHaveBeenCalledTimes(1);
+    expect(elsoOnSuccess).not.toHaveBeenCalled();
+  });
 });

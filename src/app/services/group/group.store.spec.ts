@@ -2,7 +2,17 @@ import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { GroupStore } from './group.store';
 import { GroupService } from './group.service';
-import { GroupDto } from '../../models/group.model';
+import { GroupDto, GroupMemberDto } from '../../models/group.model';
+
+function makeMember(overrides: Partial<GroupMemberDto> = {}): GroupMemberDto {
+  return {
+    userId: 1,
+    name: 'Teszt Diák',
+    email: 'diak@example.com',
+    joinedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
 
 function makeGroup(overrides: Partial<GroupDto> = {}): GroupDto {
   return {
@@ -22,6 +32,7 @@ describe('GroupStore', () => {
     getMine: ReturnType<typeof vi.fn>;
     unarchive: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
+    getMembers: ReturnType<typeof vi.fn>;
   };
   let store: GroupStore;
 
@@ -30,6 +41,7 @@ describe('GroupStore', () => {
       getMine: vi.fn(),
       unarchive: vi.fn(),
       create: vi.fn(),
+      getMembers: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -94,5 +106,52 @@ describe('GroupStore', () => {
 
     expect(store.error()).toBe('A Name mező legfeljebb 255 karakter hosszú lehet.');
     expect(store.error()).not.toContain('sikertelen.');
+  });
+
+  // UI-TT-107: két gyors egymás utáni csoport-megnyitásnál a KORÁBBAN indított
+  // tagnévsor-lekérdezés válasza — ha később ér célba — csendben felülírta a MÁR
+  // megjelenített, ÚJABB csoport tagjait: a tanár B csoport oldalán A csoport
+  // diákjait látta.
+  it('BUG UI-TT-107 javítva: loadMembers — a késve érkező RÉGI csoport tagnévsora nem írja felül az újabbat', async () => {
+    const aValasz = new Subject<GroupMemberDto[]>();
+    const bValasz = new Subject<GroupMemberDto[]>();
+    serviceMock.getMembers.mockReturnValueOnce(aValasz).mockReturnValueOnce(bValasz);
+
+    store.loadMembers(1);
+    store.loadMembers(2);
+    expect(serviceMock.getMembers).toHaveBeenCalledTimes(2);
+
+    const bTagok = [makeMember({ userId: 20, name: 'B csoport diákja' })];
+    bValasz.next(bTagok);
+    bValasz.complete();
+    await Promise.resolve();
+    expect(store.members()).toEqual(bTagok);
+
+    // "A" elavult, KÉSŐN érkező válasza nem írhatja felül "B" már megjelenített tagjait.
+    aValasz.next([makeMember({ userId: 10, name: 'A csoport diákja' })]);
+    aValasz.complete();
+    await Promise.resolve();
+    expect(store.members()).toEqual(bTagok);
+  });
+
+  // Ugyanez a hibaág: egy elavult kérés HIBÁJA sem üthet be egy közben már
+  // sikeresen betöltött, újabb csoport nézetébe.
+  it('BUG UI-TT-107 javítva: loadMembers — a késve érkező RÉGI kérés hibája nem jelenik meg az újabb csoportnál', async () => {
+    const aValasz = new Subject<GroupMemberDto[]>();
+    const bValasz = new Subject<GroupMemberDto[]>();
+    serviceMock.getMembers.mockReturnValueOnce(aValasz).mockReturnValueOnce(bValasz);
+
+    store.loadMembers(1);
+    store.loadMembers(2);
+
+    bValasz.next([makeMember({ userId: 20 })]);
+    bValasz.complete();
+    await Promise.resolve();
+
+    aValasz.error({ error: { errorMessage: 'A csoport nem található.' } });
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+    expect(store.loading()).toBe(false);
   });
 });
