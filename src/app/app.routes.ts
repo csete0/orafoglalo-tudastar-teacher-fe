@@ -14,6 +14,23 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/oauth-callback/oauth-callback.component').then((m) => m.OauthCallbackComponent),
   },
+  // 0.C-4: nincs saját regisztrációs űrlap (ld. RegistrationRedirectComponent doc-comment),
+  // de a `/registration` sem eshet a 404-re - a diák-app regisztrációjára irányítunk.
+  // A magyar alias azért kell, mert a magyar nyelvű felületen ez a kézenfekvő tipp.
+  {
+    path: 'registration',
+    loadComponent: () =>
+      import('./pages/registration-redirect/registration-redirect.component').then(
+        (m) => m.RegistrationRedirectComponent,
+      ),
+  },
+  {
+    path: 'regisztracio',
+    loadComponent: () =>
+      import('./pages/registration-redirect/registration-redirect.component').then(
+        (m) => m.RegistrationRedirectComponent,
+      ),
+  },
   {
     path: 'jelentkezes',
     canActivate: [authGuard],
