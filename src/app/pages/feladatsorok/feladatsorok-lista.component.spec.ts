@@ -145,21 +145,20 @@ describe('FeladatsorokListaComponent', () => {
     expect(fixture.componentInstance.createForm.valid).toBe(true);
   });
 
-  // UI-TT-category-tosignal-unhandled-error: a `readonly categories = toSignal(this.categoryService.getAll(), ...)`
-  // (feladatsorok-lista.component.ts:116) SEMMILYEN catchError-t nem alkalmaz a CategoryService.getAll()
-  // Observable-jén. Angular toSignal() dokumentált viselkedése: ha a forrás Observable hibával fut le, a
-  // visszaadott signal a KÖVETKEZŐ olvasáskor eldobja azt a hibát (node_modules/@angular/core/fesm2022/
-  // rxjs-interop.mjs: "case 2: throw current.error"). A `categories()` a sablon `@for` ciklusában (95-98. sor)
-  // FELTÉTEL NÉLKÜL kerül kiolvasásra minden change detection körben — tehát ha a publikus
-  // GET /public/categories végpont akár egyszer hibázik (hálózati hiba, 500, stb.), a teljes
-  // "Feladatsoraim" oldal (a MEGLÉVŐ feladatsor-lista ÉS az "Új feladatsor" űrlap is) törik, holott ez a
-  // hiba kizárólag a "Tantárgyi kategória" legördülő menüt kellene, hogy érintse - ellentétben a lapon lévő
-  // MÁSIK store-ral (TeacherTaskSetStore), aminek van saját, sablonban explicit kezelt error() signalja
-  // (29-31. sor). Ez a bug reprodukálja azt a mintát, amit a UI-TT-67 már megtalált a csoport-/intézmény-
-  // részletek "melléktermék" store-jainál (hiba-jelzés hiánya), csak itt a hiba nem is elnyelődik, hanem
-  // KIDOBÓDIK és eldönti a teljes komponens renderelését.
-  it('BUG UI-TT-category-tosignal-unhandled-error: a CategoryService.getAll() hibája esetén a teljes oldal ' +
-    'renderelése eldől, ahelyett hogy csak a kategória-legördülő maradna üres', () => {
+  // UI-TT-category-tosignal-unhandled-error — JAVÍTVA, ez már regresszió-védelem, nem
+  // nyitott hiba: a `readonly categories = toSignal(this.categoryService.getAll(), ...)`
+  // (feladatsorok-lista.component.ts:123-126) most `.pipe(catchError(() => of([])))`-ot
+  // alkalmaz a CategoryService.getAll() Observable-jén. A hiba korábban (catchError
+  // nélkül) a toSignal() dokumentált viselkedése miatt a KÖVETKEZŐ olvasáskor kidobódott
+  // volna (node_modules/@angular/core/fesm2022/rxjs-interop.mjs: "case 2: throw
+  // current.error") — mivel a `categories()` a sablon `@for` ciklusában feltétel nélkül
+  // kerül kiolvasásra minden change detection körben, ez a teljes "Feladatsoraim" oldal
+  // renderelését eldöntötte volna egyetlen kategória-hiba (hálózati hiba, 500) esetén is,
+  // holott csak a "Tantárgyi kategória" legördülőt kellene érintenie. Ez a teszt azt
+  // rögzíti, hogy a fix tartja magát: a hiba NEM dönti el a rendert, a meglévő
+  // feladatsor-lista és az "Új feladatsor" űrlap is látszik.
+  it('a CategoryService.getAll() hibája esetén a teljes oldal renderelése NEM dől el, ' +
+    'csak a kategória-legördülő marad üres', () => {
     configure();
     TestBed.overrideProvider(CategoryService, {
       useValue: { getAll: () => throwError(() => new Error('network error')) },

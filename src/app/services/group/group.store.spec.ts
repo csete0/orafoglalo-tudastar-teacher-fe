@@ -33,6 +33,7 @@ describe('GroupStore', () => {
     unarchive: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     getMembers: ReturnType<typeof vi.fn>;
+    removeMember: ReturnType<typeof vi.fn>;
   };
   let store: GroupStore;
 
@@ -42,6 +43,7 @@ describe('GroupStore', () => {
       unarchive: vi.fn(),
       create: vi.fn(),
       getMembers: vi.fn(),
+      removeMember: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -153,5 +155,26 @@ describe('GroupStore', () => {
 
     expect(store.error()).toBeNull();
     expect(store.loading()).toBe(false);
+  });
+
+  // BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT: minden MÁS mutáció ebben a store-ban
+  // (archive/unarchive/setJoinEnabled/regenerateInvite/update) patch-eli a `_groups`
+  // listát is - a `removeMember()` korábban csak a `_members`-t frissítette, a
+  // `csoportok-lista.component.ts`-ben megjelenő `group.memberCount` így elavult
+  // (eggyel magasabb, mint a valós taglétszám) maradt egy tag eltávolítása után,
+  // amíg egy külön `loadMine()` újra le nem töltötte a listát.
+  it('BUG BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT javítva: removeMember() a _groups memberCount-ját is csökkenti', () => {
+    serviceMock.getMine.mockReturnValue(of([makeGroup({ id: 501, memberCount: 3 })]));
+    serviceMock.getMembers.mockReturnValue(
+      of([makeMember({ userId: 10 }), makeMember({ userId: 20 })]),
+    );
+    serviceMock.removeMember.mockReturnValue(of({}));
+
+    store.loadMine();
+    store.loadMembers(501);
+    store.removeMember(501, 10);
+
+    expect(store.members()).toEqual([makeMember({ userId: 20 })]);
+    expect(store.groups().find((g) => g.id === 501)?.memberCount).toBe(2);
   });
 });

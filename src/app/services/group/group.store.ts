@@ -115,6 +115,14 @@ export class GroupStore {
   removeMember(groupId: number, memberUserId: number, onSuccess?: () => void): void {
     this.mutate(this.service.removeMember(groupId, memberUserId), () => {
       this._members.update((list) => list.filter((m) => m.userId !== memberUserId));
+      // BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT: minden MÁS mutáció ebben a store-ban
+      // (archive/unarchive/setJoinEnabled/regenerateInvite/update) patch-eli a `_groups`
+      // listát is - ez volt az egyetlen kivétel, csak a `_members`-t frissítette. A
+      // `GroupService.removeMember()` `Observable<unknown>`-t ad vissza (nincs
+      // szerver-válasz frissített `memberCount`-tal), ezért kézzel csökkentjük eggyel.
+      this._groups.update((list) =>
+        list.map((g) => (g.id === groupId ? { ...g, memberCount: g.memberCount - 1 } : g)),
+      );
       if (onSuccess) onSuccess();
     });
   }

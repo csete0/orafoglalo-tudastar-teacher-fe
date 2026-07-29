@@ -278,4 +278,43 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     fixture.componentInstance.saveEdit(1);
     expect(schoolStoreMock.update).toHaveBeenCalledWith(1, { name: 'a'.repeat(255) }, expect.any(Function));
   });
+
+  // BE-INTEZMENYRESZLETEK-ADMINTAB-BODY-NOT-REGATED: a nav-gombok `isSelectedAdmin()`
+  // mögé vannak zárva, de a fül-TEST (az "Áttekintés"/"Csoportok" @case ág) korábban
+  // csak a `tab()` értékétől függött - ha az admin-jog megszűnik, amíg a tanár épp
+  // ezen a fülön van (nincs push/poll, ami frissítené `_schools`-t), a tartalom
+  // befagyva tovább jelenne meg, miközben a visszalépés gombja is eltűnt.
+  it('BUG BE-INTEZMENYRESZLETEK-ADMINTAB-BODY-NOT-REGATED javítva: admin-jog elvesztésekor az Áttekintés fül tartalma eltűnik, fallback üzenet jelenik meg', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('attekintes');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('table')).toBeTruthy();
+
+    // Az admin-jog megszűnik, MIALATT a tanár még ezen a fülön van (tab() változatlan).
+    schoolStoreMock.isSelectedAdmin.set(false);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('table')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="admin-tab-lost-access"]')).toBeTruthy();
+  });
+
+  it('BUG BE-INTEZMENYRESZLETEK-ADMINTAB-BODY-NOT-REGATED javítva: admin-jog elvesztésekor a Csoportok fül tartalma eltűnik, fallback üzenet jelenik meg', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('csoportok');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('ul.space-y-2')).toBeTruthy();
+
+    schoolStoreMock.isSelectedAdmin.set(false);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="admin-tab-lost-access"]')).toBeTruthy();
+  });
 });

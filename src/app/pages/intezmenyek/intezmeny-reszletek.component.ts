@@ -156,60 +156,80 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
           }
 
           @case ('attekintes') {
-            <app-date-range-filter (rangeChange)="applyRange($event)" />
-            @if (report.error()) {
-              <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
-            } @else {
-              <div class="card overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                        <th class="py-3 px-4">Diák</th>
-                        <th class="py-3 px-4">Vizsgák</th>
-                        <th class="py-3 px-4">Átlag %</th>
-                        <th class="py-3 px-4">Sorozat</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (student of report.schoolActivity(); track student.userId) {
-                        <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                          <td class="py-2.5 px-4">
-                            <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                          </td>
-                          <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                          <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                          <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+            <!-- BE-INTEZMENYRESZLETEK-ADMINTAB-BODY-NOT-REGATED: a nav-gombok fent
+                 isSelectedAdmin() mögé vannak zárva, de ez a fül-TEST korábban
+                 kizárólag a tab() értékétől függött - ha az admin-jog a fül
+                 megtekintése közben szűnik meg (más admin által, _schools frissítés
+                 nélkül), a tartalom befagyva tovább jelent volna meg, és a visszalépés
+                 gombja is eltűnt (mert az is isSelectedAdmin()-en múlik). Nem
+                 adatszivárgás (a backend minden lekérdezést újra jogosultság-ellenőriz),
+                 csak zavaró, beragadt UI. -->
+            @if (school.isSelectedAdmin()) {
+              <app-date-range-filter (rangeChange)="applyRange($event)" />
+              @if (report.error()) {
+                <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
+              } @else {
+                <div class="card overflow-hidden">
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                          <th class="py-3 px-4">Diák</th>
+                          <th class="py-3 px-4">Vizsgák</th>
+                          <th class="py-3 px-4">Átlag %</th>
+                          <th class="py-3 px-4">Sorozat</th>
                         </tr>
-                      } @empty {
-                        <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
-                      }
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        @for (student of report.schoolActivity(); track student.userId) {
+                          <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                            <td class="py-2.5 px-4">
+                              <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
+                            </td>
+                            <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
+                            <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
+                            <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                          </tr>
+                        } @empty {
+                          <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              }
+            } @else {
+              <p class="text-text-muted text-center py-10" data-testid="admin-tab-lost-access">
+                Már nincs igazgatói jogosultságod ehhez az intézményhez.
+              </p>
             }
           }
 
           @case ('csoportok') {
-            <ul class="space-y-2">
-              @for (group of school.schoolGroups(); track group.groupId) {
-                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
-                  <span class="flex items-center gap-2 min-w-0">
-                    <app-icon name="users" class="w-4 h-4 block text-text-muted shrink-0" />
-                    <span class="truncate">{{ group.name }}</span>
-                  </span>
-                  <span class="text-text-muted shrink-0">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
-                </li>
-              } @empty {
-                <li class="flex flex-col items-center py-10 gap-3">
-                  <div class="icon-tile icon-tile-neutral">
-                    <app-icon name="users" class="w-6 h-6 block" />
-                  </div>
-                  <p class="font-semibold">Az intézményhez még nincs csoport kötve.</p>
-                </li>
-              }
-            </ul>
+            @if (school.isSelectedAdmin()) {
+              <ul class="space-y-2">
+                @for (group of school.schoolGroups(); track group.groupId) {
+                  <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
+                    <span class="flex items-center gap-2 min-w-0">
+                      <app-icon name="users" class="w-4 h-4 block text-text-muted shrink-0" />
+                      <span class="truncate">{{ group.name }}</span>
+                    </span>
+                    <span class="text-text-muted shrink-0">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
+                  </li>
+                } @empty {
+                  <li class="flex flex-col items-center py-10 gap-3">
+                    <div class="icon-tile icon-tile-neutral">
+                      <app-icon name="users" class="w-6 h-6 block" />
+                    </div>
+                    <p class="font-semibold">Az intézményhez még nincs csoport kötve.</p>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="text-text-muted text-center py-10" data-testid="admin-tab-lost-access">
+                Már nincs igazgatói jogosultságod ehhez az intézményhez.
+              </p>
+            }
           }
         }
       </div>
