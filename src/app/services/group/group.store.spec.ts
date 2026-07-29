@@ -9,7 +9,11 @@ function makeMember(overrides: Partial<GroupMemberDto> = {}): GroupMemberDto {
     userId: 1,
     name: 'Teszt Diák',
     email: 'diak@example.com',
-    joinedAt: new Date().toISOString(),
+    // Rögzített időbélyeg, NEM `new Date().toISOString()` - két hívás (a teszt-adat
+    // felépítése és egy `toEqual`-asszertáció elvárt értéke) között eltelt akár 1 ms is
+    // időszakosan elbuktatta a tesztet egy jelentéktelen, a teszt tárgyához nem tartozó
+    // időbélyeg-eltérés miatt.
+    joinedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }

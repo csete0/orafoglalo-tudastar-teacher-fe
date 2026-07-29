@@ -29,6 +29,7 @@ function makeTaskSet(overrides: Partial<AdminTaskSetDto> = {}): AdminTaskSetDto 
     description: 'Leírás',
     levelId: 2,
     isPublished: true,
+    takedownAt: null,
     createdAt: new Date().toISOString(),
     taskCount: 3,
     ...overrides,
@@ -42,6 +43,7 @@ describe('AdminTeacherStore', () => {
     setQuota: ReturnType<typeof vi.fn>;
     getTaskSets: ReturnType<typeof vi.fn>;
     takedownTaskSet: ReturnType<typeof vi.fn>;
+    reinstateTaskSet: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -51,6 +53,7 @@ describe('AdminTeacherStore', () => {
       setQuota: vi.fn(),
       getTaskSets: vi.fn(),
       takedownTaskSet: vi.fn(),
+      reinstateTaskSet: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -159,6 +162,27 @@ describe('AdminTeacherStore', () => {
     await Promise.resolve();
 
     expect(store.taskSets()[0].isPublished).toBe(false);
+    // A takedownAt jelöli meg, hogy ez ADMIN-döntés volt (nem a tanár piszkozata) -
+    // erre épül a feloldó gomb megjelenítése és a szerveroldali publish-tiltás.
+    expect(store.taskSets()[0].takedownAt).not.toBeNull();
+  });
+
+  it('reinstateTaskSet siker esetén feloldja a takedownt (isPublished=true, takedownAt=null)', async () => {
+    serviceMock.getTaskSets.mockReturnValue(
+      of([makeTaskSet({ id: 100, isPublished: false, takedownAt: '2026-07-29T10:00:00Z' })]),
+    );
+    serviceMock.reinstateTaskSet.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.selectTeacher(1);
+    await Promise.resolve();
+
+    store.reinstateTaskSet(100);
+    await Promise.resolve();
+
+    expect(serviceMock.reinstateTaskSet).toHaveBeenCalledWith(100);
+    expect(store.taskSets()[0].isPublished).toBe(true);
+    expect(store.taskSets()[0].takedownAt).toBeNull();
   });
 
   // UI-TT-117: az AdminApplicationStore.approve()/reject()-től eltérően (ld.

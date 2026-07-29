@@ -28,4 +28,9 @@ export class AdminTeacherService {
   takedownTaskSet(taskSetId: number): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/task-sets/${taskSetId}/takedown`, {});
   }
+
+  /** Admin-takedown feloldása — a tanár maga nem tudja újra publikálni a levett feladatsort. */
+  reinstateTaskSet(taskSetId: number): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/task-sets/${taskSetId}/reinstate`, {});
+  }
 }

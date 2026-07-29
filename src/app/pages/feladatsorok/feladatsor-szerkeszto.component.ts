@@ -599,6 +599,11 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       confirmLabel: 'Törlés',
     });
     if (!ok) return;
+    // UI-TT-115/123 testvér-hiánya: az add/upload műveletek dupla-kattintás guardja
+    // hiányzott a törlésekről — a megerősítő dialógus alatt egy másik mutáció
+    // (pl. egy másik törlés) elindulhatott, a mögöttes mutateAndReload() pedig nem
+    // idempotens: két egyidejű törlés zavaró, felesleges hibaüzenetet adhat.
+    if (this.store.loading()) return;
     this.store.deleteTask(taskSetId, taskId, () => this.toastService.success('Feladat törölve.'));
   }
 
@@ -651,6 +656,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       confirmLabel: 'Törlés',
     });
     if (!ok) return;
+    // UI-TT-115/123 testvér-hiánya — ld. deleteTask() fenti kommentje.
+    if (this.store.loading()) return;
     this.store.deleteSolution(taskSetId, solutionId, () => this.toastService.success('Részfeladat törölve.'));
   }
 
@@ -674,6 +681,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       confirmLabel: 'Törlés',
     });
     if (!ok) return;
+    // UI-TT-115/123 testvér-hiánya — ld. deleteTask() fenti kommentje.
+    if (this.store.loading()) return;
     this.store.deleteFile(taskSetId, fileId, () => this.toastService.success('Fájl törölve.'));
   }
 

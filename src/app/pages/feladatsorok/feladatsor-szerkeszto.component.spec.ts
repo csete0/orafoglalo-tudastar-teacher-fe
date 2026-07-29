@@ -36,6 +36,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
     addTask: ReturnType<typeof vi.fn>;
     addSolution: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
+    deleteTask: ReturnType<typeof vi.fn>;
+    deleteSolution: ReturnType<typeof vi.fn>;
+    deleteFile: ReturnType<typeof vi.fn>;
   };
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
@@ -62,6 +65,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // Alapból NEM hívja meg az onSuccess callback-et (folyamatban lévő kérést szimulál),
       // ugyanaz a konvenció, mint addTask/addSolution mockjánál.
       uploadFile: vi.fn(),
+      deleteTask: vi.fn(),
+      deleteSolution: vi.fn(),
+      deleteFile: vi.fn(),
     };
     schoolStoreMock = { schools: signal([]), loading: signal(false), error: signal(null), loadMine: vi.fn() };
     authorizedFileServiceMock = {
@@ -733,6 +739,61 @@ describe('FeladatsorSzerkesztoComponent', () => {
       component.addSolution(1, 1);
 
       expect(taskSetStoreMock.addSolution).toHaveBeenCalledTimes(1);
+    });
+
+    // BE-FELADATSORSZERKESZTO-DELETE-NO-LOADING-GUARD: az addTask()/addSolution()/uploadFile()
+    // UI-TT-115/123 fixe után a delete* metódusok maradtak az egyetlen kivétel — a
+    // megerősítő dialógus alatt egy másik mutáció elindulhat, és a mögöttes
+    // mutateAndReload() nem idempotens.
+    it('JAVÍTVA: deleteTask() nem hívja meg a store.deleteTask()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] },
+          ],
+        }),
+      );
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      taskSetStoreMock.loading.set(true);
+      await component.deleteTask(1, 1);
+
+      expect(taskSetStoreMock.deleteTask).not.toHaveBeenCalled();
+    });
+
+    it('JAVÍTVA: deleteSolution() nem hívja meg a store.deleteSolution()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
+      configure(
+        makeDetail({
+          tasks: [
+            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [{ id: 9, description: 'r', points: 5, snippets: [] }] },
+          ],
+        }),
+      );
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      taskSetStoreMock.loading.set(true);
+      await component.deleteSolution(1, 9);
+
+      expect(taskSetStoreMock.deleteSolution).not.toHaveBeenCalled();
+    });
+
+    it('JAVÍTVA: deleteFile() nem hívja meg a store.deleteFile()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
+      configure(makeDetail({ files: [{ id: 'f1', kind: 'create_sql' as any, originalFileName: 'create.sql', sizeBytes: 10 } as any] }));
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      taskSetStoreMock.loading.set(true);
+      await component.deleteFile(1, 'f1');
+
+      expect(taskSetStoreMock.deleteFile).not.toHaveBeenCalled();
     });
   });
 

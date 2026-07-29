@@ -159,11 +159,42 @@ export class AdminTeacherStore {
       .subscribe({
         next: () => {
           this._taskSets.update((list) =>
-            list.map((ts) => (ts.id === taskSetId ? { ...ts, isPublished: false } : ts)),
+            list.map((ts) =>
+              ts.id === taskSetId ? { ...ts, isPublished: false, takedownAt: new Date().toISOString() } : ts,
+            ),
           );
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A visszavonás sikertelen.'),
+      });
+  }
+
+  /**
+   * Az admin-takedown feloldása. A takedown óta a tanár SAJÁT publikálása szerveroldalon
+   * elhasal, tehát enélkül a művelet nélkül a döntés csak nyers API-hívással lenne
+   * visszafordítható — ez az egyetlen felületi útja.
+   */
+  reinstateTaskSet(taskSetId: number, onSuccess?: () => void): void {
+    if (this._loading()) return;
+
+    this._loading.set(true);
+    this._error.set(null);
+
+    this.service
+      .reinstateTaskSet(taskSetId)
+      .pipe(
+        take(1),
+        finalize(() => this._loading.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: () => {
+          this._taskSets.update((list) =>
+            list.map((ts) => (ts.id === taskSetId ? { ...ts, isPublished: true, takedownAt: null } : ts)),
+          );
+          if (onSuccess) onSuccess();
+        },
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A feloldás sikertelen.'),
       });
   }
 

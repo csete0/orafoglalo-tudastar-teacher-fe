@@ -53,12 +53,12 @@ const BYTES_PER_MB = 1048576;
               </div>
               <div class="flex flex-col gap-2 items-end shrink-0">
                 @if (teacher.isActive) {
-                  <button (click)="confirmSuspend(teacher.id, teacher.displayName)"
+                  <button (click)="confirmSuspend(teacher.id, teacher.displayName)" [disabled]="store.loading()"
                     class="btn btn-danger !px-3 !py-1.5 whitespace-nowrap">
                     Felfüggesztés
                   </button>
                 } @else {
-                  <button (click)="activate(teacher.id)"
+                  <button (click)="activate(teacher.id)" [disabled]="store.loading()"
                     class="btn !bg-success !text-white !px-3 !py-1.5 whitespace-nowrap">
                     Aktiválás
                   </button>
@@ -88,7 +88,7 @@ const BYTES_PER_MB = 1048576;
                     <input type="number" min="0" [(ngModel)]="quotaStorageMb" name="quotaStorageMb"
                       class="input !px-2 !py-1.5 !w-32" />
                   </div>
-                  <button type="submit" class="btn btn-primary !px-3 !py-1.5">
+                  <button type="submit" [disabled]="store.loading()" class="btn btn-primary !px-3 !py-1.5">
                     Mentés
                   </button>
                 </div>
@@ -110,11 +110,22 @@ const BYTES_PER_MB = 1048576;
                       <span class="min-w-0 flex-1">
                         <span class="block truncate">{{ taskSet.title }}</span>
                         <span class="text-text-muted">
-                          {{ taskSet.taskCount }} feladat · {{ taskSet.isPublished ? 'Publikálva' : 'Piszkozat' }}
+                          {{ taskSet.taskCount }} feladat ·
+                          {{ taskSet.takedownAt ? 'Admin visszavonta' : (taskSet.isPublished ? 'Publikálva' : 'Piszkozat') }}
                         </span>
                       </span>
-                      @if (taskSet.isPublished) {
-                        <button (click)="confirmTakedown(taskSet.id, taskSet.title)"
+                      <!--
+                        A takedown óta a tanár SAJÁT újra-publikálása szerveroldalon elhasal, ezért
+                        a levett állapothoz kell egy feloldó gomb is - enélkül az admin döntése
+                        csak nyers API-hívással lenne visszafordítható.
+                      -->
+                      @if (taskSet.takedownAt) {
+                        <button (click)="reinstate(taskSet.id)" [disabled]="store.loading()"
+                          class="text-success hover:underline whitespace-nowrap shrink-0">
+                          Visszavonás feloldása
+                        </button>
+                      } @else if (taskSet.isPublished) {
+                        <button (click)="confirmTakedown(taskSet.id, taskSet.title)" [disabled]="store.loading()"
                           class="text-danger hover:underline whitespace-nowrap shrink-0">
                           Publikálás visszavonása
                         </button>
@@ -187,11 +198,17 @@ export class AdminTanarokComponent {
       return;
     }
 
+    // BE-ADMINTEACHER-QUOTASAVE-FALSE-SUCCESS: a store `_loading`-ja megosztott a
+    // setActive/setQuota/takedownTaskSet között - ha egy másik admin-művelet épp
+    // folyamatban van, a setQuota() guardja csendben, HTTP-hívás nélkül visszatér. A
+    // panelt ezért KIZÁRÓLAG a store saját, ténylegesen csak sikeres válasz esetén
+    // meghívott onSuccess callback-jéből szabad zárni - korábban ez feltétel nélkül,
+    // a hívás után azonnal megtörtént, ami sikert mímelt egy el sem indult mentésnél.
     const maxStorageBytes = this.quotaStorageMb === null ? null : this.quotaStorageMb * BYTES_PER_MB;
-    this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes, () =>
-      this.toastService.success('Kvóta mentve.'),
-    );
-    this.quotaEditId.set(null);
+    this.store.setQuota(teacherProfileId, this.quotaTaskSets, maxStorageBytes, () => {
+      this.toastService.success('Kvóta mentve.');
+      this.quotaEditId.set(null);
+    });
   }
 
   activate(teacherProfileId: number): void {
@@ -216,5 +233,9 @@ export class AdminTanarokComponent {
     });
     if (!ok) return;
     this.store.takedownTaskSet(taskSetId, () => this.toastService.success('Publikálás visszavonva.'));
+  }
+
+  reinstate(taskSetId: number): void {
+    this.store.reinstateTaskSet(taskSetId, () => this.toastService.success('Visszavonás feloldva.'));
   }
 }

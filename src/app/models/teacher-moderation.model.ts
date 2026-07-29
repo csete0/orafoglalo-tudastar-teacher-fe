@@ -22,6 +22,12 @@ export interface AdminTaskSetDto {
   levelId: number;
   subjectCategoryId?: number;
   isPublished: boolean;
+  /**
+   * null = nincs admin-takedown érvényben. Kitöltve = admin vonta vissza a publikálást —
+   * a tanár ilyenkor NEM tudja maga újra publikálni, csak egy admin oldhatja fel. Enélkül
+   * a felület nem tudná megkülönböztetni ezt a tanár saját piszkozatától.
+   */
+  takedownAt: string | null;
   createdAt: string;
   taskCount: number;
 }
