@@ -281,7 +281,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
   // ezért egy TÉNYLEGESEN intézményi tagságú tanár egy átmeneti hiba esetén megerősítés
   // ÉS bármilyen hibajelzés NÉLKÜL azonnal publikál - pont az a helyzet, amit a UI-TT-47
   // fix meg akart előzni.
-  it('BUG UI-TT-110: ha a schoolStore.loadMine() HIBÁVAL fut le (nem csak lassan), a publish() ezt "nincs intézményi tagság"-ként kezeli, és megerősítés/hibajelzés NÉLKÜL azonnal publikál', async () => {
+  it('BUG UI-TT-110 javítva: ha a schoolStore.loadMine() HIBÁVAL fut le (nem csak lassan), a publish() NEM publikál némán - hibaüzenetet jelenít meg és nem hívja a store.publish()-t', async () => {
     configure(makeDetail({ isPublished: false }));
     // A schoolStore.loadMine() elbukott: a finalize() miatt loading() lezárult, de a
     // schools() SOSEM töltődött fel - ugyanaz a jel-állapot, mint egy ténylegesen
@@ -325,7 +325,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
   // a jelenség, amit egy korábbi kör a "Mentés" gombon `browser_evaluate`-tel élőben
   // bizonyított) ezért VALÓDI két `store.publish()`-hívást, azaz két külön hálózati kérést
   // eredményez.
-  it('BUG UI-TT-118: publish() intézmény nélküli tanárnál (schools()===[]) teljesen kihagyja a ConfirmService-t, ezért egy szinkron dupla-hívás VALÓDI két store.publish() hívást indít - a [disabled] gomb-őr csak a két kattintás közti change-detection ciklusra támaszkodik, a store.publish() maga nem véd "folyamatban lévő kérés" ellen', () => {
+  it('BUG UI-TT-118 javítva: publish() intézmény nélküli tanárnál (schools()===[]) kihagyja ugyan a ConfirmService-t, de egy szinkron dupla-hívás CSAK EGY store.publish() hívást indít - a store maga véd a "folyamatban lévő kérés" ellen', () => {
     configure(makeDetail({ isPublished: false }));
     schoolStoreMock.loading.set(false);
     schoolStoreMock.schools.set([]); // nincs intézményi tagság -> a confirm-ág teljesen ki van hagyva
@@ -685,7 +685,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // mindegyik hívás új sort szúr be), és maga a mutateAndReload() sem védekezik
     // újrabelépés ellen (teacher-taskset.store.ts:238-257 — nincs "if (this._loading())
     // return" az elején, csak feltétel nélkül true-ra állítja).
-    it('BUG (ÚJ): dupla-kattintás/gyors kettős Enter az "Új feladat hozzáadása" formon KÉTSZER hívja meg a store.addTask()-ot, miközben az első kérés még folyamatban van (duplikált feladat-sor a backenden)', () => {
+    it('JAVÍTVA: dupla-kattintás/gyors kettős Enter az "Új feladat hozzáadása" formon CSAK EGYSZER hívja meg a store.addTask()-ot, amíg az első kérés folyamatban van (nincs duplikált feladat-sor a backenden)', () => {
       configure(makeDetail({ tasks: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -708,7 +708,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(taskSetStoreMock.addTask).toHaveBeenCalledTimes(1);
     });
 
-    it('BUG (ÚJ): dupla-kattintás/gyors kettős Enter az "Új részfeladat" (addSolution) formon KÉTSZER hívja meg a store.addSolution()-t, miközben az első kérés még folyamatban van (duplikált részfeladat-sor a backenden)', () => {
+    it('JAVÍTVA: dupla-kattintás/gyors kettős Enter az "Új részfeladat" (addSolution) formon CSAK EGYSZER hívja meg a store.addSolution()-t, amíg az első kérés folyamatban van (nincs duplikált részfeladat-sor a backenden)', () => {
       configure(
         makeDetail({
           tasks: [
@@ -753,7 +753,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // véletlenül kiválasztott) fájl marad tárolva — pont azt a fajta versenyhelyzetet, amit a
     // guard a testvér addTask()/addSolution() formoknál (UI-TT-115) már kizár azzal, hogy a
     // második kattintást/eseményt csendben, no-opként eldobja.
-    it('BUG (ÚJ, UI-TT-123): egy második file-input "change" esemény, MÍG az első feltöltés még folyamatban van (store.loading()===true), KÉTSZER hívja meg a store.uploadFile()-t ugyanahhoz a fájl-típushoz', () => {
+    it('UI-TT-123 JAVÍTVA: egy második file-input "change" esemény, MÍG az első feltöltés még folyamatban van (store.loading()===true), CSAK EGYSZER hívja meg a store.uploadFile()-t ugyanahhoz a fájl-típushoz', () => {
       configure(makeDetail({ tasks: [], files: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();

@@ -39,8 +39,8 @@ describe('OauthCallbackComponent', () => {
     expect(navigateSpy).toHaveBeenCalledWith(['/dashboard'], { replaceUrl: true });
   });
 
-  // UI-TT-11x (javasolt): a sikeres OAuth-ág (`ngOnInit`, 42-51. sor) FELTÉTEL
-  // NÉLKÜL a dashboardra navigál, akkor is, ha a bejelentkezési folyamatot egy
+  // UI-TT-113 (JAVÍTVA): a sikeres OAuth-ág (`ngOnInit`) korábban FELTÉTEL
+  // NÉLKÜL a dashboardra navigált, akkor is, ha a bejelentkezési folyamatot egy
   // védett mélylinkről (authGuard `returnUrl`-je) indították. Ez éles ellentétben
   // áll a jelszavas bejelentkezés `LoginComponent.submit()` ágával, ami a
   // `returnUrl`-re navigál sikeres bejelentkezés után. Ha egy előző lépés
@@ -48,7 +48,7 @@ describe('OauthCallbackComponent', () => {
   // teljes oldal-navigáción túlélő helyre (sessionStorage), ennek a
   // komponensnek kellene azt visszaolvasnia és oda navigálnia, nem hardcode-olt
   // '/dashboard'-ra.
-  it('BUG: sikeres OAuth-bejelentkezés MINDIG a dashboardra navigál, akkor is, ha egy védett mélylinkről indult a bejelentkezés (elmentett returnUrl figyelmen kívül hagyva)', () => {
+  it('UI-TT-113 JAVÍTVA: sikeres OAuth-bejelentkezés az elmentett returnUrl-re navigál, nem feltétel nélkül a dashboardra', () => {
     configure({ google_authentication: 'success' });
     sessionStorage.setItem('teacher_oauth_return_url', '/csoportok/42');
 

@@ -66,7 +66,7 @@ describe('GroupStore', () => {
   // szinkron dupla-kattintás ellen — két egymást követő hívás, mielőtt az
   // első válasza megérkezne, két KÜLÖN valódi POST /api/groups/{id}/unarchive
   // kérést indít.
-  it('BUG UI-TT-119: unarchive()-nál egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', () => {
+  it('BUG UI-TT-119 javítva: unarchive()-nál egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', () => {
     serviceMock.getMine.mockReturnValue(of([makeGroup()]));
     const unarchiveSubject = new Subject<unknown>();
     serviceMock.unarchive.mockReturnValue(unarchiveSubject.asObservable());

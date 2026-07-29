@@ -174,7 +174,7 @@ describe('AdminTeacherStore', () => {
   // {id}/quota ment ki, mindkettő 200 OK-t kapott (staging, tt_staging DB,
   // 2026-07-25). Ez a teszt ugyanezt a mintát reprodukálja a store szintjén,
   // Subject-tel szimulálva egy még-nem-lezárt első kérést.
-  it('BUG UI-TT-117: setQuota()-nál egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', async () => {
+  it('BUG UI-TT-117 javítva: setQuota()-nál egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', async () => {
     serviceMock.getTeachers.mockReturnValue(of([makeTeacher()]));
     const quotaSubject = new Subject<unknown>();
     serviceMock.setQuota.mockReturnValue(quotaSubject.asObservable());

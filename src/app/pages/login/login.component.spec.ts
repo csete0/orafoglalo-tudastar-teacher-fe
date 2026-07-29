@@ -58,7 +58,7 @@ describe('LoginComponent', () => {
   // social-login redirect elindul — enélkül a mélylink szándéka visszaállíthatatlanul
   // elvész, és a felhasználó a sikeres OAuth-bejelentkezés után mindig a
   // dashboardra kerül vissza, függetlenül attól, milyen védett oldalról indult.
-  it('BUG: Google/Facebook/Apple bejelentkezésnél a returnUrl NEM kerül elmentésre a teljes oldal-navigáció (OAuth-redirect) előtt, szemben a jelszavas bejelentkezéssel, ami helyesen eljut a mélylinkre', () => {
+  it('UI-TT-113 JAVÍTVA: Google/Facebook/Apple bejelentkezésnél a returnUrl elmentődik a teljes oldal-navigáció (OAuth-redirect) előtt, a jelszavas bejelentkezéssel megegyezően', () => {
     configure({ returnUrl: '/csoportok/42' });
     const fixture = TestBed.createComponent(LoginComponent);
     fixture.detectChanges();
@@ -68,7 +68,7 @@ describe('LoginComponent', () => {
     fixture.componentInstance.signInWithProvider('google');
 
     // A social-login ág ténylegesen elindítja a redirectet (a mock authStore-on
-    // keresztül), de a returnUrl-t sehova nem menti el előtte.
+    // keresztül), ÉS a returnUrl-t elmenti sessionStorage-ba előtte.
     expect(authStoreMock.signInWithProvider).toHaveBeenCalledWith('google');
     expect(sessionStorage.getItem('teacher_oauth_return_url')).toBe('/csoportok/42');
   });

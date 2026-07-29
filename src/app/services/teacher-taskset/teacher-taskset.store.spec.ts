@@ -230,7 +230,7 @@ describe('TeacherTaskSetStore', () => {
   // (a testvér `upsertCompleteSolutionSnippets()`/`uploadFile()` metódusok - amik
   // szintén a mutateAndReload()-on mennek át - ugyanettől a hiánytól szenvednek,
   // ugyanaz a gyökérok).
-  it('BUG UI-TT-121: upsertSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', () => {
+  it('BUG UI-TT-121 javítva: upsertSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', () => {
     configure();
     const snippetsSubject = new Subject<unknown>();
     serviceMock.upsertSolutionSnippets.mockReturnValue(snippetsSubject.asObservable());
@@ -260,7 +260,7 @@ describe('TeacherTaskSetStore', () => {
   // sosem lett önállóan bizonyítva/javítva. A fix a guardot magába
   // mutateAndReload()-ba központosítja, hogy ez a testvér-metódus (és
   // bármely jövőbeli új hívó) automatikusan védve legyen.
-  it('BUG UI-TT-121 testvér-eset: upsertCompleteSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', () => {
+  it('BUG UI-TT-121 testvér-eset javítva: upsertCompleteSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', () => {
     configure();
     const snippetsSubject = new Subject<unknown>();
     serviceMock.upsertCompleteSolutionSnippets.mockReturnValue(snippetsSubject.asObservable());

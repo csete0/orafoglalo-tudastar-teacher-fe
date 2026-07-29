@@ -299,7 +299,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   // POST /api/schools/{id}/regenerate-teacher-invite kérést indít - a
   // korábban már megosztott/kimásolt kód csendben, figyelmeztetés nélkül
   // érvénytelenné válik.
-  it('BUG UI-TT-120: regenerateInvite()-nál egy átfedő második hívás (dupla-kattintás) MÁSODIK valódi HTTP-kérést indít, mert nincs "loading" guard', async () => {
+  it('BUG UI-TT-120 javítva: regenerateInvite()-nál egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, teacherInviteCode: 'OLD1234' })]));
     const regenSubject = new Subject<SchoolDto>();
     serviceMock.regenerateTeacherInvite.mockReturnValue(regenSubject.asObservable());
