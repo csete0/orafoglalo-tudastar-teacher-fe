@@ -9,6 +9,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -111,6 +112,7 @@ export class FeladatsorokListaComponent {
   private readonly router = inject(Router);
   private readonly categoryService = inject(CategoryService);
   private readonly toastService = inject(ToastService);
+  private readonly confirmService = inject(ConfirmService);
   readonly store = inject(TeacherTaskSetStore);
 
   readonly levels = LEVELS;
@@ -136,14 +138,63 @@ export class FeladatsorokListaComponent {
     this.store.loadMine();
   }
 
-  create(): void {
+  /**
+   * BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a `Szint` és a `Tantárgyi kategória` teljesen
+   * függetlenül választható volt, így pl. a "Kezdő" szintet a NEVÉBEN is ígérő kategóriába
+   * "Haladó" feladatsor kerülhetett. Ez itt szándékosan csak FIGYELMEZTETÉS: a tanár
+   * elvetheti és mehet tovább, mert a kategóriák jogosan átfoghatnak több szintet, és egy
+   * kemény tiltás visszamenőleg érvénytelenné tenné a meglévő feladatsorokat.
+   *
+   * Visszatérés: a megerősítő kérdés szövege, vagy null, ha nincs mit kérdezni.
+   * SZÁNDÉKOSAN szinkron: eltérés hiányában a create() await nélkül fut tovább, így a
+   * mentés nem csúszik át egy mikrotaszkba a hívóhelyek/tesztek háta mögött.
+   */
+  private levelMismatchMessage(levelId: number, categoryId: number | null): string | null {
+    if (categoryId == null) return null;
+
+    const category = this.categories().find((c) => c.id === categoryId);
+    // Ismeretlen kategória vagy nincs javaslat -> nincs mit összehasonlítani.
+    if (!category || category.suggestedLevelId == null) return null;
+    if (category.suggestedLevelId === levelId) return null;
+
+    const suggestedLabel = LEVELS.find((l) => l.id === category.suggestedLevelId)?.label;
+    // Ha a javasolt szint nem szerepel a helyi listában (BE-oldali új szint), inkább
+    // nem kérdezünk, mint hogy egy értelmezhetetlen "undefined" szöveget mutassunk.
+    if (!suggestedLabel) return null;
+
+    const chosenLabel = LEVELS.find((l) => l.id === levelId)?.label ?? String(levelId);
+
+    return (
+      `A(z) „${category.name}” kategóriához ${suggestedLabel} szint javasolt, ` +
+      `te viszont ${chosenLabel} szintet választottál. Így is létrehozod?`
+    );
+  }
+
+  async create(): Promise<void> {
     if (this.createForm.invalid || this.store.loading()) return;
     const raw = this.createForm.getRawValue();
+    // A szint-<select> [value]-t használ (nem [ngValue]-t), ezért a control értéke futásidőben
+    // STRING, a típusa szerinti number ellenére - Number() nélkül a lenti === sosem egyezne.
+    const levelId = Number(raw.levelId);
+
+    const mismatchMessage = this.levelMismatchMessage(levelId, raw.subjectCategoryId);
+    if (
+      mismatchMessage &&
+      !(await this.confirmService.ask({
+        title: 'Eltérő szint',
+        message: mismatchMessage,
+        confirmLabel: 'Létrehozás',
+        cancelLabel: 'Mégsem',
+      }))
+    ) {
+      return;
+    }
+
     this.store.create(
       {
         title: raw.title,
         description: raw.description,
-        levelId: raw.levelId,
+        levelId,
         subjectCategoryId: raw.subjectCategoryId ?? undefined,
       },
       (taskSet) => {

@@ -5,6 +5,8 @@ import { of, throwError } from 'rxjs';
 import { FeladatsorokListaComponent } from './feladatsorok-lista.component';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { CategoryService } from '../../services/category/category.service';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { PublicCategoryDto } from '../../models/category.model';
 
 describe('FeladatsorokListaComponent', () => {
   let storeMock: {
@@ -170,5 +172,128 @@ describe('FeladatsorokListaComponent', () => {
     // űrlap továbbra is látszik. A jelenlegi kódban ez a detectChanges() hibát dob.
     expect(() => fixture.detectChanges()).not.toThrow();
     expect(fixture.nativeElement.textContent).toContain('Meglévő feladatsor');
+  });
+  // ---------------------------------------------------------------------------
+  // BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a `Szint` és a `Tantárgyi kategória` legördülők
+  // egymástól teljesen függetlenek voltak, így egy nevében is kezdő szintet ígérő
+  // kategóriába "Haladó" feladatsor kerülhetett. A javítás FIGYELMEZTET, nem tilt:
+  // ezért a "megerősítés után létrejön" eset ugyanolyan fontos teszt, mint az elvetés.
+  // ---------------------------------------------------------------------------
+  function categoriesOf(...categories: Partial<PublicCategoryDto>[]) {
+    return categories.map((c, i) => ({
+      id: c.id ?? i + 1,
+      name: c.name ?? `Kategória ${i + 1}`,
+      slug: c.slug ?? `kategoria-${i + 1}`,
+      description: c.description ?? '',
+      suggestedLevelId: c.suggestedLevelId ?? null,
+    }));
+  }
+
+  /** Feltölti az űrlapot érvényes adatokkal és beállítja a szintet/kategóriát. */
+  function fillForm(fixture: { componentInstance: FeladatsorokListaComponent }, levelId: number,
+                    subjectCategoryId: number | null) {
+    const form = fixture.componentInstance.createForm;
+    form.controls.title.setValue('Valódi cím');
+    form.controls.description.setValue('Valódi leírás');
+    form.controls.levelId.setValue(levelId);
+    form.controls.subjectCategoryId.setValue(subjectCategoryId);
+  }
+
+  function setupWithCategories(categories: ReturnType<typeof categoriesOf>) {
+    configure();
+    TestBed.overrideProvider(CategoryService, { useValue: { getAll: () => of(categories) } });
+    const confirmService = TestBed.inject(ConfirmService);
+    const askSpy = vi.spyOn(confirmService, 'ask');
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+    return { fixture, askSpy };
+  }
+
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: eltérő szintnél megerősítést kér, a kategória és mindkét ' +
+    'szint nevével', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1010, name: 'Kezdő programozás', suggestedLevelId: 1 }),
+    );
+    askSpy.mockResolvedValue(true);
+
+    fillForm(fixture, 3, 1010);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).toHaveBeenCalledTimes(1);
+    const message = askSpy.mock.calls[0][0].message;
+    expect(message).toContain('Kezdő programozás');
+    expect(message).toContain('Kezdő');
+    expect(message).toContain('Haladó');
+  });
+
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a megerősítés elfogadása után a feladatsor LÉTREJÖN ' +
+    '(figyelmeztetés, nem tiltás)', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1010, name: 'Kezdő programozás', suggestedLevelId: 1 }),
+    );
+    askSpy.mockResolvedValue(true);
+
+    fillForm(fixture, 3, 1010);
+    await fixture.componentInstance.create();
+
+    expect(storeMock.create).toHaveBeenCalledTimes(1);
+    expect(storeMock.create.mock.calls[0][0]).toMatchObject({ levelId: 3, subjectCategoryId: 1010 });
+  });
+
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a megerősítés elvetése esetén NEM hívódik a store.create()', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1010, name: 'Kezdő programozás', suggestedLevelId: 1 }),
+    );
+    askSpy.mockResolvedValue(false);
+
+    fillForm(fixture, 3, 1010);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).toHaveBeenCalledTimes(1);
+    expect(storeMock.create).not.toHaveBeenCalled();
+  });
+
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: suggestedLevelId=null esetén sosem kérdez ' +
+    '(a kategória jogosan átfoghat több szintet)', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1012, name: 'Tanári feladatsorok', suggestedLevelId: null }),
+    );
+
+    fillForm(fixture, 3, 1012);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).not.toHaveBeenCalled();
+    expect(storeMock.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: egyező szintnél nem kérdez', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1011, name: 'Középhaladó programozás', suggestedLevelId: 2 }),
+    );
+
+    fillForm(fixture, 2, 1011);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).not.toHaveBeenCalled();
+    expect(storeMock.create).toHaveBeenCalledTimes(1);
+  });
+
+  // A szint-<select> [value]-t használ (nem [ngValue]-t), ezért a control értéke a DOM-on
+  // keresztül STRING-ként érkezik, a FormControl number típusa ellenére. Number()-konverzió
+  // nélkül a "3" === 3 összehasonlítás mindig hamis lenne, és az egyező szint is kérdezne.
+  it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a <select>-ből érkező string szint sem téveszti meg ' +
+    'az összehasonlítást', async () => {
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf({ id: 1011, name: 'Középhaladó programozás', suggestedLevelId: 2 }),
+    );
+
+    fillForm(fixture, 2, 1011);
+    // Pontosan az, amit a DOM-hoz kötött select ír a controlba:
+    fixture.componentInstance.createForm.controls.levelId.setValue('2' as unknown as number);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).not.toHaveBeenCalled();
+    expect(storeMock.create).toHaveBeenCalledTimes(1);
+    expect(storeMock.create.mock.calls[0][0]).toMatchObject({ levelId: 2 });
   });
 });
