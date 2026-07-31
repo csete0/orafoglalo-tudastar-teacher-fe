@@ -130,6 +130,55 @@ describe('TeacherTaskSetStore', () => {
     expect(store.selectedDetail()).toEqual(detailB);
   });
 
+  // UI-TT-141: `mutateAndReload()` a `_detailGeneration` számlálót KIZÁRÓLAG arra
+  // használja, hogy két, UGYANARRA az id-re versengő reload közül a régebbit kiszűrje
+  // (UI-TT-105) - de a generáció-ellenőrzés semmit nem tud/ellenőriz magáról a
+  // taskSetId-ről. Ha a tanár egy feladat hozzáadása UTÁN, de a mutáció válaszának
+  // megérkezése ELŐTT elnavigál egy MÁSIK feladatsor szerkesztőjébe (a store
+  // `providedIn: 'root'`, tehát a mutáció `takeUntilDestroyed(this.destroyRef)`-je a
+  // GYÖKÉR injector megsemmisülésére vár, NEM a komponensére - a navigáció nem szakítja
+  // meg), az elhagyott (A) feladatsor háttérben lezáruló reloadja - mivel ez indul
+  // utoljára, tehát ő kapja a legmagasabb generációt - csendben felülírja a store-t az
+  // A feladatsor adatával, annak ellenére, hogy a tanár már a B feladatsor szerkesztőjét
+  // nézi. Minden mutáló gomb (Publikálás, feladat/megoldás/fájl törlése-hozzáadása) a
+  // sablonban `detail.id`-t küld argumentumként, tehát ettől kezdve MINDEN kattintás a
+  // B oldalon ténylegesen az A feladatsort módosítja, az URL-ben látható B-t viszont
+  // változatlanul hagyja - élőben reprodukálva screenshot-tal
+  // (`evidence/UI-TT-141-cross-taskset-clobber.png`).
+  it('BUG UI-TT-141: egy elhagyott feladatsor (A) mutációjának háttérben lezáruló reloadja felülírja a közben megnyitott MÁSIK feladatsor (B) adatát', () => {
+    configure();
+
+    // (1) A tanár az A feladatsoron (id=1) hozzáad egy feladatot - a mutáció HTTP
+    // válasza (POST) még nem érkezett meg, amikor elnavigál.
+    const addTaskPost$ = new Subject<unknown>();
+    serviceMock.addTask.mockReturnValue(addTaskPost$.asObservable());
+    store.addTask(1, { title: 'race', description: 'd', maxPoints: 10, taskTypeIds: [6] });
+    expect(serviceMock.getDetail).not.toHaveBeenCalled();
+
+    // (2) A tanár - a fenti mutáció válaszát meg sem várva - egy MÁSIK feladatsor (B,
+    // id=2) szerkesztőjére navigál; ennek loadDetail(2)-je gyorsan, sikeresen lezárul.
+    const detailB = makeDetail({ id: 2, title: 'B feladatsor (amit a tanár ÉPP néz)' });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailB));
+    store.loadDetail(2);
+    expect(store.selectedDetail()).toEqual(detailB);
+
+    // (3) Csak MOST érkezik meg az A feladatsoron indított addTask() POST válasza - a
+    // store (providedIn: 'root', a mutáció subscription-je a B oldalra navigálás által
+    // NEM szakadt meg) ezt még mindig feldolgozza, és elindítja a SAJÁT loadDetail(1)
+    // reload-ját.
+    const detailAReloaded = makeDetail({ id: 1, title: 'A feladatsor (amit a tanár MÁR elhagyott)', taskCount: 1 });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailAReloaded));
+    addTaskPost$.next({ id: 10, title: 'race', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], solutions: [], completeSolutionSnippets: [] });
+    addTaskPost$.complete();
+
+    // A generáció-számláló ezt a reload-ot engedi érvényesülni (ő indult utoljára),
+    // ezért felülírja a store-t A adatával - miközben a tanár a UI szerint (URL, saját
+    // navigációja) még mindig B-t nézi. Ez a BUG: a store-nak semmilyen módon nem kellene
+    // engednie, hogy egy már elhagyott entitás reloadja felülírja az aktívan megnyitott
+    // MÁSIK entitás adatát.
+    expect(store.selectedDetail()).toEqual(detailAReloaded);
+  });
+
   // Ugyanazon id újratöltésekor (mutateAndReload()/publish() minden sikeres
   // mentés után ide fut vissza) a régi adatot SZÁNDÉKOSAN megtartjuk, amíg a
   // friss válasz meg nem érkezik - loading() a UI-TT-45 fix óta ilyenkor is
