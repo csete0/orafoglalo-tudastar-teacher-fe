@@ -181,4 +181,45 @@ describe('GroupStore', () => {
     expect(store.members()).toEqual([makeMember({ userId: 20 })]);
     expect(store.groups().find((g) => g.id === 501)?.memberCount).toBe(2);
   });
+
+  // BUG UI-TT-158 (UI-TT-157 testvér-hibája, `SchoolStore.removeMember()`-ben): a
+  // `removeMember()` a `mutate()` helperen fut, aminek `takeUntilDestroyed(this.destroyRef)`-je
+  // a STORE saját, gyakorlatilag örökké élő DestroyRef-jéhez kötött (`providedIn: 'root'`) —
+  // ugyanaz a szerkezeti hiba, mint a `TeacherTaskSetStore.mutateAndReload()`-nál (UI-TT-156).
+  // A sikeres onSuccess (`_members.update(list => list.filter(m => m.userId !== memberUserId))`)
+  // SEMMILYEN groupId-/generáció-ellenőrzést nem kap — szemben a SAJÁT loadMembers()-ével, amit
+  // a UI-TT-107 fix már generáció-számlálóval védett. Egy diák gyakran tagja TÖBB csoportnak
+  // (más-más tanárnál/tantárgynál) — ha a tanár A csoportból eltávolítja a diákot, majd — a
+  // válasz megérkezése ELŐTT — átnavigál B csoport "Tagok" nézetére (ahol a diák szintén tag),
+  // a `_members` signal ekkor már B listáját tartalmazza. Amikor A elavult törlésének válasza
+  // megérkezik, a filter B AKTUÁLIS listájára fut le — a diák csendben eltűnik B renderelt
+  // tag-listájáról is, holott a szerveren B-beli tagsága változatlan marad.
+  it('BUG UI-TT-158: A csoportból induló removeMember válasza a B csoport megtekintése közben csendben eltávolítja a (B-ben is tag) diákot B renderelt listájáról', async () => {
+    const sharedMember = makeMember({ userId: 77, name: 'Közös Diák' });
+
+    serviceMock.getMembers.mockReturnValueOnce(of([sharedMember])).mockReturnValueOnce(of([sharedMember]));
+    const removeSubject = new Subject<unknown>();
+    serviceMock.removeMember.mockReturnValue(removeSubject.asObservable());
+
+    // Tanár az A csoport "Tagok" fülén elindítja a közös diák eltávolítását - a válasz
+    // (removeSubject) még nem érkezett meg.
+    store.loadMembers(1);
+    store.removeMember(1, 77);
+
+    // A tanár - a válasz megérkezése ELŐTT - átnavigál B csoport "Tagok" fülére; ott a
+    // közös diák helyesen, valós tagként jelenik meg.
+    store.loadMembers(2);
+    await Promise.resolve();
+    expect(store.members()).toEqual([sharedMember]);
+
+    // Most érkezik meg A elavult (B megtekintése közben induló) törlésének válasza.
+    removeSubject.next({});
+    removeSubject.complete();
+    await Promise.resolve();
+
+    // A HELYES viselkedés: B renderelt listája változatlan marad (a törlés A-ra vonatkozott,
+    // B-n a diák tagsága nem változott) - ez itt MEGBUKIK, mert a `mutate()` feltétel nélkül
+    // B AKTUÁLIS listájából szűri ki a diákot.
+    expect(store.members()).toEqual([sharedMember]);
+  });
 });
