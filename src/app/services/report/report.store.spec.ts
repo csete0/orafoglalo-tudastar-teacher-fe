@@ -36,6 +36,9 @@ describe('ReportStore', () => {
     getSchoolActivity: ReturnType<typeof vi.fn>;
     getStudentActivity: ReturnType<typeof vi.fn>;
     getTaskSetResults: ReturnType<typeof vi.fn>;
+    getAttemptReview: ReturnType<typeof vi.fn>;
+    overrideScore: ReturnType<typeof vi.fn>;
+    revertOverride: ReturnType<typeof vi.fn>;
   };
   let store: ReportStore;
 
@@ -45,6 +48,9 @@ describe('ReportStore', () => {
       getSchoolActivity: vi.fn(),
       getStudentActivity: vi.fn(),
       getTaskSetResults: vi.fn(),
+      getAttemptReview: vi.fn(),
+      overrideScore: vi.fn(),
+      revertOverride: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [{ provide: ReportService, useValue: serviceMock }],
@@ -284,5 +290,64 @@ describe('ReportStore', () => {
 
     store.loadStudentActivity(5, new Date(2026, 0, 1));
     expect(store.studentDetail()).toEqual(detail);
+  });
+
+  // ── UI-TT-156/157/158 testvér-jelenség: a `mutateReview()` (overrideScore/
+  // revertOverride) sikeres ága a MUTÁCIÓ INDÍTÁSAKOR érvényes `taskSetId`-vel
+  // hívja újra a `loadTaskSetResults`-t — de ez a hívás UGYANAZT a globális
+  // `_taskSetResultsGeneration` számlálót lépteti, mint a navigációkor induló
+  // friss betöltés. A számláló csak azt garantálja, hogy "a legutóbb INDÍTOTT
+  // hívás nyer" — a CÉLZOTT feladatsor azonosságát nem ellenőrzi. Ha a tanár egy
+  // lassú pontszám-felülbírálás VÁLASZA előtt egy MÁSIK feladatsor eredmény-
+  // oldalára navigál (a store `providedIn: 'root'`, túléli a komponens-
+  // megsemmisülést), a késve érkező mentés sikeres ága a saját (régi
+  // feladatsorra hívott) `loadTaskSetResults`-ját ÚJABB generációval indítja,
+  // ami — miután lefut — csendben felülírja a KÖZBEN megnyitott másik
+  // feladatsor már megjelenített mátrixát.
+  it('BUG: egy A feladatsoron elindított pontszám-felülbírálás késve érkező válasza felülírja a közben megnyitott B feladatsor eredmény-mátrixát', async () => {
+    const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
+    const taskSetBResults = new Subject<TeacherTaskSetResultsDto>();
+    const overrideAResponse = new Subject<any>();
+    serviceMock.getTaskSetResults
+      .mockReturnValueOnce(taskSetAResults)
+      .mockReturnValueOnce(taskSetBResults)
+      // a mutateReview sikeres ága ÚJRA meghívja loadTaskSetResults(A)-t
+      .mockReturnValueOnce(new Subject<TeacherTaskSetResultsDto>());
+    serviceMock.overrideScore.mockReturnValue(overrideAResponse);
+
+    // A tanár megnyitja A feladatsor Eredmények fülét.
+    store.loadTaskSetResults(1);
+    const resultsA = makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' });
+    taskSetAResults.next(resultsA);
+    taskSetAResults.complete();
+    expect(store.taskSetResults()).toEqual(resultsA);
+
+    // Elindít egy pontszám-felülbírálást A-n (lassú hálózat, válasz még nem jött meg).
+    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null });
+
+    // MIELŐTT a mentés válasza megérkezne, SPA-navigációval átvált B feladatsor
+    // Eredmények fülére — ez helyesen, azonnal megjeleníti B adatait.
+    store.loadTaskSetResults(2);
+    const resultsB = makeTaskSetResults({ taskSetId: 2, title: 'B feladatsor' });
+    taskSetBResults.next(resultsB);
+    taskSetBResults.complete();
+    await Promise.resolve();
+    expect(store.taskSetResults()).toEqual(resultsB);
+
+    // Az A-n indított felülbírálás válasza csak MOST érkezik meg.
+    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 } as any);
+    overrideAResponse.complete();
+    await Promise.resolve();
+
+    // A siker-ág újra lekéri A eredményeit — ha ez lefut, csendben felülírja a
+    // képernyőn már látott, URL szerint is helyes B mátrixot.
+    const taskSetAReload = serviceMock.getTaskSetResults.mock.results[2].value as Subject<TeacherTaskSetResultsDto>;
+    taskSetAReload.next(makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' }));
+    taskSetAReload.complete();
+    await Promise.resolve();
+
+    // ELVÁRT: a tanár még mindig B feladatsor mátrixát nézi (ez az URL/route).
+    // TÉNYLEGES (hiba): a signal csendben visszaváltott A adataira.
+    expect(store.taskSetResults()).toEqual(resultsB);
   });
 });
