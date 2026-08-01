@@ -339,15 +339,43 @@ describe('ReportStore', () => {
     overrideAResponse.complete();
     await Promise.resolve();
 
-    // A siker-ág újra lekéri A eredményeit — ha ez lefut, csendben felülírja a
-    // képernyőn már látott, URL szerint is helyes B mátrixot.
-    const taskSetAReload = serviceMock.getTaskSetResults.mock.results[2].value as Subject<TeacherTaskSetResultsDto>;
-    taskSetAReload.next(makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' }));
-    taskSetAReload.complete();
+    // A javítás után a siker-ág összeveti a mentés célpontját (A) a mátrix-loader
+    // AKTUÁLIS célpontjával (B) — mivel eltérnek, A újratöltése el sem indul: nincs
+    // harmadik getTaskSetResults hívás.
+    expect(serviceMock.getTaskSetResults).toHaveBeenCalledTimes(2);
+
+    // A tanár változatlanul B feladatsor mátrixát látja (ez az URL/route is).
+    expect(store.taskSetResults()).toEqual(resultsB);
+
+    // Az értékelő panel maga a válaszból frissül — ez szándékos, és a komponens
+    // `review.attemptId === openAttemptId()` ellenőrzése tartja a helyén.
+    expect(store.attemptReview()).toEqual({ attemptId: 42, earnedPoints: 5 });
+  });
+
+  it('UI-TT-160 ellenpróba: ha a tanár NEM navigált el, a felülbírálás változatlanul újratölti az ÉPP nyitott feladatsor mátrixát', async () => {
+    const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
+    const taskSetAReload = new Subject<TeacherTaskSetResultsDto>();
+    const overrideAResponse = new Subject<any>();
+    serviceMock.getTaskSetResults.mockReturnValueOnce(taskSetAResults).mockReturnValueOnce(taskSetAReload);
+    serviceMock.overrideScore.mockReturnValue(overrideAResponse);
+
+    store.loadTaskSetResults(1);
+    taskSetAResults.next(makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' }));
+    taskSetAResults.complete();
+
+    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null });
+    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 } as any);
+    overrideAResponse.complete();
     await Promise.resolve();
 
-    // ELVÁRT: a tanár még mindig B feladatsor mátrixát nézi (ez az URL/route).
-    // TÉNYLEGES (hiba): a signal csendben visszaváltott A adataira.
-    expect(store.taskSetResults()).toEqual(resultsB);
+    // A guard KIZÁRÓLAG a kereszt-entitás esetet zárja ki — a normál
+    // mentés-után-mátrixfrissítés folyamat (UI-TT-45/UI-TT-147) érintetlen.
+    expect(serviceMock.getTaskSetResults).toHaveBeenCalledTimes(2);
+    const refreshed = makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor (frissítve)' });
+    taskSetAReload.next(refreshed);
+    taskSetAReload.complete();
+    await Promise.resolve();
+    expect(store.taskSetResults()).toEqual(refreshed);
+    expect(store.loading()).toBe(false);
   });
 });

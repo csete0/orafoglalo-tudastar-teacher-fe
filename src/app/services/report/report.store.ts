@@ -40,6 +40,14 @@ export class ReportStore {
   private _schoolActivityGeneration = 0;
   private _studentDetailGeneration = 0;
   private _taskSetResultsGeneration = 0;
+  // UI-TT-160: a generáció-számláló csak "a legutóbb INDÍTOTT hívás nyer"-t garantálja, a
+  // CÉLZOTT feladatsorról semmit nem tud. A `mutateReview()` viszont a pontszám-mentés
+  // UTÁN a MUTÁCIÓ INDÍTÁSAKOR érvényes `taskSetId`-vel tölti újra a mátrixot — ha a tanár
+  // közben egy MÁSIK feladatsor "Eredmények" oldalára navigált, ez a késleltetett reload
+  // kapja a legmagasabb generációt, tehát csendben A adatára cserélné a képernyőn látott
+  // (és az URL szerint is helyes) B mátrixot. Ez a mező tartja nyilván a loader aktuális
+  // célpontját.
+  private _taskSetResultsId: number | null = null;
   // Ugyanaz az indok, mint a fenti négynél: a tanár egy cella panelját bezárva egy
   // MÁSIK cellára kattinthat, mielőtt az első válasza megérkezne — generáció nélkül
   // a lassabb, korábbi válasz felülírná a már megjelenített újat.
@@ -155,6 +163,7 @@ export class ReportStore {
 
   loadTaskSetResults(taskSetId: number): void {
     const generation = ++this._taskSetResultsGeneration;
+    this._taskSetResultsId = taskSetId;
     this._loading.set(true);
     this._error.set(null);
 
@@ -273,7 +282,18 @@ export class ReportStore {
           // előtti állapotot.
           this._attemptReviewGeneration++;
           this._attemptReview.set(review);
-          this.loadTaskSetResults(taskSetId);
+
+          // UI-TT-160: a mátrixot csak akkor töltjük újra, ha a mentés célpontja MÉG
+          // MINDIG a megjelenített feladatsor. Ha a tanár időközben egy MÁSIK feladatsor
+          // "Eredmények" oldalára navigált, ez a reload az ő mátrixát írná felül.
+          //
+          // A `_loading`-ot ilyenkor SZÁNDÉKOSAN nem állítjuk vissza: a `_taskSetResultsId`
+          // kizárólag a `loadTaskSetResults()`-ban változik, ami mindig `_loading.set(true)`-val
+          // indul és mindig lezáródó `finalize()`-t kap — a loading állapot ekkor már ANNAK
+          // a frissebb betöltésnek a tulajdona, ami a célpontot átállította.
+          if (this._taskSetResultsId === taskSetId) {
+            this.loadTaskSetResults(taskSetId);
+          }
           if (onSuccess) onSuccess();
         },
         error: (err) => {

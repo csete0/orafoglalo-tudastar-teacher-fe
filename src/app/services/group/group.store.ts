@@ -27,6 +27,15 @@ export class GroupStore {
   // tanár B csoport oldalán A csoport diákjait látná.
   private _membersGeneration = 0;
 
+  // UI-TT-158: a fenti generációs-számláló csak a versengő GET-eket rendezi sorba — a
+  // `removeMember()` sikeres ága viszont feltétel nélkül a `_members` AKTUÁLIS tartalmából
+  // szűr. Egy diák gyakran tagja TÖBB csoportnak; ha a tanár A csoportból távolítja el,
+  // majd a válasz előtt B csoport "Tagok" nézetére vált, a filter B listájára futna le, és
+  // a diák csendben eltűnne B renderelt listájáról is — miközben B-beli tagsága a
+  // szerveren változatlan. Ez a mező tartja nyilván, melyik csoport tag-listája van
+  // jelenleg a `_members`-ben.
+  private _membersGroupId: number | null = null;
+
   readonly groups = computed(() => this._groups());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
@@ -55,6 +64,9 @@ export class GroupStore {
   select(groupId: number | null): void {
     this._selectedGroupId.set(groupId);
     this._members.set([]);
+    // UI-TT-158: a kiürített lista már egyik csoporté sem — amíg a loadMembers() újra
+    // be nem tölti, egyetlen mutáció-válasz sem módosíthatja.
+    this._membersGroupId = null;
   }
 
   create(request: CreateGroupRequest, onSuccess?: (group: GroupDto) => void): void {
@@ -89,6 +101,7 @@ export class GroupStore {
 
   loadMembers(id: number): void {
     const generation = ++this._membersGeneration;
+    this._membersGroupId = id;
     this._loading.set(true);
     this._error.set(null);
     this.service
@@ -114,7 +127,14 @@ export class GroupStore {
 
   removeMember(groupId: number, memberUserId: number, onSuccess?: () => void): void {
     this.mutate(this.service.removeMember(groupId, memberUserId), () => {
-      this._members.update((list) => list.filter((m) => m.userId !== memberUserId));
+      // UI-TT-158: a renderelt tag-listát csak akkor szűrjük, ha az MÉG MINDIG annak a
+      // csoportnak a listája, amelyikre az eltávolítás vonatkozott. Az alatta lévő
+      // `_groups` létszám-patch ellenben MINDIG lefut: az explicit `g.id === groupId`
+      // kulcs miatt eleve a helyes csoportot módosítja, függetlenül attól, mi van
+      // éppen megjelenítve.
+      if (this._membersGroupId === groupId) {
+        this._members.update((list) => list.filter((m) => m.userId !== memberUserId));
+      }
       // BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT: minden MÁS mutáció ebben a store-ban
       // (archive/unarchive/setJoinEnabled/regenerateInvite/update) patch-eli a `_groups`
       // listát is - ez volt az egyetlen kivétel, csak a `_members`-t frissítette. A

@@ -52,6 +52,15 @@ export class SchoolStore {
   private _membersGeneration = 0;
   private _schoolGroupsGeneration = 0;
 
+  // UI-TT-157: a fenti generációs-számláló csak a versengő GET-eket rendezi sorba —
+  // a MUTÁCIÓK (removeMember/changeMemberRole) sikeres ága viszont feltétel nélkül a
+  // `_members` AKTUÁLIS tartalmán dolgozik, és semmit nem tud arról, melyik intézmény
+  // listája van éppen betöltve. Egy több intézményben is tanító kolléga (azonos
+  // teacherProfileId) így csendben eltűnne/szerepet váltana a KÖZBEN megnyitott MÁSIK
+  // intézmény renderelt "Tanárok" listáján, holott ott a tagsága változatlan. Ez a mező
+  // tartja nyilván, melyik intézmény tag-listája van jelenleg a `_members`-ben.
+  private _membersSchoolId: number | null = null;
+
   /** Igazgató-e a bejelentkezett tanár a kiválasztott intézményben — adat, nem role. */
   readonly isSelectedAdmin = computed(() => this.selectedSchool()?.myRole === 'Admin');
 
@@ -76,6 +85,9 @@ export class SchoolStore {
     this._selectedSchoolId.set(schoolId);
     this._members.set([]);
     this._schoolGroups.set([]);
+    // UI-TT-157: a kiürített lista már egyik intézményé sem — amíg a loadMembers()
+    // újra be nem tölti, egyetlen mutáció-válasz sem módosíthatja.
+    this._membersSchoolId = null;
   }
 
   create(request: CreateSchoolRequest, onSuccess?: (school: SchoolDto) => void): void {
@@ -136,6 +148,7 @@ export class SchoolStore {
 
   loadMembers(id: number): void {
     const generation = ++this._membersGeneration;
+    this._membersSchoolId = id;
     this._loading.set(true);
     this._error.set(null);
     this.service
@@ -161,7 +174,13 @@ export class SchoolStore {
 
   removeMember(schoolId: number, memberTeacherProfileId: number, onSuccess?: () => void): void {
     this.mutate(this.service.removeMember(schoolId, memberTeacherProfileId), () => {
-      this._members.update((list) => list.filter((m) => m.teacherProfileId !== memberTeacherProfileId));
+      // UI-TT-157: a renderelt tag-listát csak akkor módosítjuk, ha az MÉG MINDIG annak
+      // az intézménynek a listája, amelyikre a törlés vonatkozott. A `loadMine()` alatta
+      // szándékosan MINDIG lefut: a myRole/`isSelectedAdmin` globális állapot, ami akkor
+      // is frissítendő, ha a felhasználó időközben másik intézményre navigált.
+      if (this._membersSchoolId === schoolId) {
+        this._members.update((list) => list.filter((m) => m.teacherProfileId !== memberTeacherProfileId));
+      }
       // A SchoolMemberDto-nak nincs önmagát azonosító mezője, ezért nem tudjuk
       // itt eldönteni, hogy a hívó saját magát távolította-e el — a `_schools`
       // (és ezáltal myRole/isSelectedAdmin) mindig újratöltődik, hogy egy
@@ -178,9 +197,12 @@ export class SchoolStore {
     onSuccess?: () => void,
   ): void {
     this.mutate(this.service.changeMemberRole(schoolId, memberTeacherProfileId, request), () => {
-      this._members.update((list) =>
-        list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
-      );
+      // UI-TT-157: ugyanaz a cél-intézmény ellenőrzés, mint removeMember()-nél.
+      if (this._membersSchoolId === schoolId) {
+        this._members.update((list) =>
+          list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
+        );
+      }
       // Ugyanaz az ok, mint removeMember()-nél: a `_schools`-beli myRole
       // csak innen frissülhet, ha a hívó saját szerepét módosította.
       this.loadMine();

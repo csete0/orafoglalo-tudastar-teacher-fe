@@ -43,6 +43,19 @@ export class TeacherTaskSetStore {
   // indul (közvetlen navigáció, `mutateAndReload()` és `publish()` egyaránt).
   private _detailGeneration = 0;
 
+  // UI-TT-156: a generációs-számláló KIZÁRÓLAG a "legutóbb INDÍTOTT loadDetail() nyer"
+  // szabályt érvényesíti — magáról a CÉLZOTT feladatsorról semmit nem tud. Mivel a store
+  // `providedIn: 'root'` és a `takeUntilDestroyed(this.destroyRef)` a STORE örökké élő
+  // DestroyRef-jéhez kötött (nem a szerkesztő-komponenséhez), egy A feladatsoron indított
+  // mutáció a SPA-navigáció UTÁN is befut, és a `mutateAndReload()` feltétel nélkül
+  // elindítja a SAJÁT `loadDetail(A)`-ját — ami így a legmagasabb generációt kapja, tehát
+  // "nyer", és csendben A adatára cseréli a közben megnyitott B feladatsor szerkesztőjét.
+  // A sablon minden mutáló gombja `detail.id`-t küld, ezért onnantól MINDEN mentés/
+  // publikálás/törlés ténylegesen A-t módosítaná, miközben az URL végig B-t mutatja.
+  // Ez a mező tartja nyilván, melyik feladatsor a loader AKTUÁLIS célpontja, hogy egy
+  // elhagyott entitás mutációja ne indíthasson újratöltést egy MÁSIK entitás nézetébe.
+  private _detailTaskSetId: number | null = null;
+
   readonly taskSets = computed(() => this._taskSets());
   readonly selectedDetail = computed(() => this._selectedDetail());
   readonly publishResult = computed(() => this._publishResult());
@@ -80,6 +93,7 @@ export class TeacherTaskSetStore {
     }
 
     const generation = ++this._detailGeneration;
+    this._detailTaskSetId = id;
     this._loading.set(true);
     this._error.set(null);
 
@@ -242,6 +256,24 @@ export class TeacherTaskSetStore {
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
+          // UI-TT-156: csak akkor töltünk újra, ha a mutáció célpontja MÉG MINDIG a
+          // loader aktuális célpontja. Ha a tanár időközben egy MÁSIK feladatsorra
+          // navigált, az elhagyott (A) mutáció újratöltése felülírná a most megjelenített
+          // (B) szerkesztőt — a `_detailGeneration` ezt nem akadályozza meg, mert A
+          // reloadja indul utoljára, tehát ő kapná a legmagasabb generációt.
+          //
+          // A `_loading`-ot ilyenkor SZÁNDÉKOSAN nem állítjuk vissza: a `_detailTaskSetId`
+          // kizárólag a `loadDetail()`-ben változik, ami mindig `_loading.set(true)`-val
+          // indul és mindig lezáródó `finalize()`-t kap — tehát a loading állapot ekkor
+          // már ANNAK a frissebb betöltésnek a tulajdona, ami a célpontot átállította.
+          // Egy kézi `false` itt a még futó B-betöltés spinnerét kapcsolná ki idő előtt.
+          //
+          // A `null` (még semmit nem töltött be a loader) SZÁNDÉKOSAN átengedi az
+          // újratöltést: ilyenkor nincs megjelenített feladatsor, amit felül lehetne írni,
+          // viszont a UI-TT-45 szerződés (a `_loading` csak a reload befejeztével vált
+          // false-ra) EZEN a reloadon múlik — blokkolva a spinner örökre bent ragadna.
+          if (this._detailTaskSetId !== null && this._detailTaskSetId !== taskSetId) return;
+
           // Loading marad true a mutáció válasza UTÁN is, egészen addig, amíg a
           // szinkron módon elindított loadDetail() saját finalize()-a le nem futtatja
           // — enélkül a mutáció válaszának megérkezésekor azonnal false-ra váltana,

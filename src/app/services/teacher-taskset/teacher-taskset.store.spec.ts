@@ -145,7 +145,7 @@ describe('TeacherTaskSetStore', () => {
   // B oldalon ténylegesen az A feladatsort módosítja, az URL-ben látható B-t viszont
   // változatlanul hagyja - élőben reprodukálva screenshot-tal
   // (`evidence/UI-TT-141-cross-taskset-clobber.png`).
-  it('BUG UI-TT-141: egy elhagyott feladatsor (A) mutációjának háttérben lezáruló reloadja felülírja a közben megnyitott MÁSIK feladatsor (B) adatát', () => {
+  it('UI-TT-156: egy elhagyott feladatsor (A) mutációjának háttérben lezáruló válasza NEM indíthat újratöltést a közben megnyitott MÁSIK feladatsor (B) fölé', () => {
     configure();
 
     // (1) A tanár az A feladatsoron (id=1) hozzáad egy feladatot - a mutáció HTTP
@@ -166,17 +166,39 @@ describe('TeacherTaskSetStore', () => {
     // store (providedIn: 'root', a mutáció subscription-je a B oldalra navigálás által
     // NEM szakadt meg) ezt még mindig feldolgozza, és elindítja a SAJÁT loadDetail(1)
     // reload-ját.
-    const detailAReloaded = makeDetail({ id: 1, title: 'A feladatsor (amit a tanár MÁR elhagyott)', taskCount: 1 });
-    serviceMock.getDetail.mockReturnValueOnce(of(detailAReloaded));
+    const getDetailCallsBefore = serviceMock.getDetail.mock.calls.length;
     addTaskPost$.next({ id: 10, title: 'race', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], solutions: [], completeSolutionSnippets: [] });
     addTaskPost$.complete();
 
-    // A generáció-számláló ezt a reload-ot engedi érvényesülni (ő indult utoljára),
-    // ezért felülírja a store-t A adatával - miközben a tanár a UI szerint (URL, saját
-    // navigációja) még mindig B-t nézi. Ez a BUG: a store-nak semmilyen módon nem kellene
-    // engednie, hogy egy már elhagyott entitás reloadja felülírja az aktívan megnyitott
-    // MÁSIK entitás adatát.
+    // A javítás után a `mutateAndReload()` next-ága összeveti a mutáció célpontját
+    // (`taskSetId`) a loader AKTUÁLIS célpontjával (`_detailTaskSetId`) - mivel a tanár
+    // időközben B-re navigált, az A-ra vonatkozó reload el sem indul (nincs újabb
+    // getDetail hívás), és a store változatlanul B adatát mutatja.
+    expect(serviceMock.getDetail.mock.calls.length).toBe(getDetailCallsBefore);
+    expect(store.selectedDetail()).toEqual(detailB);
+  });
+
+  it('UI-TT-156 ellenpróba: ha a tanár NEM navigált el, a mutáció válasza változatlanul újratölti az ÉPP nyitott feladatsort', () => {
+    configure();
+
+    const detailA = makeDetail({ id: 1, title: 'A feladatsor' });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailA));
+    store.loadDetail(1);
+    expect(store.selectedDetail()).toEqual(detailA);
+
+    const addTaskPost$ = new Subject<unknown>();
+    serviceMock.addTask.mockReturnValue(addTaskPost$.asObservable());
+    store.addTask(1, { title: 'normal', description: 'd', maxPoints: 10, taskTypeIds: [6] });
+
+    const detailAReloaded = makeDetail({ id: 1, title: 'A feladatsor', taskCount: 1 });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailAReloaded));
+    addTaskPost$.next({ id: 10, title: 'normal', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], solutions: [], completeSolutionSnippets: [] });
+    addTaskPost$.complete();
+
+    // A guard KIZÁRÓLAG a kereszt-entitás esetet zárja ki - a normál mentés-után-újratöltés
+    // folyamat (UI-TT-45/UI-TT-105) érintetlen marad.
     expect(store.selectedDetail()).toEqual(detailAReloaded);
+    expect(store.loading()).toBe(false);
   });
 
   // Ugyanazon id újratöltésekor (mutateAndReload()/publish() minden sikeres
