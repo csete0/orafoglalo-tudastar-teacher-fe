@@ -33,6 +33,10 @@ COPY --from=build /app/dist/teacher-fe/browser/ /usr/share/nginx/html/
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# UI-TT-159: a biztonsági fejlécek külön fájlban élnek, mert MINDEN location blokknak
+# include-olnia kell (az nginx add_header-öröklődési szabálya miatt) — ha ez a COPY
+# kimarad, az nginx indulásakor azonnal elhasal a hiányzó include-on, nem csendben.
+COPY security-headers.inc /etc/nginx/conf.d/security-headers.inc
 
 # Fix sendfile issue in main nginx.conf
 RUN sed -i 's/sendfile on;/sendfile off;/g' /etc/nginx/nginx.conf
