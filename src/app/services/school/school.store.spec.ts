@@ -416,6 +416,57 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     expect(store.loading()).toBe(false);
   });
 
+  // BUG UI-TT-157: removeMember()/changeMemberRole() a `mutate()` helperen át fut,
+  // aminek a `takeUntilDestroyed(this.destroyRef)`-je a STORE saját, gyakorlatilag
+  // örökké élő DestroyRef-jéhez kötött (`providedIn: 'root'`), NEM a komponenshez -
+  // ugyanaz a szerkezeti hiba, mint a `TeacherTaskSetStore.mutateAndReload()`-nál
+  // (UI-TT-156). A `mutate()` sikeres onSuccess-e (itt: `_members.update(list =>
+  // list.filter(...))`) SEMMILYEN generáció-/id-ellenőrzést nem kap - szemben a
+  // SAJÁT loadMembers()-ével, amit a UI-TT-149 fix már generáció-számlálóval védett.
+  // Ha egy tanár (X) EGYSZERRE tagja A és B intézménynek is, és az admin A
+  // intézményben elindítja X eltávolítását, majd - a válasz megérkezése ELŐTT -
+  // átnavigál B intézmény "Tanárok" fülére (ahol X szintén tag), a `_members` signal
+  // ekkor már B listáját tartalmazza. Amikor A késleltetett törlésének válasza
+  // megérkezik, a filter B AKTUÁLIS listájára fut le - X (ugyanazzal a
+  // teacherProfileId-vel) csendben eltűnik B renderelt tag-listájáról is, holott a
+  // szerveren X változatlanul B valós tagja marad (csak A-ból lett törölve).
+  it('BUG UI-TT-157: A intézményből induló removeMember válasza a B intézmény megtekintése közben csendben eltávolítja a (B-ben is tag) tanárt B renderelt listájáról', async () => {
+    const sharedMember = { teacherProfileId: 99, displayName: 'Közös Tanár', role: 'Teacher' as const, joinedAt: '', groupCount: 0 };
+
+    serviceMock.getMembers
+      .mockReturnValueOnce(of([sharedMember]))
+      .mockReturnValueOnce(of([sharedMember]));
+    const removeSubject = new Subject<unknown>();
+    serviceMock.removeMember.mockReturnValue(removeSubject.asObservable());
+    serviceMock.getMine.mockReturnValue(of([]));
+
+    const store = TestBed.inject(SchoolStore);
+
+    // Admin az A intézmény "Tanárok" fülén elindítja a közös tanár eltávolítását -
+    // a válasz (removeSubject) még nem érkezett meg.
+    store.loadMembers(1);
+    await Promise.resolve();
+    store.removeMember(1, 99);
+
+    // Az admin - a válasz megérkezése ELŐTT - átnavigál B intézmény "Tanárok"
+    // fülére; ott a közös tanár helyesen, valós tagként jelenik meg.
+    store.loadMembers(2);
+    await Promise.resolve();
+    expect(store.members()).toHaveLength(1);
+    expect(store.members()[0].teacherProfileId).toBe(99);
+
+    // Most érkezik meg A elavult (B megtekintése közben induló) törlésének válasza.
+    removeSubject.next({});
+    removeSubject.complete();
+    await Promise.resolve();
+
+    // A HELYES viselkedés: B renderelt listája változatlan marad (a törlés A-ra
+    // vonatkozott, B-n a tanár tagsága nem változott) - ez itt MEGBUKIK, mert a
+    // `mutate()` feltétel nélkül B AKTUÁLIS listájából szűri ki a tanárt.
+    expect(store.members()).toHaveLength(1);
+    expect(store.members()[0]?.teacherProfileId).toBe(99);
+  });
+
   it('create() sikere után loading() false-ra vált (nincs beágyazott reload, a hívó saját magát állítja vissza)', async () => {
     serviceMock.getMine.mockReturnValue(of([]));
     const createSubject = new Subject<SchoolDto>();
