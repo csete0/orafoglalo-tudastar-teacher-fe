@@ -54,7 +54,13 @@ import { ReportDateRange } from '../../shared/date-range/report-date-range';
               @for (exam of detail.recentExams; track exam.sessionId) {
                 <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
                   <td class="py-2.5 px-4">{{ exam.taskSetTitle }}</td>
-                  <td class="py-2.5 px-4">{{ exam.startedAt | date: 'yyyy.MM.dd' }}</td>
+                  <!-- BE-STUDENTACTIVITY-FILTER-DISPLAY-DATE-MISMATCH: az "Egyéni időszak"
+                       szűrő a befejezés (submittedAt) idejére szűr - a kijelzett dátumnak
+                       ezzel kell egyeznie, különben egy hosszan elhúzódó session a kért
+                       tartományon messze kívül eső dátummal jelenne meg. submittedAt csak
+                       befejezetlen (folyamatban lévő) sessionnél lehetne null - ilyenkor
+                       startedAt-ra esik vissza. -->
+                  <td class="py-2.5 px-4">{{ (exam.submittedAt ?? exam.startedAt) | date: 'yyyy.MM.dd' }}</td>
                   <td class="py-2.5 px-4">
                     @if (exam.isCompleted) {
                       <!-- UI-TT-37 (mis-triage correction): a százalékjel korábban a

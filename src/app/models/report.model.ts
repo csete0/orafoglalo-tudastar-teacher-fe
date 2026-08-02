@@ -17,6 +17,11 @@ export interface StudentExamSessionDto {
   taskSetId: number;
   taskSetTitle: string;
   startedAt: string;
+  // BE-STUDENTACTIVITY-FILTER-DISPLAY-DATE-MISMATCH: az "Egyéni időszak" szűrő a
+  // befejezés (submittedAt) idejére szűr - a táblázat "Dátum" oszlopa ezért ezt,
+  // nem a startedAt-ot jeleníti meg, különben egy hosszan elhúzódó session
+  // kijelzett dátuma a szűrt tartományon messze kívül eshet.
+  submittedAt?: string;
   isCompleted: boolean;
   scorePercent?: number;
   timeSpentSeconds: number;
