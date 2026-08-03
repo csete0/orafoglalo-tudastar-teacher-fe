@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { FeladatsorSzerkesztoComponent } from './feladatsor-szerkeszto.component';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
@@ -518,6 +518,54 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
     expect(link.getAttribute('href')).toBe(`blob:resolved-${expectedApiUrl}`);
+  });
+
+  it('BUG: ugyanarra a (még fel nem oldott) fájlra kétszer hívja meg a resolveUrl()-t, ha a detail két gyors, egymástól FÜGGETLEN mentés miatt kétszer újratöltődik, mielőtt az első blob-letöltés válasza megérkezne — a korábbi blob URL sosem szabadul fel', () => {
+    const file = {
+      id: 'f1',
+      kind: 'SolutionPdf' as const,
+      originalFileName: 'solution.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 10,
+      createdAt: '',
+      url: '/api/teacher-files/f1',
+    };
+
+    // Két KÜLÖN, kontrollált blob-letöltés — egyik sem old fel azonnal (mint egy valódi,
+    // nagyobb PDF HTTP-válasza), hogy a köztük lévő versenyhelyzet megfigyelhető legyen.
+    const pendingCalls: Subject<string>[] = [];
+    configure(makeDetail({ files: [file] }));
+    authorizedFileServiceMock.resolveUrl = vi.fn(() => {
+      const subject = new Subject<string>();
+      pendingCalls.push(subject);
+      return subject.asObservable();
+    });
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    expect(authorizedFileServiceMock.resolveUrl).toHaveBeenCalledTimes(1);
+
+    // Egy FÜGGETLEN, sikeres mentés (pl. egy másik feladat hozzáadása) újratölti a detailt —
+    // a store egy ÚJ `files` tömb-referenciát ad ugyanarra az f1 fájlra, MIELŐTT az első
+    // resolveUrl() HTTP-válasza megérkezne.
+    taskSetStoreMock.selectedDetail.set(makeDetail({ files: [{ ...file }] }));
+    fixture.detectChanges();
+
+    // Helyes viselkedés: az f1-re már folyamatban van egy feloldás, nem kellene újat indítani.
+    expect(authorizedFileServiceMock.resolveUrl).toHaveBeenCalledTimes(1);
+
+    // Mindkét (immár elindult) letöltés megérkezik, fordított sorrendben (a második ér célba előbb).
+    pendingCalls[1]?.next('blob:second');
+    pendingCalls[1]?.complete();
+    fixture.detectChanges();
+    pendingCalls[0].next('blob:first');
+    pendingCalls[0].complete();
+    fixture.detectChanges();
+
+    // A vesztes (korábban létrehozott, de a signalban sosem tárolt) blob URL-t senki nem
+    // revoke-olja — örökre a memóriában marad, minden ilyen versenyhelyzetnél egyet.
+    expect(authorizedFileServiceMock.revoke).toHaveBeenCalledWith('blob:first');
   });
 
   describe('"Új feladat hozzáadása" draft-kezelés (UI-TT-25 / UI-TT-61)', () => {
