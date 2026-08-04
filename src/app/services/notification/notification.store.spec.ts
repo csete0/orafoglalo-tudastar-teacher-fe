@@ -199,4 +199,39 @@ describe('NotificationStore', () => {
 
     expect(store.activeNotifications().map((n) => n.userNotificationId)).toEqual([2]);
   });
+
+  // UI-TT-171: markAsRead()/markAllAsRead()/delete() mindhárom, egymástól teljesen
+  // FÜGGETLEN (más sor/gomb által kiváltott) művelet ugyanazt a `_error` jelet írja -
+  // korábban csak `load()` törölte, és csak a SAJÁT indításakor.
+  it('UI-TT-171: markAsRead() hibája után egy KÉSŐBB sikeresen lezáruló, FÜGGETLEN markAllAsRead() törli a régi hibaüzenetet', () => {
+    configure();
+    serviceMock.getNotifications.mockReturnValue(of([makeNotification({ userNotificationId: 1 })]));
+    serviceMock.markAsRead.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Sikertelen.' } })));
+    serviceMock.markAllAsRead.mockReturnValue(of(undefined));
+
+    store.load();
+
+    store.markAsRead(1);
+    expect(store.error()).toBe('Sikertelen.');
+
+    store.markAllAsRead();
+
+    expect(store.error()).toBeNull();
+  });
+
+  it('UI-TT-171: markAsRead() hibája után egy KÉSŐBB sikeresen lezáruló, FÜGGETLEN delete() törli a régi hibaüzenetet', () => {
+    configure();
+    serviceMock.getNotifications.mockReturnValue(of([makeNotification({ userNotificationId: 1 })]));
+    serviceMock.markAsRead.mockReturnValue(throwError(() => ({ error: { errorMessage: 'Sikertelen.' } })));
+    serviceMock.deleteNotification.mockReturnValue(of(undefined));
+
+    store.load();
+
+    store.markAsRead(1);
+    expect(store.error()).toBe('Sikertelen.');
+
+    store.delete(1);
+
+    expect(store.error()).toBeNull();
+  });
 });

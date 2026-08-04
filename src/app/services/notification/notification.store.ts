@@ -84,14 +84,21 @@ export class NotificationStore {
       .markAsRead(userNotificationId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () =>
+        next: () => {
           this._notifications.update((list) =>
             list.map((n) =>
               n.userNotificationId === userNotificationId
                 ? { ...n, isRead: true, readAt: new Date() }
                 : n,
             ),
-          ),
+          );
+          // UI-TT-171: markAsRead()/markAllAsRead()/delete() mindhárom, egymástól
+          // teljesen FÜGGETLEN metódus ugyanazt a `_error` jelet írja - korábban egyik
+          // sem törölte sikeres lezáráskor (csak `load()` a SAJÁT indításakor), ezért
+          // egy sikeres tömeges "összes megjelölése olvasottként" után is egy korábbi,
+          // egyedi sor hibaüzenete maradt látható.
+          this._error.set(null);
+        },
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítés megjelölése sikertelen.')),
       });
   }
@@ -101,10 +108,13 @@ export class NotificationStore {
       .markAllAsRead()
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () =>
+        next: () => {
           this._notifications.update((list) =>
             list.map((n) => (n.isRead ? n : { ...n, isRead: true, readAt: new Date() })),
-          ),
+          );
+          // UI-TT-171, ld. markAsRead() fenti megjegyzését.
+          this._error.set(null);
+        },
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítések megjelölése sikertelen.')),
       });
   }
@@ -114,10 +124,13 @@ export class NotificationStore {
       .deleteNotification(userNotificationId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () =>
+        next: () => {
           this._notifications.update((list) =>
             list.filter((n) => n.userNotificationId !== userNotificationId),
-          ),
+          );
+          // UI-TT-171, ld. markAsRead() fenti megjegyzését.
+          this._error.set(null);
+        },
         error: (err) => this._error.set(extractErrorMessage(err, 'Az értesítés törlése sikertelen.')),
       });
   }
