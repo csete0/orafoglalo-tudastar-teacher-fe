@@ -12,6 +12,7 @@ describe('FeladatsorokListaComponent', () => {
   let storeMock: {
     taskSets: ReturnType<typeof signal<unknown[]>>;
     loading: ReturnType<typeof signal<boolean>>;
+    mineLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
@@ -21,6 +22,7 @@ describe('FeladatsorokListaComponent', () => {
     storeMock = {
       taskSets: signal([]),
       loading: signal(false),
+      mineLoading: signal(false),
       error: signal(null),
       loadMine: vi.fn(),
       create: vi.fn(),

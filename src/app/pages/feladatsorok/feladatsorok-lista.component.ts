@@ -32,7 +32,7 @@ const LEVELS = [
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
 
-      @if (store.loading() && store.taskSets().length === 0) {
+      @if (store.mineLoading() && store.taskSets().length === 0) {
         <div class="space-y-2 mb-8">
           <div class="skeleton h-20"></div>
           <div class="skeleton h-20"></div>
