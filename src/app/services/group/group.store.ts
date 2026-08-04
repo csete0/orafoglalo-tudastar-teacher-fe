@@ -17,6 +17,16 @@ export class GroupStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // UI-TT-139: az `unarchive()` UI-TT-34 fixje egy `if (this._loading()) return;`
+  // korai-return guardot kapott, ami a `loadMine()`/`loadMembers()`/`mutate()` ÁLTAL
+  // MEGOSZTOTT `_loading`-ot nézte - egy oldalbetöltéskori háttér-lekérdezés (vagy akár
+  // egy MÁSIK csoport bármely mutációja) alatt a "Visszaállítás" gomb csendben, hiba
+  // nélkül semmit nem csinált. Ez a Set kizárólag az `unarchive()` saját, csoportonkénti
+  // dupla-kattintás elleni védelmét szolgálja - a publikus `loading()` (és a többi
+  // metódus meglévő, `_loading`-ra épülő viselkedése, ld. a mutate()/generációs-számláló
+  // kommentek) szándékosan VÁLTOZATLAN marad.
+  private readonly _unarchiveInFlight = signal<ReadonlySet<number>>(new Set<number>());
+
   // UI-TT-107: ugyanaz a stale-response hibaosztály, mint a ReportStore/SchoolStore
   // (UI-TT-148/149) generációs-számláló fixjénél. A store `providedIn: 'root'`, és a
   // `takeUntilDestroyed(this.destroyRef)` a STORE saját (gyakorlatilag örökké élő)
@@ -158,12 +168,24 @@ export class GroupStore {
   // véletlenül archivált csoportot a tanár nem tudott a rendszeren belül
   // visszaállítani.
   unarchive(id: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
+    if (this._unarchiveInFlight().has(id)) return;
+    this._unarchiveInFlight.update((prev) => new Set(prev).add(id));
 
-    this.mutate(this.service.unarchive(id), () => {
-      this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: false } : g)));
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.unarchive(id),
+      () => {
+        this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: false } : g)));
+        if (onSuccess) onSuccess();
+      },
+      undefined,
+      () => {
+        this._unarchiveInFlight.update((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      },
+    );
   }
 
   setJoinEnabled(id: number, enabled: boolean, onSuccess?: () => void): void {
@@ -181,6 +203,10 @@ export class GroupStore {
     observable: Observable<T>,
     onSuccess: (value: T) => void,
     onError?: (message: string) => void,
+    // UI-TT-139: opcionális, hívó-specifikus lezárási callback (pl. unarchive()
+    // saját, entitásonkénti guard-Set-jének feloldásához) - a `_loading`-tól
+    // FÜGGETLENÜL fut, mindig, sikertől/hibától függetlenül.
+    onSettled?: () => void,
   ): void {
     this._loading.set(true);
     this._error.set(null);
@@ -188,7 +214,10 @@ export class GroupStore {
     observable
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => {
+          this._loading.set(false);
+          if (onSettled) onSettled();
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({

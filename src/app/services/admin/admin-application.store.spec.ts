@@ -186,4 +186,50 @@ describe('AdminApplicationStore', () => {
     // jelentkezéseket mutat, a fül-kiemeléssel összhangban.
     expect(store.applications().map((a) => a.status)).toEqual(['Rejected']);
   });
+
+  // UI-TT-137: az `approve()`/`reject()` (UI-TT-11 óta) UGYANAZT az egyetlen,
+  // store-szintű `_loading` jelet használja őrfeltételként, amit MINDEN
+  // jelentkezésre, MINDKÉT művelet-típusra megosztanak. Ez pontosan a
+  // kampányban sokszor megtalált "megosztott _loading guard" hibacsalád
+  // (UI-TS-151-155/196/198/199/200/201, UI-TT-136) egy testvér-előfordulása:
+  // a guard célja a UGYANAZON jelentkezésen indított dupla-kattintás
+  // megakadályozása lenne (ld. UI-TT-11), DE mivel a jel entitás-független, egy
+  // FÜGGETLEN jelentkezésen (más `id`-vel) indított "Elfogadás"/"Elutasítás"
+  // is csendben no-op-ol, amíg egy MÁSIK jelentkezés elbírálása folyamatban
+  // van - egy admin, aki egy hosszú listán gyorsan egymás után több
+  // jelentkezést bírál el, minden második/harmadik kattintását elveszítheti
+  // anélkül, hogy erről bármilyen jelzést kapna.
+  it('UI-TT-137 javítva: approve(jelentkezés A) folyamatban léte alatt egy FÜGGETLEN reject(jelentkezés B) hívás NEM no-op-ol - entitásonkénti guard', async () => {
+    serviceMock.getApplications.mockReturnValue(
+      of([makeApplication({ id: 1 }), makeApplication({ id: 2 })]),
+    );
+    const approveSubject = new Subject<unknown>();
+    serviceMock.approve.mockReturnValue(approveSubject.asObservable());
+    serviceMock.reject.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminApplicationStore);
+    store.load();
+    await Promise.resolve();
+
+    expect(store.applications().length).toBe(2);
+
+    // Az admin elfogadja az 1-es jelentkezést - a kérés még nem tért vissza.
+    store.approve(1);
+    expect(serviceMock.approve).toHaveBeenCalledTimes(1);
+    expect(store.loading()).toBe(true);
+
+    // MIELŐTT az 1-es elbírálása visszatérne, az admin a listában lejjebb egy
+    // TELJESEN FÜGGETLEN, másik jelentkezést (2-es) próbál elutasítani.
+    store.reject(2, { reason: 'Hiányos önéletrajz' });
+
+    // HELYES viselkedés: a reject() saját ("reject:2") kulcson fut, az
+    // approve("approve:1") folyamatban léte nem blokkolja - a hívás azonnal
+    // elindul, a 2-es jelentkezés kikerül a listából.
+    expect(serviceMock.reject).toHaveBeenCalledTimes(1);
+    expect(store.applications().some((a) => a.id === 2)).toBe(false);
+
+    approveSubject.next({});
+    approveSubject.complete();
+    await Promise.resolve();
+  });
 });

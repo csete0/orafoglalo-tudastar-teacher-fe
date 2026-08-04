@@ -327,6 +327,53 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     await Promise.resolve();
   });
 
+  // UI-TT-138: a UI-TT-120 fix `regenerateInvite()`-hoz a store-szintű, MINDEN
+  // metódus között megosztott `_loading` jelet adta guard-ként (`if
+  // (this._loading()) return;`, majd a közös `mutate()` helper, ami maga is
+  // ugyanezt a jelet állítja `loadMine()`/`loadMembers()`/
+  // `loadSchoolGroups()`-szal és az ÖSSZES többi mutáló metódussal
+  // (create/join/update/delete/leave/removeMember/changeMemberRole)
+  // megegyezően). Ez pontosan a kampányban sokszor megtalált "megosztott
+  // _loading guard" hibacsalád (UI-TS-151-155/196/198/199-201, UI-TT-136/137)
+  // egy újabb, a SAJÁT UI-TT-120 fixétől SZÁRMAZÓ előfordulása:
+  // `regenerateInvite()` az EGYETLEN metódus, ami explicit ellenőrzi ezt a
+  // közös jelet, ezért BÁRMELY másik, ÉPPEN FOLYAMATBAN LÉVŐ, teljesen
+  // független store-művelet (pl. az `/intezmenyek/:id` oldal ngOnInit-jében
+  // szinte egyszerre induló `loadMembers()`/`loadSchoolGroups()`) csendben
+  // meghiúsítja az "Új kód generálása" gomb kattintását - a tanár nem kap
+  // hibaüzenetet, egyszerűen nem történik semmi.
+  it('UI-TT-138 javítva: loadMembers() folyamatban léte alatt egy FÜGGETLEN regenerateInvite() hívás NEM no-op-ol - saját guard-Set', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, teacherInviteCode: 'OLD1234' })]));
+    const membersSubject = new Subject<unknown>();
+    serviceMock.getMembers.mockReturnValue(membersSubject.asObservable());
+    serviceMock.regenerateTeacherInvite.mockReturnValue(of(makeSchool({ id: 1, teacherInviteCode: 'NEW5678' })));
+
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    await Promise.resolve();
+    store.select(1);
+
+    // Az oldal betöltésekor elindul a tagok listájának lekérése - a válasz még
+    // nem érkezett meg.
+    store.loadMembers(1);
+    expect(store.loading()).toBe(true);
+
+    // A tanár - MIELŐTT a tagok betöltődnének - a teljesen FÜGGETLEN "Új kód
+    // generálása" gombra kattint.
+    store.regenerateInvite(1);
+
+    // HELYES viselkedés: a regenerateInvite() saját, intézményenkénti
+    // guard-Set-en fut, a loadMembers() folyamatban léte nem blokkolja - a
+    // hívás azonnal elindul.
+    expect(serviceMock.regenerateTeacherInvite).toHaveBeenCalledTimes(1);
+
+    membersSubject.next([]);
+    membersSubject.complete();
+    await Promise.resolve();
+
+    expect(store.selectedSchool()?.teacherInviteCode).toBe('NEW5678');
+  });
+
   // BUG UI-TT-126: a kliens az `isSelectedAdmin` (SchoolDto.myRole-ból számított) jelet
   // úgy kezeli, mintha szerver-ellenőrzött igazság lenne, miközben csak a legutóbbi
   // sikeres `loadMine()` válaszának pillanatfelvétele. A backend
@@ -374,9 +421,16 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   // ELŐTT futtatja le) - ugyanaz a hibaosztály, mint amit a
   // `TeacherTaskSetStore.mutateAndReload()` és az `AdminSchoolStore.merge()`
   // már korábban explicit módon elkerült (lásd azok "Nincs finalize() itt"
-  // megjegyzését). Emiatt a `regenerateInvite()` saját
-  // `if (this._loading()) return;` guardja (UI-TT-120 fix) ebben a rövid
-  // ablakban hatástalan volt.
+  // megjegyzését).
+  //
+  // UI-TT-138 óta a `regenerateInvite()` MÁR NEM a megosztott `_loading`-ot
+  // nézi guardként (saját, intézményenkénti `_regenerateInviteInFlight` Set-je
+  // van) - az eredeti teszt itt ellenőrizte, hogy ez a guard a beágyazott
+  // reload alatt is blokkol; ez a konkrét elvárás a UI-TT-138 fix ÓTA
+  // szándékosan NEM igaz többé (pont ez volt maga a hiba - egy teljesen
+  // független reload ne blokkolja a regenerateInvite()-ot). A `loading()`
+  // jel maga viselkedésének ellenőrzése (a mutate()/UI-TT-147 tárgya)
+  // változatlanul érvényes marad.
   it('BUG UI-TT-147: removeMember() sikere utáni beágyazott loadMine() alatt a loading() true marad (nem áll vissza korán false-ra)', async () => {
     serviceMock.getMine.mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]));
     const removeSubject = new Subject<unknown>();
@@ -402,12 +456,6 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     // folyamatban van - ez a hibás verzióban itt false-ra váltott volna.
     expect(store.loading()).toBe(true);
     expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
-
-    // Amíg a beágyazott reload folyamatban van, egy "Új kód generálása"
-    // kattintás guardjának (UI-TT-120) is blokkolnia kell - ez a hibás
-    // verzióban ÁTMENT volna, mert a loading() időközben tévesen false volt.
-    store.regenerateInvite(1);
-    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
 
     reloadSubject.next([makeSchool({ id: 1, myRole: 'Admin' })]);
     reloadSubject.complete();

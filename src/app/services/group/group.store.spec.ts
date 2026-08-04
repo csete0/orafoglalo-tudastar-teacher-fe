@@ -222,4 +222,46 @@ describe('GroupStore', () => {
     // B AKTUÁLIS listájából szűri ki a diákot.
     expect(store.members()).toEqual([sharedMember]);
   });
+
+  // UI-TT-139: a UI-TT-119 fix `unarchive()`-nak a store-szintű, MINDEN
+  // metódus között megosztott `_loading` jelet adta guard-ként (`if
+  // (this._loading()) return;`), UGYANAZT, amit `loadMine()`/`loadMembers()`
+  // és a közös `mutate()` helperen át MINDEN más mutáló metódus
+  // (create/update/regenerateInvite/removeMember/archive/setJoinEnabled) is
+  // állít. Ez pontosan a testvér `SchoolStore` `regenerateInvite()`-nél már
+  // megtalált (UI-TT-138) "megosztott _loading guard" hibacsalád (ld. még
+  // UI-TS-151-155/196/198/199-201, UI-TT-136/137) egy újabb, a SAJÁT
+  // UI-TT-119 fixétől SZÁRMAZÓ előfordulása: `unarchive()` az EGYETLEN
+  // metódus, ami explicit ellenőrzi ezt a közös jelet, ezért BÁRMELY másik,
+  // ÉPPEN FOLYAMATBAN LÉVŐ, teljesen független store-művelet (pl. a
+  // `csoport-reszletek.component.ts` ngOnInit-jében induló `loadMembers()`)
+  // csendben meghiúsítja a "Visszaállítás" gomb kattintását - a tanár nem kap
+  // hibaüzenetet, egyszerűen nem történik semmi.
+  it('UI-TT-139 javítva: loadMembers() folyamatban léte alatt egy FÜGGETLEN unarchive() hívás NEM no-op-ol - saját guard-Set', () => {
+    serviceMock.getMine.mockReturnValue(of([makeGroup({ id: 501, isArchived: true })]));
+    const membersSubject = new Subject<unknown>();
+    serviceMock.getMembers.mockReturnValue(membersSubject.asObservable());
+    serviceMock.unarchive.mockReturnValue(of({}));
+
+    store.loadMine();
+    store.select(501);
+
+    // A csoport-részletek oldal betöltésekor elindul a tagok listájának
+    // lekérése - a válasz még nem érkezett meg.
+    store.loadMembers(501);
+    expect(store.loading()).toBe(true);
+
+    // A tanár - MIELŐTT a tagok betöltődnének - a teljesen FÜGGETLEN
+    // "Visszaállítás" gombra kattint.
+    store.unarchive(501);
+
+    // HELYES viselkedés: az unarchive() saját, entitásonkénti guard-Set-en
+    // fut, a loadMembers() folyamatban léte nem blokkolja - a hívás azonnal
+    // elindul, és a csoport állapota frissül.
+    expect(serviceMock.unarchive).toHaveBeenCalledTimes(1);
+    expect(store.selectedGroup()?.isArchived).toBe(false);
+
+    membersSubject.next([]);
+    membersSubject.complete();
+  });
 });

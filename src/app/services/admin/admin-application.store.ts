@@ -10,7 +10,14 @@ export class AdminApplicationStore {
   private readonly service = inject(AdminApplicationService);
 
   private readonly _applications = signal<TeacherApplicationAdminDto[]>([]);
-  private readonly _loading = signal(false);
+  // UI-TT-137: approve()/reject() korábban egyetlen KÖZÖS `_loading` jelzőt osztottak
+  // (amit maga a `load()` is írt) - ha az admin egy jelentkezés jóváhagyását indította, egy
+  // MÁSIK, teljesen független jelentkezés elutasítása (vagy akár egy háttér-`load()`)
+  // csendben elakadt a guardon. Műveletenkénti+entitásonkénti kulcs, a UserStore/
+  // AdminTeacherStore-nál már bevált mintát követve - a `load()` saját generációs
+  // számlálós logikája (ld. UI-TT-124) VÁLTOZATLAN marad, csak a publikus `loading()`
+  // jelzőbe regisztrálja magát, hogy az ő ideje alatt is `true` maradjon.
+  private readonly _inFlight = signal<ReadonlySet<string>>(new Set<string>());
   private readonly _error = signal<string | null>(null);
   private readonly _statusFilter = signal<'pending' | 'approved' | 'rejected' | 'all'>('pending');
 
@@ -25,7 +32,7 @@ export class AdminApplicationStore {
   private _loadGeneration = 0;
 
   readonly applications = computed(() => this._applications());
-  readonly loading = computed(() => this._loading());
+  readonly loading = computed(() => this._inFlight().size > 0);
   readonly error = computed(() => this._error());
   readonly statusFilter = computed(() => this._statusFilter());
 
@@ -36,7 +43,8 @@ export class AdminApplicationStore {
 
   load(): void {
     const generation = ++this._loadGeneration;
-    this._loading.set(true);
+    const key = `load:${generation}`;
+    this._inFlight.update((prev) => new Set(prev).add(key));
     this._error.set(null);
     this._applications.set([]);
 
@@ -45,9 +53,11 @@ export class AdminApplicationStore {
       .pipe(
         take(1),
         finalize(() => {
-          // Egy elavult (időközben egy ÚJABB load()-tól "lekörözött") hívás finalize()-a
-          // ne zárja le a loading-ot, amíg a ténylegesen legutóbbi hívás még folyamatban van.
-          if (generation === this._loadGeneration) this._loading.set(false);
+          this._inFlight.update((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -65,16 +75,15 @@ export class AdminApplicationStore {
   }
 
   approve(id: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `approve:${id}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .approve(id)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -87,16 +96,15 @@ export class AdminApplicationStore {
   }
 
   reject(id: number, request: RejectTeacherApplicationRequest, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `reject:${id}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .reject(id, request)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -110,5 +118,22 @@ export class AdminApplicationStore {
 
   clearError(): void {
     this._error.set(null);
+  }
+
+  private _isInFlight(key: string): boolean {
+    return this._inFlight().has(key);
+  }
+
+  private _begin(key: string): void {
+    this._inFlight.update((prev) => new Set(prev).add(key));
+    this._error.set(null);
+  }
+
+  private _end(key: string): void {
+    this._inFlight.update((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
   }
 }
