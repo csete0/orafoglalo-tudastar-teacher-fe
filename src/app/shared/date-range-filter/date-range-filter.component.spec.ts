@@ -79,6 +79,43 @@ describe('DateRangeFilterComponent', () => {
     expect(emitted[0].to).toBeInstanceOf(Date);
   });
 
+  // BE-STUDENTACTIVITY-CUSTOMRANGE-FROM-TIMEZONE-GAP / -TO-TIMEZONE-OVERINCLUSION:
+  // a korábbi `new Date(this.customFrom())` az "ÉÉÉÉ-HH-NN" stringet MINDIG UTC
+  // éjfélként értelmezte (ECMA-262), függetlenül a böngésző időzónájától - egy
+  // pozitív UTC-eltolású (pl. magyarországi) felhasználónál ez a helyi nap
+  // kezdetét 1-2 órával KÉSŐBBRE tolta a `from`-nál (csendben kizárva a
+  // kiválasztott nap kora reggeli aktivitását), a `to`-nál pedig a backend
+  // korábbi `.Date.AddDays(1)`-je miatt a KÖVETKEZŐ nap kora reggelét is tévesen
+  // befoglalta. A fix a `semesterStart()`/`last30` gyorsszűrőknél már bevált,
+  // LOKÁLIS komponensenkénti `new Date(year, month, day)` konstrukciót használja.
+  it('egyéni tartománynál a from/to a KIVÁLASZTOTT nap HELYI éjfeleként épül fel, nem UTC-ként (BE-STUDENTACTIVITY-CUSTOMRANGE-*-TIMEZONE-*)', () => {
+    const component = createComponent();
+
+    component.selectKey('custom');
+    component.customFrom.set('2026-08-01');
+    component.customTo.set('2026-08-01');
+    component.applyCustom();
+
+    expect(emitted.length).toBe(1);
+    const { from, to } = emitted[0];
+
+    // `from`: a kiválasztott nap HELYI éjfele - a helyi (teszt-környezeti)
+    // időzóna komponenseiből épül, nem a "2026-08-01T00:00:00.000Z" UTC alakból.
+    expect(from!.getFullYear()).toBe(2026);
+    expect(from!.getMonth()).toBe(7); // 0-indexelt: augusztus
+    expect(from!.getDate()).toBe(1);
+    expect(from!.getHours()).toBe(0);
+    expect(from!.getMinutes()).toBe(0);
+
+    // `to`: a ZÁRÓ nap UTÁNI nap HELYI éjfele (kizáró felső határ) - egy nappal
+    // később, mint `from`, ugyanabban a helyi órában/percben.
+    expect(to!.getFullYear()).toBe(2026);
+    expect(to!.getMonth()).toBe(7);
+    expect(to!.getDate()).toBe(2);
+    expect(to!.getHours()).toBe(0);
+    expect(to!.getMinutes()).toBe(0);
+  });
+
   // Regresszió: az `options` KÖZVETLEN mezőként (`readonly options =
   // REPORT_RANGE_OPTIONS;`) némán `undefined` volt ebben a build-beállításban, így a
   // `@for (option of options; ...)` semmin iterált és a gyorsszűrő gombok EGYÁLTALÁN
