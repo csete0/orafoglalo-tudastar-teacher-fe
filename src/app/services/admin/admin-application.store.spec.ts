@@ -232,4 +232,29 @@ describe('AdminApplicationStore', () => {
     approveSubject.complete();
     await Promise.resolve();
   });
+
+  // UI-TT-167: a UI-TT-137 fix az `_inFlight`-ot entitásonkénti kulcsra bontotta, de az
+  // `_error` VÁLTOZATLANUL egyetlen, minden jelentkezés között MEGOSZTOTT signal maradt -
+  // egy sikeresen lezáruló, FÜGGETLEN jelentkezés-döntés nem törölte egy MÁSIK, korábban
+  // hibázó jelentkezés hibaüzenetét.
+  it('UI-TT-167: approve(A) hibája után egy KÉSŐBB sikeresen lezáruló, FÜGGETLEN reject(B) törli a régi hibaüzenetet', async () => {
+    serviceMock.getApplications.mockReturnValue(
+      of([makeApplication({ id: 1 }), makeApplication({ id: 2 })]),
+    );
+    serviceMock.approve.mockReturnValue(throwError(() => ({ error: { errorMessage: 'A jóváhagyás sikertelen.' } })));
+    serviceMock.reject.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminApplicationStore);
+    store.load();
+    await Promise.resolve();
+
+    store.approve(1);
+    await Promise.resolve();
+    expect(store.error()).toBe('A jóváhagyás sikertelen.');
+
+    store.reject(2, { reason: 'Hiányos önéletrajz' });
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+  });
 });

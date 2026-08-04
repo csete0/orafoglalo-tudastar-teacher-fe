@@ -89,6 +89,11 @@ export class AdminApplicationStore {
       .subscribe({
         next: () => {
           this._applications.update((list) => list.filter((a) => a.id !== id));
+          // UI-TT-167: `_error` a UI-TT-137 fix után is EGYETLEN, minden jelentkezés
+          // között MEGOSZTOTT signal maradt (csak `_inFlight` lett entitásonkénti) - egy
+          // sikeresen lezáruló, FÜGGETLEN jelentkezés-döntés törli a régi, MÁSIK
+          // jelentkezéstől származó hibaüzenetet is, hogy ne maradjon látható utána.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A jóváhagyás sikertelen.'),
@@ -110,6 +115,8 @@ export class AdminApplicationStore {
       .subscribe({
         next: () => {
           this._applications.update((list) => list.filter((a) => a.id !== id));
+          // UI-TT-167, ld. approve() fenti megjegyzését.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'Az elutasítás sikertelen.'),
