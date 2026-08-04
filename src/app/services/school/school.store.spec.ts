@@ -515,6 +515,43 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     expect(store.members()[0]?.teacherProfileId).toBe(99);
   });
 
+  // UI-TT-170: a GroupStore UI-TT-169 pontos testvér-hibája - a közös `mutate()` helper
+  // (amin create/join/update/regenerateInvite/delete/leave/removeMember/changeMemberRole
+  // fut) semmilyen generáció-védelmet nem kapott, szemben a `_members`-szel (UI-TT-157).
+  // Egy elhagyott mutáció KÉSVE érkező válasza beszennyezte a közben megnyitott MÁSIK
+  // intézmény már sikeresen betöltött oldalát.
+  it('UI-TT-170: A intézmény elhagyott regenerateInvite()-jának KÉSVE érkező hibája NEM szennyezi be a már sikeresen megnyitott B intézmény oldalát', async () => {
+    serviceMock.getMine.mockReturnValue(of([]));
+    serviceMock.getMembers.mockReturnValueOnce(of([])).mockReturnValueOnce(of([]));
+    const inviteSubject = new Subject<SchoolDto>();
+    serviceMock.regenerateTeacherInvite.mockReturnValue(inviteSubject.asObservable());
+
+    const store = TestBed.inject(SchoolStore);
+
+    // Admin elindítja A intézmény meghívó-kódjának regenerálását - a válasz még nem
+    // érkezett meg.
+    store.select(1);
+    store.loadMembers(1);
+    await Promise.resolve();
+    store.regenerateInvite(1);
+
+    // A válasz megérkezése ELŐTT átnavigál B intézmény oldalára, ahol a tagok
+    // betöltése sikeresen, hiba nélkül lezárul.
+    store.select(2);
+    store.loadMembers(2);
+    await Promise.resolve();
+    expect(store.loading()).toBe(false);
+    expect(store.error()).toBeNull();
+
+    // Most érkezik meg A elavult, hibás meghívó-regenerálásának válasza.
+    inviteSubject.error({ error: { errorMessage: 'A meghívó-kód regenerálása sikertelen.' } });
+    await Promise.resolve();
+
+    // A HELYES viselkedés: B már tiszta, sikeresen betöltött oldala változatlan marad -
+    // A elavult mutációja nem írhatja felül a _error állapotot.
+    expect(store.error()).toBeNull();
+  });
+
   it('create() sikere után loading() false-ra vált (nincs beágyazott reload, a hívó saját magát állítja vissza)', async () => {
     serviceMock.getMine.mockReturnValue(of([]));
     const createSubject = new Subject<SchoolDto>();

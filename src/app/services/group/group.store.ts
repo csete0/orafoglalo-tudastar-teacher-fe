@@ -99,14 +99,22 @@ export class GroupStore {
         if (onSuccess) onSuccess();
       },
       onError,
+      undefined,
+      id,
     );
   }
 
   regenerateInvite(id: number, onSuccess?: () => void): void {
-    this.mutate(this.service.regenerateInvite(id), (group) => {
-      this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.regenerateInvite(id),
+      (group) => {
+        this._groups.update((list) => list.map((g) => (g.id === id ? group : g)));
+        if (onSuccess) onSuccess();
+      },
+      undefined,
+      undefined,
+      id,
+    );
   }
 
   loadMembers(id: number): void {
@@ -136,32 +144,44 @@ export class GroupStore {
   }
 
   removeMember(groupId: number, memberUserId: number, onSuccess?: () => void): void {
-    this.mutate(this.service.removeMember(groupId, memberUserId), () => {
-      // UI-TT-158: a renderelt tag-listát csak akkor szűrjük, ha az MÉG MINDIG annak a
-      // csoportnak a listája, amelyikre az eltávolítás vonatkozott. Az alatta lévő
-      // `_groups` létszám-patch ellenben MINDIG lefut: az explicit `g.id === groupId`
-      // kulcs miatt eleve a helyes csoportot módosítja, függetlenül attól, mi van
-      // éppen megjelenítve.
-      if (this._membersGroupId === groupId) {
-        this._members.update((list) => list.filter((m) => m.userId !== memberUserId));
-      }
-      // BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT: minden MÁS mutáció ebben a store-ban
-      // (archive/unarchive/setJoinEnabled/regenerateInvite/update) patch-eli a `_groups`
-      // listát is - ez volt az egyetlen kivétel, csak a `_members`-t frissítette. A
-      // `GroupService.removeMember()` `Observable<unknown>`-t ad vissza (nincs
-      // szerver-válasz frissített `memberCount`-tal), ezért kézzel csökkentjük eggyel.
-      this._groups.update((list) =>
-        list.map((g) => (g.id === groupId ? { ...g, memberCount: g.memberCount - 1 } : g)),
-      );
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.removeMember(groupId, memberUserId),
+      () => {
+        // UI-TT-158: a renderelt tag-listát csak akkor szűrjük, ha az MÉG MINDIG annak a
+        // csoportnak a listája, amelyikre az eltávolítás vonatkozott. Az alatta lévő
+        // `_groups` létszám-patch ellenben MINDIG lefut: az explicit `g.id === groupId`
+        // kulcs miatt eleve a helyes csoportot módosítja, függetlenül attól, mi van
+        // éppen megjelenítve.
+        if (this._membersGroupId === groupId) {
+          this._members.update((list) => list.filter((m) => m.userId !== memberUserId));
+        }
+        // BE-GROUPSTORE-REMOVEMEMBER-STALE-COUNT: minden MÁS mutáció ebben a store-ban
+        // (archive/unarchive/setJoinEnabled/regenerateInvite/update) patch-eli a `_groups`
+        // listát is - ez volt az egyetlen kivétel, csak a `_members`-t frissítette. A
+        // `GroupService.removeMember()` `Observable<unknown>`-t ad vissza (nincs
+        // szerver-válasz frissített `memberCount`-tal), ezért kézzel csökkentjük eggyel.
+        this._groups.update((list) =>
+          list.map((g) => (g.id === groupId ? { ...g, memberCount: g.memberCount - 1 } : g)),
+        );
+        if (onSuccess) onSuccess();
+      },
+      undefined,
+      undefined,
+      groupId,
+    );
   }
 
   archive(id: number, onSuccess?: () => void): void {
-    this.mutate(this.service.archive(id), () => {
-      this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: true } : g)));
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.archive(id),
+      () => {
+        this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isArchived: true } : g)));
+        if (onSuccess) onSuccess();
+      },
+      undefined,
+      undefined,
+      id,
+    );
   }
 
   // UI-TT-34: az archiválásnak eddig nem volt ellentétes irányú művelete - egy
@@ -185,14 +205,21 @@ export class GroupStore {
           return next;
         });
       },
+      id,
     );
   }
 
   setJoinEnabled(id: number, enabled: boolean, onSuccess?: () => void): void {
-    this.mutate(this.service.setJoinEnabled(id, enabled), () => {
-      this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isJoinEnabled: enabled } : g)));
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.setJoinEnabled(id, enabled),
+      () => {
+        this._groups.update((list) => list.map((g) => (g.id === id ? { ...g, isJoinEnabled: enabled } : g)));
+        if (onSuccess) onSuccess();
+      },
+      undefined,
+      undefined,
+      id,
+    );
   }
 
   clearError(): void {
@@ -207,7 +234,21 @@ export class GroupStore {
     // saját, entitásonkénti guard-Set-jének feloldásához) - a `_loading`-tól
     // FÜGGETLENÜL fut, mindig, sikertől/hibától függetlenül.
     onSettled?: () => void,
+    // UI-TT-169: opcionális, a mutáció CÉLPONTJÁUL szolgáló csoport id-je. A store
+    // `providedIn: 'root'` (a navigáció nem szakítja meg a háttérben futó HTTP-hívást) -
+    // egy elhagyott (pl. A csoport archiválása) mutáció KÉSVE érkező válasza enélkül
+    // beszennyezné a közben megnyitott MÁSIK (B) csoport már sikeresen betöltött oldalát
+    // egy hozzá nem tartozó `_loading`/`_error` állapottal. A `_membersGeneration`-t
+    // (amit a `select()`/`loadMembers()` léptet minden csoport-váltáskor) HÍVÁSKOR
+    // rögzítjük - ha ez a válasz megérkezéséig megváltozott, a tanár már máshol jár, a
+    // `_loading`/`_error` írását kihagyjuk. `create()`-nél (nincs "aktuális csoport",
+    // a lista oldalról hívva) a `targetGroupId` paraméter hiányzik, a viselkedés
+    // változatlanul feltétel nélküli.
+    targetGroupId?: number,
   ): void {
+    const generation = targetGroupId !== undefined ? this._membersGeneration : null;
+    const isStillCurrent = () => generation === null || generation === this._membersGeneration;
+
     this._loading.set(true);
     this._error.set(null);
 
@@ -215,7 +256,7 @@ export class GroupStore {
       .pipe(
         take(1),
         finalize(() => {
-          this._loading.set(false);
+          if (isStillCurrent()) this._loading.set(false);
           if (onSettled) onSettled();
         }),
         takeUntilDestroyed(this.destroyRef),
@@ -224,7 +265,7 @@ export class GroupStore {
         next: onSuccess,
         error: (err) => {
           const message = extractErrorMessage(err, 'A művelet sikertelen.');
-          this._error.set(message);
+          if (isStillCurrent()) this._error.set(message);
           if (onError) onError(message);
         },
       });
