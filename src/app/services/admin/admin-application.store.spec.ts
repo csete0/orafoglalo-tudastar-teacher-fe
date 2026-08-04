@@ -199,7 +199,7 @@ describe('AdminApplicationStore', () => {
   // van - egy admin, aki egy hosszú listán gyorsan egymás után több
   // jelentkezést bírál el, minden második/harmadik kattintását elveszítheti
   // anélkül, hogy erről bármilyen jelzést kapna.
-  it('BUG UI-TT-137: approve(jelentkezés A) folyamatban léte alatt egy FÜGGETLEN reject(jelentkezés B) hívás csendben no-op-ol, mert mindkettő ugyanazt a megosztott _loading jelet nézi', async () => {
+  it('UI-TT-137 javítva: approve(jelentkezés A) folyamatban léte alatt egy FÜGGETLEN reject(jelentkezés B) hívás NEM no-op-ol - entitásonkénti guard', async () => {
     serviceMock.getApplications.mockReturnValue(
       of([makeApplication({ id: 1 }), makeApplication({ id: 2 })]),
     );
@@ -219,26 +219,17 @@ describe('AdminApplicationStore', () => {
     expect(store.loading()).toBe(true);
 
     // MIELŐTT az 1-es elbírálása visszatérne, az admin a listában lejjebb egy
-    // TELJESEN FÜGGETLEN, másik jelentkezést (2-es) próbál elutasítani. A
-    // helyes viselkedés az lenne, hogy ez a független művelet elinduljon (vagy
-    // legalább valamilyen visszajelzést adjon) - ehelyett csendben eldobódik,
-    // mert a közös `_loading` jel még `true`.
+    // TELJESEN FÜGGETLEN, másik jelentkezést (2-es) próbál elutasítani.
     store.reject(2, { reason: 'Hiányos önéletrajz' });
 
-    // BUG: a reject() HTTP-hívás soha nem indul el, a 2-es jelentkezés
-    // változatlanul a listában marad - az admin kattintása látszólag
-    // hatástalan marad, semmilyen hibaüzenet vagy visszajelzés nélkül.
-    expect(serviceMock.reject).not.toHaveBeenCalled();
-    expect(store.applications().some((a) => a.id === 2)).toBe(true);
+    // HELYES viselkedés: a reject() saját ("reject:2") kulcson fut, az
+    // approve("approve:1") folyamatban léte nem blokkolja - a hívás azonnal
+    // elindul, a 2-es jelentkezés kikerül a listából.
+    expect(serviceMock.reject).toHaveBeenCalledTimes(1);
+    expect(store.applications().some((a) => a.id === 2)).toBe(false);
 
     approveSubject.next({});
     approveSubject.complete();
     await Promise.resolve();
-
-    // Csak az 1-es (teljesen független) jelentkezés elbírálása UTÁN indulhatna
-    // el a 2-es elutasítása - egy türelmetlen admin, aki nem kattint újra,
-    // sosem tudja meg, hogy a 2-es jelentkezés elutasítása valójában el sem
-    // indult.
-    expect(serviceMock.reject).not.toHaveBeenCalled();
   });
 });

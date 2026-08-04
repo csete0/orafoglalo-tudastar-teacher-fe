@@ -342,7 +342,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   // szinte egyszerre induló `loadMembers()`/`loadSchoolGroups()`) csendben
   // meghiúsítja az "Új kód generálása" gomb kattintását - a tanár nem kap
   // hibaüzenetet, egyszerűen nem történik semmi.
-  it('BUG UI-TT-138: loadMembers() folyamatban léte alatt egy FÜGGETLEN regenerateInvite() hívás csendben no-op-ol, mert mindkettő ugyanazt a megosztott _loading jelet nézi', async () => {
+  it('UI-TT-138 javítva: loadMembers() folyamatban léte alatt egy FÜGGETLEN regenerateInvite() hívás NEM no-op-ol - saját guard-Set', async () => {
     serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, teacherInviteCode: 'OLD1234' })]));
     const membersSubject = new Subject<unknown>();
     serviceMock.getMembers.mockReturnValue(membersSubject.asObservable());
@@ -362,20 +362,16 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     // generálása" gombra kattint.
     store.regenerateInvite(1);
 
-    // BUG: a regenerateTeacherInvite() HTTP-hívás soha nem indul el, a
-    // meghívó-kód változatlan marad - a tanár kattintása látszólag
-    // hatástalan marad, semmilyen hibaüzenet vagy visszajelzés nélkül.
-    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
-    expect(store.selectedSchool()?.teacherInviteCode).toBe('OLD1234');
+    // HELYES viselkedés: a regenerateInvite() saját, intézményenkénti
+    // guard-Set-en fut, a loadMembers() folyamatban léte nem blokkolja - a
+    // hívás azonnal elindul.
+    expect(serviceMock.regenerateTeacherInvite).toHaveBeenCalledTimes(1);
 
     membersSubject.next([]);
     membersSubject.complete();
     await Promise.resolve();
 
-    // Csak a teljesen független `loadMembers()` lezárulása UTÁN indulhatna el
-    // a kódregenerálás - egy türelmetlen tanár, aki nem kattint újra, sosem
-    // tudja meg, hogy a kérése el sem indult.
-    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
+    expect(store.selectedSchool()?.teacherInviteCode).toBe('NEW5678');
   });
 
   // BUG UI-TT-126: a kliens az `isSelectedAdmin` (SchoolDto.myRole-ból számított) jelet
@@ -425,9 +421,16 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
   // ELŐTT futtatja le) - ugyanaz a hibaosztály, mint amit a
   // `TeacherTaskSetStore.mutateAndReload()` és az `AdminSchoolStore.merge()`
   // már korábban explicit módon elkerült (lásd azok "Nincs finalize() itt"
-  // megjegyzését). Emiatt a `regenerateInvite()` saját
-  // `if (this._loading()) return;` guardja (UI-TT-120 fix) ebben a rövid
-  // ablakban hatástalan volt.
+  // megjegyzését).
+  //
+  // UI-TT-138 óta a `regenerateInvite()` MÁR NEM a megosztott `_loading`-ot
+  // nézi guardként (saját, intézményenkénti `_regenerateInviteInFlight` Set-je
+  // van) - az eredeti teszt itt ellenőrizte, hogy ez a guard a beágyazott
+  // reload alatt is blokkol; ez a konkrét elvárás a UI-TT-138 fix ÓTA
+  // szándékosan NEM igaz többé (pont ez volt maga a hiba - egy teljesen
+  // független reload ne blokkolja a regenerateInvite()-ot). A `loading()`
+  // jel maga viselkedésének ellenőrzése (a mutate()/UI-TT-147 tárgya)
+  // változatlanul érvényes marad.
   it('BUG UI-TT-147: removeMember() sikere utáni beágyazott loadMine() alatt a loading() true marad (nem áll vissza korán false-ra)', async () => {
     serviceMock.getMine.mockReturnValueOnce(of([makeSchool({ id: 1, myRole: 'Admin' })]));
     const removeSubject = new Subject<unknown>();
@@ -453,12 +456,6 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     // folyamatban van - ez a hibás verzióban itt false-ra váltott volna.
     expect(store.loading()).toBe(true);
     expect(serviceMock.getMine).toHaveBeenCalledTimes(2);
-
-    // Amíg a beágyazott reload folyamatban van, egy "Új kód generálása"
-    // kattintás guardjának (UI-TT-120) is blokkolnia kell - ez a hibás
-    // verzióban ÁTMENT volna, mert a loading() időközben tévesen false volt.
-    store.regenerateInvite(1);
-    expect(serviceMock.regenerateTeacherInvite).not.toHaveBeenCalled();
 
     reloadSubject.next([makeSchool({ id: 1, myRole: 'Admin' })]);
     reloadSubject.complete();

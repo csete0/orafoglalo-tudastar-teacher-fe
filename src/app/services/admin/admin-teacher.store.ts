@@ -10,7 +10,14 @@ export class AdminTeacherStore {
   private readonly service = inject(AdminTeacherService);
 
   private readonly _teachers = signal<TeacherProfileAdminDto[]>([]);
-  private readonly _loading = signal(false);
+  // UI-TT-136: a UI-TT-117 fix `setActive()`/`setQuota()`/`takedownTaskSet()`-re (és a
+  // szintén ide tartozó `reinstateTaskSet()`-re) rakott dupla-kattintás elleni korai-return
+  // egyetlen KÖZÖS jelzőt védett, nem tanáronkénti/feladatsoronkéntit - ha az admin egy tanár
+  // sorában elindított egy hívást, egy MÁSIK tanár sorában megnyomott gomb csendben elakadt a
+  // guardon. Műveletenkénti+entitásonkénti kulcs (`${method}:${id}`), a UserStore/NotificationStore/
+  // ExamStore-nál már bevált mintát követve: mindegyik hívás csak a SAJÁT célpontját blokkolja,
+  // a publikus `loading()` viszont változatlanul "bármi folyamatban van"-t jelent.
+  private readonly _inFlight = signal<ReadonlySet<string>>(new Set<string>());
   private readonly _error = signal<string | null>(null);
 
   private readonly _selectedTeacherId = signal<number | null>(null);
@@ -27,7 +34,7 @@ export class AdminTeacherStore {
   private _taskSetsGeneration = 0;
 
   readonly teachers = computed(() => this._teachers());
-  readonly loading = computed(() => this._loading());
+  readonly loading = computed(() => this._inFlight().size > 0);
   readonly error = computed(() => this._error());
 
   readonly selectedTeacherId = computed(() => this._selectedTeacherId());
@@ -35,14 +42,14 @@ export class AdminTeacherStore {
   readonly taskSetsLoading = computed(() => this._taskSetsLoading());
 
   load(): void {
-    this._loading.set(true);
-    this._error.set(null);
+    if (this._isInFlight('load')) return;
+    this._begin('load');
 
     this.service
       .getTeachers()
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end('load')),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -52,16 +59,15 @@ export class AdminTeacherStore {
   }
 
   setActive(teacherProfileId: number, isActive: boolean, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `setActive:${teacherProfileId}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .setActive(teacherProfileId, isActive)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -81,16 +87,15 @@ export class AdminTeacherStore {
     maxStorageBytes: number | null,
     onSuccess?: () => void,
   ): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `setQuota:${teacherProfileId}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .setQuota(teacherProfileId, maxTaskSets, maxStorageBytes)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -144,16 +149,15 @@ export class AdminTeacherStore {
   }
 
   takedownTaskSet(taskSetId: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `takedownTaskSet:${taskSetId}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .takedownTaskSet(taskSetId)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -175,16 +179,15 @@ export class AdminTeacherStore {
    * visszafordítható — ez az egyetlen felületi útja.
    */
   reinstateTaskSet(taskSetId: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
+    const key = `reinstateTaskSet:${taskSetId}`;
+    if (this._isInFlight(key)) return;
+    this._begin(key);
 
     this.service
       .reinstateTaskSet(taskSetId)
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._end(key)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
@@ -200,5 +203,22 @@ export class AdminTeacherStore {
 
   clearError(): void {
     this._error.set(null);
+  }
+
+  private _isInFlight(key: string): boolean {
+    return this._inFlight().has(key);
+  }
+
+  private _begin(key: string): void {
+    this._inFlight.update((prev) => new Set(prev).add(key));
+    this._error.set(null);
+  }
+
+  private _end(key: string): void {
+    this._inFlight.update((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
   }
 }

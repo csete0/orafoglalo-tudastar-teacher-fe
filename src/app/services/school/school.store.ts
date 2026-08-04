@@ -30,6 +30,16 @@ export class SchoolStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // UI-TT-138: a UI-TT-120 fix `regenerateInvite()`-ra rakott `if (this._loading())
+  // return;` korai-return guardja a `loadMine()`/`loadMembers()`/`loadSchoolGroups()`
+  // (és a `mutate()`-en átmenő minden más metódus) ÁLTAL MEGOSZTOTT `_loading`-ot
+  // nézte - egy oldalbetöltéskori háttér-lekérdezés alatt az "Új kód generálása" gomb
+  // csendben, hiba nélkül semmit nem csinált. Ez a Set kizárólag a `regenerateInvite()`
+  // saját, intézményenkénti dupla-kattintás elleni védelmét szolgálja - a publikus
+  // `loading()` és a `mutate()`/generációs-számláló meglévő, `_loading`-ra épülő
+  // viselkedése (ld. UI-TT-147/149/157 kommentek) szándékosan VÁLTOZATLAN marad.
+  private readonly _regenerateInviteInFlight = signal<ReadonlySet<number>>(new Set<number>());
+
   readonly schools = computed(() => this._schools());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
@@ -119,13 +129,25 @@ export class SchoolStore {
   }
 
   regenerateInvite(id: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
+    if (this._regenerateInviteInFlight().has(id)) return;
+    this._regenerateInviteInFlight.update((prev) => new Set(prev).add(id));
 
-    this.mutate(this.service.regenerateTeacherInvite(id), (school) => {
-      this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
-      if (onSuccess) onSuccess();
-      this._loading.set(false);
-    });
+    this.mutate(
+      this.service.regenerateTeacherInvite(id).pipe(
+        finalize(() => {
+          this._regenerateInviteInFlight.update((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }),
+      ),
+      (school) => {
+        this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
+        if (onSuccess) onSuccess();
+        this._loading.set(false);
+      },
+    );
   }
 
   delete(id: number, onSuccess?: () => void): void {
