@@ -24,8 +24,38 @@ export class HeaderDropdownCoordinatorService {
   private readonly _openDropdown = signal<HeaderDropdown | null>(null);
   readonly openDropdown = computed(() => this._openDropdown());
 
-  open(which: HeaderDropdown): void {
+  // UI-TT-162: a "bell" KÉT teljesen független fizikai DOM-példányban is
+  // mountolva van egyszerre (desktop + mobil header-sáv), csak CSS dönti el,
+  // melyik LÁTSZIK - mindkettő él a komponensfában, saját `open` szignállal.
+  // Az `openDropdown()==='bell'` reaktív effect-alapú figyelése (ahogy a
+  // 'menu' esetnél) ITT nem elég: egy `effect()` csak a FIGYELŐ komponens
+  // SAJÁT következő change-detection/flush-ciklusán fut le, ami a MÁSIK
+  // (épp nem látható, CSS-sel elrejtett) példánynál tetszőlegesen később
+  // következik be - viewport-váltás közben pont ez hagyta nyitva a nem
+  // látszó példány panelét "szellem"-állapotban. Ezért a bell-vs-bell
+  // kizárás SZINKRON, imperatív callback-regisztráción megy (ugyanaz a
+  // "ne effect()-tel" elv, amit a NotificationBellComponent már eddig is
+  // követett a saját nyitás-jelzésénél): minden élő bell-példány
+  // regisztrálja a saját "kényszerített bezárás" callbackjét, és az `open()`
+  // hívás AZONNAL, a jelzéssel egy időben meghívja az ÖSSZES MÁSIK
+  // regisztrált példány callbackjét.
+  private readonly bellCloseCallbacks = new Map<string, () => void>();
+
+  registerBell(instanceId: string, onForceClose: () => void): void {
+    this.bellCloseCallbacks.set(instanceId, onForceClose);
+  }
+
+  unregisterBell(instanceId: string): void {
+    this.bellCloseCallbacks.delete(instanceId);
+  }
+
+  open(which: HeaderDropdown, instanceId?: string): void {
     this._openDropdown.set(which);
+    if (which === 'bell' && instanceId !== undefined) {
+      for (const [id, onForceClose] of this.bellCloseCallbacks) {
+        if (id !== instanceId) onForceClose();
+      }
+    }
   }
 
   /** Csak akkor nullázza az állapotot, ha még mindig EZ a felület számít

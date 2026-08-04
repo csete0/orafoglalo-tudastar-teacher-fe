@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -139,6 +140,11 @@ export class NotificationBellComponent implements OnInit {
 
   readonly open = signal(false);
 
+  // UI-TT-162: egyedi azonosító fizikai DOM-példányonként (desktop/mobil
+  // header-sáv) - ld. a coordinator bell-vs-bell kizárás megjegyzését, és a
+  // konstruktor `registerBell()` hívását lent.
+  private readonly instanceId = crypto.randomUUID();
+
   private readonly panel = viewChild<ElementRef<HTMLDivElement>>('panel');
   private readonly triggerBtn = viewChild<ElementRef<HTMLButtonElement>>('triggerBtn');
 
@@ -191,6 +197,18 @@ export class NotificationBellComponent implements OnInit {
         this.open.set(false);
       }
     });
+
+    // UI-TT-162: bell-vs-bell kizárás - regisztráljuk ennek a fizikai
+    // példánynak a "kényszerített bezárás" callbackjét. A coordinator ezt
+    // SZINKRON hívja meg minden MÁS regisztrált példányra, amint EZ (vagy
+    // bármelyik) példány megnyílik (ld. `toggle()` lent) - nem effect()-tel,
+    // ugyanazon okból, mint a 'menu' eset fenti kommentje írja: egy, a
+    // CSS-sel épp elrejtett testvér-példány saját change-detection ciklusa
+    // tetszőlegesen később futna le, ami pont azt a "szellem-nyitott panel"
+    // rést hagyta nyitva, amit ez a fix zár be.
+    const instanceId = this.instanceId;
+    this.dropdownCoordinator.registerBell(instanceId, () => this.open.set(false));
+    inject(DestroyRef).onDestroy(() => this.dropdownCoordinator.unregisterBell(instanceId));
   }
 
   ngOnInit(): void {
@@ -202,7 +220,7 @@ export class NotificationBellComponent implements OnInit {
       this.close();
     } else {
       this.open.set(true);
-      this.dropdownCoordinator.open('bell');
+      this.dropdownCoordinator.open('bell', this.instanceId);
     }
   }
 
