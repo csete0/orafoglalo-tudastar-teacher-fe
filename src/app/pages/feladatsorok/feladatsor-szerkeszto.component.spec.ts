@@ -520,7 +520,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(link.getAttribute('href')).toBe(`blob:resolved-${expectedApiUrl}`);
   });
 
-  it('BUG: ugyanarra a (még fel nem oldott) fájlra kétszer hívja meg a resolveUrl()-t, ha a detail két gyors, egymástól FÜGGETLEN mentés miatt kétszer újratöltődik, mielőtt az első blob-letöltés válasza megérkezne — a korábbi blob URL sosem szabadul fel', () => {
+  it('UI-TT-163 javítva: nem hívja meg kétszer a resolveUrl()-t ugyanarra a (még fel nem oldott) fájlra, ha a detail két gyors, egymástól FÜGGETLEN mentés miatt kétszer újratöltődik, mielőtt az első blob-letöltés válasza megérkezne — nincs vesztes, sosem revoke-olt blob URL', () => {
     const file = {
       id: 'f1',
       kind: 'SolutionPdf' as const,
@@ -555,17 +555,17 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // Helyes viselkedés: az f1-re már folyamatban van egy feloldás, nem kellene újat indítani.
     expect(authorizedFileServiceMock.resolveUrl).toHaveBeenCalledTimes(1);
 
-    // Mindkét (immár elindult) letöltés megérkezik, fordított sorrendben (a második ér célba előbb).
-    pendingCalls[1]?.next('blob:second');
-    pendingCalls[1]?.complete();
-    fixture.detectChanges();
+    // A dedupe miatt SOSEM indult el egy második HTTP-hívás (pendingCalls[1] nem is
+    // létezik) - az egyetlen, ténylegesen elindult letöltés most megérkezik.
+    expect(pendingCalls.length).toBe(1);
     pendingCalls[0].next('blob:first');
     pendingCalls[0].complete();
     fixture.detectChanges();
 
-    // A vesztes (korábban létrehozott, de a signalban sosem tárolt) blob URL-t senki nem
-    // revoke-olja — örökre a memóriában marad, minden ilyen versenyhelyzetnél egyet.
-    expect(authorizedFileServiceMock.revoke).toHaveBeenCalledWith('blob:first');
+    // Nincs "vesztes" blob URL, tehát nincs mit revoke-olni sem - a dedupe magát a
+    // versenyhelyzetet előzi meg, nem csak a tünetét takarítja el utólag.
+    expect(authorizedFileServiceMock.revoke).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.downloadHref(file)).toBe('blob:first');
   });
 
   describe('"Új feladat hozzáadása" draft-kezelés (UI-TT-25 / UI-TT-61)', () => {
