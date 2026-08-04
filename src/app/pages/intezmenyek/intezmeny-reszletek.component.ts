@@ -94,7 +94,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                       <button (click)="toggleRole(s.id, member.teacherProfileId, member.role, member.displayName)" class="text-primary hover:underline">
                         {{ member.role === 'Admin' ? 'Lefokozás' : 'Igazgatóvá tétel' }}
                       </button>
-                      <button (click)="removeMember(s.id, member.teacherProfileId)" class="text-danger hover:underline">Eltávolítás</button>
+                      <button (click)="removeMember(s.id, member.teacherProfileId, member.displayName)" class="text-danger hover:underline">Eltávolítás</button>
                     }
                   </div>
                 </li>
@@ -342,9 +342,12 @@ export class IntezmenyReszletekComponent implements OnInit {
     );
   }
 
-  async removeMember(schoolId: number, teacherProfileId: number): Promise<void> {
+  async removeMember(schoolId: number, teacherProfileId: number, teacherName: string): Promise<void> {
+    // UI-TT-140 (UI-TT-29 testvér-előfordulása): a megerősítő szöveg korábban sosem
+    // nevezte meg az érintett tanárt - egy hosszú listán a tanár nem tudta a
+    // dialógusból ellenőrizni, hogy valóban a kattintott sorra vonatkozik-e.
     const ok = await this.confirmService.ask({
-      message: 'Biztosan eltávolítod ezt a tanárt az intézményből? A csoportjai lekerülnek az intézményről.',
+      message: `Biztosan eltávolítod ${teacherName} tanárt az intézményből? A csoportjai lekerülnek az intézményről.`,
       danger: true,
       confirmLabel: 'Eltávolítás',
     });
