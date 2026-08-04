@@ -807,7 +807,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const component = fixture.componentInstance;
 
       taskSetStoreMock.loading.set(true);
-      await component.deleteTask(1, 1);
+      await component.deleteTask(1, 1, 'F1');
 
       expect(taskSetStoreMock.deleteTask).not.toHaveBeenCalled();
     });
@@ -826,7 +826,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const component = fixture.componentInstance;
 
       taskSetStoreMock.loading.set(true);
-      await component.deleteSolution(1, 9);
+      await component.deleteSolution(1, 9, 'r');
 
       expect(taskSetStoreMock.deleteSolution).not.toHaveBeenCalled();
     });
@@ -839,7 +839,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const component = fixture.componentInstance;
 
       taskSetStoreMock.loading.set(true);
-      await component.deleteFile(1, 'f1');
+      await component.deleteFile(1, 'f1', 'create.sql');
 
       expect(taskSetStoreMock.deleteFile).not.toHaveBeenCalled();
     });

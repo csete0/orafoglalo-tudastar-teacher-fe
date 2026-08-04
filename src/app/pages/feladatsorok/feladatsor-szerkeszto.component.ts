@@ -127,7 +127,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
                           </span>
                         </button>
-                        <button (click)="deleteTask(detail.id, task.id)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
+                        <button (click)="deleteTask(detail.id, task.id, task.title)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
                       </div>
 
                       @if (expandedTaskId() === task.id) {
@@ -137,7 +137,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <div class="bg-bg-panel rounded-xl p-3">
                               <div class="flex justify-between items-start gap-2 mb-2">
                                 <p class="text-sm font-medium min-w-0 flex-1 truncate">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
-                                <button (click)="deleteSolution(detail.id, solution.id)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
+                                <button (click)="deleteSolution(detail.id, solution.id, solution.solutionText || ('#' + solution.id))" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
                               </div>
                               <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
 
@@ -253,7 +253,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 </span>
                 <div class="flex items-center gap-3 shrink-0">
                   <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
-                  <button (click)="deleteFile(detail.id, file.id)" class="text-danger hover:underline">Törlés</button>
+                  <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
                 </div>
               </li>
             }
@@ -602,9 +602,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     return !draft?.title.trim() || !draft?.description.trim();
   }
 
-  async deleteTask(taskSetId: number, taskId: number): Promise<void> {
+  async deleteTask(taskSetId: number, taskId: number, taskTitle: string): Promise<void> {
+    // UI-TT-140 (UI-TT-29 testvér-előfordulása): a megerősítő szöveg korábban sosem
+    // nevezte meg a törlendő feladatot, pedig az ÖSSZES részfeladatát is törli - egy
+    // sok feladatos feladatsoron a tanár nem tudta a dialógusból ellenőrizni, hogy
+    // valóban a kattintott sorra vonatkozik-e.
     const ok = await this.confirmService.ask({
-      message: 'Biztosan törlöd a feladatot a részfeladataival együtt?',
+      message: `Biztosan törlöd a(z) "${taskTitle}" feladatot a részfeladataival együtt?`,
       danger: true,
       confirmLabel: 'Törlés',
     });
@@ -659,9 +663,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     );
   }
 
-  async deleteSolution(taskSetId: number, solutionId: number): Promise<void> {
+  async deleteSolution(taskSetId: number, solutionId: number, solutionLabel: string): Promise<void> {
+    // UI-TT-140 (UI-TT-29 testvér-előfordulása) — ld. deleteTask() fenti kommentje.
     const ok = await this.confirmService.ask({
-      message: 'Biztosan törlöd a részfeladatot?',
+      message: `Biztosan törlöd a(z) "${solutionLabel}" részfeladatot?`,
       danger: true,
       confirmLabel: 'Törlés',
     });
@@ -684,9 +689,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     input.value = '';
   }
 
-  async deleteFile(taskSetId: number, fileId: string): Promise<void> {
+  async deleteFile(taskSetId: number, fileId: string, fileName: string): Promise<void> {
+    // UI-TT-140 (UI-TT-29 testvér-előfordulása) — ld. deleteTask() fenti kommentje.
     const ok = await this.confirmService.ask({
-      message: 'Biztosan törlöd a fájlt?',
+      message: `Biztosan törlöd a(z) "${fileName}" fájlt?`,
       danger: true,
       confirmLabel: 'Törlés',
     });
