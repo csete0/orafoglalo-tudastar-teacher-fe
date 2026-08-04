@@ -79,7 +79,7 @@ describe('FeladatsorEredmenyekComponent', () => {
   let reportStoreMock: {
     taskSetResults: ReturnType<typeof signal<TeacherTaskSetResultsDto | null>>;
     attemptReview: ReturnType<typeof signal<TeacherAttemptReviewDto | null>>;
-    loading: ReturnType<typeof signal<boolean>>;
+    taskSetResultsLoading: ReturnType<typeof signal<boolean>>;
     reviewLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadTaskSetResults: ReturnType<typeof vi.fn>;
@@ -95,7 +95,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     reportStoreMock = {
       taskSetResults: signal(results),
       attemptReview: signal<TeacherAttemptReviewDto | null>(null),
-      loading: signal(false),
+      taskSetResultsLoading: signal(false),
       reviewLoading: signal(false),
       error: signal(null),
       loadTaskSetResults: vi.fn(),

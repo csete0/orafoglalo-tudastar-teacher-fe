@@ -230,10 +230,10 @@ const MAX_FEEDBACK_LENGTH = 2000;
                                     [(ngModel)]="draftPoints" [ngModelOptions]="{ standalone: true }"
                                     class="input !px-2 !py-1.5 !w-28" />
                                 </div>
-                                <button type="button" (click)="save(r)" [disabled]="report.loading()"
+                                <button type="button" (click)="save(r)" [disabled]="report.taskSetResultsLoading()"
                                   class="btn btn-primary !px-3 !py-1.5">Mentés</button>
                                 @if (r.isOverridden) {
-                                  <button type="button" (click)="revert(r)" [disabled]="report.loading()"
+                                  <button type="button" (click)="revert(r)" [disabled]="report.taskSetResultsLoading()"
                                     class="btn btn-danger !px-3 !py-1.5">Visszaállítás az AI pontjára</button>
                                 }
                               </div>
@@ -280,7 +280,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
         </div>
         </div>
       </div>
-    } @else if (report.loading()) {
+    } @else if (report.taskSetResultsLoading()) {
       <app-local-spinner />
     } @else {
       <p class="text-danger text-center py-10">{{ report.error() }}</p>
@@ -429,7 +429,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   }
 
   save(review: TeacherAttemptReviewDto): void {
-    if (this.report.loading()) return;
+    if (this.report.taskSetResultsLoading()) return;
 
     const pointsError = this.pointsError(review);
     const feedbackError = this.feedbackError();
@@ -457,7 +457,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   }
 
   async revert(review: TeacherAttemptReviewDto): Promise<void> {
-    if (this.report.loading()) return;
+    if (this.report.taskSetResultsLoading()) return;
 
     const confirmed = await this.confirmService.ask({
       title: 'Visszaállítás az AI pontjára',

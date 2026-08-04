@@ -22,7 +22,17 @@ export class ReportStore {
   private readonly _studentDetail = signal<StudentActivityDetailDto | null>(null);
   private readonly _taskSetResults = signal<TeacherTaskSetResultsDto | null>(null);
   private readonly _attemptReview = signal<TeacherAttemptReviewDto | null>(null);
-  private readonly _loading = signal(false);
+  // UI-TT-165: a négy loader korábban EGYETLEN közös `_loading`-ot írt - a store
+  // `providedIn: 'root'` (a navigáció nem szakítja meg a háttérben futó HTTP-hívást),
+  // ezért egy MÁSIK, immár irreleváns loader korábban induló válasza idő előtt
+  // false-ra zárta a ténylegesen még folyamatban lévő oldal `loading()`-ját. Mostantól
+  // loaderenként elkülönített jelző - a `mutateReview()` szándékosan a
+  // `_taskSetResultsLoading`-ot írja, mert a pontszám-mentés utáni UI-TT-160-mintájú
+  // mátrix-reload ugyanahhoz az entitáshoz (feladatsor) tartozik.
+  private readonly _groupActivityLoading = signal(false);
+  private readonly _schoolActivityLoading = signal(false);
+  private readonly _studentDetailLoading = signal(false);
+  private readonly _taskSetResultsLoading = signal(false);
   private readonly _error = signal<string | null>(null);
   /** Külön a mátrix `_loading`-jától: a panel töltése ne cserélje spinnerre az egész táblát. */
   private readonly _reviewLoading = signal(false);
@@ -67,13 +77,25 @@ export class ReportStore {
   readonly studentDetail = computed(() => this._studentDetail());
   readonly taskSetResults = computed(() => this._taskSetResults());
   readonly attemptReview = computed(() => this._attemptReview());
-  readonly loading = computed(() => this._loading());
+  readonly groupActivityLoading = computed(() => this._groupActivityLoading());
+  readonly schoolActivityLoading = computed(() => this._schoolActivityLoading());
+  readonly studentDetailLoading = computed(() => this._studentDetailLoading());
+  readonly taskSetResultsLoading = computed(() => this._taskSetResultsLoading());
+  /** Durva, összesített "van-e BÁRMI folyamatban" jelző - entitás-specifikus UI-nak a
+   *  fenti négy dedikált jelző egyikét kell olvasnia, nem ezt (UI-TT-165). */
+  readonly loading = computed(
+    () =>
+      this._groupActivityLoading() ||
+      this._schoolActivityLoading() ||
+      this._studentDetailLoading() ||
+      this._taskSetResultsLoading(),
+  );
   readonly reviewLoading = computed(() => this._reviewLoading());
   readonly error = computed(() => this._error());
 
   loadGroupActivity(groupId: number, from?: Date, to?: Date): void {
     const generation = ++this._groupActivityGeneration;
-    this._loading.set(true);
+    this._groupActivityLoading.set(true);
     this._error.set(null);
     if (this._groupActivityId !== groupId) {
       this._groupActivity.set([]);
@@ -85,7 +107,7 @@ export class ReportStore {
       .pipe(
         take(1),
         finalize(() => {
-          if (generation === this._groupActivityGeneration) this._loading.set(false);
+          if (generation === this._groupActivityGeneration) this._groupActivityLoading.set(false);
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -103,7 +125,7 @@ export class ReportStore {
 
   loadSchoolActivity(schoolId: number, from?: Date, to?: Date): void {
     const generation = ++this._schoolActivityGeneration;
-    this._loading.set(true);
+    this._schoolActivityLoading.set(true);
     this._error.set(null);
     if (this._schoolActivityId !== schoolId) {
       this._schoolActivity.set([]);
@@ -115,7 +137,7 @@ export class ReportStore {
       .pipe(
         take(1),
         finalize(() => {
-          if (generation === this._schoolActivityGeneration) this._loading.set(false);
+          if (generation === this._schoolActivityGeneration) this._schoolActivityLoading.set(false);
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -133,7 +155,7 @@ export class ReportStore {
 
   loadStudentActivity(studentUserId: number, from?: Date, to?: Date): void {
     const generation = ++this._studentDetailGeneration;
-    this._loading.set(true);
+    this._studentDetailLoading.set(true);
     this._error.set(null);
     if (this._studentDetailId !== studentUserId) {
       this._studentDetail.set(null);
@@ -145,7 +167,7 @@ export class ReportStore {
       .pipe(
         take(1),
         finalize(() => {
-          if (generation === this._studentDetailGeneration) this._loading.set(false);
+          if (generation === this._studentDetailGeneration) this._studentDetailLoading.set(false);
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -164,7 +186,7 @@ export class ReportStore {
   loadTaskSetResults(taskSetId: number): void {
     const generation = ++this._taskSetResultsGeneration;
     this._taskSetResultsId = taskSetId;
-    this._loading.set(true);
+    this._taskSetResultsLoading.set(true);
     this._error.set(null);
 
     // UI-TT-72 mintája: MÁSIK feladatsorra váltáskor a régi adatot azonnal töröljük,
@@ -182,7 +204,7 @@ export class ReportStore {
       .pipe(
         take(1),
         finalize(() => {
-          if (generation === this._taskSetResultsGeneration) this._loading.set(false);
+          if (generation === this._taskSetResultsGeneration) this._taskSetResultsLoading.set(false);
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -234,8 +256,8 @@ export class ReportStore {
    * ezért a panelt nem kell újratölteni — a MÁTRIXot viszont igen, hogy a cella az új
    * pontszámot és a "felülbírálva" jelzést mutassa.
    *
-   * FONTOS: nincs `finalize()` ezen a mutáción. A `_loading` szándékosan true marad a
-   * mutáció válasza után is, egészen addig, amíg a szinkron elindított
+   * FONTOS: nincs `finalize()` ezen a mutáción. A `_taskSetResultsLoading` szándékosan
+   * true marad a mutáció válasza után is, egészen addig, amíg a szinkron elindított
    * `loadTaskSetResults()` saját `finalize()`-a le nem zárja (UI-TT-45 / UI-TT-147) —
    * enélkül a UI egy pillanatra "kész, nem tölt" állapotot mutatna a régi mátrixszal.
    */
@@ -270,7 +292,7 @@ export class ReportStore {
     taskSetId: number,
     onSuccess?: () => void,
   ): void {
-    this._loading.set(true);
+    this._taskSetResultsLoading.set(true);
     this._error.set(null);
 
     observable
@@ -287,9 +309,10 @@ export class ReportStore {
           // MINDIG a megjelenített feladatsor. Ha a tanár időközben egy MÁSIK feladatsor
           // "Eredmények" oldalára navigált, ez a reload az ő mátrixát írná felül.
           //
-          // A `_loading`-ot ilyenkor SZÁNDÉKOSAN nem állítjuk vissza: a `_taskSetResultsId`
-          // kizárólag a `loadTaskSetResults()`-ban változik, ami mindig `_loading.set(true)`-val
-          // indul és mindig lezáródó `finalize()`-t kap — a loading állapot ekkor már ANNAK
+          // A `_taskSetResultsLoading`-ot ilyenkor SZÁNDÉKOSAN nem állítjuk vissza: a
+          // `_taskSetResultsId` kizárólag a `loadTaskSetResults()`-ban változik, ami mindig
+          // `_taskSetResultsLoading.set(true)`-val indul és mindig lezáródó `finalize()`-t
+          // kap — a loading állapot ekkor már ANNAK
           // a frissebb betöltésnek a tulajdona, ami a célpontot átállította.
           if (this._taskSetResultsId === taskSetId) {
             this.loadTaskSetResults(taskSetId);
@@ -298,7 +321,7 @@ export class ReportStore {
         },
         error: (err) => {
           this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
-          this._loading.set(false);
+          this._taskSetResultsLoading.set(false);
         },
       });
   }
