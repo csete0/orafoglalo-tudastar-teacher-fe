@@ -319,6 +319,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // van (nem cookie-ban) — nyers navigáció nem viszi magával, 401-et adna.
   // Ezért bearer tokennel lekért blob URL-re oldjuk fel, fileId -> blob URL.
   private readonly resolvedDownloadUrls = signal<Record<string, string>>({});
+  // UI-TT-163: a fenti signal önmagában csak azt tudja, van-e MÁR KÉSZ eredmény
+  // egy fájl-kulcshoz - nem azt, hogy fut-e rá már egy resolveUrl() HTTP-hívás.
+  // Ha a selectedDetail() két gyors, egymástól független mentés/reload miatt
+  // kétszer frissül, mielőtt az ELSŐ resolveUrl() válasza megérkezne, enélkül a
+  // lenti effect ÚJRA elindítana egy resolveUrl()-t ugyanarra a fájlra - a
+  // vesztes blob URL-t soha senki nem revoke()-olná (permanens szivárgás).
+  private readonly inFlightResolveKeys = new Set<string>();
 
   /** Típusonként (Programozás/SQL) külön "Új feladat" űrlap-draft — a szerkesztő a feladatokat
    *  típus szerint csoportosítja, összecsukható blokkokban (nincs jelenleg vegyes-típusú
@@ -460,8 +467,11 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       for (const file of files) {
         const key = String(file.id);
         if (this.resolvedDownloadUrls()[key] !== undefined) continue;
+        if (this.inFlightResolveKeys.has(key)) continue;
 
+        this.inFlightResolveKeys.add(key);
         this.authorizedFileService.resolveUrl(this.apiOrigin + file.url).subscribe((url) => {
+          this.inFlightResolveKeys.delete(key);
           this.resolvedDownloadUrls.update((current) => ({ ...current, [key]: url }));
         });
       }
