@@ -51,4 +51,48 @@ describe('HeaderDropdownCoordinatorService', () => {
     service.close('menu');
     expect(service.openDropdown()).toBeNull();
   });
+
+  // UI-TT-164: a UI-TT-162 fix (bellCloseCallbacks) KIZÁRÓLAG akkor sül el, ha
+  // egy MÁSIK bell-példány ténylegesen meghívja a saját open()-jét - egy puszta
+  // viewport-váltás (kattintás NÉLKÜL), ami a CSS-sel elrejtett, korábban nyitva
+  // hagyott példányt egyszerűen újra láthatóvá teszi, ezt sosem triggerelte. A
+  // konstruktorban regisztrált `matchMedia('(min-width: 768px)')` change-listener
+  // most MINDEN breakpoint-átlépéskor bezárja az ÖSSZES regisztrált bell-példányt,
+  // függetlenül attól, hívott-e bárki `open()`-t közben.
+  it('UI-TT-164: breakpoint-átlépéskor bezárja az ÖSSZES regisztrált bell-példányt, kattintás nélkül is', () => {
+    let changeHandler: (() => void) | undefined;
+    const mqlMock = {
+      matches: false,
+      addEventListener: (event: string, handler: () => void) => {
+        if (event === 'change') changeHandler = handler;
+      },
+      removeEventListener: () => {},
+    };
+    // jsdom-ban a `window.matchMedia` alapból nem is létezik (nem csak eltérő
+    // viselkedésű) - `vi.spyOn` csak MEGLÉVŐ függvényt tudna kicserélni, ezért
+    // közvetlen hozzárendeléssel definiáljuk, majd a teszt végén állítjuk vissza.
+    const original = window.matchMedia;
+    window.matchMedia = (() => mqlMock as unknown as MediaQueryList) as typeof window.matchMedia;
+
+    // Friss szolgáltatás-példány, hogy a konstruktor a mockolt matchMedia-t lássa
+    // (a fenti `beforeEach`-ben injektált `service` már a mock ELŐTT példányosult).
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({});
+    const freshService = TestBed.inject(HeaderDropdownCoordinatorService);
+
+    expect(changeHandler).toBeDefined();
+
+    const closeBellA = vi.fn();
+    const closeBellB = vi.fn();
+    freshService.registerBell('desktop-instance', closeBellA);
+    freshService.registerBell('mobile-instance', closeBellB);
+
+    // Sem az egyik, sem a másik nem hívott open()-t - pusztán a breakpoint lép át.
+    changeHandler!();
+
+    expect(closeBellA).toHaveBeenCalledTimes(1);
+    expect(closeBellB).toHaveBeenCalledTimes(1);
+
+    window.matchMedia = original;
+  });
 });
