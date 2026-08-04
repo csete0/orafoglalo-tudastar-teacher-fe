@@ -385,6 +385,67 @@ describe('NotificationBellComponent', () => {
     });
   });
 
+  // UI-TT-162: `AppComponent`-ben KÉT `<app-notification-bell />` van egyszerre
+  // mountolva (desktop + mobil header-sáv, ld. `app.component.ts` 77./91. sor),
+  // egymástól teljesen független `open` szignállal - csak Tailwind
+  // `hidden md:flex` / `md:hidden flex` CSS dönti el, melyik LÁTSZIK egy adott
+  // viewport-szélességnél, de EGYIK PÉLDÁNY DOM-ból/élettartamból SOSEM tűnik
+  // el, tehát az `open` szignálja is megmarad, amíg a felhasználó explicit
+  // nem zárja be AZT A PÉLDÁNYT. A `HeaderDropdownCoordinatorService` csak a
+  // "melyik FELÜLET (bell/menu) van nyitva" kérdést tudja - a két harang-
+  // példány között NINCS kölcsönös kizárás (ld. a komponens saját
+  // dokumentáció-kommentje 178-188. sor: ez SZÁNDÉKOS, hogy elkerülje a
+  // flush-ciklusbeli versenyhelyzetet). Élőben (`browser_resize` 390x844 →
+  // 1280x900 → vissza 390x844-re, konkrét lépések + screenshotok:
+  // evidence/prelaunch-bell-resize-step{1,2,3}-*.png) ez azt eredményezi,
+  // hogy a mobil harang panelje ÚJRA NYITVA jelenik meg (aria-expanded="true",
+  // "Nincs értesítésed" panel látható) egyetlen kattintás NÉLKÜL, pusztán
+  // attól, hogy a böngésző-ablakot desktop szélességre húzva-vissza-mobilra
+  // húzzuk - a mobil példány `open` jele sosem lett hamis, csak a CSS
+  // eltakarta, majd megint felfedte. Az alábbi teszt ugyanezt a hiányzó
+  // kölcsönös kizárást mutatja be közvetlenül, két, UGYANAZT a
+  // (TestBed-singleton) coordinatort megosztó példányon keresztül.
+  describe('UI-TT-162: két egyidejűleg mountolt harang-példány (desktop+mobil) között nincs kizárás', () => {
+    it('az egyik példány megnyitása NEM zárja be a MÁSIK, már nyitott példányt', () => {
+      // Mindkét "fizikai" harang-példány ugyanabban a TestBed modulban,
+      // ugyanazt a (providedIn: 'root') coordinator-singletont osztja meg -
+      // pont úgy, ahogy `app.component.ts`-ben a desktop és mobil
+      // `<app-notification-bell />` is ugyanazt az injektort örökli.
+      const desktopFixture = configure([]);
+      const mobileFixture = TestBed.createComponent(NotificationBellComponent);
+      mobileFixture.detectChanges();
+      const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
+
+      // A "desktop" példány megnyílik (pl. a felhasználó szűk viewporton
+      // becsukja, majd kiszélesíti az ablakot úgy, hogy közben nem katt,
+      // itt viszont csak azt szimuláljuk, hogy MINDKÉT példány létezik és
+      // az egyik nyitva van).
+      desktopFixture.componentInstance.toggle();
+      desktopFixture.detectChanges();
+      expect(desktopFixture.componentInstance.open()).toBe(true);
+      expect(coordinator.openDropdown()).toBe('bell');
+
+      // A "mobil" példány is megnyílik (a felhasználó ténylegesen ide
+      // kattint mobil nézetben) - a coordinator még mindig csak annyit tud,
+      // hogy "bell" van nyitva, arról fogalma sincs, hogy ez egy MÁSIK
+      // fizikai példány.
+      mobileFixture.componentInstance.toggle();
+      mobileFixture.detectChanges();
+      expect(mobileFixture.componentInstance.open()).toBe(true);
+
+      // Bukó elvárás: a coordinatornak a MÁSIK harang-példány megnyílásakor
+      // a KORÁBBAN nyitott példányt is be kellene csuknia (ugyanúgy, ahogy a
+      // "menu" megnyitása is bezárja - ld. a fenti "kölcsönös kizárás a
+      // hamburger-menüvel" leírást), különben egy viewport-váltás
+      // (böngésző-ablak átméretezése, tablet elforgatása) után a korábban
+      // "eltűnt" (CSS-sel elrejtett) példány panelje kattintás nélkül,
+      // magától újra megjelenik, amint a CSS ismét megjeleníti azt a
+      // wrappert (ld. élő screenshot-bizonyíték a fájl tetején). A tényleges
+      // kód ezt NEM garantálja - ez a teszt jelenleg BUKIK.
+      expect(desktopFixture.componentInstance.open()).toBe(false);
+    });
+  });
+
   // BUG UI-TT-127: the unread-count badge (data-testid="notification-unread-badge")
   // is purely visual - the trigger button's aria-label is the static "Értesítések"
   // string, never updated to reflect the count, and the badge <span> itself sits
