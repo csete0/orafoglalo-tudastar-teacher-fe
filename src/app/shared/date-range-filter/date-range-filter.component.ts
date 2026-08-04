@@ -97,8 +97,12 @@ export class DateRangeFilterComponent {
 
   applyCustom(): void {
     const range: ReportDateRange = {
-      from: this.customFrom() ? new Date(this.customFrom()) : undefined,
-      to: this.customTo() ? new Date(this.customTo()) : undefined,
+      from: this.customFrom() ? this.parseLocalDate(this.customFrom()) : undefined,
+      // BE-STUDENTACTIVITY-CUSTOMRANGE-TO-TIMEZONE-OVERINCLUSION: a `to` a
+      // KIVÁLASZTOTT ZÁRÓ NAP UTÁNI nap helyi éjfélét (a kizáró felső határt)
+      // képviseli - a backend ezt mostantól közvetlenül `< to.Value`-ként
+      // használja, nem ő maga tolja el egy nappal (ld. StudentActivityAggregator).
+      to: this.customTo() ? this.parseLocalDate(this.customTo(), 1) : undefined,
     };
 
     const error = validateRange(range);
@@ -111,5 +115,25 @@ export class DateRangeFilterComponent {
     }
 
     this.rangeChange.emit(range);
+  }
+
+  /**
+   * Az `<input type="date">` "ÉÉÉÉ-HH-NN" stringjét a FELHASZNÁLÓ SAJÁT
+   * (böngésző) időzónájában értelmezett naptári nap kezdeteként építi fel -
+   * a `new Date(string)` ISO-string alakot MINDIG UTC-ként értelmezi
+   * (ECMA-262), függetlenül a böngésző időzónájától, ami egy pozitív
+   * UTC-eltolású (pl. magyarországi) felhasználónál a helyi nap kezdetét
+   * 1-2 órával KÉSŐBBRE tolja, mint amit a tanár ténylegesen kiválasztott -
+   * csendben kizárva a kiválasztott nap kora reggeli aktivitását a FROM
+   * oldalon (BE-STUDENTACTIVITY-CUSTOMRANGE-FROM-TIMEZONE-GAP), és tévesen
+   * befoglalva a következő nap kora reggeli aktivitását a TO oldalon
+   * (BE-STUDENTACTIVITY-CUSTOMRANGE-TO-TIMEZONE-OVERINCLUSION). Ugyanaz a
+   * mintázat, amit a `semesterStart()`/`last30` gyorsszűrők már helyesen
+   * alkalmaznak (komponensenkénti, LOKÁLIS `new Date(year, month, day)`
+   * konstruktor, nem ISO-string parse).
+   */
+  private parseLocalDate(isoDateString: string, addDays = 0): Date {
+    const [year, month, day] = isoDateString.split('-').map(Number);
+    return new Date(year, month - 1, day + addDays);
   }
 }
