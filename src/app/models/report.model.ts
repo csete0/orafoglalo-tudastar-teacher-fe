@@ -122,6 +122,14 @@ export interface TeacherAttemptReviewDto {
 export interface TeacherScoreOverrideRequest {
   /** null = a pontszám marad, csak szöveges értékelés érkezik. */
   earnedPoints: number | null;
-  /** null = nem ír szöveget. */
+  /** Csak akkor kerül alkalmazásra, ha `feedbackProvided` true. */
   teacherFeedback: string | null;
+  /**
+   * BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE: a `teacherFeedback` önmagában
+   * nem tudja megkülönböztetni "a tanár nem is nyúlt ehhez a mezőhöz, hagyd változatlanul"
+   * és "szándékosan üresre törölte" eseteket - mindkettő `null`-lá egyszerűsödne. Ez a
+   * mező explicit jelzi a szándékot: `false` esetén a `teacherFeedback` TELJESEN
+   * figyelmen kívül marad a backendben (a meglévő érték érintetlen).
+   */
+  feedbackProvided: boolean;
 }
