@@ -323,7 +323,7 @@ describe('ReportStore', () => {
     expect(store.taskSetResults()).toEqual(resultsA);
 
     // Elindít egy pontszám-felülbírálást A-n (lassú hálózat, válasz még nem jött meg).
-    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null });
+    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null, feedbackProvided: false });
 
     // MIELŐTT a mentés válasza megérkezne, SPA-navigációval átvált B feladatsor
     // Eredmények fülére — ez helyesen, azonnal megjeleníti B adatait.
@@ -363,7 +363,7 @@ describe('ReportStore', () => {
     taskSetAResults.next(makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' }));
     taskSetAResults.complete();
 
-    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null });
+    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null, feedbackProvided: false });
     overrideAResponse.next({ attemptId: 42, earnedPoints: 5 } as any);
     overrideAResponse.complete();
     await Promise.resolve();

@@ -252,6 +252,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
                               </label>
                               <textarea rows="3" [id]="'ertekeles-' + r.attemptId"
                                 [(ngModel)]="draftFeedback" [ngModelOptions]="{ standalone: true }"
+                                (input)="feedbackTouched = true"
                                 [attr.maxlength]="maxFeedbackLength"
                                 class="input !py-1.5 w-full"
                                 placeholder="Amit a diáknak érdemes tudnia — akkor is hasznos, ha a pontszámmal egyetértesz."></textarea>
@@ -333,6 +334,17 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   draftPoints: number | null = null;
   draftFeedback = '';
 
+  /**
+   * BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE: nyomon követi, hogy a tanár
+   * TÉNYLEGESEN hozzáért-e az értékelés-mezőhöz, mióta a panel a jelenlegi beadáshoz
+   * betöltődött — a mentéskor ez dönti el, hogy a `teacherFeedback` egyáltalán
+   * elküldésre kerüljön-e. Enélkül egy csak-pontszámot-módosító mentés (a mező
+   * érintetlenül hagyva) ugyanazt a `null`-t küldené, mint egy szándékos törlés — a
+   * backend nem tudná megkülönböztetni a kettőt, és lenullázná egy MÁSIK, konkurens
+   * tanár épp beírt értékelését.
+   */
+  feedbackTouched = false;
+
   constructor() {
     // A piszkozatot a betöltött nézetből töltjük fel. Effect-ben, NEM a sablonból
     // hívott metódusban: a renderelés közbeni mellékhatás
@@ -346,6 +358,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
       this.syncedAttemptId = review.attemptId;
       this.draftPoints = review.earnedPoints;
       this.draftFeedback = review.teacherFeedback ?? '';
+      this.feedbackTouched = false;
     });
   }
 
@@ -381,6 +394,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     this.syncedAttemptId = null;
     this.draftPoints = null;
     this.draftFeedback = '';
+    this.feedbackTouched = false;
     this.report.loadAttemptReview(cell.attemptId);
   }
 
@@ -441,7 +455,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     }
 
     const feedback = this.draftFeedback.trim();
-    if (this.draftPoints == null && !feedback) {
+    if (this.draftPoints == null && !this.feedbackTouched) {
       this.toastService.warning(
         'Adj meg pontszámot vagy szöveges értékelést. A felülbírálás visszavonásához használd a visszaállítást.',
       );
@@ -451,7 +465,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     this.report.overrideScore(
       this.taskSetId,
       review.attemptId,
-      { earnedPoints: this.draftPoints, teacherFeedback: feedback || null },
+      { earnedPoints: this.draftPoints, teacherFeedback: feedback || null, feedbackProvided: this.feedbackTouched },
       () => this.toastService.success('Értékelés mentve.'),
     );
   }

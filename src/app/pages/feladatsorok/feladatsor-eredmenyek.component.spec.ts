@@ -262,12 +262,13 @@ describe('FeladatsorEredmenyekComponent', () => {
     const component = fixture.componentInstance;
     component.draftPoints = 8;
     component.draftFeedback = 'Szép munka.';
+    component.feedbackTouched = true;
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
       1,
       101,
-      { earnedPoints: 8, teacherFeedback: 'Szép munka.' },
+      { earnedPoints: 8, teacherFeedback: 'Szép munka.', feedbackProvided: true },
       expect.any(Function),
     );
   });
@@ -281,14 +282,58 @@ describe('FeladatsorEredmenyekComponent', () => {
     const component = fixture.componentInstance;
     component.draftPoints = null;
     component.draftFeedback = 'Egyetértek az AI pontjával, de figyelj a névválasztásra.';
+    component.feedbackTouched = true;
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
       1,
       101,
-      { earnedPoints: null, teacherFeedback: 'Egyetértek az AI pontjával, de figyelj a névválasztásra.' },
+      { earnedPoints: null, teacherFeedback: 'Egyetértek az AI pontjával, de figyelj a névválasztásra.', feedbackProvided: true },
       expect.any(Function),
     );
+  });
+
+  // BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE: ha a tanár a MEGLÉVŐ
+  // értékeléshez hozzá sem nyúlt, és csak a pontszámot módosítja, a mentésnek
+  // `feedbackProvided: false`-t kell küldenie — enélkül a backend a `teacherFeedback`
+  // (jelen esetben a betöltött, de nem szerkesztett) értékét alkalmazná, ami egy
+  // MÁSIK, konkurens tanár időközbeni írását nullázhatná le.
+  it('csak pontszám módosításnál (értékelés-mező érintetlen) feedbackProvided false-t küld', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const component = fixture.componentInstance;
+    component.draftPoints = 9;
+    // component.draftFeedback marad a betöltéskori érték - a tanár nem szerkesztette,
+    // ezért component.feedbackTouched is false marad (nincs (input) esemény szimulálva).
+    component.save(makeReview());
+
+    expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
+      1,
+      101,
+      expect.objectContaining({ earnedPoints: 9, feedbackProvided: false }),
+      expect.any(Function),
+    );
+  });
+
+  it('a (input) esemény beállítja a feedbackTouched jelzőt', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    expect(component.feedbackTouched).toBe(false);
+
+    const textarea: HTMLTextAreaElement | null = fixture.nativeElement.querySelector('textarea');
+    expect(textarea).toBeTruthy();
+    textarea!.value = 'Módosított értékelés.';
+    textarea!.dispatchEvent(new Event('input'));
+
+    expect(component.feedbackTouched).toBe(true);
   });
 
   it('üres pontszám ÉS üres szöveg esetén figyelmeztet, nem küld üres kérést', () => {
