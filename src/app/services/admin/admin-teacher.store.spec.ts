@@ -320,4 +320,28 @@ describe('AdminTeacherStore', () => {
 
     expect(store.teachers().find((t) => t.id === 2)?.maxTaskSets).toBe(5);
   });
+
+  // UI-TT-168: az UI-TT-167 (AdminApplicationStore) pontos testvér-hibája - a UI-TT-136
+  // fix az `_inFlight`-ot entitásonkénti kulcsra bontotta, de az `_error` VÁLTOZATLANUL
+  // egyetlen, minden tanár között MEGOSZTOTT signal maradt.
+  it('UI-TT-168: setActive(A) hibája után egy KÉSŐBB sikeresen lezáruló, FÜGGETLEN setQuota(B) törli a régi hibaüzenetet', async () => {
+    serviceMock.getTeachers.mockReturnValue(
+      of([makeTeacher({ id: 1 }), makeTeacher({ id: 2 })]),
+    );
+    serviceMock.setActive.mockReturnValue(throwError(() => ({ error: { errorMessage: 'A módosítás sikertelen.' } })));
+    serviceMock.setQuota.mockReturnValue(of({}));
+
+    const store = TestBed.inject(AdminTeacherStore);
+    store.load();
+    await Promise.resolve();
+
+    store.setActive(1, false);
+    await Promise.resolve();
+    expect(store.error()).toBe('A módosítás sikertelen.');
+
+    store.setQuota(2, 5, null);
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+  });
 });

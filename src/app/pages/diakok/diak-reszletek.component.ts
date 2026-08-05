@@ -81,7 +81,7 @@ import { ReportDateRange } from '../../shared/date-range/report-date-range';
         </div>
         </div>
       </div>
-    } @else if (store.loading()) {
+    } @else if (store.studentDetailLoading()) {
       <app-local-spinner />
     } @else {
       <p class="text-danger text-center py-10">{{ store.error() }}</p>

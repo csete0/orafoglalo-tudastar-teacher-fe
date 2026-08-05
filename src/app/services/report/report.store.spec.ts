@@ -378,4 +378,38 @@ describe('ReportStore', () => {
     expect(store.taskSetResults()).toEqual(refreshed);
     expect(store.loading()).toBe(false);
   });
+
+  // UI-TT-165: a négy loader korábban EGYETLEN közös `_loading`-ot írt - egy MÁSIK,
+  // immár irreleváns loader korábban induló válasza idő előtt false-ra zárta a
+  // ténylegesen még folyamatban lévő oldal loading()-ját.
+  it('UI-TT-165: loadGroupActivity és loadTaskSetResults FÜGGETLEN loading-jelzőt használ', async () => {
+    const groupResponse = new Subject<StudentActivitySummaryDto[]>();
+    const taskSetResponse = new Subject<TeacherTaskSetResultsDto>();
+    serviceMock.getGroupActivity.mockReturnValue(groupResponse);
+    serviceMock.getTaskSetResults.mockReturnValue(taskSetResponse);
+
+    store.loadGroupActivity(1);
+    store.loadTaskSetResults(5);
+    expect(store.groupActivityLoading()).toBe(true);
+    expect(store.taskSetResultsLoading()).toBe(true);
+
+    // A csoport-aktivitás (a Feladatsor Eredmények oldal szempontjából immár
+    // IRRELEVÁNS) válasza megérkezik és lezárul...
+    groupResponse.next([makeSummary()]);
+    groupResponse.complete();
+    await Promise.resolve();
+
+    // ...ez a SAJÁT loading-ját törli, de a MÁSIK, ténylegesen még folyamatban lévő
+    // loader jelzőjét (és az összesített loading()-ot) nem érinti.
+    expect(store.groupActivityLoading()).toBe(false);
+    expect(store.taskSetResultsLoading()).toBe(true);
+    expect(store.loading()).toBe(true);
+
+    taskSetResponse.next(makeTaskSetResults({ taskSetId: 5 }));
+    taskSetResponse.complete();
+    await Promise.resolve();
+
+    expect(store.taskSetResultsLoading()).toBe(false);
+    expect(store.loading()).toBe(false);
+  });
 });

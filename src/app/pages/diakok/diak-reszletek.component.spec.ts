@@ -25,7 +25,7 @@ function makeDetail(overrides: Partial<StudentActivityDetailDto> = {}): StudentA
 describe('DiakReszletekComponent', () => {
   let reportStoreMock: {
     studentDetail: ReturnType<typeof signal<StudentActivityDetailDto | null>>;
-    loading: ReturnType<typeof signal<boolean>>;
+    studentDetailLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadStudentActivity: ReturnType<typeof vi.fn>;
   };
@@ -33,7 +33,7 @@ describe('DiakReszletekComponent', () => {
   function configure(detail: StudentActivityDetailDto) {
     reportStoreMock = {
       studentDetail: signal(detail),
-      loading: signal(false),
+      studentDetailLoading: signal(false),
       error: signal(null),
       loadStudentActivity: vi.fn(),
     };

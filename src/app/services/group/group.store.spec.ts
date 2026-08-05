@@ -38,6 +38,7 @@ describe('GroupStore', () => {
     create: ReturnType<typeof vi.fn>;
     getMembers: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
+    archive: ReturnType<typeof vi.fn>;
   };
   let store: GroupStore;
 
@@ -48,6 +49,7 @@ describe('GroupStore', () => {
       create: vi.fn(),
       getMembers: vi.fn(),
       removeMember: vi.fn(),
+      archive: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -263,5 +265,38 @@ describe('GroupStore', () => {
 
     membersSubject.next([]);
     membersSubject.complete();
+  });
+
+  // UI-TT-169: a közös `mutate()` helper (amin archive/update/create/regenerateInvite/
+  // setJoinEnabled/removeMember fut) semmilyen generáció-védelmet nem kapott, szemben a
+  // `_members`-szel (UI-TT-107). Egy elhagyott mutáció KÉSVE érkező válasza beszennyezte
+  // a közben megnyitott MÁSIK csoport már sikeresen betöltött oldalát.
+  it('UI-TT-169: A csoport elhagyott archive()-jának KÉSVE érkező hibája NEM szennyezi be a már sikeresen megnyitott B csoport oldalát', async () => {
+    serviceMock.getMembers.mockReturnValueOnce(of([])).mockReturnValueOnce(of([]));
+    const archiveSubject = new Subject<unknown>();
+    serviceMock.archive.mockReturnValue(archiveSubject.asObservable());
+
+    // Tanár elindítja A csoport archiválását - a válasz még nem érkezett meg.
+    store.select(1);
+    store.loadMembers(1);
+    store.archive(1);
+    await Promise.resolve();
+
+    // A válasz megérkezése ELŐTT átnavigál B csoport oldalára, ahol a tagok
+    // betöltése sikeresen, hiba nélkül lezárul.
+    store.select(2);
+    store.loadMembers(2);
+    await Promise.resolve();
+    expect(store.loading()).toBe(false);
+    expect(store.error()).toBeNull();
+
+    // Most érkezik meg A elavult, hibás archiválás-válasza.
+    archiveSubject.error({ error: { errorMessage: 'Az archiválás sikertelen.' } });
+    await Promise.resolve();
+
+    // HELYES viselkedés: B már tiszta, sikeresen betöltött oldala változatlan marad -
+    // A elavult mutációja nem írhatja felül a _loading/_error állapotot.
+    expect(store.error()).toBeNull();
+    expect(store.loading()).toBe(false);
   });
 });

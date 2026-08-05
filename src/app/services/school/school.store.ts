@@ -121,17 +121,30 @@ export class SchoolStore {
   }
 
   update(id: number, request: CreateSchoolRequest, onSuccess?: () => void): void {
-    this.mutate(this.service.update(id, request), (school) => {
-      this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
-      if (onSuccess) onSuccess();
-      this._loading.set(false);
-    });
+    // UI-TT-170: a `_membersGeneration`-t (amit a `select()`/`loadMembers()` léptet
+    // minden intézmény-váltáskor) a mutáció INDÍTÁSAKOR rögzítjük - ha a tanár a
+    // válasz megérkezéséig egy MÁSIK intézmény oldalára navigál, ez a manuális
+    // `_loading.set(false)` már nem futhat le, nehogy a közben megnyitott MÁSIK
+    // intézmény még folyamatban lévő `loadMembers()`-ének spinnerét idő előtt
+    // eltüntesse (ld. `mutate()` hasonló gate-je az error-ágon).
+    const generation = this._membersGeneration;
+    this.mutate(
+      this.service.update(id, request),
+      (school) => {
+        this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
+        if (onSuccess) onSuccess();
+        if (generation === this._membersGeneration) this._loading.set(false);
+      },
+      id,
+    );
   }
 
   regenerateInvite(id: number, onSuccess?: () => void): void {
     if (this._regenerateInviteInFlight().has(id)) return;
     this._regenerateInviteInFlight.update((prev) => new Set(prev).add(id));
 
+    // UI-TT-170, ld. update() fenti megjegyzését.
+    const generation = this._membersGeneration;
     this.mutate(
       this.service.regenerateTeacherInvite(id).pipe(
         finalize(() => {
@@ -145,27 +158,40 @@ export class SchoolStore {
       (school) => {
         this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
         if (onSuccess) onSuccess();
-        this._loading.set(false);
+        if (generation === this._membersGeneration) this._loading.set(false);
       },
+      id,
     );
   }
 
   delete(id: number, onSuccess?: () => void): void {
-    this.mutate(this.service.delete(id), () => {
-      this._schools.update((list) => list.filter((s) => s.id !== id));
-      if (this._selectedSchoolId() === id) this.select(null);
-      if (onSuccess) onSuccess();
-      this._loading.set(false);
-    });
+    // UI-TT-170, ld. update() fenti megjegyzését.
+    const generation = this._membersGeneration;
+    this.mutate(
+      this.service.delete(id),
+      () => {
+        this._schools.update((list) => list.filter((s) => s.id !== id));
+        if (this._selectedSchoolId() === id) this.select(null);
+        if (onSuccess) onSuccess();
+        if (generation === this._membersGeneration) this._loading.set(false);
+      },
+      id,
+    );
   }
 
   leave(id: number, onSuccess?: () => void): void {
-    this.mutate(this.service.leave(id), () => {
-      this._schools.update((list) => list.filter((s) => s.id !== id));
-      if (this._selectedSchoolId() === id) this.select(null);
-      if (onSuccess) onSuccess();
-      this._loading.set(false);
-    });
+    // UI-TT-170, ld. update() fenti megjegyzését.
+    const generation = this._membersGeneration;
+    this.mutate(
+      this.service.leave(id),
+      () => {
+        this._schools.update((list) => list.filter((s) => s.id !== id));
+        if (this._selectedSchoolId() === id) this.select(null);
+        if (onSuccess) onSuccess();
+        if (generation === this._membersGeneration) this._loading.set(false);
+      },
+      id,
+    );
   }
 
   loadMembers(id: number): void {
@@ -195,21 +221,25 @@ export class SchoolStore {
   }
 
   removeMember(schoolId: number, memberTeacherProfileId: number, onSuccess?: () => void): void {
-    this.mutate(this.service.removeMember(schoolId, memberTeacherProfileId), () => {
-      // UI-TT-157: a renderelt tag-listát csak akkor módosítjuk, ha az MÉG MINDIG annak
-      // az intézménynek a listája, amelyikre a törlés vonatkozott. A `loadMine()` alatta
-      // szándékosan MINDIG lefut: a myRole/`isSelectedAdmin` globális állapot, ami akkor
-      // is frissítendő, ha a felhasználó időközben másik intézményre navigált.
-      if (this._membersSchoolId === schoolId) {
-        this._members.update((list) => list.filter((m) => m.teacherProfileId !== memberTeacherProfileId));
-      }
-      // A SchoolMemberDto-nak nincs önmagát azonosító mezője, ezért nem tudjuk
-      // itt eldönteni, hogy a hívó saját magát távolította-e el — a `_schools`
-      // (és ezáltal myRole/isSelectedAdmin) mindig újratöltődik, hogy egy
-      // önmaga-eltávolítás után a fejléc/fülek se maradjanak elavultak.
-      this.loadMine();
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.removeMember(schoolId, memberTeacherProfileId),
+      () => {
+        // UI-TT-157: a renderelt tag-listát csak akkor módosítjuk, ha az MÉG MINDIG annak
+        // az intézménynek a listája, amelyikre a törlés vonatkozott. A `loadMine()` alatta
+        // szándékosan MINDIG lefut: a myRole/`isSelectedAdmin` globális állapot, ami akkor
+        // is frissítendő, ha a felhasználó időközben másik intézményre navigált.
+        if (this._membersSchoolId === schoolId) {
+          this._members.update((list) => list.filter((m) => m.teacherProfileId !== memberTeacherProfileId));
+        }
+        // A SchoolMemberDto-nak nincs önmagát azonosító mezője, ezért nem tudjuk
+        // itt eldönteni, hogy a hívó saját magát távolította-e el — a `_schools`
+        // (és ezáltal myRole/isSelectedAdmin) mindig újratöltődik, hogy egy
+        // önmaga-eltávolítás után a fejléc/fülek se maradjanak elavultak.
+        this.loadMine();
+        if (onSuccess) onSuccess();
+      },
+      schoolId,
+    );
   }
 
   changeMemberRole(
@@ -218,18 +248,22 @@ export class SchoolStore {
     request: ChangeSchoolMemberRoleRequest,
     onSuccess?: () => void,
   ): void {
-    this.mutate(this.service.changeMemberRole(schoolId, memberTeacherProfileId, request), () => {
-      // UI-TT-157: ugyanaz a cél-intézmény ellenőrzés, mint removeMember()-nél.
-      if (this._membersSchoolId === schoolId) {
-        this._members.update((list) =>
-          list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
-        );
-      }
-      // Ugyanaz az ok, mint removeMember()-nél: a `_schools`-beli myRole
-      // csak innen frissülhet, ha a hívó saját szerepét módosította.
-      this.loadMine();
-      if (onSuccess) onSuccess();
-    });
+    this.mutate(
+      this.service.changeMemberRole(schoolId, memberTeacherProfileId, request),
+      () => {
+        // UI-TT-157: ugyanaz a cél-intézmény ellenőrzés, mint removeMember()-nél.
+        if (this._membersSchoolId === schoolId) {
+          this._members.update((list) =>
+            list.map((m) => (m.teacherProfileId === memberTeacherProfileId ? { ...m, role: request.role } : m)),
+          );
+        }
+        // Ugyanaz az ok, mint removeMember()-nél: a `_schools`-beli myRole
+        // csak innen frissülhet, ha a hívó saját szerepét módosította.
+        this.loadMine();
+        if (onSuccess) onSuccess();
+      },
+      schoolId,
+    );
   }
 
   loadSchoolGroups(id: number): void {
@@ -273,7 +307,22 @@ export class SchoolStore {
   // hívók, amelyek NEM indítanak beágyazott újratöltést (create/join/update/
   // regenerateInvite/delete/leave), ezért maguk állítják vissza a
   // `_loading`-ot a saját onSuccess-ük végén.
-  private mutate<T>(observable: Observable<T>, onSuccess: (value: T) => void): void {
+  private mutate<T>(
+    observable: Observable<T>,
+    onSuccess: (value: T) => void,
+    // UI-TT-170: opcionális, a mutáció CÉLPONTJÁUL szolgáló intézmény id-je (ld.
+    // GroupStore.mutate() UI-TT-169 testvér-fixének azonos indoklását). Amikor jelen
+    // van, a hiba-ág `_error`-írását a `_membersGeneration` HÍVÁSKORI értékéhez kötjük -
+    // ha ez a válasz megérkezéséig megváltozott (a tanár már másik intézmény oldalán
+    // jár), a hibaüzenetet nem írjuk be, nehogy beszennyezze a közben megnyitott MÁSIK
+    // intézmény már sikeresen betöltött oldalát. `create()`/`join()`-nál (nincs
+    // "aktuális intézmény", a lista oldalról hívva) a paraméter hiányzik, a
+    // viselkedés változatlanul feltétel nélküli.
+    targetSchoolId?: number,
+  ): void {
+    const generation = targetSchoolId !== undefined ? this._membersGeneration : null;
+    const isStillCurrent = () => generation === null || generation === this._membersGeneration;
+
     this._loading.set(true);
     this._error.set(null);
 
@@ -298,7 +347,9 @@ export class SchoolStore {
           // saját finalize()-a teszi ezt meg, amikor a beágyazott GET
           // ténylegesen befejeződik (UI-TT-147).
           this.loadMine();
-          this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
+          if (isStillCurrent()) {
+            this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
+          }
         },
       });
   }

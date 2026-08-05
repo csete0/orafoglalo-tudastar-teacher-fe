@@ -25,6 +25,7 @@ describe('TeacherTaskSetStore', () => {
   let serviceMock: {
     addTask: ReturnType<typeof vi.fn>;
     getDetail: ReturnType<typeof vi.fn>;
+    getMine: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
     upsertSolutionSnippets: ReturnType<typeof vi.fn>;
@@ -36,6 +37,7 @@ describe('TeacherTaskSetStore', () => {
     serviceMock = {
       addTask: vi.fn(),
       getDetail: vi.fn(),
+      getMine: vi.fn(),
       publish: vi.fn(),
       uploadFile: vi.fn(),
       upsertSolutionSnippets: vi.fn(),
@@ -48,6 +50,38 @@ describe('TeacherTaskSetStore', () => {
 
     store = TestBed.inject(TeacherTaskSetStore);
   }
+
+  // UI-TT-166: a loadMine() (Feladatsorok LISTA oldal) korábban ugyanazt a `_loading`-ot
+  // írta, mint a loadDetail() (Szerkesztő oldal) - a lista oldalról a szerkesztőbe
+  // navigálva a korábbi, immár irreleváns loadMine()-válasz idő előtt false-ra zárta a
+  // szerkesztő MÉG folyamatban lévő loadDetail()-jét.
+  it('UI-TT-166: loadMine() és loadDetail() FÜGGETLEN loading-jelzőt használ', async () => {
+    configure();
+    const mine$ = new Subject<unknown[]>();
+    const detail$ = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getMine.mockReturnValue(mine$.asObservable());
+    serviceMock.getDetail.mockReturnValue(detail$.asObservable());
+
+    store.loadMine();
+    store.loadDetail(1);
+    expect(store.mineLoading()).toBe(true);
+    expect(store.loading()).toBe(true);
+
+    // A lista oldal (a Szerkesztő szempontjából immár IRRELEVÁNS) válasza megérkezik...
+    mine$.next([]);
+    mine$.complete();
+    await Promise.resolve();
+
+    // ...ez a SAJÁT loading-ját törli, de a szerkesztő MÉG folyamatban lévő
+    // loadDetail()-jének loading()-ját nem érinti.
+    expect(store.mineLoading()).toBe(false);
+    expect(store.loading()).toBe(true);
+
+    detail$.next(makeDetail());
+    detail$.complete();
+    await Promise.resolve();
+    expect(store.loading()).toBe(false);
+  });
 
   // UI-TT-45: a mutateAndReload()-on (és a publish()-en) átmenő metódusoknál a loading()
   // a mutáció válaszának megérkezésekor NEM válthat azonnal false-ra — addig kell true-nak

@@ -75,6 +75,11 @@ export class AdminTeacherStore {
           this._teachers.update((list) =>
             list.map((t) => (t.id === teacherProfileId ? { ...t, isActive } : t)),
           );
+          // UI-TT-168: `_error` a UI-TT-136 fix után is EGYETLEN, minden tanár között
+          // MEGOSZTOTT signal maradt (csak `_inFlight` lett entitásonkénti) - egy
+          // sikeresen lezáruló, FÜGGETLEN döntés törli a régi, MÁSIK tanártól származó
+          // hibaüzenetet is, hogy ne maradjon látható utána.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A módosítás sikertelen.'),
@@ -103,6 +108,8 @@ export class AdminTeacherStore {
           this._teachers.update((list) =>
             list.map((t) => (t.id === teacherProfileId ? { ...t, maxTaskSets, maxStorageBytes } : t)),
           );
+          // UI-TT-168, ld. setActive() fenti megjegyzését.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A kvóta mentése sikertelen.'),
@@ -167,6 +174,8 @@ export class AdminTeacherStore {
               ts.id === taskSetId ? { ...ts, isPublished: false, takedownAt: new Date().toISOString() } : ts,
             ),
           );
+          // UI-TT-168, ld. setActive() fenti megjegyzését.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A visszavonás sikertelen.'),
@@ -195,6 +204,8 @@ export class AdminTeacherStore {
           this._taskSets.update((list) =>
             list.map((ts) => (ts.id === taskSetId ? { ...ts, isPublished: true, takedownAt: null } : ts)),
           );
+          // UI-TT-168, ld. setActive() fenti megjegyzését.
+          this._error.set(null);
           if (onSuccess) onSuccess();
         },
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A feloldás sikertelen.'),

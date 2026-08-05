@@ -30,6 +30,14 @@ export class TeacherTaskSetStore {
   private readonly _selectedDetail = signal<TeacherTaskSetDetailDto | null>(null);
   private readonly _publishResult = signal<PublishResultDto | null>(null);
   private readonly _loading = signal(false);
+  // UI-TT-166: a `loadMine()` (Feladatsorok LISTA oldal) korábban ugyanazt a `_loading`-ot
+  // írta, mint a `loadDetail()`/mutáló metódusok (Szerkesztő oldal) - mivel a store
+  // `providedIn: 'root'` (a navigáció nem szakítja meg a háttérben futó HTTP-hívást), a
+  // lista oldalról a szerkesztőbe navigálva a korábbi, immár irreleváns `loadMine()`-válasz
+  // idő előtt false-ra zárta a szerkesztő MÉG folyamatban lévő `loadDetail()`-jét. A
+  // `loadMine()` a `_loading`-gal ellentétben nem is generáció-védett (nincs több egyidejű
+  // hívása), ezért itt elég a jelzőt elkülöníteni, nem kell külön számláló.
+  private readonly _mineLoading = signal(false);
   private readonly _error = signal<string | null>(null);
 
   // UI-TT-105: minden sikeres mutáció a `mutateAndReload()`-on át elindít egy SAJÁT
@@ -60,17 +68,18 @@ export class TeacherTaskSetStore {
   readonly selectedDetail = computed(() => this._selectedDetail());
   readonly publishResult = computed(() => this._publishResult());
   readonly loading = computed(() => this._loading());
+  readonly mineLoading = computed(() => this._mineLoading());
   readonly error = computed(() => this._error());
 
   loadMine(): void {
-    this._loading.set(true);
+    this._mineLoading.set(true);
     this._error.set(null);
 
     this.service
       .getMine()
       .pipe(
         take(1),
-        finalize(() => this._loading.set(false)),
+        finalize(() => this._mineLoading.set(false)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
