@@ -17,6 +17,7 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     description: 'd',
     levelId: 2,
     isPublished: false,
+    takedownAt: null,
     createdAt: new Date().toISOString(),
     taskCount: 0,
     tasks: [],
@@ -237,6 +238,39 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const button: HTMLButtonElement = fixture.nativeElement.querySelector('[data-testid="publish-button"]');
     expect(button.disabled).toBe(false);
     expect(button.textContent).toContain('Publikálás');
+  });
+
+  // UI-TT-172: a takedownAt-tal rendelkező feladatsor korábban ugyanazt a "Piszkozat"
+  // jelvényt kapta, mint egy sosem publikált feladatsor, és a "Publikálás" gomb aktív
+  // maradt - a kattintás egy megerősítő dialógus UTÁN, egy garantáltan sikertelen
+  // szerver-hívással bukott volna.
+  it('BUG UI-TT-172 javítva: admin által visszavont feladatsornál "Admin visszavonta" jelvény, letiltott Publikálás gomb és magyarázó szöveg', () => {
+    configure(makeDetail({ isPublished: false, takedownAt: '2026-08-05T10:33:33Z' }));
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const badge: HTMLElement = fixture.nativeElement.querySelector('.badge');
+    expect(badge.textContent).toContain('Admin visszavonta');
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('[data-testid="publish-button"]');
+    expect(button.disabled).toBe(true);
+
+    expect(fixture.nativeElement.textContent).toContain('a platform-admin adminisztratív okból visszavonta');
+  });
+
+  it('BUG UI-TT-172 javítva: a publish() a takedownAt-tal rendelkező feladatsornál védekezésből sem hívja a store-t', async () => {
+    configure(makeDetail({ isPublished: false, takedownAt: '2026-08-05T10:33:33Z' }));
+    schoolStoreMock.schools.set([{ id: 1 }]);
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await component.publish(1);
+
+    expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+    expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
   });
 
   it('publish hívás előtt intézményi tagságnál megerősítést kér (ConfirmService)', async () => {

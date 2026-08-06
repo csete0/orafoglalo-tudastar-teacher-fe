@@ -51,8 +51,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
           <div class="min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-black tracking-tight truncate min-w-0">{{ detail.title }}</h1>
-              <span class="badge" [class]="detail.isPublished ? 'badge-success' : 'badge-warning'">
-                {{ detail.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
+              <span class="badge" [class]="taskSetBadgeClass(detail)">
+                {{ taskSetBadgeLabel(detail) }}</span>
             </div>
             <p class="text-text-muted text-sm mt-1">{{ detail.taskCount }} feladat</p>
           </div>
@@ -60,12 +60,26 @@ type SnippetDraft = Record<number, Record<number, string>>;
             @if (detail.isPublished) {
               <a [routerLink]="['/feladatsorok', detail.id, 'eredmenyek']" class="text-sm text-primary hover:underline">Eredmények</a>
             }
-            <button (click)="publish(detail.id)" [disabled]="detail.isPublished || store.loading()"
+            <button (click)="publish(detail.id)" [disabled]="detail.isPublished || !!detail.takedownAt || store.loading()"
               data-testid="publish-button" class="btn btn-primary">
               {{ detail.isPublished ? 'Publikálva' : 'Publikálás' }}
             </button>
           </div>
         </div>
+
+        <!--
+          UI-TT-172: a takedownAt-tal rendelkező feladatsor SAJÁT publikálása szerveroldalon
+          mindig elhasal ("csak admin publikálhatja újra") - korábban a tanár erről csak a
+          megerősítő dialógus UTÁN, egy sikertelen kérésből szerzett tudomást. A gomb fent
+          már letiltva, ez a szöveg megmagyarázza, miért.
+        -->
+        @if (detail.takedownAt) {
+          <p class="bg-danger-subtle border border-danger/40 rounded-xl p-3 mb-6 text-sm text-danger flex items-start gap-2">
+            <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
+            <span>Ezt a feladatsort a platform-admin adminisztratív okból visszavonta — a tartalma nem publikálható újra, amíg
+            az admin fel nem oldja a visszavonást.</span>
+          </p>
+        }
 
         @if (store.error()) {
           <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
@@ -706,7 +720,29 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     return this.fileKinds.find((k) => k.kind === kind)?.label ?? kind;
   }
 
+  /**
+   * UI-TT-172: az admin-nézet (`admin-tanarok.component.ts`) mintáját követve a
+   * takedownAt-tal rendelkező feladatsor megkülönböztetve jelenik meg a sima
+   * piszkozattól.
+   */
+  taskSetBadgeLabel(taskSet: { isPublished: boolean; takedownAt: string | null }): string {
+    if (taskSet.takedownAt) return 'Admin visszavonta';
+    return taskSet.isPublished ? 'Publikált' : 'Piszkozat';
+  }
+
+  taskSetBadgeClass(taskSet: { isPublished: boolean; takedownAt: string | null }): string {
+    if (taskSet.takedownAt) return 'badge-danger';
+    return taskSet.isPublished ? 'badge-success' : 'badge-warning';
+  }
+
   async publish(taskSetId: number): Promise<void> {
+    // UI-TT-172: a gomb fent már [disabled]-ként letiltva, de billentyűzet/programozott
+    // hívás ellen (ugyanaz az elv, mint a fenti _publishing re-entrancy guard) itt is
+    // védünk - a szerveroldali publish ezen az állapoton MINDIG elhasalna, feleslegesen
+    // mutatva a megerősítő dialógust egy eleve értelmetlen művelet előtt.
+    const detail = this.store.selectedDetail();
+    if (detail?.takedownAt) return;
+
     // UI-TT-118: a "Publikálás" gomb [disabled]="... || store.loading()" kötése csak
     // akkor véd, ha Angular change detection lefut a két kattintás ESEMÉNYE közt — egy
     // ugyanabban a JS-tickben lezajló szinkron dupla-hívás ellen nem. Intézményhez NEM

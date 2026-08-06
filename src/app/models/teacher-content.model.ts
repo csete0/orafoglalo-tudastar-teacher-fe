@@ -16,6 +16,14 @@ export interface TeacherTaskSetDto {
   isPublished: boolean;
   createdAt: string;
   taskCount: number;
+  /**
+   * UI-TT-172: NULL, ha a feladatsort nem vonta vissza admin. Ha nem NULL, a feladatsor
+   * admin-adminisztratív okból visszavontnak számít (isPublished ilyenkor false) - ezt az
+   * admin-nézet (`admin-tanarok.component.ts`) már helyesen megkülönbözteti "Admin
+   * visszavonta"-ként a sima piszkozattól, a tanár SAJÁT listája/szerkesztője viszont eddig
+   * nem is ismerte ezt a mezőt.
+   */
+  takedownAt: string | null;
 }
 
 export interface TeacherTaskSetDetailDto extends TeacherTaskSetDto {
