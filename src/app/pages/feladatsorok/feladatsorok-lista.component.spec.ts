@@ -174,6 +174,27 @@ describe('FeladatsorokListaComponent', () => {
     expect(() => fixture.detectChanges()).not.toThrow();
     expect(fixture.nativeElement.textContent).toContain('Meglévő feladatsor');
   });
+
+  // UI-TT-172: a takedownAt-tal rendelkező feladatsor korábban megkülönböztethetetlen
+  // "Piszkozat" jelvényt kapott egy sosem publikált feladatsorral (isPublished mindkettőnél
+  // false) - az admin-nézet (`admin-tanarok.component.ts`) mintáját követve itt is "Admin
+  // visszavonta" jelvényt kell kapnia.
+  it('BUG UI-TT-172 javítva: admin által visszavont feladatsor "Admin visszavonta" jelvényt kap, nem "Piszkozat"-ot', () => {
+    configure();
+    storeMock.taskSets.set([
+      { id: 1, title: 'Visszavont feladatsor', taskCount: 3, isPublished: false, takedownAt: '2026-08-05T10:33:33Z' },
+      { id: 2, title: 'Sima piszkozat', taskCount: 1, isPublished: false, takedownAt: null },
+    ]);
+
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+
+    const badges = Array.from(fixture.nativeElement.querySelectorAll('.badge')) as HTMLElement[];
+    const badgeTexts = badges.map((b) => b.textContent?.trim());
+
+    expect(badgeTexts).toContain('Admin visszavonta');
+    expect(badgeTexts).toContain('Piszkozat');
+  });
   // ---------------------------------------------------------------------------
   // BE-TASKSET-LEVEL-CATEGORY-MISMATCH: a `Szint` és a `Tantárgyi kategória` legördülők
   // egymástól teljesen függetlenek voltak, így egy nevében is kezdő szintet ígérő

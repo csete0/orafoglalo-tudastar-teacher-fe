@@ -53,8 +53,8 @@ const LEVELS = [
                     <span class="font-bold block truncate">{{ taskSet.title }}</span>
                     <span class="text-text-muted text-xs">{{ taskSet.taskCount }} feladat</span>
                   </span>
-                  <span class="badge shrink-0" [class]="taskSet.isPublished ? 'badge-success' : 'badge-warning'">
-                    {{ taskSet.isPublished ? 'Publikált' : 'Piszkozat' }}</span>
+                  <span class="badge shrink-0" [class]="taskSetBadgeClass(taskSet)">
+                    {{ taskSetBadgeLabel(taskSet) }}</span>
                   <app-icon name="arrow-right"
                     class="w-4 h-4 block text-text-muted transition-transform group-hover:translate-x-1 shrink-0" />
                 </div>
@@ -136,6 +136,22 @@ export class FeladatsorokListaComponent {
 
   constructor() {
     this.store.loadMine();
+  }
+
+  /**
+   * UI-TT-172: a takedownAt-tal rendelkező feladatsor korábban megkülönböztethetetlen
+   * "Piszkozat" jelvényt kapott egy sosem publikált feladatsorral - az admin-nézet
+   * (`admin-tanarok.component.ts`) mintáját követve itt is három állapotot különböztetünk
+   * meg.
+   */
+  taskSetBadgeLabel(taskSet: { isPublished: boolean; takedownAt: string | null }): string {
+    if (taskSet.takedownAt) return 'Admin visszavonta';
+    return taskSet.isPublished ? 'Publikált' : 'Piszkozat';
+  }
+
+  taskSetBadgeClass(taskSet: { isPublished: boolean; takedownAt: string | null }): string {
+    if (taskSet.takedownAt) return 'badge-danger';
+    return taskSet.isPublished ? 'badge-success' : 'badge-warning';
   }
 
   /**

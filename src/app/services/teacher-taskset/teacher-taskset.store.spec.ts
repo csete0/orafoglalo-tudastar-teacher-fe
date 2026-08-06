@@ -13,6 +13,7 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     description: 'd',
     levelId: 1,
     isPublished: false,
+    takedownAt: null,
     createdAt: new Date().toISOString(),
     taskCount: 0,
     tasks: [],
