@@ -273,13 +273,22 @@ type SnippetDraft = Record<number, Record<number, string>>;
             }
           </ul>
 
-          <div class="grid grid-cols-2 gap-3">
+          <!-- UI-TT-173: a natív input type=file intrinsic szélessége (Choose File gomb +
+               No file chosen felirat, mérve ~286px) meghaladta a feltétel nélküli
+               grid-cols-2 mobil-szélességen (375px viewporton) számított ~165.5px-es oszlop-
+               szélességét - az input nem zsugorodott, hanem kilógott a kártyájából, és a TELJES
+               oldal vízszintesen túlcsordult (493px). grid-cols-1 sm:grid-cols-2-re cserélve
+               mobilon (<640px) egymás alatt, egy oszlopban jelennek meg a kártyák (bőven elfér a
+               natív vezérlő), sm:-től (≥640px) változatlanul 2 oszlop. A w-full/max-w-full
+               az inputon extra védőháló, hogy a natív vezérlő MINDIG a szülő kártya tényleges
+               szélességét tisztelje, ne a saját intrinsic méretét. -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             @for (kindOption of fileKinds; track kindOption.kind) {
               <div class="card !rounded-xl p-3">
                 <label class="text-sm block mb-1">{{ kindOption.label }}</label>
                 <input type="file" [accept]="kindOption.accept" [disabled]="store.loading()"
                   (change)="uploadFile(detail.id, kindOption.kind, $event)"
-                  class="text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
+                  class="w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
               </div>
             }
           </div>
