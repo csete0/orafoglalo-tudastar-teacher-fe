@@ -375,6 +375,44 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(reportStoreMock.revertOverride).toHaveBeenCalledWith(1, 101, expect.any(Function));
   });
 
+  // BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE testvér-rés a visszaállítás
+  // útvonalon: a `revert()` a draftPoints/draftFeedback mezőket nullázza a siker-callbackben,
+  // de a `feedbackTouched` jelzőt NEM — ha a tanár a visszaállítás ELŐTT hozzáért az
+  // értékelés-mezőhöz (aztán meggondolta magát és inkább visszaállított), a jelző stale
+  // `true` marad. Egy ezt követő, csak-pontszámot-módosító mentés emiatt téves
+  // `feedbackProvided: true`-t küld `teacherFeedback: null`-lal — élőben (192.168.1.77:9443,
+  // taskSetId 1378, attemptId 2339) reprodukálva, a valós PUT-kérés törzse pontosan
+  // `{"earnedPoints":4,"teacherFeedback":null,"feedbackProvided":true}` volt egy ilyen
+  // szekvencia után. Ha eközben egy MÁSIK tanár épp beírt egy szöveges értékelést, ez a
+  // mentés némán lenullázza azt — pontosan az eredeti hiba, csak a visszaállítás útvonalán
+  // keresztül újranyitva.
+  it('BUG: visszaállítás után egy csak-pontszámot-módosító mentés a visszaállítás ELŐTTI feedbackTouched jelzőt küldi el, nem false-t', async () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({ isOverridden: true, teacherFeedback: 'Régi értékelés' }));
+
+    const component = fixture.componentInstance;
+    // A tanár hozzáért az értékelés-mezőhöz, majd meggondolta magát és visszaállított.
+    component.feedbackTouched = true;
+
+    await component.revert(makeReview({ isOverridden: true, teacherFeedback: 'Régi értékelés' }));
+    const onRevertSuccess = reportStoreMock.revertOverride.mock.calls[0][2] as () => void;
+    onRevertSuccess();
+
+    expect(component.feedbackTouched).toBe(false);
+
+    component.draftPoints = 4;
+    component.save(makeReview({ attemptId: 101, isOverridden: false, teacherFeedback: null }));
+
+    expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
+      1,
+      101,
+      expect.objectContaining({ feedbackProvided: false }),
+      expect.any(Function),
+    );
+  });
+
   it('a felülbírált cella "tanári" jelzést kap a mátrixban', () => {
     configure(makeResults());
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
