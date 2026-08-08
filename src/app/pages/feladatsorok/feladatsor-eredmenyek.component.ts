@@ -134,7 +134,22 @@ const MAX_FEEDBACK_LENGTH = 2000;
                   <tr>
                     <td [attr.colspan]="results.tasks.length + 2" class="px-4 pb-4">
                       @if (review(); as r) {
-                        <div class="pl-4 border-l-2 border-primary">
+                        <!-- UI-TT-174: a panel (pl. a diák-kód pre eleme) intrinsic tartalom-
+                             szélessége korábban a TÁBLÁZAT auto-layout oszlopszélesség-
+                             számítását is kiszélesítette (mobilon 628px-re a 341px-es
+                             kliens-szélesség helyett), mert egy td colspan auto table-layout
+                             alatt a benne lévő legszélesebb elem preferred width-jét
+                             örökli - ez a Mentés / Visszaállítás az AI pontjára gombokat
+                             egy néma, a táblázat saját overflow-x-auto konténerében rejtve
+                             görgethető csapdába zárta (a két gomb sosem látszott egyszerre).
+                             A w-0 min-w-full egy bevett minta erre: a w-0 nullázza ennek
+                             a wrappernek a table-layout-hoz való preferred-width hozzájárulását
+                             (a táblázat oszlopszélessége visszaáll a többi sor/oszlop által
+                             meghatározott, viewporthoz illeszkedő értékre), a min-w-full
+                             pedig a ténylegesen kiosztott (immár helyes) szélességre húzza -
+                             a belső overflow-x-auto elemek (pl. a diák-kód pre eleme) ettől
+                             függetlenül, LOKÁLISAN továbbra is görgethetők maradnak. -->
+                        <div class="pl-4 border-l-2 border-primary w-0 min-w-full">
                           <div class="flex items-start justify-between gap-4 flex-wrap mt-3">
                             <div>
                               <h2 class="font-semibold">{{ r.taskTitle }}</h2>
