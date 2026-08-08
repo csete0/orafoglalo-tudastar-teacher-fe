@@ -485,6 +485,7 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     this.report.revertOverride(this.taskSetId, review.attemptId, () => {
       this.draftPoints = null;
       this.draftFeedback = '';
+      this.feedbackTouched = false;
       this.toastService.success('Visszaállítva az AI pontjára.');
     });
   }
