@@ -43,18 +43,25 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
         </div>
         <div class="hairline"></div>
 
-        <nav class="flex gap-4 border-b border-border-default mb-6">
-          <button (click)="setTab('tanarok')" class="tab-btn" [class.tab-btn-active]="tab() === 'tanarok'">
+        <!-- UI-TT-179: valódi, tartalom-váltó tab-widget - a wrapper role="tablist",
+             a gombok role="tab" + aria-selected nélkül egy képernyőolvasó-felhasználó
+             számára 4 néma, állapot nélküli "gomb"-ként hangzott el. -->
+        <nav class="flex gap-4 border-b border-border-default mb-6" role="tablist">
+          <button (click)="setTab('tanarok')" class="tab-btn" [class.tab-btn-active]="tab() === 'tanarok'"
+            role="tab" [attr.aria-selected]="tab() === 'tanarok'">
             Tanárok
           </button>
-          <button (click)="setTab('ranglista')" class="tab-btn" [class.tab-btn-active]="tab() === 'ranglista'">
+          <button (click)="setTab('ranglista')" class="tab-btn" [class.tab-btn-active]="tab() === 'ranglista'"
+            role="tab" [attr.aria-selected]="tab() === 'ranglista'">
             Ranglista
           </button>
           @if (school.isSelectedAdmin()) {
-            <button (click)="setTab('attekintes')" class="tab-btn" [class.tab-btn-active]="tab() === 'attekintes'">
+            <button (click)="setTab('attekintes')" class="tab-btn" [class.tab-btn-active]="tab() === 'attekintes'"
+              role="tab" [attr.aria-selected]="tab() === 'attekintes'">
               Áttekintés
             </button>
-            <button (click)="setTab('csoportok')" class="tab-btn" [class.tab-btn-active]="tab() === 'csoportok'">
+            <button (click)="setTab('csoportok')" class="tab-btn" [class.tab-btn-active]="tab() === 'csoportok'"
+              role="tab" [attr.aria-selected]="tab() === 'csoportok'">
               Csoportok
             </button>
           }

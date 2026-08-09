@@ -339,4 +339,30 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(items[0].textContent).not.toContain('Archivált');
     expect(items[1].textContent).toContain('Archivált');
   });
+
+  // UI-TT-179: valódi, tartalom-váltó tab-widget (Tanárok/Ranglista/Áttekintés/Csoportok) -
+  // a wrapper nav és a gombok korábban kizárólag a "tab-btn-active" CSS class-on keresztül
+  // jelezték a kijelölt fület, semmilyen ARIA tab-szemantika nem volt jelen.
+  it('BUG UI-TT-179 javítva: a fül-navigáció role="tablist"/"tab" + aria-selected szemantikát visel', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
+    expect(nav.getAttribute('role')).toBe('tablist');
+
+    const tabs = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[];
+    expect(tabs.length).toBe(4);
+    tabs.forEach((tab) => expect(tab.getAttribute('role')).toBe('tab'));
+
+    // Alapértelmezetten a "Tanárok" fül aktív.
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(tabs.slice(1).every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
+
+    fixture.componentInstance.setTab('csoportok');
+    fixture.detectChanges();
+
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
+    expect(tabs[3].getAttribute('aria-selected')).toBe('true');
+  });
 });

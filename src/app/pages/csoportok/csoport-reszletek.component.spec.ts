@@ -135,6 +135,32 @@ describe('CsoportReszletekComponent', () => {
     expect(table.closest('.overflow-x-auto')).not.toBeNull();
   });
 
+  // UI-TT-179: valódi, tartalom-váltó tab-widget - a wrapper nav és a gombok korábban
+  // kizárólag a "tab-btn-active" CSS class-on keresztül jelezték a kijelölt fület,
+  // semmilyen ARIA tab-szemantika (role="tablist"/"tab", aria-selected) nem volt jelen.
+  it('BUG UI-TT-179 javítva: a fül-navigáció role="tablist"/"tab" + aria-selected szemantikát visel', () => {
+    configure(makeGroup());
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
+    expect(nav.getAttribute('role')).toBe('tablist');
+
+    const tabs = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[];
+    expect(tabs.length).toBe(4);
+    tabs.forEach((tab) => expect(tab.getAttribute('role')).toBe('tab'));
+
+    // Alapértelmezetten a "Tagok" fül aktív.
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(tabs.slice(1).every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
+
+    fixture.componentInstance.setTab('eredmenyek');
+    fixture.detectChanges();
+
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+  });
+
   // UI-TT-178: a DateRangeFilterComponent egy @switch/@case ágban él, ezért minden
   // fülváltás destroy+recreate-eli - enélkül a fixnek a legördülő mindig "Teljes
   // időszak"-ra ugrana vissza, holott a lekérdezés (loadGroupActivity) helyesen a
