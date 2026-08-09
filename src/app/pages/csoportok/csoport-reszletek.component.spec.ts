@@ -135,6 +135,39 @@ describe('CsoportReszletekComponent', () => {
     expect(table.closest('.overflow-x-auto')).not.toBeNull();
   });
 
+  // UI-TT-178: a DateRangeFilterComponent egy @switch/@case ágban él, ezért minden
+  // fülváltás destroy+recreate-eli - enélkül a fixnek a legördülő mindig "Teljes
+  // időszak"-ra ugrana vissza, holott a lekérdezés (loadGroupActivity) helyesen a
+  // perzisztált range()-t használja tovább.
+  it('BUG UI-TT-178 javítva: fülváltás után az Eredmények visszatérve a korábban beállított szűrő látszik a legördülőben, nem "Teljes időszak"', async () => {
+    configure(makeGroup());
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('eredmenyek');
+    fixture.detectChanges();
+
+    // Egy "Utolsó 30 nap" gyorsszűrő kiválasztása.
+    const dateFilter = fixture.debugElement.query((de) => de.name === 'app-date-range-filter').componentInstance;
+    dateFilter.selectKey('last30');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.rangeKey()).toBe('last30');
+
+    // Fülváltás el (Tagok), majd vissza (Eredmények) - a DateRangeFilterComponent
+    // ilyenkor destroy+recreate-elődik.
+    fixture.componentInstance.setTab('tagok');
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('eredmenyek');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const select = fixture.nativeElement.querySelector('select#range-key') as HTMLSelectElement;
+    expect(select.value).toBe('last30');
+    expect(select.value).not.toBe('all');
+  });
+
   // BUG UI-TT-4: az intézmény-<select> a törölt (Mégse-vel elutasított) intézményen maradt,
   // mert a [ngModel] bemenete (group.schoolId) Mégse esetén sosem változott.
   it('BUG UI-TT-4 javítva: Mégse után a displaySchoolId visszaáll az eredeti értékre', async () => {
