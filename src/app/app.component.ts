@@ -49,8 +49,16 @@ const ADMIN_LINKS: NavLink[] = [
         </a>
 
         @if (authStore.isAuthenticated()) {
-          <!-- Desktop nav -->
-          <nav class="hidden md:flex items-center gap-1 text-sm">
+          <!-- Desktop nav. UI-TT-177: a "hidden md:flex"/"md:hidden" töréspont-pár
+               768px-nél fix - ez elég a 3 tanári linkhez, de a hasAdminRole() melletti
+               6 linkes nav+jobb blokk élőben teljes oldal-szintű vízszintes túlcsordulást
+               okozott 768px és kb. 1115px között (élőben megerősítve 1200px-nél már
+               tiszta). Adminnál a törésponot-pár min-[1200px]-re emeljük - eddig
+               a MÁR MEGLÉVŐ, teljes funkcionalitású mobil hamburger-panel jelenik meg
+               helyette (ugyanazokkal a linkekkel/haranggal/kijelentkezéssel), tehát
+               ez nem új fallback, csak a meglévő kettő közötti váltásküszöb admin
+               esetén szélesebbre húzva. -->
+          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex items-center gap-1 text-sm' : 'hidden md:flex items-center gap-1 text-sm'">
             @if (authStore.hasTeacherRole()) {
               @for (link of teacherLinks; track link.path) {
                 <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
@@ -73,7 +81,7 @@ const ADMIN_LINKS: NavLink[] = [
           </nav>
 
           <!-- Profil-chip + kijelentkezés (desktop) -->
-          <div class="hidden md:flex items-center gap-2 shrink-0">
+          <div [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex items-center gap-2 shrink-0' : 'hidden md:flex items-center gap-2 shrink-0'">
             <app-notification-bell />
             <div class="flex items-center gap-2" [title]="userEmail()">
               <div class="w-8 h-8 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center"
@@ -87,7 +95,7 @@ const ADMIN_LINKS: NavLink[] = [
           </div>
 
           <!-- Harang + hamburger (mobil) -->
-          <div class="md:hidden flex items-center gap-1">
+          <div [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden flex items-center gap-1' : 'md:hidden flex items-center gap-1'">
             <app-notification-bell />
             <button (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
               class="btn btn-ghost !px-2">
@@ -100,7 +108,7 @@ const ADMIN_LINKS: NavLink[] = [
       <!-- Mobil lenyíló panel (div, NEM nav — a spec querySelector('nav')-jai
            a desktop navigációt célozzák egyértelműen) -->
       @if (authStore.isAuthenticated() && menuOpen()) {
-        <div class="md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1">
+        <div [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
           @if (authStore.hasTeacherRole()) {
             @for (link of teacherLinks; track link.path) {
               <a [routerLink]="link.path" (click)="menuOpen.set(false)"

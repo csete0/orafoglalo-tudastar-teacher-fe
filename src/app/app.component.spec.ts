@@ -109,6 +109,45 @@ describe('AppComponent', () => {
     expect(nav.textContent).toContain('Intézmények');
   });
 
+  // UI-TT-177: a "hidden md:flex"/"md:hidden" töréspont-pár 768px-nél fix - ez elég a
+  // 3 tanári linkhez, de a hasAdminRole() melletti 6 linkes desktop-nav élőben teljes
+  // oldal-szintű vízszintes túlcsordulást okozott 768px és kb. 1115px között (1200px-nél
+  // élőben már tiszta). Admin usernél a desktop-nav/profil-blokk küszöbét min-[1200px]-re
+  // kell emelni, a mobil harang+hamburger blokknak (és lenyíló panelnek) pedig ezzel
+  // lépést tartva min-[1200px]:hidden-re, különben 768-1200px között SEM a desktop-nav,
+  // SEM a hamburger nem jelenne meg.
+  it('BUG UI-TT-177 javítva: admin usernél a desktop-nav/profil-blokk töréspontja min-[1200px]-re emelve, a mobil harang+hamburger pedig ugyanerre a küszöbre vált', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasAdminRole.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
+    expect(nav.className).toContain('min-[1200px]:flex');
+    expect(nav.className).not.toContain('md:flex');
+
+    const mobileToggle = fixture.nativeElement.querySelector('[aria-label="Menü"]')!.closest('div') as HTMLElement;
+    expect(mobileToggle.className).toContain('min-[1200px]:hidden');
+    expect(mobileToggle.className).not.toContain('md:hidden');
+  });
+
+  it('nem-admin usernél a töréspont-pár változatlanul md:flex/md:hidden marad', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasAdminRole.mockReturnValue(false);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
+    expect(nav.className).toContain('md:flex');
+    expect(nav.className).not.toContain('min-[1200px]:flex');
+
+    const mobileToggle = fixture.nativeElement.querySelector('[aria-label="Menü"]')!.closest('div') as HTMLElement;
+    expect(mobileToggle.className).toContain('md:hidden');
+    expect(mobileToggle.className).not.toContain('min-[1200px]:hidden');
+  });
+
   it('a profil-chip monogramja magyar sorrendben: vezetéknév + keresztnév kezdőbetű', () => {
     authStoreMock.isAuthenticated.mockReturnValue(true);
 
