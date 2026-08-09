@@ -302,6 +302,42 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="admin-tab-lost-access"]')).toBeTruthy();
   });
 
+  // UI-TT-180 (a UI-TT-178 fix mellékhatása, sibling a csoport-reszletek oldalon
+  // már javított előfordulásnak): az "Egyéni időszak" alkalmazása után a
+  // `range().to` a kiválasztott záró nap UTÁNI nap helyi éjfelét (kizáró felső
+  // határ) tárolja - a `customToValue` computed ezt korábban közvetlenül
+  // `toDateInputValue`-val formázta vissza a "Vége" mezőbe fülváltás utáni
+  // újra-mountoláskor, EGY NAPPAL KÉSŐBBRE csúsztatva a látható értéket.
+  it('BUG UI-TT-180 javítva: fülváltás után az "Egyéni időszak" Vége mezője a ténylegesen beírt záró napot mutatja, nem eggyel későbbit', async () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('attekintes');
+    fixture.detectChanges();
+
+    const dateFilter = fixture.debugElement.query((de) => de.name === 'app-date-range-filter').componentInstance;
+    dateFilter.selectKey('custom');
+    dateFilter.customFrom.set('2026-08-01');
+    dateFilter.customTo.set('2026-08-05');
+    dateFilter.applyCustom();
+    fixture.detectChanges();
+
+    // Fülváltás el (Tanárok), majd vissza (Áttekintés) - a DateRangeFilterComponent
+    // destroy+recreate-elődik, a "Vége" mezőt az [initialCustomTo]="customToValue()"
+    // tölti vissza a szülő perzisztált range()-jéből.
+    fixture.componentInstance.setTab('tanarok');
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('attekintes');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const toInput = fixture.nativeElement.querySelector('input#range-to') as HTMLInputElement;
+    expect(toInput.value).toBe('2026-08-05');
+    expect(toInput.value).not.toBe('2026-08-06');
+  });
+
   it('BUG BE-INTEZMENYRESZLETEK-ADMINTAB-BODY-NOT-REGATED javítva: admin-jog elvesztésekor a Csoportok fül tartalma eltűnik, fallback üzenet jelenik meg', () => {
     configure(makeSchool({ myRole: 'Admin' }), true);
 

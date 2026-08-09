@@ -12,7 +12,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
-import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue } from '../../shared/date-range/report-date-range';
+import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
 
@@ -287,7 +287,7 @@ export class CsoportReszletekComponent implements OnInit {
   // legördülő-opciót tudja visszatölteni, ne mindig DEFAULT_RANGE_KEY-t ("Teljes időszak").
   readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
   readonly customFromValue = computed(() => toDateInputValue(this.range().from));
-  readonly customToValue = computed(() => toDateInputValue(this.range().to));
+  readonly customToValue = computed(() => toDateInputValueExclusiveEnd(this.range().to));
 
   applyRange(groupId: number, event: { key: ReportRangeKey; range: ReportDateRange }): void {
     this.rangeKey.set(event.key);

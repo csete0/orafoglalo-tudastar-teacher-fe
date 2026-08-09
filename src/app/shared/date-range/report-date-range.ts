@@ -108,6 +108,27 @@ export function toDateInputValue(date: Date | undefined): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * UI-TT-180: a `range().to` (amit egy szülő oldal `customToValue`-ként tölt
+ * vissza a "Vége" mezőbe fülváltás utáni újra-mountoláskor) a `DateRangeFilterComponent.
+ * applyCustom()` óta MÁR a kiválasztott záró nap UTÁNI nap helyi éjfélét
+ * (a kizáró felső határt) tárolja, ld. `toDateInputValue` doksi-kommentjét
+ * fent és `BE-STUDENTACTIVITY-CUSTOMRANGE-TO-TIMEZONE-OVERINCLUSION`-t.
+ * A puszta `toDateInputValue(range().to)` ezt a MÁR eltolt dátumot mutatta
+ * vissza a mezőben - minden fülváltás EGY NAPPAL KÉSŐBBRE csúsztatta a
+ * látható "Vége" értéket. Ez a variáns levonja az 1 napot megjelenítés
+ * előtt, hogy a mező a tanár ÁLTAL TÉNYLEGESEN kiválasztott záró napot
+ * mutassa, a belső kizáró-határ ábrázolás helyett. Kizárólag a "custom"
+ * kulcshoz tartozó `to`-ra alkalmazandó - ez az egyetlen forrás, ami
+ * valaha kitölti a `to` mezőt (`resolveRange` egyik másik ága sem ad `to`-t).
+ */
+export function toDateInputValueExclusiveEnd(date: Date | undefined): string {
+  if (!date) return '';
+  const inclusive = new Date(date);
+  inclusive.setDate(inclusive.getDate() - 1);
+  return toDateInputValue(inclusive);
+}
+
 export function validateRange(range: ReportDateRange): string | null {
   const { from, to } = range;
   if (!from || !to) {

@@ -1,4 +1,4 @@
-import { DEFAULT_RANGE_KEY, resolveRange, semesterStart, validateRange } from './report-date-range';
+import { DEFAULT_RANGE_KEY, resolveRange, semesterStart, toDateInputValueExclusiveEnd, validateRange } from './report-date-range';
 
 // 7. fázis: a riport dátumszűrő EGYETLEN forrása. A "félév" definíciója üzleti
 // döntés — ha ez elcsúszik, három oldal mutat egyszerre más időszakot.
@@ -70,6 +70,29 @@ describe('report-date-range', () => {
 
     it('az érvényes tartományt elfogadja', () => {
       expect(validateRange({ from: new Date(2026, 0, 1), to: new Date(2026, 5, 1) })).toBeNull();
+    });
+  });
+
+  describe('toDateInputValueExclusiveEnd', () => {
+    // UI-TT-180: a `DateRangeFilterComponent.applyCustom()` a "Vége" mezőbe
+    // beírt záró nap UTÁNI nap helyi éjfelét adja ki `to`-ként (kizáró felső
+    // határ a backend lekérdezéshez). Egy szülő oldal (`csoport-reszletek`/
+    // `intezmeny-reszletek`), ami ezt az értéket fülváltás utáni
+    // újra-mountoláskor vissza akarja tölteni a "Vége" mezőbe, ennek a
+    // függvénynek kell használnia (NEM a puszta `toDateInputValue`-t), hogy a
+    // tanár által ténylegesen beírt napot lássa, ne az eggyel későbbit.
+    it('egy nappal korábbi dátumot ad vissza, mint a bemenet (a kizáró felső határ visszafordítása az eredeti, beírt záró napra)', () => {
+      const exclusiveUpperBound = new Date(2026, 7, 6); // applyCustom() kimenete "2026-08-05" beírása után
+      expect(toDateInputValueExclusiveEnd(exclusiveUpperBound)).toBe('2026-08-05');
+    });
+
+    it('undefined bemenetre üres stringet ad (nincs "Vége" dátum beállítva)', () => {
+      expect(toDateInputValueExclusiveEnd(undefined)).toBe('');
+    });
+
+    it('hónaphatáron át is helyesen forgat vissza (szeptember 1. → augusztus 31.)', () => {
+      const exclusiveUpperBound = new Date(2026, 8, 1); // "2026-08-31" beírása után
+      expect(toDateInputValueExclusiveEnd(exclusiveUpperBound)).toBe('2026-08-31');
     });
   });
 });
