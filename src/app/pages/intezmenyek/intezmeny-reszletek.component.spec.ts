@@ -317,4 +317,26 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
 
     expect(fixture.nativeElement.querySelector('[data-testid="admin-tab-lost-access"]')).toBeTruthy();
   });
+
+  // UI-TT-175: a "Csoportok" fülön az `isArchived` mező eddig sehol nem volt kiolvasva a
+  // template-ben, szemben a tanár saját csoport-nézeteivel (`csoportok-lista.component.ts`,
+  // `csoport-reszletek.component.ts`), amik jól látható "Archivált" jelvényt mutatnak rá -
+  // egy archivált csoport itt megkülönböztethetetlen volt egy élő csoporttól.
+  it('BUG UI-TT-175 javítva: az archivált csoport a Csoportok fülön "Archivált" jelvényt kap, a nem-archivált nem', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+    schoolStoreMock.schoolGroups.set([
+      { groupId: 1, name: 'Élő csoport', teacherDisplayName: 'Teszt Tanár', memberCount: 3, isArchived: false },
+      { groupId: 2, name: 'Archivált csoport', teacherDisplayName: 'Teszt Tanár', memberCount: 1, isArchived: true },
+    ]);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('csoportok');
+    fixture.detectChanges();
+
+    const items: HTMLLIElement[] = Array.from(fixture.nativeElement.querySelectorAll('ul.space-y-2 > li'));
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).not.toContain('Archivált');
+    expect(items[1].textContent).toContain('Archivált');
+  });
 });
