@@ -194,6 +194,42 @@ describe('CsoportReszletekComponent', () => {
     expect(select.value).not.toBe('all');
   });
 
+  // UI-TT-180 (a UI-TT-178 fix mellékhatása): az "Egyéni időszak" alkalmazása után
+  // (applyCustom()) a `range().to` a kiválasztott záró nap UTÁNI nap helyi éjfelét
+  // (kizáró felső határ) tárolja - a `customToValue` computed ezt korábban
+  // közvetlenül `toDateInputValue`-val formázta vissza a "Vége" mezőbe fülváltás
+  // utáni újra-mountoláskor, EGY NAPPAL KÉSŐBBRE csúsztatva a látható értéket a
+  // tanár által ténylegesen beírt naphoz képest.
+  it('BUG UI-TT-180 javítva: fülváltás után az "Egyéni időszak" Vége mezője a ténylegesen beírt záró napot mutatja, nem eggyel későbbit', async () => {
+    configure(makeGroup());
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('eredmenyek');
+    fixture.detectChanges();
+
+    const dateFilter = fixture.debugElement.query((de) => de.name === 'app-date-range-filter').componentInstance;
+    dateFilter.selectKey('custom');
+    dateFilter.customFrom.set('2026-08-01');
+    dateFilter.customTo.set('2026-08-05');
+    dateFilter.applyCustom();
+    fixture.detectChanges();
+
+    // Fülváltás el (Tagok), majd vissza (Eredmények) - a DateRangeFilterComponent
+    // destroy+recreate-elődik, a "Vége" mezőt az [initialCustomTo]="customToValue()"
+    // tölti vissza a szülő perzisztált range()-jéből.
+    fixture.componentInstance.setTab('tagok');
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('eredmenyek');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const toInput = fixture.nativeElement.querySelector('input#range-to') as HTMLInputElement;
+    expect(toInput.value).toBe('2026-08-05');
+    expect(toInput.value).not.toBe('2026-08-06');
+  });
+
   // BUG UI-TT-4: az intézmény-<select> a törölt (Mégse-vel elutasított) intézményen maradt,
   // mert a [ngModel] bemenete (group.schoolId) Mégse esetén sosem változott.
   it('BUG UI-TT-4 javítva: Mégse után a displaySchoolId visszaáll az eredeti értékre', async () => {
