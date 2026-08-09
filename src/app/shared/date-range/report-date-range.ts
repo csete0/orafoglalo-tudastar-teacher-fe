@@ -88,6 +88,26 @@ export function resolveRange(
  *
  * `null` = rendben; egyébként a megjelenítendő magyar hibaüzenet.
  */
+/**
+ * Egy `Date` visszaalakítása `<input type="date">`-kompatibilis "ÉÉÉÉ-HH-NN"
+ * stringgé, a HELYI (nem UTC) naptári napot használva - a `parseLocalDate`
+ * (`date-range-filter.component.ts`) pontos fordítottja. `undefined`-re üres
+ * stringet ad (üres input mező).
+ *
+ * UI-TT-178: ez teszi lehetővé, hogy egy szülő oldal (`csoport-reszletek`/
+ * `intezmeny-reszletek`) a saját perzisztált `range()`-jéből vissza tudja
+ * tölteni az "Egyéni időszak" Kezdete/Vége mezőket a `DateRangeFilterComponent`
+ * `initialCustomFrom`/`initialCustomTo` inputjaiba, amikor a fül-váltás miatt a
+ * gyermek-komponens újra-mountol.
+ */
+export function toDateInputValue(date: Date | undefined): string {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function validateRange(range: ReportDateRange): string | null {
   const { from, to } = range;
   if (!from || !to) {

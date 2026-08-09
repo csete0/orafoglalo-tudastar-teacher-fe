@@ -6,7 +6,7 @@ import { StudentActivityDetailDto } from '../../models/report.model';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
-import { ReportDateRange } from '../../shared/date-range/report-date-range';
+import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-date-range';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -99,8 +99,8 @@ export class DiakReszletekComponent implements OnInit {
     this.store.loadStudentActivity(this.userId);
   }
 
-  applyRange(range: ReportDateRange): void {
-    this.store.loadStudentActivity(this.userId, range.from, range.to);
+  applyRange(event: { key: ReportRangeKey; range: ReportDateRange }): void {
+    this.store.loadStudentActivity(this.userId, event.range.from, event.range.to);
   }
 
   initials(name: string): string {

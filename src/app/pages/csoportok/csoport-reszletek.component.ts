@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GroupStore } from '../../services/group/group.store';
@@ -12,7 +12,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
-import { ReportDateRange } from '../../shared/date-range/report-date-range';
+import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
 
@@ -100,7 +100,13 @@ type Tab = 'tagok' | 'eredmenyek' | 'ranglista' | 'meghivo';
           }
 
           @case ('eredmenyek') {
-            <app-date-range-filter (rangeChange)="applyRange(group.id, $event)" />
+            <!-- UI-TT-178: az @switch/@case ág minden fülváltáskor destroy+recreate-eli ezt a
+                 komponenst - az initialRangeKey/initialCustomFrom/initialCustomTo inputok nélkül
+                 a legördülő mindig "Teljes időszak"-ra ugrana vissza, holott a lekérdezés maga
+                 (lent) a perzisztált range()-t használja tovább. -->
+            <app-date-range-filter [initialRangeKey]="rangeKey()"
+              [initialCustomFrom]="customFromValue()" [initialCustomTo]="customToValue()"
+              (rangeChange)="applyRange(group.id, $event)" />
             @if (report.error()) {
               <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
             } @else {
@@ -272,10 +278,17 @@ export class CsoportReszletekComponent implements OnInit {
 
   /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */
   readonly range = signal<ReportDateRange>({});
+  // UI-TT-178: a szűrő KULCSÁT (nem csak a belőle feloldott range-et) is meg kell
+  // őrizni, hogy a fülváltás miatt újra-mountoló DateRangeFilterComponent a helyes
+  // legördülő-opciót tudja visszatölteni, ne mindig DEFAULT_RANGE_KEY-t ("Teljes időszak").
+  readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
+  readonly customFromValue = computed(() => toDateInputValue(this.range().from));
+  readonly customToValue = computed(() => toDateInputValue(this.range().to));
 
-  applyRange(groupId: number, range: ReportDateRange): void {
-    this.range.set(range);
-    this.report.loadGroupActivity(groupId, range.from, range.to);
+  applyRange(groupId: number, event: { key: ReportRangeKey; range: ReportDateRange }): void {
+    this.rangeKey.set(event.key);
+    this.range.set(event.range);
+    this.report.loadGroupActivity(groupId, event.range.from, event.range.to);
   }
 
   loadLeaderboard(groupId: number): void {

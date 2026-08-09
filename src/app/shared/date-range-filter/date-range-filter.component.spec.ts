@@ -1,26 +1,29 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { DateRangeFilterComponent } from './date-range-filter.component';
 import { ToastService } from '../toast/toast.service';
-import { ReportDateRange } from '../date-range/report-date-range';
+import { ReportDateRange, ReportRangeKey } from '../date-range/report-date-range';
 
 // 7. fázis: a szűrő nem tölt be semmit, csak feloldott tartományt ad ki. A
 // kliens-oldali validáció csak kényelmi réteg — a szerver a mérvadó —, de UI-TT-134
 // miatt SOHA nem lehet néma no-op: ha nem szűrünk, meg kell mondani, miért.
 describe('DateRangeFilterComponent', () => {
   let toastService: ToastService;
-  let emitted: ReportDateRange[];
+  // UI-TT-178: az emit payload a range mellett a KULCSOT is tartalmazza, hogy egy
+  // fülváltás miatt újra-mountoló szülő vissza tudja tölteni a legördülő állapotát.
+  let emitted: { key: ReportRangeKey; range: ReportDateRange }[];
 
   function createComponent(): DateRangeFilterComponent {
     const fixture = TestBed.createComponent(DateRangeFilterComponent);
     const component = fixture.componentInstance;
     emitted = [];
-    component.rangeChange.subscribe((range) => emitted.push(range));
+    component.rangeChange.subscribe((event) => emitted.push(event));
     fixture.detectChanges();
     return component;
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ imports: [DateRangeFilterComponent] });
+    TestBed.configureTestingModule({ imports: [DateRangeFilterComponent, HostComponent] });
     toastService = TestBed.inject(ToastService);
   });
 
@@ -30,8 +33,9 @@ describe('DateRangeFilterComponent', () => {
     component.selectKey('last30');
 
     expect(emitted.length).toBe(1);
-    expect(emitted[0].from).toBeInstanceOf(Date);
-    expect(emitted[0].to).toBeUndefined();
+    expect(emitted[0].key).toBe('last30');
+    expect(emitted[0].range.from).toBeInstanceOf(Date);
+    expect(emitted[0].range.to).toBeUndefined();
   });
 
   it('a "Teljes időszak" üres tartományt ad — ez a mai, szűrő nélküli viselkedés', () => {
@@ -39,7 +43,8 @@ describe('DateRangeFilterComponent', () => {
 
     component.selectKey('all');
 
-    expect(emitted[0]).toEqual({});
+    expect(emitted[0].key).toBe('all');
+    expect(emitted[0].range).toEqual({});
   });
 
   it('az "Egyéni időszak" kiválasztása önmagában MÉG nem szűr', () => {
@@ -75,8 +80,9 @@ describe('DateRangeFilterComponent', () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
     expect(emitted.length).toBe(1);
-    expect(emitted[0].from).toBeInstanceOf(Date);
-    expect(emitted[0].to).toBeInstanceOf(Date);
+    expect(emitted[0].key).toBe('custom');
+    expect(emitted[0].range.from).toBeInstanceOf(Date);
+    expect(emitted[0].range.to).toBeInstanceOf(Date);
   });
 
   // BE-STUDENTACTIVITY-CUSTOMRANGE-FROM-TIMEZONE-GAP / -TO-TIMEZONE-OVERINCLUSION:
@@ -97,7 +103,8 @@ describe('DateRangeFilterComponent', () => {
     component.applyCustom();
 
     expect(emitted.length).toBe(1);
-    const { from, to } = emitted[0];
+    expect(emitted[0].key).toBe('custom');
+    const { from, to } = emitted[0].range;
 
     // `from`: a kiválasztott nap HELYI éjfele - a helyi (teszt-környezeti)
     // időzóna komponenseiből épül, nem a "2026-08-01T00:00:00.000Z" UTC alakból.
@@ -138,5 +145,72 @@ describe('DateRangeFilterComponent', () => {
 
     expect(fixture.componentInstance.options).toBeDefined();
     expect(fixture.componentInstance.options.length).toBe(4);
+  });
+
+  // UI-TT-178: az initialRangeKey/initialCustomFrom/initialCustomTo inputok teszik
+  // lehetővé, hogy egy fülváltás miatt destroy+recreate-elt szülő vissza tudja tölteni
+  // a legördülőt a saját perzisztált állapotára, ahelyett hogy az mindig
+  // DEFAULT_RANGE_KEY-re ("Teljes időszak") esne vissza.
+  //
+  // Egy gazda-komponens SAJÁT template-jén keresztül kötjük be az inputokat (nem
+  // `componentRef.setInput()`-tal a bare fixture-ön), mert a signal input mezőket
+  // seedelő field-initializer (`readonly rangeKey = signal(this.initialRangeKey())`)
+  // csak akkor kapja meg a bekötött értéket, ha az a KOMPONENS LÉTREHOZÁSAKOR már
+  // kötve van - pontosan úgy, ahogy egy valós szülő (`csoport-reszletek`/
+  // `intezmeny-reszletek`) template-je is teszi minden fülváltáskor.
+  @Component({
+    standalone: true,
+    imports: [DateRangeFilterComponent],
+    template: `<app-date-range-filter [initialRangeKey]="key" [initialCustomFrom]="from" [initialCustomTo]="to" />`,
+  })
+  class HostComponent {
+    key: ReportRangeKey = 'all';
+    from = '';
+    to = '';
+  }
+
+  it('BUG UI-TT-178 javítva: initialRangeKey inputtal a legördülő a megadott kulccsal jön létre, nem DEFAULT_RANGE_KEY-vel', async () => {
+    const hostFixture = TestBed.createComponent(HostComponent);
+    hostFixture.componentInstance.key = 'last30';
+    hostFixture.detectChanges();
+    // A [ngModel] a DOM-frissítést egy mikrotaszkra halasztja (ControlValueAccessor
+    // writeValue), hogy elkerülje az ExpressionChangedAfterItHasBeenCheckedError-t -
+    // a signal (rangeKey()) már itt is a helyes értéket adja vissza, csak a
+    // renderelt <select>.value-hoz kell egy stabilizálási kör.
+    await hostFixture.whenStable();
+    hostFixture.detectChanges();
+
+    const child = hostFixture.debugElement.children[0].componentInstance as DateRangeFilterComponent;
+    expect(child.rangeKey()).toBe('last30');
+    const select = hostFixture.nativeElement.querySelector('select#range-key') as HTMLSelectElement;
+    expect(select.value).toBe('last30');
+  });
+
+  it('BUG UI-TT-178 javítva: initialRangeKey="custom" + initialCustomFrom/To inputtal az egyéni dátum-mezők is visszatöltődnek', async () => {
+    const hostFixture = TestBed.createComponent(HostComponent);
+    hostFixture.componentInstance.key = 'custom';
+    hostFixture.componentInstance.from = '2026-08-01';
+    hostFixture.componentInstance.to = '2026-08-09';
+    hostFixture.detectChanges();
+    await hostFixture.whenStable();
+    hostFixture.detectChanges();
+
+    const child = hostFixture.debugElement.children[0].componentInstance as DateRangeFilterComponent;
+    expect(child.rangeKey()).toBe('custom');
+    expect(child.customFrom()).toBe('2026-08-01');
+    expect(child.customTo()).toBe('2026-08-09');
+    const fromInput = hostFixture.nativeElement.querySelector('#range-from') as HTMLInputElement;
+    const toInput = hostFixture.nativeElement.querySelector('#range-to') as HTMLInputElement;
+    expect(fromInput.value).toBe('2026-08-01');
+    expect(toInput.value).toBe('2026-08-09');
+  });
+
+  it('input nélkül a viselkedés változatlan: DEFAULT_RANGE_KEY-vel ("Teljes időszak") jön létre', () => {
+    const fixture = TestBed.createComponent(DateRangeFilterComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.rangeKey()).toBe('all');
+    const select = fixture.nativeElement.querySelector('select#range-key') as HTMLSelectElement;
+    expect(select.value).toBe('all');
   });
 });

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../toast/toast.service';
 import {
@@ -53,10 +53,24 @@ import {
     </div>
   `,
 })
-export class DateRangeFilterComponent {
+export class DateRangeFilterComponent implements OnInit {
   private readonly toastService = inject(ToastService);
 
-  readonly rangeChange = output<ReportDateRange>();
+  /**
+   * UI-TT-178: a komponens egy `@switch`/`@case` ágban élő szülőknél (`csoport-
+   * reszletek`, `intezmeny-reszletek`) minden fülváltáskor destroy+recreate-elődik
+   * - enélkül az input NÉLKÜL a saját `rangeKey`/`customFrom`/`customTo` szignálja
+   * mindig `DEFAULT_RANGE_KEY`-re ("Teljes időszak") inicializálódna újra, FÜGGETLENÜL
+   * attól, hogy a szülő már egy korábban alkalmazott, eltérő szűrést tart életben (a
+   * lekérdezés maga helyesen újra lefut a perzisztált szűréssel - csak a LÁTHATÓ
+   * legördülő csúszott szét ettől a ténytől). A szülő ezt az inputot a saját
+   * perzisztált állapotából táplálja minden újra-mountoláskor.
+   */
+  readonly initialRangeKey = input<ReportRangeKey>(DEFAULT_RANGE_KEY);
+  readonly initialCustomFrom = input<string>('');
+  readonly initialCustomTo = input<string>('');
+
+  readonly rangeChange = output<{ key: ReportRangeKey; range: ReportDateRange }>();
 
   /**
    * FIGYELEM — getter, nem mező. Mezőként (`readonly options = REPORT_RANGE_OPTIONS;`)
@@ -83,16 +97,29 @@ export class DateRangeFilterComponent {
     return REPORT_RANGE_OPTIONS;
   }
 
+  // UI-TT-178: NEM field-initializerben olvassuk ki az initialRangeKey()/
+  // initialCustomFrom()/initialCustomTo() inputokat - Angular a direktíva
+  // konstruktorát (és a field-initializereket) a bekötött input-értékek
+  // ALKALMAZÁSA ELŐTT futtatja le, tehát egy `signal(this.initialRangeKey())`
+  // alakú seedelés itt mindig a DEFAULT_RANGE_KEY-t "fagyasztaná be", függetlenül
+  // attól, mit köt be a szülő. Az ngOnInit már az első input-kötési kör UTÁN fut
+  // le, itt biztonságosan olvasható a ténylegesen bekötött kezdőérték.
   readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
   readonly customFrom = signal<string>('');
   readonly customTo = signal<string>('');
+
+  ngOnInit(): void {
+    this.rangeKey.set(this.initialRangeKey());
+    this.customFrom.set(this.initialCustomFrom());
+    this.customTo.set(this.initialCustomTo());
+  }
 
   selectKey(key: ReportRangeKey): void {
     this.rangeKey.set(key);
     // Az "Egyéni időszak" kiválasztása önmagában még nem szűr — a tanárnak előbb
     // ki kell töltenie a két dátumot, és a Szűrés gombra kattintania.
     if (key === 'custom') return;
-    this.rangeChange.emit(resolveRange(key));
+    this.rangeChange.emit({ key, range: resolveRange(key) });
   }
 
   applyCustom(): void {
@@ -114,7 +141,7 @@ export class DateRangeFilterComponent {
       return;
     }
 
-    this.rangeChange.emit(range);
+    this.rangeChange.emit({ key: 'custom', range });
   }
 
   /**
