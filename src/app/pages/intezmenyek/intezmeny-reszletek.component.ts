@@ -213,6 +213,9 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                     <span class="flex items-center gap-2 min-w-0">
                       <app-icon name="users" class="w-4 h-4 block text-text-muted shrink-0" />
                       <span class="truncate">{{ group.name }}</span>
+                      @if (group.isArchived) {
+                        <span class="badge badge-neutral shrink-0">Archivált</span>
+                      }
                     </span>
                     <span class="text-text-muted shrink-0">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
                   </li>
