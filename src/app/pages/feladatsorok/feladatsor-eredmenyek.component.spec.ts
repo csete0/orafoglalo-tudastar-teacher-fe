@@ -199,6 +199,26 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(text).toContain('Segédlet megnyitva:');
   });
 
+  // UI-TT-176: a UI-TT-174 fixe (`w-0 min-w-full`) élőben hatástalan maradt egy `td colspan`
+  // auto-layout táblázatban - jsdom nem végez valódi CSS layout-számítást, ezért a tényleges
+  // szélesség-blowoutot ez a teszt nem tudja közvetlenül reprodukálni (ld. ledger). Ez a teszt
+  // csak azt őrzi, hogy a wrapper a helyes, nem-körkörös osztálykombinációt (`max-w-[90vw]` +
+  // `overflow-x-auto`) használja, és a bizonyítottan hatástalan `w-0`/`min-w-full` NEM tér vissza
+  // egy jövőbeli, jóhiszemű "letisztításnál".
+  it('BUG UI-TT-176 javítva: a panel wrapper max-w-[90vw]+overflow-x-auto osztályokat kap, nem a hatástalan w-0/min-w-full mintát', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture);
+
+    const wrapper = fixture.nativeElement.querySelector('.border-l-2.border-primary') as HTMLElement;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper.className).toContain('max-w-[90vw]');
+    expect(wrapper.className).toContain('overflow-x-auto');
+    expect(wrapper.className).not.toContain('w-0');
+    expect(wrapper.className).not.toContain('min-w-full');
+  });
+
   // A munkafolyamat-blokk NYERS adat, nem bizonyíték: egy "gyanús" címke téves
   // vádhoz vezethet egy valós diák ellen. Ezt a tesztet szándékosan a
   // megfogalmazásra írjuk, nem csak a számokra.
