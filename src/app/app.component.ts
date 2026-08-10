@@ -42,7 +42,18 @@ const ADMIN_LINKS: NavLink[] = [
   ],
   template: `
     <header class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm">
-      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <!-- UI-TT-181: flex-wrap hozzáadva - a korábbi, tördelés nélküli flex sor
+           a viewport-alapú (media-query) mobil-hamburger töréspont ALATT (pl.
+           1280px asztali szélességnél) is túlcsordult, ha a tartalom szöveg-
+           alapon (root font-size, pl. Chrome "Nagy" betűméret akadálymentességi
+           beállítása) nőtt - a header saját, width:auto háttér-doboza NEM nőtt
+           a túlcsorduló, overflow-visible gyerek-tartalommal együtt, így a jobb
+           oldali blokk (harang/admin-jelvény/névkártya/kilépés) a puszta
+           oldalháttéren "lebegve" jelent meg. flex-wrap-pel a túlcsorduló elemek
+           egy második sorra törnek UGYANAZON a dobozon belül, aminek a magassága
+           (és így a háttere/alsó szegélye) automatikusan követi a tördelt
+           tartalmat - nincs több "lebegő" elem a fejléc dobozán kívül. -->
+      <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <a routerLink="/dashboard" aria-label="PaTricks Tanári Felület"
           class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-sm shrink-0">
           <img src="assets/patricks/patricks_logo.png" alt="" class="w-6 h-6 object-contain" />
@@ -58,7 +69,7 @@ const ADMIN_LINKS: NavLink[] = [
                helyette (ugyanazokkal a linkekkel/haranggal/kijelentkezéssel), tehát
                ez nem új fallback, csak a meglévő kettő közötti váltásküszöb admin
                esetén szélesebbre húzva. -->
-          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex items-center gap-1 text-sm' : 'hidden md:flex items-center gap-1 text-sm'">
+          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex flex-wrap items-center gap-1 text-sm' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
             @if (authStore.hasTeacherRole()) {
               @for (link of teacherLinks; track link.path) {
                 <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
