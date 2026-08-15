@@ -66,6 +66,29 @@ describe('NotificationBellComponent', () => {
     expect(storeMock.load).toHaveBeenCalled();
   });
 
+  // UI-TT-183: a saját live munkamenetnek szóló Notification-t létrehozó BE-oldali
+  // hívási helyek (pl. saját tanári jelentkezés elbírálása, saját feladatsor admin
+  // általi levétele) közül legalább kettő FE-oldali megfelelője (TeacherApplicationStore,
+  // TeacherTaskSetStore) bizonyítottan nem hívta újra a NotificationStore.load()-ot -
+  // a harang emiatt a teljes hátralévő munkamenetben elavult maradt. Egy periodikus
+  // újratöltés a harangon magán MINDEN ilyen (jelenlegi és jövőbeli, még nem auditált)
+  // hívási helyet egyszerre lefed, per-store patch-elés nélkül.
+  it('UI-TT-183: periodikusan újratölti az értesítéseket, hogy a saját élő munkamenetnek szóló, más store-ok által ki nem váltott értesítések is megjelenjenek', () => {
+    vi.useFakeTimers();
+    try {
+      configure();
+      storeMock.load.mockClear(); // az ngOnInit()-es kezdeti hívást ne számoljuk
+
+      vi.advanceTimersByTime(60_000);
+      expect(storeMock.load).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(60_000);
+      expect(storeMock.load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('nem jelenít meg olvasatlan jelvényt, ha unreadCount 0', () => {
     const fixture = configure([]);
     expect(fixture.nativeElement.querySelector('[data-testid="notification-unread-badge"]')).toBeNull();
@@ -256,7 +279,13 @@ describe('NotificationBellComponent', () => {
 
       (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
-      vi.runAllTimers();
+      // UI-TT-183: runAllTimers() helyett - a komponens mostantól egy 60s-es
+      // periodikus setInterval()-t is regisztrál (harang-poll), amit a
+      // runAllTimers() sosem tudna "kimeríteni" (végtelen ciklust jelezne).
+      // A fókusz-effect setTimeout(fn)-je (0ms, azonnali) a t=0-nál esedékes
+      // időzítők lefuttatásával flush-olható, a jövőbeli poll-intervallum
+      // érintetlenül hagyása mellett.
+      vi.advanceTimersByTime(0);
 
       const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
       expect(panel).not.toBeNull();
@@ -274,7 +303,13 @@ describe('NotificationBellComponent', () => {
 
       (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
-      vi.runAllTimers();
+      // UI-TT-183: runAllTimers() helyett - a komponens mostantól egy 60s-es
+      // periodikus setInterval()-t is regisztrál (harang-poll), amit a
+      // runAllTimers() sosem tudna "kimeríteni" (végtelen ciklust jelezne).
+      // A fókusz-effect setTimeout(fn)-je (0ms, azonnali) a t=0-nál esedékes
+      // időzítők lefuttatásával flush-olható, a jövőbeli poll-intervallum
+      // érintetlenül hagyása mellett.
+      vi.advanceTimersByTime(0);
 
       const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
       expect(panel.querySelectorAll('button, [href], input, select, textarea').length).toBe(0);
@@ -288,7 +323,13 @@ describe('NotificationBellComponent', () => {
 
       trigger.click();
       fixture.detectChanges();
-      vi.runAllTimers();
+      // UI-TT-183: runAllTimers() helyett - a komponens mostantól egy 60s-es
+      // periodikus setInterval()-t is regisztrál (harang-poll), amit a
+      // runAllTimers() sosem tudna "kimeríteni" (végtelen ciklust jelezne).
+      // A fókusz-effect setTimeout(fn)-je (0ms, azonnali) a t=0-nál esedékes
+      // időzítők lefuttatásával flush-olható, a jövőbeli poll-intervallum
+      // érintetlenül hagyása mellett.
+      vi.advanceTimersByTime(0);
 
       const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
       panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
@@ -304,7 +345,13 @@ describe('NotificationBellComponent', () => {
 
       (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
-      vi.runAllTimers();
+      // UI-TT-183: runAllTimers() helyett - a komponens mostantól egy 60s-es
+      // periodikus setInterval()-t is regisztrál (harang-poll), amit a
+      // runAllTimers() sosem tudna "kimeríteni" (végtelen ciklust jelezne).
+      // A fókusz-effect setTimeout(fn)-je (0ms, azonnali) a t=0-nál esedékes
+      // időzítők lefuttatásával flush-olható, a jövőbeli poll-intervallum
+      // érintetlenül hagyása mellett.
+      vi.advanceTimersByTime(0);
 
       const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
       const focusable = Array.from(panel.querySelectorAll('button')) as HTMLButtonElement[];
@@ -326,7 +373,13 @@ describe('NotificationBellComponent', () => {
 
       (fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement).click();
       fixture.detectChanges();
-      vi.runAllTimers();
+      // UI-TT-183: runAllTimers() helyett - a komponens mostantól egy 60s-es
+      // periodikus setInterval()-t is regisztrál (harang-poll), amit a
+      // runAllTimers() sosem tudna "kimeríteni" (végtelen ciklust jelezne).
+      // A fókusz-effect setTimeout(fn)-je (0ms, azonnali) a t=0-nál esedékes
+      // időzítők lefuttatásával flush-olható, a jövőbeli poll-intervallum
+      // érintetlenül hagyása mellett.
+      vi.advanceTimersByTime(0);
 
       const panel = fixture.nativeElement.querySelector('[data-testid="notification-panel"]');
       const focusable = Array.from(panel.querySelectorAll('button')) as HTMLButtonElement[];
