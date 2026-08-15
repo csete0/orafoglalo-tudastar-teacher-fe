@@ -107,12 +107,12 @@ const SUPPORT_EMAIL = 'info@orafoglalo.hu';
         <form [formGroup]="form" (ngSubmit)="submit()" class="card p-6 space-y-4">
           <div>
             <label class="block text-sm mb-1" for="motivation">Bemutatkozás</label>
-            <textarea id="motivation" formControlName="motivation" rows="5" class="input"
+            <textarea id="motivation" formControlName="motivation" rows="5" class="input" maxlength="2000"
               placeholder="Milyen tantárgyat tanítasz, hány éve, miért szeretnél feladatsorokat készíteni?"></textarea>
           </div>
           <div>
             <label class="block text-sm mb-1" for="institutionName">Intézmény neve (opcionális)</label>
-            <input id="institutionName" formControlName="institutionName" class="input" />
+            <input id="institutionName" formControlName="institutionName" class="input" maxlength="255" />
           </div>
 
           @if (store.error()) {
@@ -137,9 +137,15 @@ export class JelentkezesComponent {
   readonly turnaroundHours = DECISION_TURNAROUND_HOURS;
   readonly supportEmail = SUPPORT_EMAIL;
 
+  // UI-TT-185: a backend ApplyTeacherRequest.Motivation/InstitutionName
+  // [MaxLength(2000)]/[MaxLength(255)] DataAnnotations-szal védett, de ennek
+  // korábban nem volt kliens-oldali párja - egy túl hosszú bemutatkozás
+  // kliens-oldalon "érvényesnek" tűnt, a submit elindult, majd a backend
+  // elutasította, a store (fixálva lentebb, extractErrorMessage) korábban
+  // csendben eldobta a valós okot.
   readonly form = this.fb.nonNullable.group({
-    motivation: ['', [Validators.required, Validators.minLength(20), notBlankValidator()]],
-    institutionName: [''],
+    motivation: ['', [Validators.required, Validators.minLength(20), Validators.maxLength(2000), notBlankValidator()]],
+    institutionName: ['', [Validators.maxLength(255)]],
   });
 
   readonly enterAsTeacherError = signal<string | null>(null);

@@ -4,6 +4,7 @@ import { finalize, take } from 'rxjs/operators';
 import { TeacherApplicationService } from './teacher-application.service';
 import { ApplyTeacherRequest, TeacherApplicationDto } from '../../models/teacher-application.model';
 import { NotificationStore } from '../notification/notification.store';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 @Injectable({ providedIn: 'root' })
 export class TeacherApplicationStore {
@@ -81,7 +82,7 @@ export class TeacherApplicationStore {
           if (err.status === 404) {
             this._application.set(null);
           } else {
-            this._error.set(err.error?.errorMessage ?? 'A jelentkezés állapotának lekérdezése sikertelen.');
+            this._error.set(extractErrorMessage(err, 'A jelentkezés állapotának lekérdezése sikertelen.'));
           }
         },
       });
@@ -105,7 +106,7 @@ export class TeacherApplicationStore {
           if (onSuccess) onSuccess();
         },
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A jelentkezés beadása sikertelen.');
+          this._error.set(extractErrorMessage(err, 'A jelentkezés beadása sikertelen.'));
         },
       });
   }
