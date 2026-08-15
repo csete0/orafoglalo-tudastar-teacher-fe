@@ -3,11 +3,18 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs/operators';
 import { TeacherApplicationService } from './teacher-application.service';
 import { ApplyTeacherRequest, TeacherApplicationDto } from '../../models/teacher-application.model';
+import { NotificationStore } from '../notification/notification.store';
 
 @Injectable({ providedIn: 'root' })
 export class TeacherApplicationStore {
   private readonly destroyRef = inject(DestroyRef);
   private readonly service = inject(TeacherApplicationService);
+  // UI-TT-183: a JelentkezesComponent 5mp-enkénti pollozása alatt az admin
+  // jóváhagyás/elutasítás a SAJÁT live munkamenetnek is hoz létre
+  // Notification-sort - a harang enélkül a teljes hátralévő munkamenetben
+  // "Nincs értesítésed"-et mutatott, csak egy teljes oldal-újratöltés után
+  // frissült helyesen.
+  private readonly notificationStore = inject(NotificationStore);
 
   private readonly _application = signal<TeacherApplicationDto | null>(null);
   private readonly _loading = signal(false);
@@ -56,6 +63,17 @@ export class TeacherApplicationStore {
         next: (application) => {
           // Elavult válasz - egy KÉSŐBBI loadMine() már felülírta a szándékot, eldobjuk.
           if (generation !== this._loadGeneration) return;
+
+          // UI-TT-183: Pending → Approved/Rejected ÁTMENET észlelése (nem a
+          // puszta "Approved/Rejected állapot", hogy egy már ezen az
+          // állapoton induló/ismétlődő poll ne hívja feleslegesen újra) -
+          // pontosan ekkor hoz létre a backend egy Notification-sort ennek a
+          // usernek.
+          const previousStatus = this._application()?.status;
+          if (previousStatus === 'Pending' && application?.status !== 'Pending') {
+            this.notificationStore.load();
+          }
+
           this._application.set(application);
         },
         error: (err) => {

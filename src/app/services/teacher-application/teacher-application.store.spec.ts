@@ -3,6 +3,7 @@ import { of, throwError, Subject } from 'rxjs';
 import { TeacherApplicationStore } from './teacher-application.store';
 import { TeacherApplicationService } from './teacher-application.service';
 import { TeacherApplicationDto } from '../../models/teacher-application.model';
+import { NotificationStore } from '../notification/notification.store';
 
 function makeApplication(overrides: Partial<TeacherApplicationDto> = {}): TeacherApplicationDto {
   return {
@@ -16,13 +17,16 @@ function makeApplication(overrides: Partial<TeacherApplicationDto> = {}): Teache
 
 describe('TeacherApplicationStore', () => {
   let serviceMock: { apply: ReturnType<typeof vi.fn>; getMine: ReturnType<typeof vi.fn> };
+  let notificationStoreMock: { load: ReturnType<typeof vi.fn> };
 
   function configure() {
     serviceMock = { apply: vi.fn(), getMine: vi.fn() };
+    notificationStoreMock = { load: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         TeacherApplicationStore,
         { provide: TeacherApplicationService, useValue: serviceMock },
+        { provide: NotificationStore, useValue: notificationStoreMock },
       ],
     });
   }
@@ -141,5 +145,47 @@ describe('TeacherApplicationStore', () => {
     expect(store.isApproved()).toBe(true);
     expect(store.isPending()).toBe(false);
     expect(store.isRejected()).toBe(false);
+  });
+
+  // UI-TT-183: élőben reprodukálva 2026-08-14-én (hétvégi böngészős kör, ui-tudastar-teacher
+  // slice) két friss, egyértelműen jelölt eldobható diák-fiókkal (userId=1179/1180), valódi
+  // (nem forge-olt) admin-jóváhagyással. Ugyanaz a hibacsalád, mint a diák-fe már JAVÍTOTT
+  // NOTIFICATIONBELL-STALE-AFTER-BADGE-EARNED tétele (ld. tudastar.md): a `NotificationBellComponent`
+  // az `AppComponent` fejlécében EGYSZER mountolva, `ngOnInit()`-ben hívja a
+  // `NotificationStore.load()`-ot, és SEMMILYEN downstream store nem hívja újra ezt élő
+  // munkameneten belül. A "22. ma" (2026-08-13) kör ugyanezt az irányt megvizsgálta és
+  // ELVETETTE azzal az indoklással, hogy "a bug family strukturálisan nem ismétlődhet meg a
+  // teacher-fe-n, mert minden BE notify-trigger MÁSIK usert céloz" - ez a feltevés téves erre az
+  // egy konkrét ágra: a `/jelentkezes` oldal SAJÁT munkamenetén belül pollozza a jóváhagyás
+  // státuszát (`TeacherApplicationStore.loadMine()`), és az admin jóváhagyása UGYANAZON usernek
+  // (magának a live böngésző-munkamenetnek) generál egy Notification-sort. Élőben: a poll
+  // helyesen "Elfogadva" állapotra váltott 5mp-en belül, a "Belépés tanárként" gomb helyesen
+  // tanári dashboardra navigált - DE a harang a teljes hátralévő munkamenetben "Nincs
+  // értesítésed"-et mutatott, holott egy MÁSIK, friss (teljes oldal-újratöltéses) böngésző-fülön
+  // ugyanaz a user ugyanabban a pillanatban helyesen látta a "Tanári jelentkezésed elfogadva"
+  // értesítést "1 perce" időbélyeggel. Javasolt fix-irány: pontosan a diák-fe fix mintája -
+  // `loadMine()` ÚJ "Approved" állapot ÉSZLELÉSEKOR (előző állapothoz képesti átmenetkor) hívja
+  // meg a `NotificationStore.load()`-ot is.
+  it('BUG (ÚJ, UI-TT-183): loadMine() Pending → Approved átmenet ÉSZLELÉSEKOR nem frissíti a NotificationStore-t, holott a jóváhagyás új Notification-sort hoz létre ugyanannak a live munkamenetnek', async () => {
+    serviceMock.getMine
+      .mockReturnValueOnce(of(makeApplication({ status: 'Pending' })))
+      .mockReturnValueOnce(of(makeApplication({ status: 'Approved' })));
+
+    const store = TestBed.inject(TeacherApplicationStore);
+
+    // Első poll-tick: még "Pending" - helyesen nem indokolt értesítés-frissítés.
+    store.loadMine();
+    await Promise.resolve();
+    expect(store.isPending()).toBe(true);
+
+    // Második poll-tick (5mp múlva): a backend időközben jóváhagyta - a harangnak
+    // ITT kellene tudomást szereznie az admin jóváhagyás által létrehozott Notification-ról.
+    store.loadMine();
+    await Promise.resolve();
+    expect(store.isApproved()).toBe(true);
+
+    // Bukó elvárás: élőben a harang ezen a ponton még mindig "Nincs értesítésed"-et mutat,
+    // mert semmi nem hívja meg a NotificationStore.load()-ot ezen az átmeneten.
+    expect(notificationStoreMock.load).toHaveBeenCalled();
   });
 });

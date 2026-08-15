@@ -148,6 +148,21 @@ export class NotificationBellComponent implements OnInit {
   private readonly panel = viewChild<ElementRef<HTMLDivElement>>('panel');
   private readonly triggerBtn = viewChild<ElementRef<HTMLButtonElement>>('triggerBtn');
 
+  // UI-TT-183: a harang eredetileg csak EGYSZER, ngOnInit()-ben töltötte be az
+  // értesítéseket - amikor a backend a SAJÁT live munkamenetünknek hoz létre
+  // Notification-t (pl. saját tanári jelentkezésünk elbírálása, saját
+  // feladatsorunk admin általi levétele), a harang emiatt a teljes hátralévő
+  // munkamenetben elavult maradt, csak egy teljes oldal-újratöltés után
+  // frissült. Legalább KÉT független store-ban (TeacherApplicationStore,
+  // TeacherTaskSetStore) bizonyítottan hiányzott az ehhez szükséges
+  // NotificationStore.load() újrahívás, és további, még sosem auditált
+  // INotificationService hívási helyek (Group/School/TeacherAttemptReview
+  // szolgáltatások) is léteznek a backend oldalon - a per-store patch-elés
+  // ezért törékeny/skálázhatatlan. Egy rövid periódusú újra-lekérdezés itt,
+  // a harangon magán, mindegyiket egyszerre lefedi, a jövőbeli hívási
+  // helyeket is beleértve.
+  private static readonly POLL_INTERVAL_MS = 60_000;
+
   // Törölt (delete()) elemek a store-ból azonnal kikerülnek, nincs "isDeleted"
   // szűrés itt szükséges - a diák-fe-vel ellentétben (ahol soft-delete a
   // listában marad megjelölve) ez a lista mindig csak az aktuálisan
@@ -208,7 +223,16 @@ export class NotificationBellComponent implements OnInit {
     // rést hagyta nyitva, amit ez a fix zár be.
     const instanceId = this.instanceId;
     this.dropdownCoordinator.registerBell(instanceId, () => this.open.set(false));
-    inject(DestroyRef).onDestroy(() => this.dropdownCoordinator.unregisterBell(instanceId));
+
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(() => this.dropdownCoordinator.unregisterBell(instanceId));
+
+    // UI-TT-183: periodikus újratöltés - ld. a POLL_INTERVAL_MS fenti kommentjét.
+    const pollHandle = setInterval(
+      () => this.store.load(),
+      NotificationBellComponent.POLL_INTERVAL_MS,
+    );
+    destroyRef.onDestroy(() => clearInterval(pollHandle));
   }
 
   ngOnInit(): void {
