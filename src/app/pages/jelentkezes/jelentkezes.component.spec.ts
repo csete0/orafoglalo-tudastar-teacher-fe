@@ -650,4 +650,47 @@ describe('JelentkezesComponent', () => {
     expect(mailto).not.toBeNull();
     expect(mailto.getAttribute('href')).toBe('mailto:info@orafoglalo.hu');
   });
+
+  // UI-TT-184: a "Bemutatkozás" mező required/minLength(20)/blank validátorainak egyikéhez sincs
+  // hozzárendelve hibaüzenet a sablonban - szemben a csoportok-lista/intezmenyek-lista/
+  // feladatsorok-lista testvér-formokkal, amik mind kiolvassák a control hasError('blank')-jét.
+  it('BUG UI-TT-184: túl rövid (20 karakternél kevesebb) "Bemutatkozás" esetén a form érvénytelen és a beküldés gomb letiltva marad, DE semmilyen hibaüzenet nem jelenik meg, ami megmondaná a jelentkezőnek, miért', () => {
+    configure({ application: null, checked: true });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    const motivationControl = fixture.componentInstance.form.controls.motivation;
+    motivationControl.setValue('Matektanár vagyok.'); // 19 karakter, a minLength(20) alatt
+    motivationControl.markAsTouched();
+    fixture.detectChanges();
+
+    expect(motivationControl.invalid).toBe(true);
+    expect(motivationControl.hasError('minlength')).toBe(true);
+
+    const submitButton = fixture.nativeElement.querySelector(
+      'button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+
+    // A sablonban egyetlen hibaüzenet-szöveg sem utal arra, mi hiányzik - bukik.
+    const pageText: string = fixture.nativeElement.textContent;
+    expect(pageText).toMatch(/legalább|karakter|kötelező|hosszú/i);
+  });
+
+  it('BUG UI-TT-184 (kizárólag szóköz altípus): csak whitespace-ből álló, 20+ hosszú "Bemutatkozás" esetén a "blank" hiba sem jelenik meg sehol a sablonban', () => {
+    configure({ application: null, checked: true });
+    const fixture = TestBed.createComponent(JelentkezesComponent);
+    fixture.detectChanges();
+
+    const motivationControl = fixture.componentInstance.form.controls.motivation;
+    motivationControl.setValue(' '.repeat(25));
+    motivationControl.markAsTouched();
+    fixture.detectChanges();
+
+    expect(motivationControl.invalid).toBe(true);
+    expect(motivationControl.hasError('blank')).toBe(true);
+
+    const pageText: string = fixture.nativeElement.textContent;
+    expect(pageText).toMatch(/szóköz/i);
+  });
 });

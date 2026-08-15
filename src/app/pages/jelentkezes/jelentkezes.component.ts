@@ -109,10 +109,29 @@ const SUPPORT_EMAIL = 'info@orafoglalo.hu';
             <label class="block text-sm mb-1" for="motivation">Bemutatkozás</label>
             <textarea id="motivation" formControlName="motivation" rows="5" class="input" maxlength="2000"
               placeholder="Milyen tantárgyat tanítasz, hány éve, miért szeretnél feladatsorokat készíteni?"></textarea>
+            <!-- UI-TT-184: a testvér-formok (csoportok-lista/intezmenyek-lista/feladatsorok-lista)
+                 mintáját követve - korábban a motivation mező validátorai (required/minLength/
+                 notBlankValidator) MŰKÖDTEK, de egyetlen hibaüzenet sem volt kiírva, a gomb csak
+                 indoklás nélkül letiltva maradt. -->
+            @if (form.controls.motivation.hasError('required')) {
+              <p class="text-sm text-danger">A bemutatkozás megadása kötelező.</p>
+            }
+            @if (form.controls.motivation.hasError('minlength')) {
+              <p class="text-sm text-danger">A bemutatkozás legalább 20 karakter hosszú legyen.</p>
+            }
+            @if (form.controls.motivation.hasError('blank')) {
+              <p class="text-sm text-danger">A bemutatkozás nem állhat kizárólag szóközökből.</p>
+            }
+            @if (form.controls.motivation.hasError('maxlength')) {
+              <p class="text-sm text-danger">A bemutatkozás legfeljebb 2000 karakter hosszú lehet.</p>
+            }
           </div>
           <div>
             <label class="block text-sm mb-1" for="institutionName">Intézmény neve (opcionális)</label>
             <input id="institutionName" formControlName="institutionName" class="input" maxlength="255" />
+            @if (form.controls.institutionName.hasError('maxlength')) {
+              <p class="text-sm text-danger">Az intézmény neve legfeljebb 255 karakter hosszú lehet.</p>
+            }
           </div>
 
           @if (store.error()) {
