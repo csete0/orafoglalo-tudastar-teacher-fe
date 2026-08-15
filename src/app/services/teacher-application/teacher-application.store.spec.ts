@@ -94,6 +94,38 @@ describe('TeacherApplicationStore', () => {
     expect(store.application()).toBeNull();
   });
 
+  // BUG (ÚJ): `ApplyTeacherRequest.Motivation` a backendben `[Required][MaxLength(2000)]`
+  // DataAnnotations-szal védett (TeacherApplicationDtos.cs), a `[ApiController]` ezt
+  // model-binding-kor AUTOMATIKUSAN 400-ra képezi, a sztenderd ASP.NET
+  // `ValidationProblemDetails` alakban: `{ errors: { Motivation: ["..."] } }` - NEM
+  // `{ errorMessage: "..." }`. A `JelentkezesComponent` reaktív formja viszont a
+  // `motivation` mezőn KIZÁRÓLAG `required`/`minLength(20)`/`notBlankValidator()`-t
+  // ellenőriz - nincs `Validators.maxLength(2000)` és a textarea-nak sincs `maxlength`
+  // attribútuma -, tehát egy 2000 karakternél hosszabb bemutatkozást (pl. egy hosszabb
+  // beillesztett motivációs levél) a kliens simán engedélyez, a submit gomb aktív marad.
+  // A `TeacherApplicationStore.apply()` error-ága ugyanakkor (a `GroupStore`/`SchoolStore`/
+  // `TeacherTaskSetStore`-tól eltérően) NEM a közös `extractErrorMessage()` helpert
+  // használja, hanem csak `err.error?.errorMessage`-et olvas - a `errors: {...}` szótár-alak
+  // ezen csendben átesik, és a jelentkező a VALÓS okot (a bemutatkozás túl hosszú) SOHA nem
+  // tudja meg, csak egy tartalmatlan általános hibaüzenetet lát ugyanazon a formon, amit
+  // tetszőlegesen sokszor újra be tud küldeni.
+  it('BUG (ÚJ): apply hiba ASP.NET ValidationProblemDetails (errors: {Motivation: [...]}) alakban - a store a konkrét okot csendben eldobja és a generikus fallback-re esik', async () => {
+    serviceMock.apply.mockReturnValue(
+      throwError(() => ({
+        status: 400,
+        error: {
+          errors: { Motivation: ['A(z) Motivation mező legfeljebb 2000 karakter hosszú lehet.'] },
+        },
+      })),
+    );
+
+    const store = TestBed.inject(TeacherApplicationStore);
+    store.apply({ motivation: 'x'.repeat(2001) });
+    await Promise.resolve();
+
+    expect(store.error()).toBe('A(z) Motivation mező legfeljebb 2000 karakter hosszú lehet.');
+  });
+
   // JelentkezesComponent 5 másodpercenként pollozza loadMine()-t, amíg isPending() igaz -
   // korábban semmi nem védte a válaszok kiérkezésének sorrendjét: ha egy KORÁBBAN indított
   // (de lassabb) hívás válasza egy KÉSŐBB indított (de gyorsabb) hívás válasza UTÁN
