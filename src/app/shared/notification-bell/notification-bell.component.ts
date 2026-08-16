@@ -317,6 +317,13 @@ export class NotificationBellComponent implements OnInit {
     this.close();
     if (n.actionUrl) {
       this.router.navigateByUrl(n.actionUrl);
+    } else {
+      // UI-TT-188: actionUrl nélküli elemnél nincs elnavigálás, ami a
+      // fókuszvesztést (a close() a panelt a fókuszált sor-elemmel együtt
+      // távolítja el a DOM-ból, a fókusz document.body-ra esik) amúgy is
+      // elfedné - ugyanaz a minta, mint a closeAndReturnFocus()-ban az
+      // Escape-es záráshoz.
+      this.triggerBtn()?.nativeElement.focus();
     }
   }
 
