@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs/operators';
 import { AdminApplicationService } from './admin-application.service';
 import { RejectTeacherApplicationRequest, TeacherApplicationAdminDto } from '../../models/teacher-application.model';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 @Injectable({ providedIn: 'root' })
 export class AdminApplicationStore {
@@ -119,7 +120,7 @@ export class AdminApplicationStore {
           this._error.set(null);
           if (onSuccess) onSuccess();
         },
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'Az elutasítás sikertelen.'),
+        error: (err) => this._error.set(extractErrorMessage(err, 'Az elutasítás sikertelen.')),
       });
   }
 
