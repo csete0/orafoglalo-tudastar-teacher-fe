@@ -232,4 +232,49 @@ describe('AppComponent', () => {
 
     expect(fixture.componentInstance.menuOpen()).toBe(false);
   });
+
+  // UI-TT-189: a mobil hamburger-menü panelje - a NotificationBellComponent
+  // dropdownjával (fixed inset-0 backdrop (click)="open.set(false)" ÉS
+  // (keydown.escape) handler) ellentétben - SEM kattintás-a-panelen-kívülre,
+  // SEM Escape billentyűre nem záródik be. Egyetlen módja a bezárásnak: a
+  // hamburger-gombra ismételt kattintás, egy panelen belüli linkre kattintás,
+  // vagy navigáció (UI-TT-78 fixe). Amíg nyitva marad, a panel (absolute
+  // top-full inset-x-0 z-40) ténylegesen letiltja a pointer-eseményeket az
+  // alatta lévő oldaltartalomra.
+  it('BUG UI-TT-189: Escape billentyűre a nyitott mobil hamburger-menü NEM záródik be', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.menuOpen.set(true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.menuOpen()).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+
+    // Elvárt (helyes) viselkedés: false. Tényleges: true marad, mert nincs
+    // semmilyen (keydown.escape) handler a menu-panelen vagy az AppComponent-en.
+    expect(fixture.componentInstance.menuOpen()).toBe(false);
+  });
+
+  it('BUG UI-TT-189: a panelen KÍVÜLI (pl. document body) kattintásra a nyitott mobil hamburger-menü NEM záródik be', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.menuOpen.set(true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.menuOpen()).toBe(true);
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+
+    // Elvárt (helyes) viselkedés: false, ahogy a testvér NotificationBellComponent
+    // dropdownja saját "fixed inset-0" backdrop-kattintással bezáródik. Tényleges:
+    // true marad, mert a menu-panelnek nincs saját backdropja/document-click listenere.
+    expect(fixture.componentInstance.menuOpen()).toBe(false);
+  });
 });
