@@ -257,4 +257,34 @@ describe('AdminApplicationStore', () => {
 
     expect(store.error()).toBeNull();
   });
+
+  // UI-TT-185-SIBLING: a `TeacherApplicationStore` UI-TT-185 fixe (2026-08-15) a közös
+  // `extractErrorMessage()` helperre állította át a JELENTKEZŐ-oldali store-ot, DE az
+  // `AdminApplicationStore.reject()` - ami a `RejectTeacherApplicationRequest.Reason` mezőt
+  // küldi, amin a backend `[MaxLength(1000)]` DataAnnotations-validációja van
+  // (`TeacherApplicationDtos.cs`) - VÁLTOZATLANUL csak `err.error?.errorMessage`-et olvas.
+  // 1000 karakternél hosszabb elutasítás-indoklásnál a backend sztenderd ASP.NET
+  // `ValidationProblemDetails` (`errors: { Reason: [...] }`) alakot ad, amit ez csendben
+  // eldob, és az admin csak a tartalmatlan "Az elutasítás sikertelen." üzenetet látja - a
+  // `admin-jelentkezesek.component.ts` input mezőjén sincs `maxlength` attribútum, tehát a
+  // hosszú szöveg a store-ig változatlanul eljut.
+  it('BUG (ÚJ): reject hiba ASP.NET ValidationProblemDetails (errors: {Reason: [...]}) alakban - a store a konkrét okot csendben eldobja és a generikus fallback-re esik', async () => {
+    serviceMock.getApplications.mockReturnValue(of([makeApplication({ id: 1 })]));
+    serviceMock.reject.mockReturnValue(
+      throwError(() => ({
+        error: { errors: { Reason: ['A(z) Reason mező legfeljebb 1000 karakter hosszú lehet.'] } },
+      })),
+    );
+
+    const store = TestBed.inject(AdminApplicationStore);
+    store.load();
+    await Promise.resolve();
+
+    store.reject(1, { reason: 'x'.repeat(1001) });
+    await Promise.resolve();
+
+    // Elvárt (JAVÍTOTT) viselkedés: a konkrét backend-ok látszik.
+    // Tényleges: a generikus, tartalmatlan fallback-üzenet jelenik meg.
+    expect(store.error()).toBe('A(z) Reason mező legfeljebb 1000 karakter hosszú lehet.');
+  });
 });
