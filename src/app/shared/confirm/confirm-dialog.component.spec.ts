@@ -99,4 +99,43 @@ describe('ConfirmDialogComponent', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(accept);
   });
+
+  // UI-TT-187 (2026-08-16, hétvégi böngészős kör): a dialógus a UI-TT-28 fix óta
+  // NYITÁSKOR helyesen a Megerősítés gombra fókuszál, és Tab-bal csapdázza a fókuszt -
+  // de BEZÁRÁSKOR (resolve/Escape/backdrop) sosem állítja vissza a fókuszt a dialógust
+  // megnyitó (trigger) elemre. Ugyanaz a hibaosztály, mint a diák-app UI-TS-192/193/194
+  // (2026-07-26-án egy megosztott FocusTrapDirective-tel javítva ott) - a teacher-fe
+  // repóban nincs `FocusTrapDirective`/`restoreFocus`/hasonló mechanizmus (grep 0
+  // találat), és egyik `confirmService.ask()` hívóhely sem hív `.focus()`-t utána.
+  it('bezáráskor a fókusz NEM tér vissza a dialógust megnyitó elemre (UI-TT-187 gap)', () => {
+    vi.useFakeTimers();
+    try {
+      const trigger = document.createElement('button');
+      trigger.textContent = 'Felfüggesztés';
+      document.body.appendChild(trigger);
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      const fixture = TestBed.createComponent(ConfirmDialogComponent);
+      fixture.detectChanges();
+      service.ask({ message: 'Biztos?' });
+      fixture.detectChanges();
+      vi.runAllTimers(); // a konstruktor setTimeout-os autofókusza
+
+      const accept = fixture.nativeElement.querySelector('[data-testid="confirm-accept"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(accept);
+
+      service.resolve(true);
+      fixture.detectChanges();
+
+      // Helyesen a `trigger`-nek kellene visszakapnia a fókuszt - a valóságban a
+      // fókuszált gomb DOM-ból való eltávolításakor a böngésző document.body-ra esik
+      // vissza, a billentyűzetes/screen reader felhasználó elveszti a helyét az oldalon.
+      expect(document.activeElement).toBe(trigger);
+
+      document.body.removeChild(trigger);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

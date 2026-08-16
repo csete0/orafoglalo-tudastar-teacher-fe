@@ -55,12 +55,26 @@ export class ConfirmDialogComponent {
   private readonly cancelBtn = viewChild<ElementRef<HTMLButtonElement>>('cancelBtn');
   private readonly confirmBtn = viewChild<ElementRef<HTMLButtonElement>>('confirmBtn');
 
+  // UI-TT-187: a `resolve()` (Elfogadás/Mégse/Escape/backdrop mindegyike ezen
+  // át fut) a `@if (confirmService.pending())` blokkot eltávolítja a DOM-ból,
+  // a fókuszált gombbal együtt - enélkül a mentés/visszaállítás nélkül a
+  // böngésző a fókuszt document.body-ra ejtette, és a billentyűzet/screen
+  // reader-felhasználó minden egyes megerősítés után elvesztette a helyét az
+  // oldalon (mind a 18 hívóhelyen, mert ez az egyetlen globális dialógus-
+  // komponens). Ugyanaz a minta, mint a diák-app `FocusTrapDirective`-je.
+  private previouslyFocused: HTMLElement | null = null;
+
   constructor() {
     // Autofókusz a megerősítő gombra, amint a dialógus megjelenik —
     // így az Enter/Escape azonnal működik egérmozgatás nélkül.
     effect(() => {
       if (this.confirmService.pending()) {
+        this.previouslyFocused =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setTimeout(() => this.confirmBtn()?.nativeElement.focus());
+      } else if (this.previouslyFocused) {
+        this.previouslyFocused.focus();
+        this.previouslyFocused = null;
       }
     });
   }
