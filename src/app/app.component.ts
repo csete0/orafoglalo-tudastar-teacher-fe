@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -41,7 +41,8 @@ const ADMIN_LINKS: NavLink[] = [
     ConfirmDialogComponent,
   ],
   template: `
-    <header class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm">
+    <header (document:click)="onDocumentClick($event)"
+      class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm">
       <!-- UI-TT-181: flex-wrap hozzáadva - a korábbi, tördelés nélküli flex sor
            a viewport-alapú (media-query) mobil-hamburger töréspont ALATT (pl.
            1280px asztali szélességnél) is túlcsordult, ha a tartalom szöveg-
@@ -108,7 +109,7 @@ const ADMIN_LINKS: NavLink[] = [
           <!-- Harang + hamburger (mobil) -->
           <div [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden flex items-center gap-1' : 'md:hidden flex items-center gap-1'">
             <app-notification-bell />
-            <button (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
+            <button #menuBtn (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
               class="btn btn-ghost !px-2">
               <app-icon [name]="menuOpen() ? 'x' : 'menu'" class="w-6 h-6 block" />
             </button>
@@ -119,7 +120,23 @@ const ADMIN_LINKS: NavLink[] = [
       <!-- Mobil lenyíló panel (div, NEM nav — a spec querySelector('nav')-jai
            a desktop navigációt célozzák egyértelműen) -->
       @if (authStore.isAuthenticated() && menuOpen()) {
-        <div [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
+        <!-- UI-TT-189: a testvér NotificationBellComponent dropdownjához (UI-TT-100/101)
+             hasonló bezáró mechanizmus - a panelnek korábban NEM volt sem Escape-,
+             sem panelen-kívüli-kattintás-alapú bezárása, kizárólag a hamburger-gomb
+             ismételt megnyomásával/navigációval lehetett bezárni. A globális
+             document:keydown.escape binding (nem a panel elemére kötve) azért kell,
+             mert a panel mobil nézeten nincs fókusz-kezelve (nincs tabindex/autofókusz,
+             szemben a Confirm/harang dialógusokkal) - a bezárásnak a fókusz állapotától
+             függetlenül kell működnie. A fixed inset-0 backdrop a valós böngésző-
+             kattintás hit-testeléséhez kell (a panel alatti tartalom amúgy is le van
+             tiltva pointer-events szempontból, ld. ledger); az onDocumentClick() a
+             fejlécre kötött, MINDIG regisztrált (nem az at-if-en belüli) listener,
+             ami a panel/hamburger-gomb tartalmán KÍVÜLI bármilyen kattintást (a
+             backdroptól függetlenül, pl. teszt-környezetben programozottan
+             kiváltott document.body-kattintást is) helyesen bezárja. -->
+        <div class="fixed inset-0 z-30" (click)="menuOpen.set(false)"></div>
+        <div #panel (document:keydown.escape)="menuOpen.set(false)"
+          [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
           @if (authStore.hasTeacherRole()) {
             @for (link of teacherLinks; track link.path) {
               <a [routerLink]="link.path" (click)="menuOpen.set(false)"
@@ -175,6 +192,9 @@ export class AppComponent {
   readonly adminLinks = ADMIN_LINKS;
   readonly menuOpen = signal(false);
 
+  private readonly menuBtn = viewChild<ElementRef<HTMLElement>>('menuBtn');
+  private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
+
   constructor() {
     // UI-TT-78: a mobil lenyíló panel korábban csak a PANELEN BELÜLI linkekre
     // (és logout()-ra) kattintva záródott be - a fejléc-logóra, a dashboard-
@@ -207,6 +227,20 @@ export class AppComponent {
         this.menuOpen.set(false);
       }
     });
+  }
+
+  // UI-TT-189: a `<header>`-re kötött (document:click) mindig regisztrálva van
+  // (nem az @if(menuOpen())-en belül), tehát nincs "ugyanaz a kattintás, ami
+  // megnyitja, azonnal be is csukja" időzítési kockázat - a hamburger-gomb
+  // saját (click)="menuOpen.set(!menuOpen())" kezelője MINDIG lefut előbb
+  // (target-fázis), majd ez a handler a bubble-fázisban fut, de a gomb-
+  // konténmentellenőrzés miatt nem írja felül a friss állapotot.
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.menuOpen()) return;
+    const target = event.target as Node;
+    if (this.menuBtn()?.nativeElement.contains(target)) return;
+    if (this.panel()?.nativeElement.contains(target)) return;
+    this.menuOpen.set(false);
   }
 
   /** Magyar névsorrend: vezetéknév + keresztnév kezdőbetűje. */
