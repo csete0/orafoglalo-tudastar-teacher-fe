@@ -153,6 +153,38 @@ describe('NotificationBellComponent', () => {
     expect(storeMock.markAsRead).not.toHaveBeenCalled();
   });
 
+  // UI-TT-188 (2026-08-16, hétvégi böngészős kör): a UI-TT-100/101 fix a panel
+  // Escape-zárásához (closeAndReturnFocus()) HELYESEN visszaadja a fókuszt a
+  // harang-gombra, de az actionUrl NÉLKÜLI elem billentyűzetes (Enter/Space)
+  // aktiválása csak close()-t hív onItemClick()-en keresztül - ugyanaz a
+  // hibaosztály, mint a UI-TT-187 (ConfirmDialogComponent), csak itt a
+  // komponens FÉLIG már javítva van (Escape-nél), a "aktivált egy elemet,
+  // ami nem navigál el" ágon nem.
+  it('BUG (ÚJ, UI-TT-188): actionUrl NÉLKÜLI elemet billentyűzettel (Enter) aktiválva a fókusz NEM tér vissza a harang-gombra', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = configure([makeNotification({ userNotificationId: 7, isRead: false })]);
+      const trigger = fixture.nativeElement.querySelector('button[aria-label^="Értesítések"]') as HTMLButtonElement;
+
+      trigger.click();
+      fixture.detectChanges();
+      vi.advanceTimersByTime(0);
+
+      const item = fixture.nativeElement.querySelector('li div') as HTMLElement;
+      item.focus();
+      item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      // Helyesen a `trigger`-nek kellene visszakapnia a fókuszt (mint Escape-nél) -
+      // ehelyett document.body-ra esik, mert onItemClick() csak close()-t hív,
+      // nem closeAndReturnFocus()-t.
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('actionUrl-lel rendelkező elemre kattintva navigál oda', () => {
     const fixture = configure([
       makeNotification({ userNotificationId: 5, isRead: true, actionUrl: '/csoportok/1' }),
