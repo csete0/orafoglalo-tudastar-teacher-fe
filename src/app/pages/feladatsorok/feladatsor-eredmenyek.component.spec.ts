@@ -545,4 +545,54 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(weakestHeader?.classList.contains('text-warning')).toBe(true);
     expect(strongestHeader?.classList.contains('text-warning')).toBe(false);
   });
+
+  // JAVÍTVA UI-TT-190: még ki nem értékelt (folyamatban lévő vagy AI-értékelés
+  // nélküli) beadásnál a `canEditScore()` (`maxPoints > 0`) hamis, ezért a
+  // teljes Pontszám+Mentés blokk el sem renderelődik - a "Szöveges értékelés a
+  // diáknak" textarea korábban EZTŐL FÜGGETLENÜL mindig szerkeszthető maradt,
+  // ezért a beírt szöveg a panel bezárásakor (draftFeedback visszaáll
+  // review.teacherFeedback-re) nyomtalanul, figyelmeztetés nélkül elveszett -
+  // "néma no-op". A textarea mostantól [disabled]="!canEditScore(r)", és egy
+  // magyarázó szöveg jelzi, miért nem szerkeszthető - a tanár nem tud olyan
+  // szöveget beírni, amit aztán ne tudna elmenteni.
+  it('kiértékeletlen beadásnál a szöveges értékelés mező le van tiltva, mert nincs mód a mentésére (Mentés gomb hiányzik)', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    openFirstCell(fixture, makeReview({
+      maxPoints: 0,
+      earnedPoints: undefined,
+      aiEarnedPoints: undefined,
+      aiFeedback: null,
+      aiStrengths: null,
+      aiWeaknesses: null,
+      aiScoredAt: null,
+      aiModel: null,
+    }));
+
+    const buttons = [...fixture.nativeElement.querySelectorAll('button')] as HTMLButtonElement[];
+    const saveButton = buttons.find((b) => b.textContent?.includes('Mentés'));
+    expect(saveButton).toBeUndefined();
+
+    const textarea = fixture.nativeElement.querySelector(
+      'textarea[id^="ertekeles-"]',
+    ) as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea!.disabled).toBe(true);
+
+    expect(fixture.nativeElement.textContent).toContain(
+      'Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a szöveges értékelés sem menthető el.',
+    );
+
+    // A böngésző natívan nem enged gépelést egy disabled textareaba - itt csak
+    // megerősítjük, hogy egy program által kikényszerített "input" esemény sem
+    // vezet el save()-hez, mivel a Mentés gomb (és maga a save()-hívási út)
+    // ehhez a sorhoz továbbra sincs renderelve.
+    textarea!.value = 'Fontos visszajelzés, amit a diáknak szánok.';
+    textarea!.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
+  });
 });
