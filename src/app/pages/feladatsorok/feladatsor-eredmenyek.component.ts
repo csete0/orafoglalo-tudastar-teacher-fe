@@ -270,20 +270,38 @@ const MAX_FEEDBACK_LENGTH = 2000;
                               <label class="text-xs text-text-muted block mb-1" [attr.for]="'ertekeles-' + r.attemptId">
                                 Szöveges értékelés a diáknak
                               </label>
+                              <!-- UI-TT-190: canEditScore(r)===false esetén a "Mentés" gomb (és maga
+                                   a save() hívási útja) nincs renderelve - enélkül a [disabled] nélkül
+                                   a tanár írhatott ide szöveget, ami a panel bezárásakor
+                                   (draftFeedback visszaáll review.teacherFeedback-re) nyomtalanul,
+                                   figyelmeztetés nélkül elveszett - "néma no-op", pontosan az a
+                                   hibaosztály, amit a save() lent explicit el akar kerülni. A mező
+                                   szándékosan NEM [(ngModel)]-t, hanem egyirányú [value] + (input)
+                                   kezelést használ - az NgModel saját disabled-állapot-
+                                   szinkronizációja (a mögöttes FormControl sosem lett ténylegesen
+                                   disable()-özve) minden CD-ciklusban visszaírta volna false-ra a
+                                   [disabled]/[attr.disabled] binding által beállított értéket. -->
                               <textarea rows="3" [id]="'ertekeles-' + r.attemptId"
-                                [(ngModel)]="draftFeedback" [ngModelOptions]="{ standalone: true }"
-                                (input)="feedbackTouched = true"
+                                [value]="draftFeedback"
+                                (input)="draftFeedback = $any($event.target).value; feedbackTouched = true"
                                 [attr.maxlength]="maxFeedbackLength"
-                                class="input !py-1.5 w-full"
+                                [disabled]="!canEditScore(r)"
+                                class="input !py-1.5 w-full disabled:opacity-60 disabled:cursor-not-allowed"
                                 placeholder="Amit a diáknak érdemes tudnia — akkor is hasznos, ha a pontszámmal egyetértesz."></textarea>
-                              <div class="flex justify-between gap-2 mt-1">
-                                @if (feedbackError(); as err) {
-                                  <p class="text-sm text-danger">{{ err }}</p>
-                                } @else {
-                                  <span></span>
-                                }
-                                <span class="text-xs text-text-muted">{{ draftFeedback.length }}/{{ maxFeedbackLength }}</span>
-                              </div>
+                              @if (!canEditScore(r)) {
+                                <p class="text-sm text-text-muted mt-1">
+                                  Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a szöveges értékelés sem menthető el.
+                                </p>
+                              } @else {
+                                <div class="flex justify-between gap-2 mt-1">
+                                  @if (feedbackError(); as err) {
+                                    <p class="text-sm text-danger">{{ err }}</p>
+                                  } @else {
+                                    <span></span>
+                                  }
+                                  <span class="text-xs text-text-muted">{{ draftFeedback.length }}/{{ maxFeedbackLength }}</span>
+                                </div>
+                              }
                             </div>
                           </div>
                         </div>
