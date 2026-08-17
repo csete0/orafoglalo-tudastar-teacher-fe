@@ -395,6 +395,39 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(reportStoreMock.revertOverride).toHaveBeenCalledWith(1, 101, expect.any(Function));
   });
 
+  // BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: a `revert()` megerősítő
+  // szövege ("Biztosan visszaállítod az AI eredeti pontszámát?") és a gomb felirata
+  // ("Visszaállítás az AI pontjára") FELTÉTEL NÉLKÜL azt állítja, hogy van egy valódi AI
+  // eredeti pontszám, amire vissza lehet állítani. Ez nem mindig igaz: a napi AI-token-limit
+  // vagy egy AI-hiba miatt `aiEarnedPoints` legitim módon NULL maradhat egy egyébként
+  // pontozható (`maxPoints > 0`) beadáson (`ExamTaskResult.AiEarnedPoints` doc-kommentje:
+  // "NULL = az AI nem értékelt (napi token-limit vagy hiba)"), és a tanári panel ilyenkor is
+  // szerkeszthető (`canEditScore` csak `maxPoints > 0`-t néz, nem `aiScoredAt`-ot) — pontosan
+  // ez a `TeacherAttemptReviewService` dokumentált "vészkijárat". Élőben (192.168.1.77:9443,
+  // `browserhunt-teacher-20260710@example.com`, taskSetId 1378, attemptId 2418, `aiEarnedPoints`
+  // staging-DB-ben NULL-ra állítva a valós token-limit/AI-hiba állapot szimulálására)
+  // reprodukálva: a tanár kézzel 4/5 pontot ad + szöveges értékelést ír, elmenti, majd
+  // (tévedésből vagy meggondolva magát) rákattint a "Visszaállítás az AI pontjára" gombra — a
+  // megerősítő ablak ugyanezt a hamis állítást ismétli, elfogadás után pedig a `RevertOverrideAsync`
+  // (`EarnedPoints = AiEarnedPoints = null`) NÉMÁN, VISSZAVONHATATLANUL eldobja a tanár pontját
+  // ÉS szöveges értékelését — a "Visszaállítva az AI pontjára." sikertoast is hamis, valójában
+  // "nincs értékelve" állapotba esett vissza, nem egy AI-pontra.
+  it('BUG: a visszaállítás megerősítő szövege hamisan állítja, hogy van AI eredeti pontszám, ha aiEarnedPoints null', async () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    const reviewNeverAiScored = makeReview({ isOverridden: true, aiEarnedPoints: null, earnedPoints: 4 });
+    openFirstCell(fixture, reviewNeverAiScored);
+
+    await fixture.componentInstance.revert(reviewNeverAiScored);
+
+    expect(confirmMock.ask).toHaveBeenCalled();
+    const confirmArgs = confirmMock.ask.mock.calls[0][0] as { title: string; message: string };
+    // Ha nincs valódi AI eredeti pontszám (aiEarnedPoints === null), a megerősítés szövege
+    // NEM állíthatja, hogy van - jelenleg feltétel nélkül ezt állítja, ezért ez bukik.
+    expect(confirmArgs.title + ' ' + confirmArgs.message).not.toMatch(/AI (eredeti pontszámát|pontjára)/);
+  });
+
   // BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE testvér-rés a visszaállítás
   // útvonalon: a `revert()` a draftPoints/draftFeedback mezőket nullázza a siker-callbackben,
   // de a `feedbackTouched` jelzőt NEM — ha a tanár a visszaállítás ELŐTT hozzáért az
