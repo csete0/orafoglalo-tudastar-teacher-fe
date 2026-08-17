@@ -647,6 +647,30 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(taskSetStoreMock.addTask).not.toHaveBeenCalled();
     });
 
+    // UI-TT-191: élőben megerősítve (kétszer, -5 és 5000 értékkel), hogy a
+    // backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-je csak a
+    // beküldés UTÁN, egy nyers angol DataAnnotations-hibaüzenettel jelentkezett -
+    // kliens-oldalon a mező eddig egyáltalán nem volt ellenőrizve.
+    it('BUG UI-TT-191: tartományon kívüli (0/negatív/1000 fölötti) maxPoints esetén a "Hozzáadás" gomb letiltva marad ÉS addTask() csendben visszatér', () => {
+      configure(makeDetail({ tasks: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      for (const invalid of [0, -5, 5000]) {
+        component.newTaskDrafts[6] = { title: 'Cím', description: 'Leírás', maxPoints: invalid };
+        expect(component.isTaskDraftMaxPointsInvalid(6)).toBe(true);
+
+        component.addTask(1, 6);
+        expect(taskSetStoreMock.addTask).not.toHaveBeenCalled();
+      }
+
+      component.newTaskDrafts[6] = { title: 'Cím', description: 'Leírás', maxPoints: 10 };
+      expect(component.isTaskDraftMaxPointsInvalid(6)).toBe(false);
+      component.addTask(1, 6);
+      expect(taskSetStoreMock.addTask).toHaveBeenCalled();
+    });
+
     it('BUG UI-TT-61 javítva: whitespace-only cím esetén a "Hozzáadás" gomb letiltva marad (nem csendben no-op)', () => {
       configure(makeDetail({ tasks: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);

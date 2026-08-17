@@ -239,10 +239,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
                       <div class="flex gap-2 items-end">
                         <div>
                           <label class="text-xs text-text-muted">Max pont</label>
-                          <input type="number" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
+                          <input type="number" min="1" max="1000" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
                             [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
                         </div>
-                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id) || store.loading()"
+                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id) || isTaskDraftMaxPointsInvalid(section.id) || store.loading()"
                           class="btn btn-primary !px-3 !py-1.5">
                           Hozzáadás
                         </button>
@@ -596,6 +596,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     // a leírás nélküli beküldés korábban csak egy 400-zal derült ki, mert ez a guard
     // (és az alábbi isTaskDraftTitleBlank()) kizárólag a címet ellenőrizte.
     if (!draft?.title.trim() || !draft?.description.trim()) return;
+    // UI-TT-191: a backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-je
+    // korábban a beküldés utáni 400-zal jelentkezett csak, egy nyers, angol
+    // DataAnnotations-sablonszöveggel ("The field MaxPoints must be between 1
+    // and 1000.") a különben teljesen magyar felületen - kliens-oldalon ez a
+    // mező eddig egyáltalán nem volt ellenőrizve.
+    if (this.isTaskDraftMaxPointsInvalid(typeId)) return;
     this.store.addTask(
       taskSetId,
       {
@@ -623,6 +629,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   isTaskDraftTitleBlank(typeId: number): boolean {
     const draft = this.newTaskDrafts[typeId];
     return !draft?.title.trim() || !draft?.description.trim();
+  }
+
+  // UI-TT-191: a backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-jét
+  // tükrözi kliens-oldalon, hogy a "Hozzáadás" gomb ne engedjen egy garantáltan
+  // 400-at eredményező (0/negatív/1000 fölötti) értéket beküldeni.
+  isTaskDraftMaxPointsInvalid(typeId: number): boolean {
+    const maxPoints = this.newTaskDrafts[typeId]?.maxPoints;
+    return maxPoints == null || maxPoints < 1 || maxPoints > 1000;
   }
 
   async deleteTask(taskSetId: number, taskId: number, taskTitle: string): Promise<void> {
