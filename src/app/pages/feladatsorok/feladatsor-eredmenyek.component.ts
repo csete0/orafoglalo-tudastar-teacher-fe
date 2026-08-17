@@ -253,8 +253,16 @@ const MAX_FEEDBACK_LENGTH = 2000;
                                 <button type="button" (click)="save(r)" [disabled]="report.taskSetResultsLoading()"
                                   class="btn btn-primary !px-3 !py-1.5">Mentés</button>
                                 @if (r.isOverridden) {
+                                  <!-- BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM:
+                                       a gomb felirata korábban feltétel nélkül "Visszaállítás az AI
+                                       pontjára" volt, akkor is, ha az AI SOSEM értékelte a beadást
+                                       (napi token-limit/hiba - aiEarnedPoints null, dokumentáltan
+                                       legitim állapot). Ilyenkor a revert() ténylegesen nem "vissza"
+                                       állít semmit, hanem véglegesen törli a tanár kézzel beírt
+                                       pontszámát/értékelését - a gomb feliratának ezt tükröznie kell,
+                                       ne állítson létező AI-alapértéket. -->
                                   <button type="button" (click)="revert(r)" [disabled]="report.taskSetResultsLoading()"
-                                    class="btn btn-danger !px-3 !py-1.5">Visszaállítás az AI pontjára</button>
+                                    class="btn btn-danger !px-3 !py-1.5">{{ hasAiScore(r) ? 'Visszaállítás az AI pontjára' : 'Felülbírálás törlése' }}</button>
                                 }
                               </div>
                               @if (pointsError(r); as err) {
@@ -462,6 +470,21 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     return review.maxPoints > 0;
   }
 
+  /**
+   * BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: van-e ténylegesen
+   * olyan AI-eredmény, amire a revert() visszaállítana. Szándékosan KIZÁRÓLAG
+   * `aiEarnedPoints`-ot nézi, nem `aiScoredAt`-ot is - a backend `RevertOverrideAsync`
+   * ténylegesen `EarnedPoints = AiEarnedPoints`-et hajt végre, tehát EZ a mező dönti el
+   * a valós hatást. `aiEarnedPoints` null, ha az AI a napi token-limit vagy egy hiba
+   * miatt sosem értékelte a beadást (dokumentáltan legitim, gyakori állapot, ld.
+   * `ExamTaskResult.AiEarnedPoints` doc-kommentje) - ilyenkor a `revert()` NEM
+   * "visszaállít" semmit, hanem véglegesen törli a tanár kézzel beírt
+   * pontszámát/értékelését, `aiScoredAt`-tól függetlenül.
+   */
+  hasAiScore(review: TeacherAttemptReviewDto): boolean {
+    return review.aiEarnedPoints != null;
+  }
+
   /** Inline validáció — a hibát gépelés közben mutatjuk, nem csak mentéskor. */
   pointsError(review: TeacherAttemptReviewDto): string | null {
     const points = this.draftPoints;
@@ -511,11 +534,19 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   async revert(review: TeacherAttemptReviewDto): Promise<void> {
     if (this.report.taskSetResultsLoading()) return;
 
+    // BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: ha nincs valódi
+    // AI-pontszám (az AI sosem értékelte ezt a beadást), a megerősítő ablak és a
+    // sikertoast korábban feltétel nélkül azt állította, hogy egy AI-értékelésre áll
+    // vissza - valójában a tanár saját munkája véglegesen, visszavonhatatlanul
+    // törlődik, nincs mire "visszaállni". A szöveg ezt az esetet explicit
+    // megkülönbözteti, hogy a tanár tudatosan döntsön.
+    const aiScoreExists = this.hasAiScore(review);
     const confirmed = await this.confirmService.ask({
-      title: 'Visszaállítás az AI pontjára',
-      message:
-        'Biztosan visszaállítod az AI eredeti pontszámát? A saját pontszámod és a szöveges értékelésed törlődik.',
-      confirmLabel: 'Visszaállítás',
+      title: aiScoreExists ? 'Visszaállítás az AI pontjára' : 'Felülbírálás törlése',
+      message: aiScoreExists
+        ? 'Biztosan visszaállítod az AI eredeti pontszámát? A saját pontszámod és a szöveges értékelésed törlődik.'
+        : 'FIGYELEM: az AI még nem értékelte ezt a beadást, nincs mire visszaállni. A saját pontszámod és a szöveges értékelésed véglegesen törlődik.',
+      confirmLabel: aiScoreExists ? 'Visszaállítás' : 'Törlés',
       danger: true,
     });
     if (!confirmed) return;
@@ -524,7 +555,9 @@ export class FeladatsorEredmenyekComponent implements OnInit {
       this.draftPoints = null;
       this.draftFeedback = '';
       this.feedbackTouched = false;
-      this.toastService.success('Visszaállítva az AI pontjára.');
+      this.toastService.success(
+        aiScoreExists ? 'Visszaállítva az AI pontjára.' : 'Felülbírálás törölve.',
+      );
     });
   }
 
