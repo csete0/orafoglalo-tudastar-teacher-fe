@@ -213,6 +213,48 @@ describe('TeacherTaskSetStore', () => {
     expect(store.selectedDetail()).toEqual(detailB);
   });
 
+  // TEACH-6: a mutateAndReload() SIKER-ágán a UI-TT-156 fix ellenőrzi, hogy a mutáció
+  // célpontja (`taskSetId`) még mindig a loader AKTUÁLIS célpontja-e (`_detailTaskSetId`)
+  // - ha a tanár időközben elnavigált egy MÁSIK feladatsorra, az elhagyott mutáció
+  // reloadja nem indul el. A HIBA-ág (`error:`) viszont ugyanezt az ellenőrzést nem
+  // kapta meg: feltétel nélkül hívja a `_error.set(...)`-et és a `_loading.set(false)`-t,
+  // FÜGGETLENÜL attól, hogy a mutáció célpontja még mindig az éppen nézett feladatsor-e.
+  it('BUG TEACH-6: egy elhagyott feladatsor (A) mutációjának HIBÁVAL záruló válasza felülírja a közben megnyitott MÁSIK feladatsor (B) loading/error állapotát', () => {
+    configure();
+
+    // (1) A tanár A-n (id=1) hozzáad egy feladatot - a POST válasz még nem érkezett.
+    const addTaskPost$ = new Subject<unknown>();
+    serviceMock.addTask.mockReturnValue(addTaskPost$.asObservable());
+    store.addTask(1, { title: 'race', description: 'd', maxPoints: 10, taskTypeIds: [6] });
+
+    // (2) A tanár - a fenti mutáció válaszát meg sem várva - a B feladatsor (id=2)
+    // szerkesztőjére navigál; ennek loadDetail(2)-je MÉG folyamatban van (nincs
+    // szinkron válasz), tehát a store épp B-t tölti.
+    const detailB$ = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(detailB$.asObservable());
+    store.loadDetail(2);
+    expect(store.loading()).toBe(true);
+    expect(store.selectedDetail()).toBeNull();
+
+    // (3) Csak MOST érkezik meg az A-n indított addTask() HIBÁS válasza (a store
+    // providedIn: 'root', a mutáció subscription-je a navigáció által NEM szakadt meg).
+    addTaskPost$.error({ error: { errorMessage: 'A szerver hibát adott.' } });
+
+    // Helyes viselkedés: mivel a tanár már B-t nézi és B betöltése MÉG folyamatban van,
+    // A elavult hibája nem oltatja ki B loading-jelzőjét, és nem jelenítheti meg A
+    // hibaüzenetét B fölött (ez pont az a "not-found" villanás / rossz-kontextusú
+    // hibabanner, amit a sikeres ág UI-TT-156 guardja már kizár).
+    expect(store.loading()).toBe(true);
+    expect(store.error()).toBeNull();
+
+    // B válasza ezután rendben megérkezik.
+    detailB$.next(makeDetail({ id: 2, title: 'B feladatsor' }));
+    detailB$.complete();
+    expect(store.loading()).toBe(false);
+    expect(store.selectedDetail()?.id).toBe(2);
+    expect(store.error()).toBeNull();
+  });
+
   it('UI-TT-156 ellenpróba: ha a tanár NEM navigált el, a mutáció válasza változatlanul újratölti az ÉPP nyitott feladatsort', () => {
     configure();
 
