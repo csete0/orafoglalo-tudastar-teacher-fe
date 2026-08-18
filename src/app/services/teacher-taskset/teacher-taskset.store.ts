@@ -291,6 +291,13 @@ export class TeacherTaskSetStore {
           this.loadDetail(taskSetId, onSuccess);
         },
         error: (err) => {
+          // TEACH-6: ugyanaz a guard, mint a SIKER-ágon fent (UI-TT-156) - ha a tanár
+          // időközben egy MÁSIK feladatsorra navigált, az elhagyott (A) mutáció HIBÁS
+          // válasza sem írhatja felül a közben megnyitott (B) feladatsor loading/error
+          // állapotát (rossz-kontextusú hibabanner B fölött, illetve a B loadDetail()-je
+          // saját finalize()-a előtt idő előtt kikapcsolt spinner).
+          if (this._detailTaskSetId !== null && this._detailTaskSetId !== taskSetId) return;
+
           this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
           this._loading.set(false);
         },
