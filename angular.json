@@ -34,7 +34,12 @@
               "outputHashing": "all",
               "fileReplacements": [
                 { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" }
-              ]
+              ],
+              "optimization": {
+                "scripts": true,
+                "fonts": true,
+                "styles": { "minify": true, "inlineCritical": false }
+              }
             },
             "staging": {
               "budgets": [
@@ -44,7 +49,12 @@
               "outputHashing": "all",
               "fileReplacements": [
                 { "replace": "src/environments/environment.ts", "with": "src/environments/environment.staging.ts" }
-              ]
+              ],
+              "optimization": {
+                "scripts": true,
+                "fonts": true,
+                "styles": { "minify": true, "inlineCritical": false }
+              }
             },
             "development": {
               "optimization": false,
