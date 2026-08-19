@@ -161,6 +161,19 @@ export class TeacherTaskSetStore {
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
+          // TEACH-8: ugyanaz a célpont-ellenőrzés, mint a mutateAndReload() UI-TT-156
+          // guardja (ld. lent) - a publish() korábban ezt NEM kapta meg, holott
+          // pontosan ugyanúgy a store `providedIn: 'root'`-ja és a store-hoz kötött
+          // (nem a komponenshez kötött) takeUntilDestroyed miatt egy elhagyott (A)
+          // feladatsor publikálásának KÉSVE érkező válasza a közben megnyitott (B)
+          // feladatsor szerkesztőjét írta felül: sikeres ágon a `_publishResult`
+          // (a sablon validációs-hiba listája) ÉS egy feltétel nélküli `loadDetail(A,
+          // onSuccess)` - ez utóbbi a `_detailGeneration`-t a LEGMAGASABB értékre
+          // léptette, tehát A adatai "nyertek" B már megjelenített, helyes adatai
+          // felett, a "Feladatsor publikálva." toast pedig B oldalán jelent meg, holott
+          // a teanár B-t sosem publikálta.
+          if (this._detailTaskSetId !== null && this._detailTaskSetId !== id) return;
+
           this._publishResult.set(result);
           if (result.success) {
             // Loading marad true (a loadDetail() gondoskodik a lezárásáról), amíg az
@@ -173,6 +186,12 @@ export class TeacherTaskSetStore {
           }
         },
         error: (err) => {
+          // TEACH-8: ld. a next-ág fenti megjegyzését - a hiba-ágnak is ugyanez a
+          // célpont-ellenőrzés kell, nehogy egy elhagyott feladatsor publikálási
+          // hibája a közben megnyitott MÁSIK feladatsor loading/error állapotát írja
+          // felül.
+          if (this._detailTaskSetId !== null && this._detailTaskSetId !== id) return;
+
           this._error.set(extractErrorMessage(err, 'A publikálás sikertelen.'));
           this._loading.set(false);
         },

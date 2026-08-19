@@ -255,6 +255,69 @@ describe('TeacherTaskSetStore', () => {
     expect(store.error()).toBeNull();
   });
 
+  // TEACH-8: a publish() a mutateAndReload()-hoz hasonló mintát követ (mutáció ->
+  // sikeres válasz esetén szinkron loadDetail()-reload), de a UI-TT-156-fixet SOHA
+  // nem kapta meg - sem a siker-, sem a hiba-ágon. A siker-ágon ez SÚLYOSABB, mint a
+  // TEACH-6: egy elhagyott feladatsor (A) publikálásának KÉSVE érkező sikeres válasza
+  // feltétel nélkül hívja a `loadDetail(A, onSuccess)`-t, ami a _detailGeneration-t a
+  // LEGMAGASABB értékre lépteti - A adatai "nyernek" a közben megnyitott (B) feladatsor
+  // már helyesen megjelenített adatai felett, ÉS az onSuccess (toast "Feladatsor
+  // publikálva.") is lefut B oldalán, holott a tanár B-t sosem publikálta.
+  it('BUG TEACH-8: egy elhagyott feladatsor (A) publikálásának KÉSVE érkező SIKERES válasza felülírja a közben megnyitott MÁSIK feladatsor (B) adatait', () => {
+    configure();
+
+    // A tanár A-n (id=1) publikál - a válasz még nem érkezett.
+    const publishA$ = new Subject<PublishResultDto>();
+    serviceMock.publish.mockReturnValue(publishA$.asObservable());
+    let onSuccessCalled = false;
+    store.publish(1, () => (onSuccessCalled = true));
+
+    // A tanár - a publikálás válaszát meg sem várva - B feladatsor (id=2)
+    // szerkesztőjére navigál; loadDetail(2) SIKERESEN, szinkron lezárul.
+    const detailB = makeDetail({ id: 2, title: 'B feladatsor' });
+    serviceMock.getDetail.mockReturnValueOnce(of(detailB));
+    store.loadDetail(2);
+    expect(store.selectedDetail()).toEqual(detailB);
+    expect(store.loading()).toBe(false);
+
+    // Csak MOST érkezik meg az A-n indított publish() SIKERES válasza.
+    publishA$.next({ success: true, errors: [] });
+    publishA$.complete();
+
+    // Helyes viselkedés: mivel a tanár már B-t nézi, A elavult sikeres válasza nem
+    // indíthat reloadot A-ra, nem írhatja felül B adatait, és az onSuccess sem
+    // sülhet el B oldalán A publikálásának nevében.
+    expect(serviceMock.getDetail).toHaveBeenCalledTimes(1); // csak a B-s hívás, A reloadja NEM indult
+    expect(store.selectedDetail()).toEqual(detailB);
+    expect(onSuccessCalled).toBe(false);
+  });
+
+  it('BUG TEACH-8: egy elhagyott feladatsor (A) publikálásának HIBÁVAL záruló válasza felülírja a közben megnyitott MÁSIK feladatsor (B) loading/error állapotát', () => {
+    configure();
+
+    const publishA$ = new Subject<unknown>();
+    serviceMock.publish.mockReturnValue(publishA$.asObservable());
+    store.publish(1);
+
+    const detailB$ = new Subject<TeacherTaskSetDetailDto>();
+    serviceMock.getDetail.mockReturnValueOnce(detailB$.asObservable());
+    store.loadDetail(2);
+    expect(store.loading()).toBe(true);
+
+    publishA$.error({ error: { errorMessage: 'A szerver hibát adott.' } });
+
+    // A elavult hibája nem oltatja ki B loading-jelzőjét, nem jelenítheti meg A
+    // hibaüzenetét B fölött.
+    expect(store.loading()).toBe(true);
+    expect(store.error()).toBeNull();
+
+    detailB$.next(makeDetail({ id: 2, title: 'B feladatsor' }));
+    detailB$.complete();
+    expect(store.loading()).toBe(false);
+    expect(store.selectedDetail()?.id).toBe(2);
+    expect(store.error()).toBeNull();
+  });
+
   it('UI-TT-156 ellenpróba: ha a tanár NEM navigált el, a mutáció válasza változatlanul újratölti az ÉPP nyitott feladatsort', () => {
     configure();
 
