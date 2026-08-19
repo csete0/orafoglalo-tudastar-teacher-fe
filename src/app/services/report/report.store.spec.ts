@@ -379,6 +379,53 @@ describe('ReportStore', () => {
     expect(store.loading()).toBe(false);
   });
 
+  // TEACH-7 javítva: a mutateReview() hiba-ága a siker-ághoz (UI-TT-160) hasonlóan
+  // mostantól ellenőrzi, hogy a mentés célpontja (`taskSetId`) még mindig a
+  // mátrix-loader AKTUÁLIS célpontja-e - ha a tanár időközben egy MÁSIK feladatsor
+  // "Eredmények" fülére navigált, az elhagyott mentés hibája sem a hibaüzenetet,
+  // sem a loading-jelzőt nem írhatja felül.
+  it('BUG TEACH-7 javítva: egy elhagyott feladatsor (A) felülbírálásának HIBÁVAL záruló válasza NEM zárja le idő előtt a közben megnyitott MÁSIK feladatsor (B) MÉG FOLYAMATBAN LÉVŐ betöltésének loading-jelzőjét', async () => {
+    const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
+    const taskSetBResults = new Subject<TeacherTaskSetResultsDto>();
+    const overrideAResponse = new Subject<any>();
+    serviceMock.getTaskSetResults.mockReturnValueOnce(taskSetAResults).mockReturnValueOnce(taskSetBResults);
+    serviceMock.overrideScore.mockReturnValue(overrideAResponse);
+
+    // A tanár megnyitja A feladatsor Eredmények fülét.
+    store.loadTaskSetResults(1);
+    taskSetAResults.next(makeTaskSetResults({ taskSetId: 1, title: 'A feladatsor' }));
+    taskSetAResults.complete();
+    expect(store.loading()).toBe(false);
+
+    // Elindít egy pontszám-felülbírálást A-n (lassú hálózat, válasz még nem jött meg).
+    store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null, feedbackProvided: false });
+    expect(store.loading()).toBe(true);
+
+    // MIELŐTT a mentés válasza megérkezne, SPA-navigációval átvált B feladatsor
+    // Eredmények fülére - B lekérdezése MÉG FOLYAMATBAN VAN.
+    store.loadTaskSetResults(2);
+    expect(store.loading()).toBe(true);
+    expect(store.taskSetResults()).toBeNull();
+
+    // Az A-n indított felülbírálás HIBÁS válasza csak MOST érkezik meg - a tanár
+    // ekkor már B betöltésére vár.
+    overrideAResponse.error({ error: { errorMessage: 'A szerver hibát adott.' } });
+    await Promise.resolve();
+
+    // Helyes viselkedés: A elavult hibája nem oltja ki B loading-jelzőjét, és nem
+    // jeleníti meg A hibaüzenetét B fölött.
+    expect(store.loading()).toBe(true);
+    expect(store.error()).toBeNull();
+
+    // B válasza ezután rendben megérkezik.
+    taskSetBResults.next(makeTaskSetResults({ taskSetId: 2, title: 'B feladatsor' }));
+    taskSetBResults.complete();
+    await Promise.resolve();
+    expect(store.loading()).toBe(false);
+    expect(store.taskSetResults()?.taskSetId).toBe(2);
+    expect(store.error()).toBeNull();
+  });
+
   // UI-TT-165: a négy loader korábban EGYETLEN közös `_loading`-ot írt - egy MÁSIK,
   // immár irreleváns loader korábban induló válasza idő előtt false-ra zárta a
   // ténylegesen még folyamatban lévő oldal loading()-ját.

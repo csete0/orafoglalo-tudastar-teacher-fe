@@ -320,6 +320,12 @@ export class ReportStore {
           if (onSuccess) onSuccess();
         },
         error: (err) => {
+          // TEACH-7: a siker-ághoz hasonlóan a hiba-ágnak is ellenőriznie kell, hogy a
+          // mentés célpontja MÉG MINDIG a megjelenített feladatsor-e - ha a tanár
+          // időközben egy MÁSIK feladatsor "Eredmények" oldalára navigált, ennek a
+          // hibája sem az ő hibaüzenetét, sem a loading-jelzőjét nem írhatja felül
+          // (az immár B saját loadTaskSetResults()-ának tulajdona).
+          if (this._taskSetResultsId !== taskSetId) return;
           this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
           this._taskSetResultsLoading.set(false);
         },
