@@ -53,8 +53,27 @@ const ADMIN_LINKS: NavLink[] = [
            oldalháttéren "lebegve" jelent meg. flex-wrap-pel a túlcsorduló elemek
            egy második sorra törnek UGYANAZON a dobozon belül, aminek a magassága
            (és így a háttere/alsó szegélye) automatikusan követi a tördelt
-           tartalmat - nincs több "lebegő" elem a fejléc dobozán kívül. -->
-      <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+           tartalmat - nincs több "lebegő" elem a fejléc dobozán kívül.
+
+           UI-TT-192: a fenti UI-TT-181 fix önmagában NEM oldotta meg a gyökér-
+           problémát admin-szerepkörű tanárnál - a konténer max-w-5xl (1024px,
+           px-4-gyel 992px tényleges tartalom-szélesség) VISZONYTÓL FÜGGETLENÜL
+           fixen korlátozott, akkor is, ha a viewport ennél sokkal szélesebb
+           (akár 1920px-en is). A 6 admin-linket (Intézmények/Csoportok/
+           Feladatsorok/Jelentkezések/Tanárok/Intézmények (admin)) tartalmazó
+           nav + logó + jobb blokk (harang/névkártya/Kilépés) élőben mérve
+           kb. 1118.9px szélességet igényel - 126.9px-cel többet, mint amennyi
+           a 992px-es tartalom-doboznak valaha is jut, FÜGGETLENÜL a viewport
+           szélességétől vagy a min-[1200px] nav-megjelenítési töréspont
+           állapotától (az csak azt dönti el, hogy a desktop nav egyáltalán
+           látszik-e, nem azt, hogy elfér-e a SAJÁT konténerében). Admin-
+           szerepkörnél ezért a konténer max-w-7xl-re (1280px, 1248px tényleges
+           tartalom-szélesség) bővül - ez a min-[1200px] nav-töréspontnál is
+           szélesebb, tehát minden olyan viewport-szélességnél, ahol a desktop
+           nav egyáltalán látszik, elegendő hely is jut neki egy sorban. -->
+      <div [class]="authStore.hasAdminRole()
+        ? 'max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3'
+        : 'max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3'">
         <a routerLink="/dashboard" aria-label="PaTricks Tanári Felület"
           class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-sm shrink-0">
           <img src="assets/patricks/patricks_logo.png" alt="" class="w-6 h-6 object-contain" />

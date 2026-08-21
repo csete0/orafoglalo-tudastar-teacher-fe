@@ -148,6 +148,38 @@ describe('AppComponent', () => {
     expect(mobileToggle.className).not.toContain('min-[1200px]:hidden');
   });
 
+  // UI-TT-192: a `max-w-5xl` (1024px, `px-4`-gyel 992px tényleges tartalom-szélesség)
+  // konténer élőben mérve mindig 2 sorra törte a fejlécet admin-szerepkörű tanárnál
+  // (16px root font-size, zoom nélkül, MINDEN viewport-szélességnél, mert a 6 admin-
+  // link + logó + jobb blokk ~1118.9px-et igényel, ~126.9px-cel többet, mint amennyi a
+  // 992px-es doboznak valaha is jut) - a törött fejléc miatt a NotificationBellComponent
+  // lenyíló panelje (`position: absolute; right: 0` a 2. sorra tördelt, immár a fejléc
+  // BAL szélén ülő szülőjéhez képest) ~44%-ban a viewport bal szélén KÍVÜLRE
+  // (negatív x-koordinátára) renderelődött, olvashatatlanul.
+  it('BUG UI-TT-192 javítva: admin usernél a fejléc-konténer max-w-7xl-re bővül, hogy a 6 admin-link egy sorban elférjen', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasAdminRole.mockReturnValue(true);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const headerContainer = fixture.nativeElement.querySelector('header > div') as HTMLElement;
+    expect(headerContainer.className).toContain('max-w-7xl');
+    expect(headerContainer.className).not.toContain('max-w-5xl');
+  });
+
+  it('nem-admin usernél a fejléc-konténer változatlanul max-w-5xl marad', () => {
+    authStoreMock.isAuthenticated.mockReturnValue(true);
+    authStoreMock.hasAdminRole.mockReturnValue(false);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const headerContainer = fixture.nativeElement.querySelector('header > div') as HTMLElement;
+    expect(headerContainer.className).toContain('max-w-5xl');
+    expect(headerContainer.className).not.toContain('max-w-7xl');
+  });
+
   it('a profil-chip monogramja magyar sorrendben: vezetéknév + keresztnév kezdőbetű', () => {
     authStoreMock.isAuthenticated.mockReturnValue(true);
 
