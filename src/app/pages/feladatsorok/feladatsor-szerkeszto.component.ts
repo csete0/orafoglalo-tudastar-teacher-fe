@@ -149,11 +149,49 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <!-- Részfeladatok -->
                           @for (solution of task.solutions; track solution.id) {
                             <div class="bg-bg-panel rounded-xl p-3">
-                              <div class="flex justify-between items-start gap-2 mb-2">
-                                <p class="text-sm font-medium min-w-0 flex-1 truncate">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
-                                <button (click)="deleteSolution(detail.id, solution.id, solution.solutionText || ('#' + solution.id))" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
-                              </div>
-                              <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
+                              @if (editingSolutionId() === solution.id) {
+                                <!-- UI-TT-193: inline szerkesztő - a "Új részfeladat" form
+                                     mezőit tükrözi (leírás + pont), ugyanazokra a store-
+                                     metódusokra (updateSolution) kötve, amiket eddig egyetlen
+                                     komponens sem hívott. -->
+                                <div class="mb-2 space-y-2">
+                                  <div>
+                                    <label class="text-xs text-text-muted">Leírás</label>
+                                    <textarea rows="2"
+                                      [ngModel]="editSolutionDraft(solution).description"
+                                      (ngModelChange)="setEditSolutionDescription(solution.id, $event)"
+                                      [ngModelOptions]="{standalone: true}"
+                                      class="input !px-2 !py-1"></textarea>
+                                  </div>
+                                  <div class="flex gap-2 items-end">
+                                    <div class="w-24">
+                                      <label class="text-xs text-text-muted">Pont</label>
+                                      <input type="number"
+                                        [ngModel]="editSolutionDraft(solution).points"
+                                        (ngModelChange)="setEditSolutionPoints(solution.id, $event)"
+                                        [ngModelOptions]="{standalone: true}"
+                                        class="input !px-2 !py-1" />
+                                    </div>
+                                    <button (click)="saveEditSolution(detail.id, solution.id)"
+                                      [disabled]="isEditSolutionDraftDescriptionBlank(solution.id) || store.loading()"
+                                      class="btn btn-primary !px-3 !py-1.5">
+                                      Mentés
+                                    </button>
+                                    <button (click)="cancelEditSolution()" class="btn btn-ghost !px-3 !py-1.5">
+                                      Mégsem
+                                    </button>
+                                  </div>
+                                </div>
+                              } @else {
+                                <div class="flex justify-between items-start gap-2 mb-2">
+                                  <p class="text-sm font-medium min-w-0 flex-1 truncate">{{ solution.solutionText || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
+                                  <div class="flex items-center gap-3 shrink-0">
+                                    <button (click)="startEditSolution(solution)" class="text-sm text-primary hover:underline">Szerkesztés</button>
+                                    <button (click)="deleteSolution(detail.id, solution.id, solution.solutionText || ('#' + solution.id))" class="text-sm text-danger hover:underline">Törlés</button>
+                                  </div>
+                                </div>
+                                <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
+                              }
 
                               <div class="grid grid-cols-2 gap-2">
                                 @for (lang of languages; track lang.id) {
@@ -367,6 +405,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
    *  követve — OnPush mellett is frissül, mert a bekötő esemény ebben a komponensben
    *  keletkezik). */
   private readonly newSolutionDrafts: Record<number, { description: string; points: number }> = {};
+
+  // UI-TT-193: egy MEGLÉVŐ részfeladat pontszámának/leírásának eddig NEM volt UI-
+  // belépési pontja - kizárólag "Törlés" gomb volt, a teljesen kiépített és guardolt
+  // backend UpdateSolutionAsync-ot semelyik komponens nem hívta. Az `editingSolutionId`
+  // (solution.id-vel kulcsolva, az `expandedTaskId` mintáját követve) jelöli, melyik sor
+  // van éppen inline-szerkesztés alatt - egyszerre legfeljebb egy.
+  readonly editingSolutionId = signal<number | null>(null);
+  private readonly editSolutionDrafts: Record<number, { description: string; points: number }> = {};
 
   /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
    *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
@@ -711,6 +757,61 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     // UI-TT-115/123 testvér-hiánya — ld. deleteTask() fenti kommentje.
     if (this.store.loading()) return;
     this.store.deleteSolution(taskSetId, solutionId, () => this.toastService.success('Részfeladat törölve.'));
+  }
+
+  // UI-TT-193: lazy-létrehozott draft, a solution AKTUÁLIS (mentett) leírásával/
+  // pontszámával előtöltve - a newSolutionDraft() mintáját követi.
+  editSolutionDraft(solution: TeacherSolutionDto): { description: string; points: number } {
+    return (this.editSolutionDrafts[solution.id] ??= {
+      description: solution.description ?? '',
+      points: solution.points ?? 0,
+    });
+  }
+
+  startEditSolution(solution: TeacherSolutionDto): void {
+    // Minden megnyitáskor a JELENLEGI (mentett) értékekről indítunk - ha korábban
+    // már volt egy meg nem mentett, majd elvetett szerkesztés ugyanerre a sorra,
+    // az ne "ragadjon be".
+    this.editSolutionDrafts[solution.id] = {
+      description: solution.description ?? '',
+      points: solution.points ?? 0,
+    };
+    this.editingSolutionId.set(solution.id);
+  }
+
+  cancelEditSolution(): void {
+    this.editingSolutionId.set(null);
+  }
+
+  isEditSolutionDraftDescriptionBlank(solutionId: number): boolean {
+    return !this.editSolutionDrafts[solutionId]?.description.trim();
+  }
+
+  setEditSolutionDescription(solutionId: number, value: string): void {
+    if (this.editSolutionDrafts[solutionId]) this.editSolutionDrafts[solutionId].description = value;
+  }
+
+  setEditSolutionPoints(solutionId: number, value: number): void {
+    if (this.editSolutionDrafts[solutionId]) this.editSolutionDrafts[solutionId].points = value;
+  }
+
+  saveEditSolution(taskSetId: number, solutionId: number): void {
+    // UI-TT-115/123 testvér-guard - ld. addSolution()/deleteSolution() fenti kommentje.
+    if (this.store.loading()) return;
+    const draft = this.editSolutionDrafts[solutionId];
+    if (!draft || !draft.description.trim()) return;
+    this.store.updateSolution(
+      taskSetId,
+      solutionId,
+      {
+        description: draft.description.trim(),
+        points: draft.points,
+      },
+      () => {
+        this.editingSolutionId.set(null);
+        this.toastService.success('Részfeladat frissítve.');
+      },
+    );
   }
 
   uploadFile(taskSetId: number, kind: TeacherFileKind, event: Event): void {
