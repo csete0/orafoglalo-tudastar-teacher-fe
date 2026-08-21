@@ -426,6 +426,61 @@ describe('ReportStore', () => {
     expect(store.error()).toBeNull();
   });
 
+  // BUG: mutateReview() sikeres ága a `review` DTO-t generáció-ellenőrzés NÉLKÜL írja
+  // a `_attemptReview`-ba - a komponens `review.attemptId === openAttemptId()` védelme
+  // (ld. fenti UI-TT-160 teszt) csak a KERESZT-attemptId esetet zárja ki. Ha a tanár
+  // UGYANAZT a beadást zárja be, majd (a lassú mentés válasza előtt) UJRA megnyitja -
+  // ez egy vadonatúj `loadAttemptReview()`-t indít, saját, magasabb generációval -,
+  // a később megérkező, elavult mentés-válasz attemptId-ja továbbra is egyezik, tehát a
+  // komponens guardja nem szűri ki: csendben felülírja a frissen betöltött, valós
+  // szerver-állapotot a lekésett mentés adataival.
+  it('BUG: ugyanannak a beadásnak bezárás+újranyitás utáni friss betöltését felülírja egy közben lekésve érkező, korábbi mentés válasza', async () => {
+    const firstLoad = new Subject<any>();
+    const overrideResponse = new Subject<any>();
+    const reopenLoad = new Subject<any>();
+    serviceMock.getAttemptReview.mockReturnValueOnce(firstLoad).mockReturnValueOnce(reopenLoad);
+    serviceMock.overrideScore.mockReturnValue(overrideResponse);
+
+    // A tanár megnyitja a 42-es beadás panelét.
+    store.loadAttemptReview(42);
+    firstLoad.next({ attemptId: 42, earnedPoints: 3, maxPoints: 10 });
+    firstLoad.complete();
+    expect(store.attemptReview()).toEqual({ attemptId: 42, earnedPoints: 3, maxPoints: 10 });
+
+    // Elindít egy pontszám-felülbírálást (lassú hálózat, válasz még nem jött meg).
+    store.overrideScore(1, 42, { earnedPoints: 8, teacherFeedback: null, feedbackProvided: false });
+
+    // MIELŐTT a mentés válasza megérkezne, a tanár bezárja a panelt...
+    store.clearAttemptReview();
+    expect(store.attemptReview()).toBeNull();
+
+    // ...majd UJRA megnyitja UGYANAZT a cellát - ez egy vadonatúj GET-et indít.
+    store.loadAttemptReview(42);
+    reopenLoad.next({ attemptId: 42, earnedPoints: 3, maxPoints: 10, teacherFeedback: 'friss, szerver-oldali állapot' });
+    reopenLoad.complete();
+    await Promise.resolve();
+    expect(store.attemptReview()).toEqual({
+      attemptId: 42,
+      earnedPoints: 3,
+      maxPoints: 10,
+      teacherFeedback: 'friss, szerver-oldali állapot',
+    });
+
+    // A régi, elhagyott felülbírálás válasza csak MOST érkezik meg.
+    overrideResponse.next({ attemptId: 42, earnedPoints: 8, maxPoints: 10, teacherFeedback: null });
+    overrideResponse.complete();
+    await Promise.resolve();
+
+    // Helyes viselkedés: a lekésett mentés válasza NEM írhatja felül a közben frissen
+    // újratöltött, valós panel-adatot - jelenleg viszont felülírja.
+    expect(store.attemptReview()).toEqual({
+      attemptId: 42,
+      earnedPoints: 3,
+      maxPoints: 10,
+      teacherFeedback: 'friss, szerver-oldali állapot',
+    });
+  });
+
   // UI-TT-165: a négy loader korábban EGYETLEN közös `_loading`-ot írt - egy MÁSIK,
   // immár irreleváns loader korábban induló válasza idő előtt false-ra zárta a
   // ténylegesen még folyamatban lévő oldal loading()-ját.

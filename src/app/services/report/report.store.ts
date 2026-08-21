@@ -295,10 +295,24 @@ export class ReportStore {
     this._taskSetResultsLoading.set(true);
     this._error.set(null);
 
+    // TEACH-9: a mentés INDULÁSÁNAK pillanatában rögzített generáció - ha a panel
+    // időközben bezárult (`clearAttemptReview()`) VAGY ugyanarra az attemptre újra
+    // megnyílt (`loadAttemptReview()`), MINDKETTŐ lépteti `_attemptReviewGeneration`-t,
+    // tehát ez az érték elavulttá válik. Enélkül egy lassú hálózat miatt későn érkező
+    // mentés-válasz a panel bezárás+újranyitás utáni, már friss `loadAttemptReview()`
+    // által betöltött adatot írta felül - ugyanarra az attemptId-ra, tehát a komponens
+    // saját `review.attemptId === openAttemptId()` védelme (UI-TT-160) ezt nem szűrte ki.
+    const targetGeneration = this._attemptReviewGeneration;
+
     observable
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (review) => {
+          // Ha a panel a mentés indulása óta bezárult vagy újranyílt, ez a válasz már
+          // elavult - nem szabad felülírnia a közben frissen betöltött (vagy törölt)
+          // állapotot.
+          if (targetGeneration !== this._attemptReviewGeneration) return;
+
           // A panel a válaszból frissül; a generációt is léptetjük, hogy egy
           // időközben elindult, régebbi GET válasza ne írhassa vissza a mentés
           // előtti állapotot.
