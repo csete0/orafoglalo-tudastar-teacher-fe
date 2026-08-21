@@ -36,6 +36,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     publish: ReturnType<typeof vi.fn>;
     addTask: ReturnType<typeof vi.fn>;
     addSolution: ReturnType<typeof vi.fn>;
+    updateSolution: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
     deleteTask: ReturnType<typeof vi.fn>;
     deleteSolution: ReturnType<typeof vi.fn>;
@@ -65,6 +66,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       addSolution: vi.fn(),
       // Alapból NEM hívja meg az onSuccess callback-et (folyamatban lévő kérést szimulál),
       // ugyanaz a konvenció, mint addTask/addSolution mockjánál.
+      updateSolution: vi.fn(),
       uploadFile: vi.fn(),
       deleteTask: vi.fn(),
       deleteSolution: vi.fn(),
@@ -781,6 +783,121 @@ describe('FeladatsorSzerkesztoComponent', () => {
       component.addSolution(1, 1);
 
       expect(component.newSolutionDraft(1)).toEqual({ description: 'Beírt részfeladat-leírás', points: 8 });
+    });
+  });
+
+  // UI-TT-193: egy MEGLÉVŐ részfeladat pontszámának/leírásának eddig NEM volt UI-
+  // belépési pontja - kizárólag "Törlés" gomb volt, a teljesen kiépített és guardolt
+  // backend UpdateSolutionAsync-ot semelyik komponens nem hívta. Ez a describe blokk
+  // az újonnan bevezetett inline szerkesztő (Szerkesztés gomb -> leírás/pont mező +
+  // Mentés/Mégsem) viselkedését fedi le.
+  describe('meglévő részfeladat inline szerkesztése (UI-TT-193)', () => {
+    function configureWithSolution() {
+      configure(
+        makeDetail({
+          tasks: [
+            {
+              id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6],
+              completeSolutionSnippets: [],
+              solutions: [{ id: 5, description: 'Eredeti leírás', points: 5, solutionText: 'Rész1', snippets: [] }],
+            },
+          ],
+        }),
+      );
+    }
+
+    it('"Szerkesztés" gombra kattintva megjelenik az inline szerkesztő, a JELENLEGI leírással/ponttal előtöltve', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.toggleTask(1);
+      fixture.detectChanges();
+
+      const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+      const editButton = buttons.find((b) => b.textContent?.trim() === 'Szerkesztés')!;
+      expect(editButton).toBeTruthy();
+      editButton.click();
+      fixture.detectChanges();
+
+      // A component-szintű állapotot ellenőrizzük (a draftCode()-hoz hasonló
+      // meglévő tesztek is így tesznek ebben a fájlban) - az ngModel-kötött
+      // textarea/input élő DOM `.value`-jának szinkron kiolvasása ebben a
+      // teszt-harnessben nem megbízható.
+      expect(component.editingSolutionId()).toBe(5);
+      expect(component.editSolutionDraft({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] }))
+        .toEqual({ description: 'Eredeti leírás', points: 5 });
+      const labels: HTMLLabelElement[] = Array.from(fixture.nativeElement.querySelectorAll('label'));
+      expect(labels.some((l) => l.textContent?.trim() === 'Leírás')).toBe(true);
+      expect(labels.some((l) => l.textContent?.trim() === 'Pont')).toBe(true);
+    });
+
+    it('"Mégsem" visszazárja a szerkesztőt mentés NÉLKÜL', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.toggleTask(1);
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      fixture.detectChanges();
+      expect(component.editingSolutionId()).toBe(5);
+
+      component.cancelEditSolution();
+      fixture.detectChanges();
+
+      expect(component.editingSolutionId()).toBeNull();
+      expect(taskSetStoreMock.updateSolution).not.toHaveBeenCalled();
+    });
+
+    it('whitespace-only leírással a "Mentés" gomb letiltva marad, saveEditSolution() csendben visszatér', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.toggleTask(1);
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.setEditSolutionDescription(5, '   ');
+      fixture.detectChanges();
+
+      expect(component.isEditSolutionDraftDescriptionBlank(5)).toBe(true);
+      component.saveEditSolution(1, 5);
+      expect(taskSetStoreMock.updateSolution).not.toHaveBeenCalled();
+    });
+
+    it('érvényes szerkesztés esetén store.updateSolution()-t hívja a helyes (trimmelt leírás + pont) request-tel, siker esetén bezárja a szerkesztőt', () => {
+      configureWithSolution();
+      taskSetStoreMock.updateSolution.mockImplementation(
+        (_taskSetId: number, _solutionId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.toggleTask(1);
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.setEditSolutionDescription(5, '  Frissített leírás  ');
+      component.setEditSolutionPoints(5, 3);
+
+      component.saveEditSolution(1, 5);
+
+      expect(taskSetStoreMock.updateSolution).toHaveBeenCalledWith(
+        1, 5, { description: 'Frissített leírás', points: 3 }, expect.any(Function),
+      );
+      expect(component.editingSolutionId()).toBeNull();
+    });
+
+    it('folyamatban lévő mentésnél (store.loading()===true) saveEditSolution() nem hívja meg a store-t', () => {
+      configureWithSolution();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.toggleTask(1);
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.setEditSolutionDescription(5, 'Új leírás');
+      taskSetStoreMock.loading.set(true);
+
+      component.saveEditSolution(1, 5);
+
+      expect(taskSetStoreMock.updateSolution).not.toHaveBeenCalled();
     });
   });
 
