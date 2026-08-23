@@ -186,6 +186,45 @@ describe('AdminIntezmenyekComponent', () => {
     expect(storeMock.merge).not.toHaveBeenCalled();
   });
 
+  // UI-TT-195: a merge-eszköz kifejezetten VÉLETLENÜL DUPLIKÁLTAN létrejött,
+  // tehát tipikusan AZONOS NEVŰ intézmények összevonására való (ld. a
+  // komponens saját sablon-leírása: "Két véletlenül duplikáltan létrejött
+  // intézmény egyesíthető"). Két ilyen, azonos nevű, de különböző
+  // város/id-jű intézmény esetén sem a forrás/cél legördülő listák, sem a
+  // végső, "Ez nem vonható vissza." jóváhagyó dialógus szövege NEM
+  // különbözteti meg őket - mindkét <option> és a dialógus üzenete is
+  // szó szerint ugyanaz a szöveg, city/id nélkül.
+  it('BUG UI-TT-195: két AZONOS NEVŰ intézmény a forrás/cél legördülőben és a jóváhagyó dialógusban is megkülönböztethetetlen', async () => {
+    configure([
+      makeSchool({ id: 1, name: 'Duplikált Gimnázium', city: 'Budapest' }),
+      makeSchool({ id: 2, name: 'Duplikált Gimnázium', city: 'Szeged' }),
+    ]);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const sourceSelect: HTMLSelectElement = fixture.nativeElement.querySelector('select[name="sourceId"]');
+    const optionTexts = Array.from(sourceSelect.options)
+      .slice(1) // az első a "Válassz…" placeholder
+      .map((o) => o.textContent?.trim());
+
+    // Elvárás: a két KÜLÖNBÖZŐ intézményhez tartozó opciószöveg legyen
+    // megkülönböztethető (pl. tartalmazza a várost is) - BUKIK, mindkettő
+    // szó szerint "Duplikált Gimnázium".
+    expect(new Set(optionTexts).size).toBe(2);
+
+    fixture.componentInstance.sourceId = 1;
+    fixture.componentInstance.targetId = 2;
+    await fixture.componentInstance.confirmMerge();
+
+    // Elvárás: a visszavonhatatlan művelet jóváhagyó szövege azonosítsa,
+    // MELYIK "Duplikált Gimnázium"-ot törli (pl. várossal) - BUKIK, a
+    // dialógus szó szerint kétszer ugyanazt a nevet tartalmazza, az admin
+    // szövegből nem tudja megállapítani, a Budapesti vagy a Szegedi
+    // példány törlődik-e.
+    const message: string = confirmServiceMock.ask.mock.calls[0][0].message;
+    expect(message).toContain('Budapest');
+  });
+
   it('confirmMerge() no-op, ha a forrás vagy a cél már nem szerepel a store.schools() listájában', async () => {
     configure([makeSchool({ id: 1 })]);
     const fixture = TestBed.createComponent(AdminIntezmenyekComponent);

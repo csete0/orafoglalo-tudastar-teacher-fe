@@ -5,6 +5,7 @@ import { AdminSchoolStore } from '../../services/admin/admin-school.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { SchoolAdminDto } from '../../models/teacher-moderation.model';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -49,7 +50,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
             <select [(ngModel)]="sourceId" name="sourceId" class="input !w-auto min-w-48">
               <option [ngValue]="null">Válassz…</option>
               @for (school of store.schools(); track school.id) {
-                <option [ngValue]="school.id">{{ school.name }}</option>
+                <option [ngValue]="school.id">{{ schoolLabel(school) }}</option>
               }
             </select>
           </div>
@@ -58,7 +59,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
             <select [(ngModel)]="targetId" name="targetId" class="input !w-auto min-w-48">
               <option [ngValue]="null">Válassz…</option>
               @for (school of store.schools(); track school.id) {
-                <option [ngValue]="school.id">{{ school.name }}</option>
+                <option [ngValue]="school.id">{{ schoolLabel(school) }}</option>
               }
             </select>
           </div>
@@ -117,6 +118,15 @@ export class AdminIntezmenyekComponent {
     return this.sourceId !== null && this.targetId !== null && this.sourceId !== this.targetId;
   }
 
+  // UI-TT-195: az eszköz fő célközönsége pontosan az AZONOS NEVŰ, véletlenül
+  // duplikáltan létrejött intézmény-párok - önmagában a név emiatt nem elég a
+  // legördülőben/jóváhagyó dialógusban a két fizikai intézmény
+  // megkülönböztetéséhez. A várost és az id-t is feltüntetjük.
+  schoolLabel(school: SchoolAdminDto): string {
+    const city = school.city ? `, ${school.city}` : '';
+    return `${school.name}${city} (#${school.id})`;
+  }
+
   async confirmMerge(): Promise<void> {
     if (!this.canMerge() || this.sourceId === null || this.targetId === null || this.store.loading()) return;
 
@@ -124,10 +134,12 @@ export class AdminIntezmenyekComponent {
     const target = this.store.schools().find((s) => s.id === this.targetId);
     if (!source || !target) return;
 
+    const sourceLabel = this.schoolLabel(source);
+    const targetLabel = this.schoolLabel(target);
     const ok = await this.confirmService.ask({
       message:
-        `Biztosan egyesíted a(z) „${source.name}” intézményt a(z) „${target.name}” intézménybe? ` +
-        `Minden tanára és csoportja átkerül, a(z) „${source.name}” törlődik. Ez nem vonható vissza.`,
+        `Biztosan egyesíted a(z) „${sourceLabel}” intézményt a(z) „${targetLabel}” intézménybe? ` +
+        `Minden tanára és csoportja átkerül, a(z) „${sourceLabel}” törlődik. Ez nem vonható vissza.`,
       danger: true,
       confirmLabel: 'Egyesítés',
     });
