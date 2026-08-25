@@ -27,15 +27,48 @@ function runSql(sql: string): void {
     [
       'exec', DB_CONTAINER_NAME,
       '/opt/mssql-tools18/bin/sqlcmd',
+      // -I: SET QUOTED_IDENTIFIER ON. A `dbo.Users` táblán SZŰRT indexek vannak
+      // (UQ_Users_DiscordId, UQ_Users_Nickname), és SQL Server minden ilyen táblán
+      // végzett DML-hez megköveteli ezt a beállítást - a sqlcmd viszont alapból
+      // OFF-fal csatlakozik. A `confirmEmail` UPDATE-je emiatt csendben elhasalt
+      // ("Msg 1934 ... QUOTED_IDENTIFIER"), a diák e-mailje sosem lett megerősítve,
+      // és a rákövetkező bejelentkezés "Email cím nincs megerősítve"-vel bukott.
+      //
+      // -b: SQL-hiba esetén NEM nulla kilépési kód. Enélkül a sqlcmd sikert jelez
+      // hibás utasításra is, az execFileSync nem dob, és a hiba láthatatlan marad -
+      // pontosan ezért maradt ez a hiba észrevétlen (a `stdio: 'ignore'` pedig az
+      // üzenetet is elrejtette).
+      '-I', '-b',
       '-S', 'localhost', '-U', 'sa', '-P', DB_SA_PASSWORD, '-C', '-d', DB_NAME,
       '-Q', sql,
     ],
-    { stdio: 'ignore' },
+    { stdio: ['ignore', 'ignore', 'pipe'] },
   );
 }
 
+
 export function confirmEmail(email: string): void {
   runSql(`UPDATE dbo.Users SET EmailConfirmed = 1 WHERE Email = N'${email.replace(/'/g, "''")}';`);
+}
+
+/**
+ * A `ConfirmService` dialógusának elfogadása.
+ *
+ * A suite megírása (2026-07-10) óta több, következményekkel járó művelet mögé
+ * került megerősítő dialógus (intézményhez csatlakozás, tag eltávolítása, tanár
+ * felfüggesztése, publikálás visszavonása). A specek ezekről nem tudtak: a
+ * kattintás után azonnal az eredményt várták, a dialógus viszont nyitva maradt,
+ * és a teszt 60 mp-es timeouttal halt el.
+ *
+ * A `data-testid` horgonyokat használjuk, nem a gombfeliratot: a felirat
+ * műveletenként más ("Csatlakozás", "Eltávolítás", "Felfüggesztés"), a testid
+ * viszont stabil.
+ */
+export async function acceptConfirmDialog(page: Page): Promise<void> {
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible({ timeout: 15000 });
+  await page.getByTestId('confirm-accept').click();
+  await expect(dialog).toHaveCount(0, { timeout: 15000 });
 }
 
 // ── Diák oldal ──────────────────────────────────────────────────────────
@@ -51,6 +84,20 @@ export async function registerStudent(
   await page.locator('#password').fill(TEST_PASSWORD);
   await page.locator('#confirmPassword').fill(TEST_PASSWORD);
   await page.locator('#terms').check();
+
+  // UI-TS-374 (2026-08-17) óta a regisztrációs form Cloudflare Turnstile mögött van, és
+  // a `signUp()` token nélkül csak egy toastot dob ("Kérjük, igazold, hogy nem vagy
+  // robot!") - navigáció nélkül. Ez a suite régebbi (2026-07-10), ezért azonnal
+  // kattintott, jellemzően MIELŐTT a widget kiadta volna a tokent: emiatt mind a 8
+  // UI-teszt pontosan itt, a `waitForURL`-en bukott el, holott a hibaképernyőn a
+  // Turnstile már "Success!"-t mutatott.
+  //
+  // A dev/E2E environment Cloudflare mindig-átengedő teszt-kulcsát használja
+  // (`1x00000000000000000000AA`), tehát nincs mit "megoldani" - csak meg kell várni,
+  // amíg a widget beírja a válasz-tokent a rejtett mezőjébe.
+  await expect(page.locator('input[name="cf-turnstile-response"]'))
+    .not.toHaveValue('', { timeout: 30000 });
+
   await page.getByRole('button', { name: 'Felhasználói fiók létrehozása' }).click();
   await page.waitForURL(/confirm-email/, { timeout: 15000 });
   confirmEmail(opts.email);

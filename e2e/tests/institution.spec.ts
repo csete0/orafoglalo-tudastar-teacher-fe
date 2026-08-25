@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
-import { createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { acceptConfirmDialog, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 /**
  * A teljes intézményi (F6.5) flow két tanárral: az igazgató intézményt hoz
@@ -41,6 +41,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await colleaguePage.goto(`${TEACHER_FE_URL}/intezmenyek`);
   await colleaguePage.locator('[formcontrolname="code"]').fill(teacherInviteCode!);
   await colleaguePage.getByRole('button', { name: 'Csatlakozás' }).click();
+  await acceptConfirmDialog(colleaguePage);
   await expect(colleaguePage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
 
   // ── Kolléga csoportot hoz létre, az intézményhez kötve ──

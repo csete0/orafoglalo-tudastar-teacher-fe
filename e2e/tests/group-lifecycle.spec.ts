@@ -68,5 +68,9 @@ test('érvénytelen meghívó kódnál hibaüzenetet kap a diák', async ({ page
   await page.locator('#consent').check();
   await page.getByRole('button', { name: 'Csatlakozás a csoporthoz' }).click();
 
-  await expect(page.getByText(/Érvénytelen meghívó kód/)).toBeVisible({ timeout: 15000 });
+  // A hibaüzenet ma KÉT helyen jelenik meg (toast + űrlapon belüli doboz), ezért a
+  // csupasz getByText strict-mode ütközést adna. Az űrlapon belüli, tartós
+  // üzenetre horgonyzunk - a toast magától eltűnik.
+  await expect(page.locator('form').getByText(/Érvénytelen meghívó kód/))
+    .toBeVisible({ timeout: 15000 });
 });
