@@ -60,7 +60,11 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     // ── Takedown (saját confirm-dialógus) ──
     await item.getByRole('button', { name: 'Publikálás visszavonása' }).click();
     await adminPage.getByTestId('confirm-accept').click();
-    await expect(item.getByText('Piszkozat')).toBeVisible({ timeout: 15000 });
+    // A takedown ma SAJÁT állapotot kap: a lista a \`takedownAt\` alapján
+    // "Admin visszavonta"-t ír, nem esik vissza a "Piszkozat" címkére. Ez
+    // pontosabb is - megkülönbözteti az admin-beavatkozást a tanár saját
+    // publikálatlan piszkozatától.
+    await expect(item.getByText('Admin visszavonta')).toBeVisible({ timeout: 15000 });
 
     // ── Kill-switch (saját confirm-dialógus) ──
     await item.getByRole('button', { name: 'Felfüggesztés' }).click();

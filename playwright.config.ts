@@ -22,13 +22,7 @@ import {
  */
 export default defineConfig({
   testDir: './e2e/tests',
-  // 120 mp: a hosszabb forgatókönyvek több felhasználót is regisztrálnak
-  // (tanár-onboarding + diák), és a regisztráció UI-TS-374 óta megvárja a
-  // Cloudflare Turnstile tokenjét is - ettől a több-regisztrációs tesztek
-  // összideje a korábbi 60 mp-es kereten túlnyúlt. A lépésenkénti (expect)
-  // határidők változatlanok, tehát egy TÉNYLEGES beragadás továbbra is
-  // gyorsan, beszédes hibával bukik, nem a teszt-timeouttal.
-  timeout: 120_000,
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,

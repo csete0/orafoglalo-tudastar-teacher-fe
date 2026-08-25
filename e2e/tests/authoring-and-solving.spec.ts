@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import { createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
+// A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
+// a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
+// `button` szerepet, ezért a `getByRole('button', ...)` egyszerűen nem találja
+// meg őket - a kattintás nem hibázott, hanem VÉGTELENÜL várt egy sosem létező
+// elemre, és a teszt csak a teljes teszt-timeouttal halt el (semmitmondó
+// hibaüzenettel). Ezért `getByRole('tab', ...)`.
+
 /**
  * A teljes tartalom-készítési kör: tanár SQL-feladatsort ír (create.sql +
  * create_lite.sql párral, ahogy a Judge0/SQLite konvenció megköveteli) és
@@ -55,8 +62,23 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
 
   // ── SQL kódrészlet kitöltése + mentés ──
   const saveSnippetsButton = teacherPage.getByRole('button', { name: 'Kódrészletek mentése' });
-  const sqlTextarea = saveSnippetsButton.locator('xpath=preceding::textarea[1]');
+
+  // A kódrészlet-mezőket a NYELV CÍMKÉJE alapján azonosítjuk, nem pozíció szerint.
+  // Korábban itt `xpath=preceding::textarea[1]` állt ("a mentés gomb előtti utolsó
+  // textarea"), ami akkor működött, amikor az SQL volt a nyelvlista utolsó eleme.
+  // Azóta a szerkesztő LANGUAGES tömbje kiegészült a C nyelvvel (id 12), az SQL
+  // (id 6) UTÁN - így a pozíció-alapú lokátor a C mezőjét töltötte ki. SQL-kódrészlet
+  // hiányában a `sqlFilesPaired()` igazat adott, a sárga párosítási figyelmeztetés
+  // meg sem jelent, és a teszt azon bukott el.
+  // A mentés gombot közvetlenül megelőző nyelv-rácson BELÜL keressük az SQL mezőt,
+  // a nyelv címkéje alapján (a "Összevont megoldás" blokk ugyanilyen rácsot rendel,
+  // ezért a szűkítés nélküli keresés a rossz blokkot is eltalálhatja).
+  const snippetGrid = saveSnippetsButton.locator('xpath=preceding-sibling::div[1]');
+  const sqlTextarea = snippetGrid.locator('div:has(> label:text-is("SQL")) > textarea');
   await sqlTextarea.fill('SELECT * FROM Users;');
+  // Explicit visszaellenőrzés: enélkül egy félresikerült kitöltés csak jóval később,
+  // a hiányzó párosítási figyelmeztetésnél derülne ki, félrevezető hibaüzenettel.
+  await expect(sqlTextarea).toHaveValue('SELECT * FROM Users;');
   await saveSnippetsButton.click();
 
   // ── SQL-párosítási figyelmeztetés látszik (még nincs fájl feltöltve) ──
@@ -92,7 +114,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await teacherPage.locator('[formcontrolname="name"]').fill(groupName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupName).click();
-  await teacherPage.getByRole('button', { name: 'Meghívó' }).click();
+  await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
   const inviteCode = (await teacherPage.locator('code').first().textContent())?.trim();
 
   // ── Diák csatlakozik, előfizetés NÉLKÜL ──

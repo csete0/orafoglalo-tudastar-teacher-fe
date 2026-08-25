@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import { createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher, uniqueEmail } from '../helpers';
 
+// A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
+// a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
+// `button` szerepet, ezért a `getByRole('button', ...)` egyszerűen nem találja
+// meg őket - a kattintás nem hibázott, hanem VÉGTELENÜL várt egy sosem létező
+// elemre, és a teszt csak a teljes teszt-timeouttal halt el (semmitmondó
+// hibaüzenettel). Ezért `getByRole('tab', ...)`.
+
 test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, majd a tanár eltávolítja', async ({ browser }) => {
   const adminContext = await browser.newContext();
   const teacherContext = await browser.newContext();
@@ -25,7 +32,7 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     await expect(teacherPage).toHaveURL(/\/csoportok\/\d+/, { timeout: 15000 });
 
     // ── Meghívó kód kiolvasása ──
-    await teacherPage.getByRole('button', { name: 'Meghívó' }).click();
+    await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
     const inviteCode = (await teacherPage.locator('code').first().textContent())?.trim();
     expect(inviteCode).toBeTruthy();
 
@@ -43,7 +50,7 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     await expect(studentPage.getByText(groupName)).toBeVisible({ timeout: 15000 });
 
     // ── Tanár oldalán a "Tagok" fülön megjelenik a diák ──
-    await teacherPage.getByRole('button', { name: 'Tagok' }).click();
+    await teacherPage.getByRole('tab', { name: 'Tagok' }).click();
     await expect(teacherPage.getByRole('button', { name: 'Eltávolítás' })).toBeVisible({ timeout: 15000 });
 
     // ── Eltávolítás (saját confirm-dialógus komponens) ──

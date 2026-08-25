@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import { apiGet, createLoggedInStudent, getAccessTokenFromStorage, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
+// A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
+// a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
+// `button` szerepet, ezért a `getByRole('button', ...)` egyszerűen nem találja
+// meg őket - a kattintás nem hibázott, hanem VÉGTELENÜL várt egy sosem létező
+// elemre, és a teszt csak a teljes teszt-timeouttal halt el (semmitmondó
+// hibaüzenettel). Ezért `getByRole('tab', ...)`.
+
 /**
  * A Fázis 5 láthatósági garancia negatív iránya: egy tanári (nem publikus)
  * feladatsor csak a tanár csoportjainak (ill. F6.5 óta az intézményének)
@@ -63,7 +70,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await teacherPage.locator('[formcontrolname="name"]').fill(groupAName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupAName).click();
-  await teacherPage.getByRole('button', { name: 'Meghívó' }).click();
+  await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
   const groupACode = (await teacherPage.locator('code').first().textContent())?.trim();
 
   const otherTeacherPage = await otherTeacherContext.newPage();
@@ -74,7 +81,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await otherTeacherPage.locator('[formcontrolname="name"]').fill(groupBName);
   await otherTeacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await otherTeacherPage.getByText(groupBName).click();
-  await otherTeacherPage.getByRole('button', { name: 'Meghívó' }).click();
+  await otherTeacherPage.getByRole('tab', { name: 'Meghívó' }).click();
   const groupBCode = (await otherTeacherPage.locator('code').first().textContent())?.trim();
 
   // ── Diák1: A csoport tagja — POZITÍV kontroll, ő elérje ──

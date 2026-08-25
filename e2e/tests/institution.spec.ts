@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import { acceptConfirmDialog, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
+// A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
+// a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
+// `button` szerepet, ezért a `getByRole('button', ...)` egyszerűen nem találja
+// meg őket - a kattintás nem hibázott, hanem VÉGTELENÜL várt egy sosem létező
+// elemre, és a teszt csak a teljes teszt-timeouttal halt el (semmitmondó
+// hibaüzenettel). Ezért `getByRole('tab', ...)`.
+
 /**
  * A teljes intézményi (F6.5) flow két tanárral: az igazgató intézményt hoz
  * létre, a kolléga tanári kóddal csatlakozik és a csoportját az
@@ -44,6 +51,23 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await acceptConfirmDialog(colleaguePage);
   await expect(colleaguePage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
 
+  // ── Az igazgató igazgatóvá lépteti elő a kollégát ──
+  // A BE-GROUPSCHOOLBIND-NOADMINROLE-GATE fix óta csoportot intézményhez kötni
+  // CSAK aktív Admin (igazgató) tag tud - a meghívó kóddal szerzett Teacher-tagság
+  // nem elég, mert a kötés ugyanazt az intézmény-szintű láthatóságot hozza létre,
+  // amit a kódbázis máshol is Admin-only-ként kezel. A spec ennél régebbi, ezért
+  // sima tanárként próbált kötni, és "Az iskola nem található." hibát kapott.
+  await principalPage.reload();
+  // A kollégát NEM a nevével azonosítjuk: a megjelenített név a regisztrációból jön
+  // (mindkét tanár ugyanazt a teszt-nevet kapja), az e-mail-prefix pedig nem látszik
+  // ebben a listában. Az "Igazgatóvá tétel" gomb viszont KIZÁRÓLAG a nem-admin
+  // tagoknál jelenik meg - a principal maga admin, tehát pontosan egy ilyen sor van.
+  const promoteButton = principalPage.getByRole('button', { name: 'Igazgatóvá tétel' });
+  await expect(promoteButton).toBeVisible({ timeout: 15000 });
+  await promoteButton.click();
+  await acceptConfirmDialog(principalPage);
+  await expect(promoteButton).toHaveCount(0, { timeout: 15000 });
+
   // ── Kolléga csoportot hoz létre, az intézményhez kötve ──
   const groupName = `institution-group-${Date.now()}`;
   await colleaguePage.goto(`${TEACHER_FE_URL}/csoportok`);
@@ -52,8 +76,26 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await colleaguePage.getByRole('button', { name: 'Létrehozás' }).click();
   await expect(colleaguePage.getByText(groupName)).toBeVisible({ timeout: 15000 });
   await colleaguePage.getByText(groupName).click();
-  await colleaguePage.getByRole('button', { name: 'Meghívó' }).click();
+  await colleaguePage.getByRole('tab', { name: 'Meghívó' }).click();
   const groupInviteCode = (await colleaguePage.locator('code').first().textContent())?.trim();
+
+  // ── Az igazgató VISSZA-lefokozza a kollégát sima tanárrá ──
+  // Az előléptetés csak a csoport intézményhez KÖTÉSÉHEZ kellett (Admin-only
+  // művelet). A teszt lényege viszont az, hogy a diák a KOLLÉGA csoportjából éri
+  // el az IGAZGATÓ feladatsorát - és a spec vége külön ellenőrzi, hogy a kolléga
+  // sima tagként NEM lát admin-füleket. Ha igazgató maradna, azt az ellenőrzést
+  // értelmetlenné tennénk. A csoport intézményi kötése a lefokozás után is megmarad.
+  await principalPage.reload();
+  // Előléptetés után MINDKÉT tanár igazgató, tehát két "Lefokozás" gomb van. A
+  // megjelenített nevük azonos (mindkettő ugyanazzal a teszt-névvel regisztrált),
+  // ezért a sorban látszó csoportszám különbözteti meg őket: ezen a ponton a
+  // kollégának pontosan egy csoportja van, az igazgatónak egy sem.
+  const colleagueRow = principalPage.locator('li', { hasText: '1 csoport' });
+  const demoteButton = colleagueRow.getByRole('button', { name: 'Lefokozás' });
+  await expect(demoteButton).toBeVisible({ timeout: 15000 });
+  await demoteButton.click();
+  await acceptConfirmDialog(principalPage);
+  await expect(demoteButton).toHaveCount(0, { timeout: 15000 });
 
   // ── Igazgató feladatsort ír és publikál (intézményi megosztás confirm) ──
   const taskSetTitle = `E2E Igazgató feladatsor ${Date.now()}`;
@@ -108,15 +150,15 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   // ── Igazgató Áttekintés füle látja a diákot ──
   await principalPage.goto(`${TEACHER_FE_URL}/intezmenyek`);
   await principalPage.getByText(institutionName).click();
-  await principalPage.getByRole('button', { name: 'Áttekintés' }).click();
+  await principalPage.getByRole('tab', { name: 'Áttekintés' }).click();
   await expect(principalPage.getByText('Teszt').first()).toBeVisible({ timeout: 15000 });
 
   // ── A kolléga (sima tag) NEM lát Áttekintés/Csoportok fület ──
   await colleaguePage.goto(`${TEACHER_FE_URL}/intezmenyek`);
   await colleaguePage.getByText(institutionName).click();
   await expect(colleaguePage.getByTestId('my-role-badge')).toHaveText(/Tanár/, { timeout: 15000 });
-  await expect(colleaguePage.getByRole('button', { name: 'Áttekintés' })).toHaveCount(0);
-  await expect(colleaguePage.getByRole('button', { name: 'Csoportok' })).toHaveCount(0);
+  await expect(colleaguePage.getByRole('tab', { name: 'Áttekintés' })).toHaveCount(0);
+  await expect(colleaguePage.getByRole('tab', { name: 'Csoportok' })).toHaveCount(0);
 
   // ── Kolléga kilép az intézményből (saját confirm-dialógus) ──
   await colleaguePage.getByRole('main').getByRole('button', { name: 'Kilépés' }).click();
