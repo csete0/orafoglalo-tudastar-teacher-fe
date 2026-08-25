@@ -147,18 +147,24 @@ describe('CsoportReszletekComponent', () => {
     expect(nav.getAttribute('role')).toBe('tablist');
 
     const tabs = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[];
-    expect(tabs.length).toBe(4);
+    // A fülek számát szándékosan a komponens saját listájából vesszük, nem beégetve:
+    // ennek a tesztnek az ARIA-szemantika a tárgya, nem az, hogy hány fül van
+    // (egy új fül felvétele nem lehet ok arra, hogy egy akadálymentességi teszt bukjon).
+    expect(tabs.length).toBe(fixture.componentInstance.tabs.length);
     tabs.forEach((tab) => expect(tab.getAttribute('role')).toBe('tab'));
 
+    const tabByLabel = (label: string) => tabs.find((t) => t.textContent?.trim() === label)!;
+
     // Alapértelmezetten a "Tagok" fül aktív.
-    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
-    expect(tabs.slice(1).every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
+    expect(tabByLabel('Tagok').getAttribute('aria-selected')).toBe('true');
+    expect(tabs.filter((t) => t !== tabByLabel('Tagok'))
+      .every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
 
     fixture.componentInstance.setTab('eredmenyek');
     fixture.detectChanges();
 
-    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
-    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    expect(tabByLabel('Tagok').getAttribute('aria-selected')).toBe('false');
+    expect(tabByLabel('Eredmények').getAttribute('aria-selected')).toBe('true');
   });
 
   // UI-TT-178: a DateRangeFilterComponent egy @switch/@case ágban él, ezért minden
