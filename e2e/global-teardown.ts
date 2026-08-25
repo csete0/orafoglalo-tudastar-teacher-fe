@@ -8,7 +8,11 @@ export default async function globalTeardown(): Promise<void> {
 
   console.log('[global-teardown] E2E DB-konténer eltávolítása...');
   try {
-    execFileSync('docker', ['rm', '-f', DB_CONTAINER_NAME], { stdio: 'inherit' });
+    if (process.env.E2E_KEEP_DB === '1') {
+      console.log('[global-teardown] E2E_KEEP_DB=1 -> a DB-kontener megmarad (diagnosztika).');
+    } else {
+      execFileSync('docker', ['rm', '-f', DB_CONTAINER_NAME], { stdio: 'inherit' });
+    }
   } catch {
     // A konténer esetleg már nem létezik — nem hiba.
   }
