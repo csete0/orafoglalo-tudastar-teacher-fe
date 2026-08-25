@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   CreateInstitutionalLicenseRequest,
   InstitutionalLicenseDto,
+  InstitutionalLicenseUsageDto,
   InstitutionalSeatHolderDto,
   UpdateInstitutionalLicenseRequest,
 } from '../../models/institutional-license.model';
@@ -32,6 +33,10 @@ export class AdminLicenseService {
 
   getSeats(id: number): Observable<InstitutionalSeatHolderDto[]> {
     return this.http.get<InstitutionalSeatHolderDto[]>(`${this.baseUrl}/licenses/${id}/seats`);
+  }
+
+  getUsage(id: number, days = 30): Observable<InstitutionalLicenseUsageDto> {
+    return this.http.get<InstitutionalLicenseUsageDto>(`${this.baseUrl}/licenses/${id}/usage?days=${days}`);
   }
 
   releaseSeat(id: number, userId: number): Observable<void> {

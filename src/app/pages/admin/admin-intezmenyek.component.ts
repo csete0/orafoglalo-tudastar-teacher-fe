@@ -7,7 +7,11 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { SchoolAdminDto } from '../../models/teacher-moderation.model';
-import { InstitutionalLicenseDto } from '../../models/institutional-license.model';
+import {
+  InstitutionalLicenseDto,
+  InstitutionalLicenseUsageDayDto,
+  InstitutionalLicenseUsageDto,
+} from '../../models/institutional-license.model';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,6 +133,9 @@ import { InstitutionalLicenseDto } from '../../models/institutional-license.mode
                       <button (click)="toggleSeats(license.id)" class="btn btn-ghost !px-2 !py-1 !text-xs">
                         {{ expandedLicenseId === license.id ? 'Helyek elrejtése' : 'Helyek megtekintése' }}
                       </button>
+                      <button (click)="toggleUsage(license.id)" class="btn btn-ghost !px-2 !py-1 !text-xs">
+                        {{ expandedUsageLicenseId === license.id ? 'Kimutatás elrejtése' : 'Kihasználtság' }}
+                      </button>
                       @if (!license.revokedAt) {
                         <button
                           (click)="confirmRevoke(license)"
@@ -164,6 +171,52 @@ import { InstitutionalLicenseDto } from '../../models/institutional-license.mode
                           <li class="text-text-muted">Jelenleg senki nem használ helyet.</li>
                         }
                       </ul>
+                    }
+
+                    @if (expandedUsageLicenseId === license.id) {
+                      @if (licenseStore.usage()[license.id]; as usage) {
+                        <div class="mt-2 border-t border-border-default pt-2">
+                          <p class="font-semibold mb-1">Kihasználtság — elmúlt {{ usage.rangeDays }} nap</p>
+
+                          <!-- A bővítési döntés fő száma előre: hányan nem fértek be,
+                               pedig jogosultak lettek volna. -->
+                          <p [class]="usage.totalDenied > 0 ? 'text-danger font-bold' : 'text-text-muted'">
+                            {{ usage.totalDenied }} alkalommal nem jutott hely olyan diáknak, aki jogosult lett volna
+                          </p>
+                          <p class="text-text-muted">
+                            Csúcs: {{ usage.peakSeatsInUse }}/{{ usage.capacity }} hely ·
+                            {{ usage.daysAtCapacity }} napon telt be ·
+                            {{ usage.totalReclaimed }} átvétel tétlen diáktól
+                          </p>
+
+                          @if (usage.totalDenied > 0) {
+                            <p class="mt-1">
+                              Ez a keret szűk: érdemes megfontolni a bővítést.
+                            </p>
+                          }
+
+                          @if (activeUsageDays(usage).length > 0) {
+                            <ul class="mt-2 space-y-0.5">
+                              @for (day of activeUsageDays(usage); track day.day) {
+                                <li>
+                                  <span class="text-text-muted">{{ day.day | date: 'MM.dd' }}</span>
+                                  · csúcs {{ day.peakSeatsInUse }}/{{ usage.capacity }}
+                                  @if (day.denied > 0) {
+                                    · <span class="text-danger">{{ day.denied }} kiszorult</span>
+                                  }
+                                  @if (day.reclaimed > 0) {
+                                    · {{ day.reclaimed }} átvétel
+                                  }
+                                </li>
+                              }
+                            </ul>
+                          } @else {
+                            <p class="text-text-muted mt-1">Ebben az időszakban nem volt használat.</p>
+                          }
+                        </div>
+                      } @else {
+                        <p class="text-text-muted mt-2">Kimutatás betöltése…</p>
+                      }
                     }
                   </div>
                 } @empty {
@@ -244,6 +297,7 @@ export class AdminIntezmenyekComponent {
   targetId: number | null = null;
 
   expandedLicenseId: number | null = null;
+  expandedUsageLicenseId: number | null = null;
 
   newLicenseSchoolId: number | null = null;
   newTier = 'premium';
@@ -259,6 +313,24 @@ export class AdminIntezmenyekComponent {
 
   tierLabel(tier: string): string {
     return tier === 'premium' ? 'Prémium' : 'Standard';
+  }
+
+  toggleUsage(licenseId: number): void {
+    if (this.expandedUsageLicenseId === licenseId) {
+      this.expandedUsageLicenseId = null;
+      return;
+    }
+    this.expandedUsageLicenseId = licenseId;
+    this.licenseStore.loadUsage(licenseId);
+  }
+
+  /**
+   * Csak azokat a napokat listázzuk, ahol TÖRTÉNT valami - egy 30 elemű, csupa
+   * nulla lista elrejtené a lényeget. Az összesítők (fent) így is a teljes
+   * időszakra vonatkoznak.
+   */
+  activeUsageDays(usage: InstitutionalLicenseUsageDto): InstitutionalLicenseUsageDayDto[] {
+    return usage.daily.filter((d) => d.peakSeatsInUse > 0 || d.denied > 0 || d.reclaimed > 0);
   }
 
   toggleSeats(licenseId: number): void {

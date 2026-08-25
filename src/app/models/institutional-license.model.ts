@@ -51,3 +51,23 @@ export interface InstitutionalSeatHolderDto {
   /** A tétlenségi ablakon belül aktív volt-e (különben elvehető-jelölt). */
   isFresh: boolean;
 }
+
+export interface InstitutionalLicenseUsageDayDto {
+  day: string;
+  peakSeatsInUse: number;
+  denied: number;
+  reclaimed: number;
+  atCapacity: boolean;
+}
+
+export interface InstitutionalLicenseUsageDto {
+  licenseId: number;
+  capacity: number;
+  rangeDays: number;
+  /** A bővítési döntés fő száma: hányan nem fértek be, pedig jogosultak lettek volna. */
+  totalDenied: number;
+  totalReclaimed: number;
+  peakSeatsInUse: number;
+  daysAtCapacity: number;
+  daily: InstitutionalLicenseUsageDayDto[];
+}

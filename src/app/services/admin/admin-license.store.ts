@@ -5,6 +5,7 @@ import { AdminLicenseService } from './admin-license.service';
 import {
   CreateInstitutionalLicenseRequest,
   InstitutionalLicenseDto,
+  InstitutionalLicenseUsageDto,
   InstitutionalSeatHolderDto,
   UpdateInstitutionalLicenseRequest,
 } from '../../models/institutional-license.model';
@@ -16,11 +17,13 @@ export class AdminLicenseStore {
 
   private readonly _licenses = signal<InstitutionalLicenseDto[]>([]);
   private readonly _seats = signal<Record<number, InstitutionalSeatHolderDto[] | undefined>>({});
+  private readonly _usage = signal<Record<number, InstitutionalLicenseUsageDto | undefined>>({});
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
   readonly licenses = computed(() => this._licenses());
   readonly seats = computed(() => this._seats());
+  readonly usage = computed(() => this._usage());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
 
@@ -119,6 +122,18 @@ export class AdminLicenseStore {
       .subscribe({
         next: (seats) => this._seats.update((current) => ({ ...current, [licenseId]: seats })),
         error: (err) => this._error.set(err.error?.errorMessage ?? 'A helyek betöltése sikertelen.'),
+      });
+  }
+
+  loadUsage(licenseId: number): void {
+    this._error.set(null);
+
+    this.service
+      .getUsage(licenseId)
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (usage) => this._usage.update((current) => ({ ...current, [licenseId]: usage })),
+        error: (err) => this._error.set(err.error?.errorMessage ?? 'A kimutatás betöltése sikertelen.'),
       });
   }
 
