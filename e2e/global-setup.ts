@@ -4,6 +4,7 @@ import * as net from 'node:net';
 import * as http from 'node:http';
 import {
   BACKEND_LOG_FILE,
+  BACKEND_PORT,
   BACKEND_PID_FILE,
   BACKEND_REPO_PATH,
   BACKEND_URL,
@@ -55,9 +56,40 @@ export default async function globalSetup(): Promise<void> {
   fs.mkdirSync(TEACHER_FILES_ROOT, { recursive: true });
 
   console.log('[global-setup] Backend indítása (a séma+seed már kész)...');
+  assertBackendPortFree();
   await startBackend();
 
   console.log('[global-setup] Kész — a webServer-ek (diák-fe/tanári-fe) indulhatnak, a backend már fut.');
+}
+
+/**
+ * Megszakítja a futást, ha a backend portján MÁR figyel valami.
+ *
+ * Enélkül a suite csendben egy KORÁBBI futásból ottmaradt backend-példányhoz
+ * beszél: a `dotnet run` nem tud bindolni, a health-check viszont zöld (a régi
+ * példány válaszol), és a tesztek egy elavult binárist ellenőriznek. Ez pontosan
+ * úgy néz ki, mintha az új kód nem működne - órákat lehet vele elmenni.
+ *
+ * A jelenség valós: egy elárvult (PPID=1) `dotnet run` gyerekfolyamat órákon át
+ * kiszolgálta a suite-ot, mert a teardown csak a wrappert ölte meg.
+ */
+function assertBackendPortFree(): void {
+  try {
+    execFileSync('ss', ['-tlnp'], { encoding: 'utf-8' })
+      .split('\n')
+      .filter((line) => line.includes(`:${BACKEND_PORT} `))
+      .forEach((line) => {
+        throw new Error(
+          `[global-setup] A ${BACKEND_PORT}-as porton MÁR figyel egy folyamat:\n  ${line.trim()}\n` +
+          'Ez jellemzően egy korábbi futásból ottmaradt backend. Állítsd le, mielőtt újra futtatnád — ' +
+          'különben a tesztek egy elavult binárist ellenőriznének.',
+        );
+      });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('[global-setup]')) throw err;
+    // Az `ss` hiánya nem ok a futás megszakítására - ilyenkor a `dotnet run`
+    // bind-hibája fog szólni.
+  }
 }
 
 async function startBackend(): Promise<void> {

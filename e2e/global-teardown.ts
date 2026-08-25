@@ -25,6 +25,16 @@ function stopBackend(): void {
   fs.rmSync(BACKEND_PID_FILE, { force: true });
   if (!pid) return;
 
+  // A `dotnet run` egy KÜLÖN gyerekfolyamatként indítja a tényleges
+  // DigitalCulture.API-t. Csak a wrappert megölve a gyerek elárvul (PPID=1) és
+  // tovább figyel a backend porton - a KÖVETKEZŐ futás pedig csendben ehhez a
+  // régi binárishoz fog beszélni. Ezért a teljes folyamatfát kell lezárni.
+  try {
+    execFileSync('pkill', ['-TERM', '-P', String(pid)], { stdio: 'ignore' });
+  } catch {
+    // Nincs gyerek, vagy a pkill hiányzik - a lenti kill(pid) még megy.
+  }
+
   try {
     // /T: a teljes folyamatfát leállítja — a `dotnet run` maga is spawnol
     // egy tényleges DigitalCulture.API.exe gyermek-folyamatot.
