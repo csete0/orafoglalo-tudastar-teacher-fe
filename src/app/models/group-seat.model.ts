@@ -5,6 +5,8 @@ export interface GroupSeatHolderDto {
   lastActivityAt: string;
   /** A tétlenségi ablakon belül aktív volt-e. */
   isFresh: boolean;
+  /** Éppen vizsgát/kvízt ír - ilyenkor a felszabadítás nem hajtódik végre. */
+  sessionInProgress: boolean;
   /** Épp vizsgázik/kvízel — tőle a rendszer sem venné el a helyet. */
   hasSessionInProgress: boolean;
   /**

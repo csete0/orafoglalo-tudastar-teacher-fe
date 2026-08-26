@@ -156,6 +156,13 @@ import {
                             <span [class]="seat.isFresh ? 'text-success' : 'text-text-muted'">
                               {{ seat.isFresh ? 'aktív' : 'tétlen' }}
                             </span>
+                            <!-- A "Felszabadítás" gomb itt van mellette: az admin előre
+                                 lássa, kinél nem fog végrehajtódni a művelet. -->
+                            @if (seat.sessionInProgress) {
+                              <span class="text-warning" title="Vizsga vagy kvíz van folyamatban - a helyét most nem lehet felszabadítani.">
+                                &middot; vizsgázik
+                              </span>
+                            }
                             <span class="text-text-muted">
                               utoljára: {{ seat.lastActivityAt | date: 'MM.dd HH:mm' }}
                             </span>

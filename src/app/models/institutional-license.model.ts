@@ -50,6 +50,8 @@ export interface InstitutionalSeatHolderDto {
   lastActivityAt: string;
   /** A tétlenségi ablakon belül aktív volt-e (különben elvehető-jelölt). */
   isFresh: boolean;
+  /** Éppen vizsgát/kvízt ír - ilyenkor a felszabadítás nem hajtódik végre. */
+  sessionInProgress: boolean;
 }
 
 export interface InstitutionalLicenseUsageDayDto {
