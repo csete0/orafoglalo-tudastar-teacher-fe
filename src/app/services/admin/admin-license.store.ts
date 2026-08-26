@@ -87,7 +87,19 @@ export class AdminLicenseStore {
       .update(id, request)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.load(),
+        next: () => {
+          // BE/UI: a licenc-lista frissítése önmagában nem elég. Ha az admin épp NYITVA
+          // tartja ennek a licencnek a hely-listáját, az a gyorsítótárból tovább mutatná a
+          // már felszabadított/érvénytelenné vált helyeket - a felület és a valóság
+          // szétcsúszna. A mutáció után az érintett licenc cache-elt hely-listáját eldobjuk.
+          // A cache-t nem elég eldobni (akkor a panel "nincs adat" állapotba esne),
+          // hanem ÚJRA KELL TÖLTENI - a lista nyitva marad, csak már a friss állapotot
+          // mutatja. Csak akkor, ha ennek a licencnek a helyeit egyáltalán megnyitották.
+          if (this._seats()[id] !== undefined) {
+            this.loadSeats(id);
+          }
+          this.load();
+        },
         error: (err) => {
           this._error.set(err.error?.errorMessage ?? 'A licenc módosítása sikertelen.');
           this._loading.set(false);
@@ -105,7 +117,19 @@ export class AdminLicenseStore {
       .revoke(id)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.load(),
+        next: () => {
+          // BE/UI: a licenc-lista frissítése önmagában nem elég. Ha az admin épp NYITVA
+          // tartja ennek a licencnek a hely-listáját, az a gyorsítótárból tovább mutatná a
+          // már felszabadított/érvénytelenné vált helyeket - a felület és a valóság
+          // szétcsúszna. A mutáció után az érintett licenc cache-elt hely-listáját eldobjuk.
+          // A cache-t nem elég eldobni (akkor a panel "nincs adat" állapotba esne),
+          // hanem ÚJRA KELL TÖLTENI - a lista nyitva marad, csak már a friss állapotot
+          // mutatja. Csak akkor, ha ennek a licencnek a helyeit egyáltalán megnyitották.
+          if (this._seats()[id] !== undefined) {
+            this.loadSeats(id);
+          }
+          this.load();
+        },
         error: (err) => {
           this._error.set(err.error?.errorMessage ?? 'A licenc visszavonása sikertelen.');
           this._loading.set(false);

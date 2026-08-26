@@ -408,8 +408,15 @@ export class AdminIntezmenyekComponent {
     this.licenseStore.releaseSeat(license.id, userId);
   }
 
+  // BE-INSTLICENSEADMIN-CREATEFORM-LOCALMIDNIGHT-UTCDATE: a `toISOString()` UTC-re
+  // konvertál, ezért helyi éjfél után, UTC éjfél előtt a "mai nap" alapértelmezés a
+  // TEGNAPI dátumot töltötte be - az admin észrevétlenül egy nappal korábbi
+  // érvényességgel hozott létre licencet. A HELYI naptári napot kell kiírni.
   private toDateInput(date: Date): string {
-    return date.toISOString().slice(0, 10);
+    const ev = date.getFullYear();
+    const ho = String(date.getMonth() + 1).padStart(2, '0');
+    const nap = String(date.getDate()).padStart(2, '0');
+    return `${ev}-${ho}-${nap}`;
   }
 
   canMerge(): boolean {
