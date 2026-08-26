@@ -5,6 +5,7 @@ import { AdminLicenseService } from './admin-license.service';
 import {
   CreateInstitutionalLicenseRequest,
   InstitutionalLicenseDto,
+  InstitutionalLicenseRevokeResultDto,
   InstitutionalLicenseUsageDto,
   InstitutionalSeatHolderDto,
   UpdateInstitutionalLicenseRequest,
@@ -77,7 +78,18 @@ export class AdminLicenseStore {
       });
   }
 
-  update(id: number, request: UpdateInstitutionalLicenseRequest): void {
+  // UI-TT-199: `onSuccess` a testvér `AdminTeacherStore.setQuota()` mintáját követi - a
+  // hívó (`admin-intezmenyek.component.ts` `saveLicenseEdit()`) a szerkesztő formot
+  // KIZÁRÓLAG ebből zárja. Hiba esetén (pl. `ValidateRange`/`ValidateIdleWindow`) az
+  // `onSuccess` sosem fut le, a form nyitva marad az admin begépelt értékeivel - a korábbi
+  // "azonnal, feltétel nélkül zár" viselkedés véglegesen eldobta a be nem küldött módosítást.
+  // A frissített DTO-t is átadjuk (mint a `GroupStore.create()`/`SchoolStore.create()`-nál),
+  // hogy a hívó a `skippedDueToActiveSessionCount`-ot (UI-TT-200) is felolvashassa.
+  update(
+    id: number,
+    request: UpdateInstitutionalLicenseRequest,
+    onSuccess?: (license: InstitutionalLicenseDto) => void,
+  ): void {
     if (this._loading()) return;
 
     this._loading.set(true);
@@ -87,7 +99,7 @@ export class AdminLicenseStore {
       .update(id, request)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (license) => {
           // BE/UI: a licenc-lista frissítése önmagában nem elég. Ha az admin épp NYITVA
           // tartja ennek a licencnek a hely-listáját, az a gyorsítótárból tovább mutatná a
           // már felszabadított/érvénytelenné vált helyeket - a felület és a valóság
@@ -99,6 +111,7 @@ export class AdminLicenseStore {
             this.loadSeats(id);
           }
           this.load();
+          if (onSuccess) onSuccess(license);
         },
         error: (err) => {
           this._error.set(err.error?.errorMessage ?? 'A licenc módosítása sikertelen.');
@@ -107,7 +120,10 @@ export class AdminLicenseStore {
       });
   }
 
-  revoke(id: number): void {
+  // UI-TT-200: az `onSuccess`-nek átadott `InstitutionalLicenseRevokeResultDto` hordozza a
+  // `skippedDueToActiveSessionCount`-ot - a hívó (`confirmRevoke()`) ebből tud toast-ot
+  // mutatni, ha a visszavonás NEM szabadított fel minden helyet (aktív vizsga/kvíz miatt).
+  revoke(id: number, onSuccess?: (result: InstitutionalLicenseRevokeResultDto) => void): void {
     if (this._loading()) return;
 
     this._loading.set(true);
@@ -117,7 +133,7 @@ export class AdminLicenseStore {
       .revoke(id)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (result) => {
           // BE/UI: a licenc-lista frissítése önmagában nem elég. Ha az admin épp NYITVA
           // tartja ennek a licencnek a hely-listáját, az a gyorsítótárból tovább mutatná a
           // már felszabadított/érvénytelenné vált helyeket - a felület és a valóság
@@ -129,6 +145,7 @@ export class AdminLicenseStore {
             this.loadSeats(id);
           }
           this.load();
+          if (onSuccess) onSuccess(result);
         },
         error: (err) => {
           this._error.set(err.error?.errorMessage ?? 'A licenc visszavonása sikertelen.');

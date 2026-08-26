@@ -4,6 +4,7 @@ import { AdminIntezmenyekComponent } from './admin-intezmenyek.component';
 import { AdminSchoolStore } from '../../services/admin/admin-school.store';
 import { AdminLicenseStore } from '../../services/admin/admin-license.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
 import { SchoolAdminDto } from '../../models/teacher-moderation.model';
 import { InstitutionalLicenseDto } from '../../models/institutional-license.model';
 
@@ -36,6 +37,7 @@ function makeLicense(overrides: Partial<InstitutionalLicenseDto> = {}): Institut
     billingNote: null,
     createdAt: '2026-08-25T00:00:00Z',
     isActive: true,
+    skippedDueToActiveSessionCount: 0,
     ...overrides,
   };
 }
@@ -66,6 +68,7 @@ describe('AdminIntezmenyekComponent', () => {
     releaseSeat: ReturnType<typeof vi.fn>;
   };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
+  let toastServiceMock: { success: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn> };
 
   function configure(
     schools: SchoolAdminDto[] = [makeSchool({ id: 1, name: 'Forrás' }), makeSchool({ id: 2, name: 'Cél' })],
@@ -91,11 +94,24 @@ describe('AdminIntezmenyekComponent', () => {
       loadUsage: vi.fn(),
       clearError: vi.fn(),
       create: vi.fn(),
-      update: vi.fn(),
-      revoke: vi.fn(),
+      // A valódi store `of()`-fal (RxJS-szel) SZINKRON emittál - az onSuccess callback
+      // alapból, mint egy sikeres HTTP-válasz, azonnal lefut a frissített DTO-val. Az
+      // egyes tesztek felülírhatják, ha hiba-ágat (callback NEM hívása) akarnak szimulálni.
+      update: vi.fn((id: number, request: unknown, onSuccess?: (license: InstitutionalLicenseDto) => void) => {
+        onSuccess?.(makeLicense({ id, ...(request as object) }));
+      }),
+      revoke: vi.fn(
+        (
+          _id: number,
+          onSuccess?: (result: { releasedCount: number; skippedDueToActiveSessionCount: number }) => void,
+        ) => {
+          onSuccess?.({ releasedCount: 1, skippedDueToActiveSessionCount: 0 });
+        },
+      ),
       releaseSeat: vi.fn(),
     };
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(true) };
+    toastServiceMock = { success: vi.fn(), warning: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [AdminIntezmenyekComponent],
@@ -103,6 +119,7 @@ describe('AdminIntezmenyekComponent', () => {
         { provide: AdminSchoolStore, useValue: storeMock },
         { provide: AdminLicenseStore, useValue: licenseStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
+        { provide: ToastService, useValue: toastServiceMock },
       ],
     });
   }
@@ -402,7 +419,7 @@ describe('AdminIntezmenyekComponent', () => {
   // update()-jét hívja meg - nem egy revoke+create workaroundot, ami
   // azonnal kirúgná a nem-vizsgázó diákokat és nullázná a kihasználtsági
   // előzményt egy vadonatúj licenc-id alatt.
-  it('saveLicenseEdit() a szerkesztett mezőkkel meghívja a licenseStore.update()-öt, majd bezárja a formot', () => {
+  it('saveLicenseEdit() a szerkesztett mezőkkel meghívja a licenseStore.update()-öt, majd sikeres válasz után bezárja a formot', () => {
     configure();
     const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
     fixture.detectChanges();
@@ -418,13 +435,19 @@ describe('AdminIntezmenyekComponent', () => {
 
     component.saveLicenseEdit(license);
 
-    expect(licenseStoreMock.update).toHaveBeenCalledWith(42, {
-      capacity: 40,
-      validFrom: '2026-09-01',
-      validTo: '2027-09-01',
-      billingNote: 'Új számlázási megjegyzés',
-      idleWindowMinutes: 25,
-    });
+    expect(licenseStoreMock.update).toHaveBeenCalledWith(
+      42,
+      {
+        capacity: 40,
+        validFrom: '2026-09-01',
+        validTo: '2027-09-01',
+        billingNote: 'Új számlázási megjegyzés',
+        idleWindowMinutes: 25,
+      },
+      expect.any(Function),
+    );
+    // A configure() alap update()-mock-ja szinkron hívja az onSuccess-t (mint a valódi
+    // store `of()`-fal) - ez a sikeres válasz zárja a formot.
     expect(component.editingLicenseId).toBeNull();
   });
 
@@ -443,7 +466,65 @@ describe('AdminIntezmenyekComponent', () => {
     expect(licenseStoreMock.update).toHaveBeenCalledWith(
       42,
       expect.objectContaining({ billingNote: null }),
+      expect.any(Function),
     );
+  });
+
+  // UI-TT-199: `saveLicenseEdit()` korábban `editingLicenseId = null`-t FELTÉTEL NÉLKÜL, a
+  // HTTP-válasz előtt állította be. Ha a backend elutasítja a kérést (pl. `ValidateRange`:
+  // felcserélt validFrom/validTo - könnyű elgépelés két szomszédos dátum-mezőnél), a form már
+  // bezárult, mire a hiba megérkezett - az admin begépelt módosítása véglegesen elveszett, a
+  // form újranyitásakor az EREDETI adatokra ugrott vissza. A HELYES viselkedés: a store csak
+  // SIKERES válasz esetén hívja az onSuccess-t (ld. `admin-license.store.spec.ts`), a
+  // komponens pedig KIZÁRÓLAG onnan zár - hiba esetén a form (és a begépelt értékek) nyitva
+  // maradnak.
+  it('BUG UI-TT-199 javítva: saveLicenseEdit() sikertelen backend-válasz esetén NEM zárja be a formot, a begépelt módosítás megmarad', () => {
+    configure([makeSchool({ id: 1 })], [makeLicense({ id: 42, capacity: 30, validFrom: '2026-08-25', validTo: '2027-08-25' })]);
+    // A store `error`-ágát szimuláljuk: hiba esetén a valódi store SOSEM hívja az onSuccess-t.
+    licenseStoreMock.update.mockImplementation(() => {
+      /* onSuccess szándékosan nincs meghívva - a backend elutasította a kérést */
+    });
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const license = makeLicense({ id: 42, capacity: 30, validFrom: '2026-08-25', validTo: '2027-08-25' });
+
+    // Az admin megnyitja a szerkesztőt, és elgépeli a két dátumot (felcseréli őket) - ez
+    // élesben a backend `ValidateRange`-jét biztosan elbuktatja.
+    component.startEditLicense(license);
+    component.editCapacity = 50;
+    component.editValidFrom = '2027-09-01';
+    component.editValidTo = '2026-09-01';
+    component.saveLicenseEdit(license);
+
+    // A backend elutasította -> a form NEM zárult be, és az admin begépelt értékei
+    // megmaradtak, hogy csak a hibás mezőt kelljen javítania.
+    expect(component.editingLicenseId).toBe(42);
+    expect(component.editCapacity).toBe(50);
+    expect(component.editValidFrom).toBe('2027-09-01');
+    expect(component.editValidTo).toBe('2026-09-01');
+  });
+
+  // UI-TT-200: a kapacitás-csökkentéses update() válasza is hordozhatja a
+  // `skippedDueToActiveSessionCount`-ot (BE-ADMINUPDATE-CAPACITYREDUCTION-SILENT-SKIP) - a
+  // sikeres mentés utáni toast korrigálja, ha nem minden hely szabadult fel ténylegesen.
+  it('saveLicenseEdit() sikeres válasz után toast-figyelmeztetést mutat, ha vizsgázó diák miatt hely maradt bent', () => {
+    configure();
+    licenseStoreMock.update.mockImplementation(
+      (id: number, _req: unknown, onSuccess?: (license: InstitutionalLicenseDto) => void) => {
+        onSuccess?.(makeLicense({ id, capacity: 5, skippedDueToActiveSessionCount: 2 }));
+      },
+    );
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({ id: 42 });
+    component.startEditLicense(license);
+    component.saveLicenseEdit(license);
+
+    expect(component.editingLicenseId).toBeNull();
+    expect(toastServiceMock.warning).toHaveBeenCalledWith(expect.stringContaining('2 hely'));
   });
 
   it('saveLicenseEdit() no-op, ha a licenseStore éppen loading', () => {
@@ -489,5 +570,45 @@ describe('AdminIntezmenyekComponent', () => {
     expect(capacityInput).toBeTruthy();
     expect(fixture.componentInstance.editingLicenseId).toBe(10);
     expect(fixture.componentInstance.editCapacity).toBe(30);
+  });
+
+  // UI-TT-200: a `confirmRevoke()` dialógusa feltétel nélkül ígéri, hogy "a jelenleg
+  // használt N hely azonnal felszabadul" - ez szándékosan nem igaz, ha egy diák épp
+  // vizsgázik/kvízt ír (a backend `BE-LICENSEREVOKE-BULK-SILENT-FALSE-SUCCESS` fixe óta
+  // ilyenkor SZÁNDÉKOSAN kihagyja a helyét). Korábban `AdminLicenseService.revoke()`
+  // `Observable<void>`-ra volt tipizálva, a store `next()`-ága pedig nem fogadott
+  // callback-et - ez az információ sosem jutott el az adminig. A HELYES viselkedés: a
+  // sikeres visszavonás után egy toast korrigálja az ígéretet, ha a valóság eltér tőle.
+  it('confirmRevoke() sikeres visszavonás után toast-figyelmeztetést mutat, ha vizsgázó diák miatt hely maradt bent', async () => {
+    configure([makeSchool({ id: 1 })], [makeLicense({ id: 42, schoolId: 1, heldSeats: 5 })]);
+    licenseStoreMock.revoke.mockImplementation(
+      (
+        _id: number,
+        onSuccess?: (result: { releasedCount: number; skippedDueToActiveSessionCount: number }) => void,
+      ) => {
+        onSuccess?.({ releasedCount: 3, skippedDueToActiveSessionCount: 2 });
+      },
+    );
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    await component.confirmRevoke(makeLicense({ id: 42, schoolId: 1, heldSeats: 5 }));
+
+    expect(licenseStoreMock.revoke).toHaveBeenCalledWith(42, expect.any(Function));
+    expect(toastServiceMock.warning).toHaveBeenCalledWith(expect.stringContaining('2 hely'));
+  });
+
+  it('confirmRevoke() NEM mutat toast-ot, ha minden hely felszabadult (skippedDueToActiveSessionCount = 0)', async () => {
+    configure([makeSchool({ id: 1 })], [makeLicense({ id: 42, schoolId: 1, heldSeats: 5 })]);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // A configure() alap revoke()-mock-ja skippedDueToActiveSessionCount: 0-val hívja
+    // az onSuccess-t.
+    await component.confirmRevoke(makeLicense({ id: 42, schoolId: 1, heldSeats: 5 }));
+
+    expect(toastServiceMock.warning).not.toHaveBeenCalled();
   });
 });

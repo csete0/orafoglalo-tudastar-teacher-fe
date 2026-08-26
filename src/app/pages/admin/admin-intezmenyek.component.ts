@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AdminSchoolStore } from '../../services/admin/admin-school.store';
 import { AdminLicenseStore } from '../../services/admin/admin-license.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { SchoolAdminDto } from '../../models/teacher-moderation.model';
@@ -349,6 +350,7 @@ export class AdminIntezmenyekComponent {
   readonly store = inject(AdminSchoolStore);
   readonly licenseStore = inject(AdminLicenseStore);
   private readonly confirmService = inject(ConfirmService);
+  private readonly toastService = inject(ToastService);
 
   sourceId: number | null = null;
   targetId: number | null = null;
@@ -462,18 +464,30 @@ export class AdminIntezmenyekComponent {
     this.editingLicenseId = null;
   }
 
+  // UI-TT-199: a form KIZÁRÓLAG a store sikeres callback-jéből zár - ugyanaz a minta, mint
+  // az `admin-tanarok.component.ts` `saveQuota()`-ja. Korábban `editingLicenseId = null` itt,
+  // feltétel nélkül futott, MIELŐTT a HTTP-válasz megérkezett volna - backend-elutasítás
+  // (pl. felcserélt validFrom/validTo) esetén a form már bezárult, az admin begépelt
+  // módosítása véglegesen elveszett. Hiba esetén (a store `error`-ágán) ez a callback sosem
+  // fut le, a form nyitva marad a begépelt értékekkel, hogy az admin csak a hibás mezőt
+  // javítsa.
   saveLicenseEdit(license: InstitutionalLicenseDto): void {
     if (this.licenseStore.loading()) return;
 
-    this.licenseStore.update(license.id, {
-      capacity: this.editCapacity,
-      validFrom: this.editValidFrom,
-      validTo: this.editValidTo,
-      billingNote: this.editBillingNote?.trim() || null,
-      idleWindowMinutes: this.editIdleWindowMinutes,
-    });
-
-    this.editingLicenseId = null;
+    this.licenseStore.update(
+      license.id,
+      {
+        capacity: this.editCapacity,
+        validFrom: this.editValidFrom,
+        validTo: this.editValidTo,
+        billingNote: this.editBillingNote?.trim() || null,
+        idleWindowMinutes: this.editIdleWindowMinutes,
+      },
+      (updated) => {
+        this.editingLicenseId = null;
+        this.warnIfSeatsSkipped(updated.skippedDueToActiveSessionCount);
+      },
+    );
   }
 
   async confirmRevoke(license: InstitutionalLicenseDto): Promise<void> {
@@ -489,7 +503,22 @@ export class AdminIntezmenyekComponent {
     });
     if (!ok) return;
 
-    this.licenseStore.revoke(license.id);
+    // UI-TT-200: a fenti dialógus feltétel nélkül ígéri, hogy MINDEN hely felszabadul - ez
+    // szándékosan nem igaz, ha egy diák épp vizsgázik/kvízt ír (a backend ilyenkor
+    // SZÁNDÉKOSAN kihagyja a helyét). A callback-ből mutatott toast korrigálja ezt, ha a
+    // valóság eltér az ígérettől.
+    this.licenseStore.revoke(license.id, (result) => {
+      this.warnIfSeatsSkipped(result.skippedDueToActiveSessionCount);
+    });
+  }
+
+  private warnIfSeatsSkipped(skippedCount: number): void {
+    if (skippedCount <= 0) return;
+
+    this.toastService.warning(
+      `${skippedCount} hely nem szabadult fel - a diák épp vizsgázik/kvízt ír, ` +
+        'a hely csak a munkamenet végeztével válik felszabadíthatóvá.',
+    );
   }
 
   async confirmReleaseSeat(license: InstitutionalLicenseDto, userId: number, label: string): Promise<void> {

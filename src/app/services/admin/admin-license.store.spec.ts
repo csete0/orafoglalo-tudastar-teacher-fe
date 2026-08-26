@@ -21,6 +21,7 @@ function makeLicense(overrides: Partial<InstitutionalLicenseDto> = {}): Institut
     billingNote: null,
     createdAt: '2026-08-25T00:00:00Z',
     isActive: true,
+    skippedDueToActiveSessionCount: 0,
     ...overrides,
   };
 }
@@ -48,7 +49,7 @@ describe('AdminLicenseStore', () => {
       getLicenses: vi.fn().mockReturnValue(of([makeLicense()])),
       create: vi.fn().mockReturnValue(of(makeLicense())),
       update: vi.fn().mockReturnValue(of(makeLicense())),
-      revoke: vi.fn().mockReturnValue(of(void 0)),
+      revoke: vi.fn().mockReturnValue(of({ releasedCount: 0, skippedDueToActiveSessionCount: 0 })),
       getSeats: vi.fn().mockReturnValue(of([])),
       releaseSeat: vi.fn().mockReturnValue(of(void 0)),
       getUsage: vi.fn().mockReturnValue(
@@ -119,6 +120,51 @@ describe('AdminLicenseStore', () => {
 
     expect(store.error()).toBe('A licenc már vissza van vonva.');
     expect(store.loading()).toBe(false);
+  });
+
+  // UI-TT-199: az `AdminTeacherStore.setQuota()` mintáját követve `update()` is fogad egy
+  // opcionális `onSuccess` callback-et - a hívó (`admin-intezmenyek.component.ts`
+  // `saveLicenseEdit()`) KIZÁRÓLAG ebből zárja a szerkesztő formot. Korábban egyáltalán nem
+  // volt callback-paraméter, ezért a komponens feltétel nélkül, a HTTP-válasz előtt zárt.
+  it('update() sikeres válasz esetén meghívja az onSuccess callback-et a frissített licenccel', async () => {
+    serviceMock.update.mockReturnValue(of(makeLicense({ id: 10, capacity: 50 })));
+    const store = configure();
+    const onSuccess = vi.fn();
+
+    store.update(10, { capacity: 50, validFrom: '2026-08-25', validTo: '2027-08-25' }, onSuccess);
+    await Promise.resolve();
+
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ id: 10, capacity: 50 }));
+  });
+
+  it('update() hiba esetén NEM hívja meg az onSuccess callback-et - a hívó formja nyitva maradhat', async () => {
+    serviceMock.update.mockReturnValue(
+      throwError(() => ({ error: { errorMessage: 'Az érvényesség vége nem lehet korábbi a kezdeténél.' } })),
+    );
+    const store = configure();
+    const onSuccess = vi.fn();
+
+    store.update(10, { capacity: 50, validFrom: '2027-08-25', validTo: '2026-08-25' }, onSuccess);
+    await Promise.resolve();
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(store.error()).toBe('Az érvényesség vége nem lehet korábbi a kezdeténél.');
+  });
+
+  // UI-TT-200: a backend (BE-LICENSEREVOKE-BULK-SILENT-FALSE-SUCCESS, ma reggel javítva) a
+  // visszavonás válaszában pontosan megmondja, hány helyet hagyott ki aktív vizsga/kvíz
+  // miatt. Korábban `revoke()` `Observable<void>`-ra volt tipizálva és nem fogadott
+  // callback-et - ez az információ sosem jutott el a felületig. Az onSuccess-nek átadott
+  // válasz-DTO-ból a hívó (`confirmRevoke()`) tud toast-ot mutatni.
+  it('revoke() sikeres válasz esetén az onSuccess callback-nek átadja a skippedDueToActiveSessionCount-ot', async () => {
+    serviceMock.revoke.mockReturnValue(of({ releasedCount: 3, skippedDueToActiveSessionCount: 2 }));
+    const store = configure();
+    const onSuccess = vi.fn();
+
+    store.revoke(10, onSuccess);
+    await Promise.resolve();
+
+    expect(onSuccess).toHaveBeenCalledWith({ releasedCount: 3, skippedDueToActiveSessionCount: 2 });
   });
 
   it('licencenként tárolja a kihasználtsági kimutatást', async () => {

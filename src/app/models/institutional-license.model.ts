@@ -20,6 +20,14 @@ export interface InstitutionalLicenseDto {
   billingNote: string | null;
   createdAt: string;
   isActive: boolean;
+  /**
+   * BE-ADMINUPDATE-CAPACITYREDUCTION-SILENT-SKIP: az UTOLSÓ update()-hívás kapacitás-
+   * csökkentése hány, a tartományon kívülre szorult helyet hagyott bent vizsga/kvíz miatt.
+   * 0, ha nem történt kapacitás-csökkentés vagy nem volt kihagyás - a licenc-LISTÁS nézet
+   * ezt nem tölti ki, csak az adott update()-hívás válasza hordozza (egyszeri művelet
+   * eredménye, nem a licenc tartós állapota).
+   */
+  skippedDueToActiveSessionCount: number;
 }
 
 export interface CreateInstitutionalLicenseRequest {
@@ -39,6 +47,16 @@ export interface UpdateInstitutionalLicenseRequest {
   validTo: string;
   billingNote?: string | null;
   idleWindowMinutes?: number | null;
+}
+
+/**
+ * UI-TT-200 / BE-LICENSEREVOKE-BULK-SILENT-FALSE-SUCCESS: a visszavonás SZÁNDÉKOSAN
+ * kihagyja a vizsga/kvíz közben lévő diákok helyét - az admin-nak tudnia kell erről,
+ * különben a felület sikert mutat, miközben egy hely ténylegesen bent maradt.
+ */
+export interface InstitutionalLicenseRevokeResultDto {
+  releasedCount: number;
+  skippedDueToActiveSessionCount: number;
 }
 
 export interface InstitutionalSeatHolderDto {

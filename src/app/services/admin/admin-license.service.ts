@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   CreateInstitutionalLicenseRequest,
   InstitutionalLicenseDto,
+  InstitutionalLicenseRevokeResultDto,
   InstitutionalLicenseUsageDto,
   InstitutionalSeatHolderDto,
   UpdateInstitutionalLicenseRequest,
@@ -27,8 +28,12 @@ export class AdminLicenseService {
     return this.http.put<InstitutionalLicenseDto>(`${this.baseUrl}/licenses/${id}`, request);
   }
 
-  revoke(id: number): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/licenses/${id}/revoke`, {});
+  // UI-TT-200: a válasz teste (releasedCount/skippedDueToActiveSessionCount) a
+  // valóságban mindig megérkezik - `Observable<void>`-ra tipizálva korábban fizikailag
+  // eldobta a backend `SkippedDueToActiveSessionCount` mezőjét, mielőtt bármi kiolvashatta
+  // volna.
+  revoke(id: number): Observable<InstitutionalLicenseRevokeResultDto> {
+    return this.http.post<InstitutionalLicenseRevokeResultDto>(`${this.baseUrl}/licenses/${id}/revoke`, {});
   }
 
   getSeats(id: number): Observable<InstitutionalSeatHolderDto[]> {
