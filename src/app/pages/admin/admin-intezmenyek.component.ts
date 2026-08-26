@@ -138,6 +138,13 @@ import {
                       </button>
                       @if (!license.revokedAt) {
                         <button
+                          (click)="startEditLicense(license)"
+                          [disabled]="licenseStore.loading()"
+                          class="btn btn-ghost !px-2 !py-1 !text-xs"
+                        >
+                          Szerkesztés
+                        </button>
+                        <button
                           (click)="confirmRevoke(license)"
                           [disabled]="licenseStore.loading()"
                           class="btn btn-danger !px-2 !py-1 !text-xs"
@@ -146,6 +153,49 @@ import {
                         </button>
                       }
                     </div>
+
+                    @if (editingLicenseId === license.id) {
+                      <div class="mt-2 flex flex-wrap gap-2 items-end border-t border-border-default pt-2">
+                        <div>
+                          <label class="text-xs text-text-muted block mb-1">Helyek</label>
+                          <input type="number" min="0" [(ngModel)]="editCapacity"
+                                 [attr.name]="'edit-cap-' + license.id" [ngModelOptions]="{ standalone: true }"
+                                 class="input !w-20 !text-xs" />
+                        </div>
+                        <div>
+                          <label class="text-xs text-text-muted block mb-1">Érvényes-tól</label>
+                          <input type="date" [(ngModel)]="editValidFrom"
+                                 [attr.name]="'edit-from-' + license.id" [ngModelOptions]="{ standalone: true }"
+                                 class="input !w-auto !text-xs" />
+                        </div>
+                        <div>
+                          <label class="text-xs text-text-muted block mb-1">Érvényes-ig</label>
+                          <input type="date" [(ngModel)]="editValidTo"
+                                 [attr.name]="'edit-to-' + license.id" [ngModelOptions]="{ standalone: true }"
+                                 class="input !w-auto !text-xs" />
+                        </div>
+                        <div>
+                          <label class="text-xs text-text-muted block mb-1">Tétlenségi ablak (perc)</label>
+                          <input type="number" min="0" [(ngModel)]="editIdleWindowMinutes"
+                                 [attr.name]="'edit-idle-' + license.id" [ngModelOptions]="{ standalone: true }"
+                                 class="input !w-24 !text-xs" />
+                        </div>
+                        <div>
+                          <label class="text-xs text-text-muted block mb-1">Számlázási megjegyzés</label>
+                          <input type="text" [(ngModel)]="editBillingNote"
+                                 [attr.name]="'edit-note-' + license.id" [ngModelOptions]="{ standalone: true }"
+                                 placeholder="pl. fenntartó neve, számlaszám"
+                                 class="input !w-56 !text-xs" />
+                        </div>
+                        <button (click)="saveLicenseEdit(license)" [disabled]="licenseStore.loading()"
+                                class="btn btn-primary !px-3 !py-1 !text-xs">
+                          Mentés
+                        </button>
+                        <button (click)="cancelEditLicense()" class="btn btn-ghost !px-3 !py-1 !text-xs">
+                          Mégse
+                        </button>
+                      </div>
+                    }
 
                     @if (expandedLicenseId === license.id) {
                       <ul class="mt-2 space-y-1">
@@ -313,6 +363,13 @@ export class AdminIntezmenyekComponent {
   newValidTo = '';
   newBillingNote = '';
 
+  editingLicenseId: number | null = null;
+  editCapacity = 0;
+  editValidFrom = '';
+  editValidTo = '';
+  editIdleWindowMinutes: number | null = null;
+  editBillingNote = '';
+
   constructor() {
     this.store.load();
     this.licenseStore.load();
@@ -382,6 +439,41 @@ export class AdminIntezmenyekComponent {
     });
 
     this.newLicenseSchoolId = null;
+  }
+
+  // UI-TT-198: a "+ Új licenc" form mellé a MEGLÉVŐ licenceket szerkesztő
+  // inline form - a backend `UpdateAsync` (kapacitás/érvényesség/idle-window/
+  // számlázási megjegyzés) rég kész és tesztelt volt, csak ez a komponens nem
+  // hívta meg soha. A kizárólagos korábbi workaround (Visszavonás + Új licenc)
+  // azonnal kirúgja a nem-vizsgázó diákokat és nullázza a kihasználtsági
+  // előzményt egy vadonatúj licenc-id alatt - ezt váltja ki ez a form.
+  startEditLicense(license: InstitutionalLicenseDto): void {
+    this.editingLicenseId = license.id;
+    this.licenseStore.clearError();
+
+    this.editCapacity = license.capacity;
+    this.editValidFrom = license.validFrom.slice(0, 10);
+    this.editValidTo = license.validTo.slice(0, 10);
+    this.editIdleWindowMinutes = license.idleWindowMinutes;
+    this.editBillingNote = license.billingNote ?? '';
+  }
+
+  cancelEditLicense(): void {
+    this.editingLicenseId = null;
+  }
+
+  saveLicenseEdit(license: InstitutionalLicenseDto): void {
+    if (this.licenseStore.loading()) return;
+
+    this.licenseStore.update(license.id, {
+      capacity: this.editCapacity,
+      validFrom: this.editValidFrom,
+      validTo: this.editValidTo,
+      billingNote: this.editBillingNote?.trim() || null,
+      idleWindowMinutes: this.editIdleWindowMinutes,
+    });
+
+    this.editingLicenseId = null;
   }
 
   async confirmRevoke(license: InstitutionalLicenseDto): Promise<void> {

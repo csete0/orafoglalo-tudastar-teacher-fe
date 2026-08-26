@@ -2,8 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { AdminIntezmenyekComponent } from './admin-intezmenyek.component';
 import { AdminSchoolStore } from '../../services/admin/admin-school.store';
+import { AdminLicenseStore } from '../../services/admin/admin-license.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { SchoolAdminDto } from '../../models/teacher-moderation.model';
+import { InstitutionalLicenseDto } from '../../models/institutional-license.model';
 
 function makeSchool(overrides: Partial<SchoolAdminDto> = {}): SchoolAdminDto {
   return {
@@ -17,6 +19,27 @@ function makeSchool(overrides: Partial<SchoolAdminDto> = {}): SchoolAdminDto {
   };
 }
 
+function makeLicense(overrides: Partial<InstitutionalLicenseDto> = {}): InstitutionalLicenseDto {
+  return {
+    id: 10,
+    schoolId: 1,
+    teacherProfileId: null,
+    ownerName: 'Forrás Gimnázium',
+    tier: 'premium',
+    capacity: 30,
+    usedSeats: 12,
+    heldSeats: 14,
+    validFrom: '2026-08-25',
+    validTo: '2027-08-25',
+    idleWindowMinutes: 20,
+    revokedAt: null,
+    billingNote: null,
+    createdAt: '2026-08-25T00:00:00Z',
+    isActive: true,
+    ...overrides,
+  };
+}
+
 describe('AdminIntezmenyekComponent', () => {
   let storeMock: {
     schools: ReturnType<typeof signal<SchoolAdminDto[]>>;
@@ -26,9 +49,28 @@ describe('AdminIntezmenyekComponent', () => {
     load: ReturnType<typeof vi.fn>;
     merge: ReturnType<typeof vi.fn>;
   };
+  let licenseStoreMock: {
+    licenses: ReturnType<typeof signal<InstitutionalLicenseDto[]>>;
+    seats: ReturnType<typeof signal<Record<number, unknown>>>;
+    usage: ReturnType<typeof signal<Record<number, unknown>>>;
+    loading: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
+    licensesForSchool: ReturnType<typeof vi.fn>;
+    load: ReturnType<typeof vi.fn>;
+    loadSeats: ReturnType<typeof vi.fn>;
+    loadUsage: ReturnType<typeof vi.fn>;
+    clearError: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    revoke: ReturnType<typeof vi.fn>;
+    releaseSeat: ReturnType<typeof vi.fn>;
+  };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
 
-  function configure(schools: SchoolAdminDto[] = [makeSchool({ id: 1, name: 'Forrás' }), makeSchool({ id: 2, name: 'Cél' })]) {
+  function configure(
+    schools: SchoolAdminDto[] = [makeSchool({ id: 1, name: 'Forrás' }), makeSchool({ id: 2, name: 'Cél' })],
+    licenses: InstitutionalLicenseDto[] = [],
+  ) {
     storeMock = {
       schools: signal(schools),
       loading: signal(false),
@@ -37,12 +79,29 @@ describe('AdminIntezmenyekComponent', () => {
       load: vi.fn(),
       merge: vi.fn(),
     };
+    licenseStoreMock = {
+      licenses: signal(licenses),
+      seats: signal({}),
+      usage: signal({}),
+      loading: signal(false),
+      error: signal(null),
+      licensesForSchool: vi.fn((schoolId: number) => licenses.filter((l) => l.schoolId === schoolId)),
+      load: vi.fn(),
+      loadSeats: vi.fn(),
+      loadUsage: vi.fn(),
+      clearError: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      revoke: vi.fn(),
+      releaseSeat: vi.fn(),
+    };
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(true) };
 
     TestBed.configureTestingModule({
       imports: [AdminIntezmenyekComponent],
       providers: [
         { provide: AdminSchoolStore, useValue: storeMock },
+        { provide: AdminLicenseStore, useValue: licenseStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
       ],
     });
@@ -266,5 +325,169 @@ describe('AdminIntezmenyekComponent', () => {
 
     expect(confirmServiceMock.ask).not.toHaveBeenCalled();
     expect(storeMock.merge).not.toHaveBeenCalled();
+  });
+
+  // UI-TT-198: az AdminLicenseStore.update() (kapacitás/érvényesség/idle-window/
+  // számlázási megjegyzés módosítása egy MEGLÉVŐ licencen) teljes körűen elkészült
+  // a store és a service oldalon, de ezt a komponenst SOHA nem hívta meg semmi -
+  // az admin-felület kizárólag Create/Revoke/ReleaseSeat műveleteket vezetett be.
+  // Ld. a hunter proof-tesztjét: bug-hunt/2026-08-26-uitt198-no-license-edit-ui,
+  // commit db9f8b7.
+  it('BUG UI-TT-198 (javítva): van szerkesztés-képesség (startEditLicense) a komponensen egy MEGLÉVŐ licenchez', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const instance = fixture.componentInstance as unknown as Record<string, unknown>;
+    const hasEditCapability = [
+      'startEditLicense',
+      'editLicense',
+      'updateLicense',
+      'saveLicenseEdit',
+      'openEditLicense',
+    ].some((name) => typeof instance[name] === 'function');
+
+    expect(hasEditCapability).toBe(true);
+  });
+
+  it('a "Szerkesztés" gomb minden aktív (nem visszavont) licenc-kártyán megjelenik', () => {
+    configure([makeSchool({ id: 1 })], [makeLicense({ id: 10, schoolId: 1, revokedAt: null })]);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const editButton = buttons.find((b) => b.textContent?.trim() === 'Szerkesztés');
+    expect(editButton).toBeTruthy();
+  });
+
+  it('visszavont licencen NEM jelenik meg a "Szerkesztés" gomb', () => {
+    configure(
+      [makeSchool({ id: 1 })],
+      [makeLicense({ id: 10, schoolId: 1, revokedAt: '2026-08-20T00:00:00Z', isActive: false })],
+    );
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const editButton = buttons.find((b) => b.textContent?.trim() === 'Szerkesztés');
+    expect(editButton).toBeFalsy();
+  });
+
+  it('startEditLicense() a licenc jelenlegi adataival tölti fel a szerkesztő form mezőit', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({
+      id: 42,
+      capacity: 30,
+      validFrom: '2026-08-25',
+      validTo: '2027-08-25',
+      idleWindowMinutes: 20,
+      billingNote: 'Fenntartó Kft.',
+    });
+    component.startEditLicense(license);
+
+    expect(component.editingLicenseId).toBe(42);
+    expect(component.editCapacity).toBe(30);
+    expect(component.editValidFrom).toBe('2026-08-25');
+    expect(component.editValidTo).toBe('2027-08-25');
+    expect(component.editIdleWindowMinutes).toBe(20);
+    expect(component.editBillingNote).toBe('Fenntartó Kft.');
+    expect(licenseStoreMock.clearError).toHaveBeenCalled();
+  });
+
+  // A lényeg: a szerkesztés VÉGSŐ soron a store már meglévő, tesztelt
+  // update()-jét hívja meg - nem egy revoke+create workaroundot, ami
+  // azonnal kirúgná a nem-vizsgázó diákokat és nullázná a kihasználtsági
+  // előzményt egy vadonatúj licenc-id alatt.
+  it('saveLicenseEdit() a szerkesztett mezőkkel meghívja a licenseStore.update()-öt, majd bezárja a formot', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({ id: 42 });
+    component.startEditLicense(license);
+    component.editCapacity = 40;
+    component.editValidFrom = '2026-09-01';
+    component.editValidTo = '2027-09-01';
+    component.editIdleWindowMinutes = 25;
+    component.editBillingNote = '  Új számlázási megjegyzés  ';
+
+    component.saveLicenseEdit(license);
+
+    expect(licenseStoreMock.update).toHaveBeenCalledWith(42, {
+      capacity: 40,
+      validFrom: '2026-09-01',
+      validTo: '2027-09-01',
+      billingNote: 'Új számlázási megjegyzés',
+      idleWindowMinutes: 25,
+    });
+    expect(component.editingLicenseId).toBeNull();
+  });
+
+  it('saveLicenseEdit() üres számlázási megjegyzést null-ra alakít', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({ id: 42 });
+    component.startEditLicense(license);
+    component.editBillingNote = '   ';
+
+    component.saveLicenseEdit(license);
+
+    expect(licenseStoreMock.update).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ billingNote: null }),
+    );
+  });
+
+  it('saveLicenseEdit() no-op, ha a licenseStore éppen loading', () => {
+    configure();
+    licenseStoreMock.loading.set(true);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.saveLicenseEdit(makeLicense({ id: 42 }));
+
+    expect(licenseStoreMock.update).not.toHaveBeenCalled();
+  });
+
+  it('cancelEditLicense() bezárja a szerkesztő formot a store hívása nélkül', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startEditLicense(makeLicense({ id: 42 }));
+    expect(component.editingLicenseId).toBe(42);
+
+    component.cancelEditLicense();
+
+    expect(component.editingLicenseId).toBeNull();
+    expect(licenseStoreMock.update).not.toHaveBeenCalled();
+  });
+
+  it('a "Szerkesztés" gombra kattintva megnyílik a szerkesztő form a kapacitás-mezővel', () => {
+    configure([makeSchool({ id: 1 })], [makeLicense({ id: 10, schoolId: 1, capacity: 30 })]);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const editButton = buttons.find((b) => b.textContent?.trim() === 'Szerkesztés');
+    editButton!.click();
+    fixture.detectChanges();
+
+    const capacityInput: HTMLInputElement = fixture.nativeElement.querySelector(
+      'input[name="edit-cap-10"]',
+    );
+    expect(capacityInput).toBeTruthy();
+    expect(fixture.componentInstance.editingLicenseId).toBe(10);
+    expect(fixture.componentInstance.editCapacity).toBe(30);
   });
 });
