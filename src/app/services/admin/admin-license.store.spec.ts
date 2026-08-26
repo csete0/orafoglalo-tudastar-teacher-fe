@@ -152,4 +152,44 @@ describe('AdminLicenseStore', () => {
 
     expect(serviceMock.revoke).toHaveBeenCalledTimes(1);
   });
+
+  // BUG UI-TT-197: revoke()/update()/releaseSeat() mind csak a licenc-listát
+  // (load()) töltik újra sikeres válasz után - a licenc-specifikus, kulcsolt
+  // _seats/_usage cache-t SOHA nem érvénytelenítik és nem töltik újra. Ha az
+  // admin a "Helyek megtekintése" panelt már nyitva tartotta egy licencnél,
+  // egy visszavonás/felszabadítás UTÁN is a REVOKE ELŐTTI hely-listát látja
+  // tovább - a "Felszabadítás" gomb rajta marad egy már felszabadult helyen,
+  // aminek megnyomása a backendtől 400-at kap ("nem tartozik aktív hely").
+  it('visszavonás után a már nyitva tartott hely-lista NEM frissül - stale cache marad', async () => {
+    const store = configure();
+
+    // Admin korábban megnyitotta a "Helyek megtekintése" panelt: 1 aktív hely.
+    serviceMock.getSeats.mockReturnValue(
+      of([
+        {
+          userId: 99,
+          displayName: 'Teszt Diák',
+          email: 'teszt@example.com',
+          seatIndex: 0,
+          claimedAt: '2026-08-20T00:00:00Z',
+          lastActivityAt: '2026-08-26T00:00:00Z',
+          isFresh: true,
+        },
+      ]),
+    );
+    store.loadSeats(10);
+    await Promise.resolve();
+    expect(store.seats()[10]?.length).toBe(1);
+
+    // A visszavonás a backenden felszabadítja az ÖSSZES helyet - egy ezutáni
+    // valódi getSeats hívás már üres listát adna vissza.
+    serviceMock.getSeats.mockReturnValue(of([]));
+    store.revoke(10);
+    await Promise.resolve();
+
+    // Elvárt helyes viselkedés: a nyitva tartott hely-lista a visszavonás
+    // után frissüljön (vagy legalább ürüljön ki), hogy az admin ne lásson
+    // már felszabadult, "Felszabadítás"-ra kattintható helyeket.
+    expect(store.seats()[10]?.length).toBe(0);
+  });
 });
