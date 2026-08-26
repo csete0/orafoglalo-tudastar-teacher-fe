@@ -225,6 +225,35 @@ describe('AdminIntezmenyekComponent', () => {
     expect(message).toContain('Budapest');
   });
 
+  // BE-INSTLICENSEADMIN-CREATEFORM-LOCALMIDNIGHT-UTCDATE: startNewLicense() a
+  // "mai naptól egy tanévnyi időre" alapértelmezést `toDateInput()`-tal tölti,
+  // ami `date.toISOString().slice(0, 10)` - ez a Date UTC-komponenseiből
+  // olvas, NEM a böngésző helyi (magyar) naptári napjából. Budapesten (nyáron
+  // UTC+2, télen UTC+1) helyi éjfél és UTC éjfél között minden nap van egy
+  // 1-2 órás ablak, amiben a UTC-nap még a TEGNAPI magyar nap - ilyenkor az
+  // admin által "ma"-ként látott dátum-mezők valójában TEGNAPRA (és a
+  // "tanévnyi" végdátum is tegnap+1évre) preselectálódnak.
+  it('BUG BE-INSTLICENSEADMIN-CREATEFORM-LOCALMIDNIGHT-UTCDATE: helyi éjfél utáni, UTC éjfél előtti percben a "mai nap" alapértelmezés a TEGNAPI dátumot tölti be', () => {
+    const originalTZ = process.env['TZ'];
+    process.env['TZ'] = 'Europe/Budapest';
+
+    // 2026-08-27 00:30 helyi idő (nyári, UTC+2) = 2026-08-26 22:30 UTC.
+    // A helyi naptári nap már augusztus 27., de a UTC-nap még augusztus 26.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-26T22:30:00.000Z'));
+
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startNewLicense(1);
+
+    expect(fixture.componentInstance.newValidFrom).toBe('2026-08-27');
+
+    vi.useRealTimers();
+    process.env['TZ'] = originalTZ;
+  });
+
   it('confirmMerge() no-op, ha a forrás vagy a cél már nem szerepel a store.schools() listájában', async () => {
     configure([makeSchool({ id: 1 })]);
     const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
