@@ -494,19 +494,26 @@ export class AdminIntezmenyekComponent {
     this.newLicenseSchoolId = null;
   }
 
+  // UI-TT-208: a "+ Új licenc" form KIZÁRÓLAG a store `onSuccess` callback-jéből zár - a
+  // korábbi, a HTTP-hívás után közvetlenül, szinkron `this.newLicenseSchoolId = null` a
+  // válasz megérkezése ELŐTT lefutott, backend-elutasításnál a begépelt adatokat véglegesen
+  // eldobva (ugyanaz a hibaosztály, mint a szerkesztő formon a `UI-TT-199` előtt).
   createLicense(schoolId: number): void {
     if (this.licenseStore.loading()) return;
 
-    this.licenseStore.create({
-      schoolId,
-      tier: this.newTier,
-      capacity: this.newCapacity,
-      validFrom: this.newValidFrom,
-      validTo: this.newValidTo,
-      billingNote: this.newBillingNote?.trim() || null,
-    });
-
-    this.newLicenseSchoolId = null;
+    this.licenseStore.create(
+      {
+        schoolId,
+        tier: this.newTier,
+        capacity: this.newCapacity,
+        validFrom: this.newValidFrom,
+        validTo: this.newValidTo,
+        billingNote: this.newBillingNote?.trim() || null,
+      },
+      () => {
+        this.newLicenseSchoolId = null;
+      },
+    );
   }
 
   // UI-TT-198: a "+ Új licenc" form mellé a MEGLÉVŐ licenceket szerkesztő

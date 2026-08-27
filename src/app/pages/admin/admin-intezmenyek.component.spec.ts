@@ -339,6 +339,56 @@ describe('AdminIntezmenyekComponent', () => {
     process.env['TZ'] = originalTZ;
   });
 
+  // UI-TT-208 (a UI-TT-199 testvér-hézaga): a "+ Új licenc" form (`createLicense()`) a
+  // szerkesztő formmal (`saveLicenseEdit()`) ellentétben SOSEM kapta meg a UI-TT-199 mintáját -
+  // a korábbi kód `this.newLicenseSchoolId = null`-t FELTÉTEL NÉLKÜL, közvetlenül a
+  // `licenseStore.create()` hívása UTÁN, szinkron állította be, jóval a valódi (RxJS HTTP-
+  // alapú) store HTTP-válasza előtt. Backend-elutasításnál (pl. felcserélt validFrom/validTo)
+  // a form már bezárult, mire a hiba megérkezett - az admin begépelt adatai véglegesen
+  // elvesztek. A javítás a store `create()`-jét `onSuccess` callback-kel bővíti (az `update()`
+  // mintáját követve), a komponens pedig kizárólag onnan zár.
+  it('BUG UI-TT-208 javítva: createLicense() sikertelen backend-válasz esetén NEM zárja be a formot, a begépelt adatok megmaradnak', () => {
+    configure([makeSchool({ id: 1 })], []);
+    // A valódi store `create()`-je hiba esetén SOSEM hívja meg az `onSuccess` callback-et -
+    // ezt szimuláljuk: a mock implementáció egyszerűen nem hívja meg a kapott callback-et.
+    licenseStoreMock.create.mockImplementation(() => {
+      /* a backend elutasította a kérést - onSuccess nem hívódik meg */
+    });
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startNewLicense(1);
+    component.newTier = 'premium';
+    component.newCapacity = 40;
+    component.newValidFrom = '2027-09-01';
+    component.newValidTo = '2026-09-01'; // felcserélt dátum, élesben a backend elutasítaná
+    component.newBillingNote = 'Fenntartó: Teszt Alapítvány';
+    component.createLicense(1);
+
+    // A form NYITVA marad, az admin begépelt adatai megmaradnak, amíg a backend nem
+    // erősíti meg a sikert.
+    expect(component.newLicenseSchoolId).toBe(1);
+    expect(component.newCapacity).toBe(40);
+    expect(component.newValidFrom).toBe('2027-09-01');
+    expect(component.newBillingNote).toBe('Fenntartó: Teszt Alapítvány');
+  });
+
+  it('createLicense() sikeres válasz esetén bezárja a formot (onSuccess callback lefut)', () => {
+    configure([makeSchool({ id: 1 })], []);
+    licenseStoreMock.create.mockImplementation(
+      (_request: unknown, onSuccess?: (license: unknown) => void) => onSuccess?.(makeLicense({ id: 50, schoolId: 1 })),
+    );
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startNewLicense(1);
+    component.createLicense(1);
+
+    expect(component.newLicenseSchoolId).toBeNull();
+  });
+
   it('confirmMerge() no-op, ha a forrás vagy a cél már nem szerepel a store.schools() listájában', async () => {
     configure([makeSchool({ id: 1 })]);
     const fixture = TestBed.createComponent(AdminIntezmenyekComponent);

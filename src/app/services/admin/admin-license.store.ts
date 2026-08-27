@@ -86,7 +86,12 @@ export class AdminLicenseStore {
       });
   }
 
-  create(request: CreateInstitutionalLicenseRequest): void {
+  // UI-TT-208: `onSuccess` a testvér `update()`/`UI-TT-199` mintáját követi - a hívó
+  // (`admin-intezmenyek.component.ts` `createLicense()`) a "+ Új licenc" formot KIZÁRÓLAG
+  // ebből zárja. Korábban a form szinkron, feltétel nélkül zárt közvetlenül a `create()`
+  // hívása UTÁN - jóval a HTTP-válasz előtt -, így backend-elutasításnál (pl. felcserélt
+  // validFrom/validTo, érvénytelen kapacitás) a begépelt adatok véglegesen elvesztek.
+  create(request: CreateInstitutionalLicenseRequest, onSuccess?: (license: InstitutionalLicenseDto) => void): void {
     if (this._loading()) return;
 
     this._loading.set(true);
@@ -99,7 +104,10 @@ export class AdminLicenseStore {
       .create(request)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.load(),
+        next: (license) => {
+          this.load();
+          if (onSuccess) onSuccess(license);
+        },
         error: (err) => {
           this.setError(err.error?.errorMessage ?? 'A licenc létrehozása sikertelen.', 'create');
           this._loading.set(false);
