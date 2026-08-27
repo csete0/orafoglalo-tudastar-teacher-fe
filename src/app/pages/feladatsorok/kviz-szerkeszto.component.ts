@@ -14,6 +14,7 @@ import {
   QUIZ_QUESTION_TYPE_LABELS,
   QuizDifficulty,
   QuizFeedbackMode,
+  QuizExamLevel,
   QuizQuestionType,
   QuizTopicOptionDto,
   TeacherQuizQuestionDto,
@@ -124,6 +125,15 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               <input formControlName="maxAttempts" type="number" min="1" class="input mt-1" />
             </label>
 
+            <label class="block">
+              <span class="text-sm text-text-muted">Érettségi vizsgaszint</span>
+              <select formControlName="examLevel" class="input mt-1">
+                @for (level of examLevels; track level.value) {
+                  <option [ngValue]="level.value">{{ level.label }}</option>
+                }
+              </select>
+            </label>
+
             <label class="flex items-center gap-2 text-sm">
               <input formControlName="shuffleQuestions" type="checkbox" />
               Kérdések keverése
@@ -164,6 +174,20 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                 </div>
 
                 <div class="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    [disabled]="$first || store.loading()"
+                    (click)="moveQuestion(question, -1)"
+                    aria-label="Feljebb"
+                  >↑</button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    [disabled]="$last || store.loading()"
+                    (click)="moveQuestion(question, 1)"
+                    aria-label="Lejjebb"
+                  >↓</button>
                   @if (!question.isApproved) {
                     <button type="button" class="btn btn-ghost" (click)="approve(question)">Jóváhagyom</button>
                   }
@@ -272,6 +296,13 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                   <option [value]="level.value">{{ level.label }}</option>
                 }
               </select>
+            </label>
+
+            <label class="block">
+              <span class="text-sm text-text-muted">
+                Időkorlát erre a kérdésre (mp, üresen a kvíz beállítása érvényes)
+              </span>
+              <input formControlName="secondsLimit" type="number" min="1" class="input mt-1" />
             </label>
 
             @if (formWarning(); as warning) {
@@ -426,6 +457,17 @@ export class KvizSzerkesztoComponent {
     { initialValue: [] as QuizTopicOptionDto[] },
   );
 
+  /**
+   * Az emelt szint követelményei TARTALMAZZÁK a középszintűeket, ezért a `kozep` jelentése
+   * "középtől felfelé kell" - nem kell külön "mindkettő" érték. A `null` = nem érettségi
+   * anyag.
+   */
+  readonly examLevels: { value: QuizExamLevel; label: string }[] = [
+    { value: null, label: 'Nem érettségi anyag' },
+    { value: 'kozep', label: 'Középszint (emelten is kell)' },
+    { value: 'emelt', label: 'Csak emelt szint' },
+  ];
+
   readonly editingId = signal<number | null>(null);
   private readonly selectedCorrect = signal<string[]>([]);
 
@@ -437,6 +479,7 @@ export class KvizSzerkesztoComponent {
     maxAttempts: this.fb.control<number | null>(null),
     shuffleQuestions: [true],
     allowLateSubmission: [true],
+    examLevel: this.fb.control<QuizExamLevel>(null),
   });
 
   readonly questionForm = this.fb.nonNullable.group({
@@ -447,6 +490,7 @@ export class KvizSzerkesztoComponent {
     acceptedText: [''],
     explanation: [''],
     difficulty: ['Medium' as QuizDifficulty, Validators.required],
+    secondsLimit: this.fb.control<number | null>(null),
   });
 
   readonly generateForm = this.fb.nonNullable.group({
@@ -536,6 +580,7 @@ export class KvizSzerkesztoComponent {
       maxAttempts: quiz.maxAttempts ?? null,
       shuffleQuestions: quiz.shuffleQuestions,
       allowLateSubmission: quiz.allowLateSubmission,
+      examLevel: quiz.examLevel ?? null,
     });
   }
 
@@ -597,6 +642,7 @@ export class KvizSzerkesztoComponent {
         maxAttempts: raw.maxAttempts || null,
         shuffleQuestions: raw.shuffleQuestions,
         allowLateSubmission: raw.allowLateSubmission,
+        examLevel: raw.examLevel,
       },
       () => this.toastService.success('Beállítások mentve.'),
     );
@@ -617,6 +663,7 @@ export class KvizSzerkesztoComponent {
       acceptedText: question.questionType === 'cloze' ? question.correctAnswers.join('\n') : '',
       explanation: question.explanation ?? '',
       difficulty: question.difficulty,
+      secondsLimit: question.secondsLimit ?? null,
     });
     this.selectedCorrect.set(question.questionType === 'cloze' ? [] : [...question.correctAnswers]);
   }
@@ -641,6 +688,7 @@ export class KvizSzerkesztoComponent {
       correctAnswers: type === 'cloze' ? this.acceptedAnswers() : this.selectedCorrect(),
       explanation: raw.explanation || null,
       difficulty: raw.difficulty,
+      secondsLimit: raw.secondsLimit || null,
     };
 
     const editingId = this.editingId();
@@ -654,6 +702,50 @@ export class KvizSzerkesztoComponent {
     } else {
       this.store.addQuestion(this.quizId, request, done);
     }
+  }
+
+  /**
+   * Kérdés mozgatása a sorrendben. A két érintett kérdés DisplayOrder-jét CSERÉLJÜK,
+   * nem "beszúrunk" - így nem kell az egész listát újraszámozni, és két gyors kattintás
+   * sem tud lyukat hagyni a sorszámozásban.
+   *
+   * A második mentés az első sikere UTÁN indul: a store minden mutáció után újratölti a
+   * részletet, két egyidejű hívás pedig egymás újratöltésével versenyezne.
+   */
+  moveQuestion(question: TeacherQuizQuestionDto, direction: -1 | 1): void {
+    const questions = this.detail()?.questions ?? [];
+    const index = questions.findIndex((q) => q.id === question.id);
+    const neighbour = questions[index + direction];
+    if (!neighbour || this.store.loading()) return;
+
+    const questionOrder = question.displayOrder ?? index;
+    const neighbourOrder = neighbour.displayOrder ?? index + direction;
+
+    this.store.updateQuestion(
+      this.quizId,
+      question.id,
+      { ...this.toRequest(question), displayOrder: neighbourOrder },
+      () =>
+        this.store.updateQuestion(this.quizId, neighbour.id, {
+          ...this.toRequest(neighbour),
+          displayOrder: questionOrder,
+        }),
+    );
+  }
+
+  /** Egy meglévő kérdés visszaalakítása mentési kéréssé (mozgatáshoz, tartalom nélkül változtatva). */
+  private toRequest(question: TeacherQuizQuestionDto): CreateTeacherQuizQuestionRequest {
+    return {
+      topicId: question.topicId,
+      questionType: question.questionType,
+      questionText: question.questionText,
+      options: question.options,
+      correctAnswers: question.correctAnswers,
+      explanation: question.explanation ?? null,
+      difficulty: question.difficulty,
+      secondsLimit: question.secondsLimit ?? null,
+      displayOrder: question.displayOrder ?? null,
+    };
   }
 
   approve(question: TeacherQuizQuestionDto): void {
