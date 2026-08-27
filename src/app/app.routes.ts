@@ -82,6 +82,20 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsorok-lista.component').then((m) => m.FeladatsorokListaComponent),
       },
+      // A kvíz-útvonalak SZÁNDÉKOSAN a ':id/...' minták ELŐTT állnak, és szándékosan a
+      // 'feladatsorok' alatt: a fejléc-navigáció 6 linkre van méretezve
+      // (UI-TT-181/192/177), ezért a kvízkezelés nem kap külön menüpontot, hanem a
+      // Feladatsorok oldal fülén él.
+      {
+        path: 'kvizek',
+        loadComponent: () =>
+          import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
+      },
+      {
+        path: 'kvizek/:id/szerkesztes',
+        loadComponent: () =>
+          import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
+      },
       {
         path: ':id/szerkesztes',
         loadComponent: () =>

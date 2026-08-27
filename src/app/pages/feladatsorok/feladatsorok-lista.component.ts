@@ -10,6 +10,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { TartalomFulekComponent } from './tartalom-fulek.component';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -21,12 +22,13 @@ const LEVELS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsorok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent],
+  imports: [ReactiveFormsModule, RouterLink, IconComponent, TartalomFulekComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
       <h1 class="page-title">Feladatsoraim</h1>
       <p class="text-sm text-text-muted mt-1">Saját feladatsorok szerkesztése és publikálása</p>
-      <div class="hairline"></div>
+
+      <app-tartalom-fulek />
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
