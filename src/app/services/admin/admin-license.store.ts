@@ -11,6 +11,20 @@ import {
   UpdateInstitutionalLicenseRequest,
 } from '../../models/institutional-license.model';
 
+// UI-TT-206: `error` egyetlen, megosztott signal MINDEN licenc-műveletre
+// (create/update/revoke/releaseSeat/load/loadSeats/loadUsage). A hívónak (a komponensnek)
+// tudnia kell, MELYIK művelet és MELYIK licenc okozta az aktuális hibát, hogy a helyes
+// helyre tudja irányítani a megjelenítést - ne a szerkesztett licenc kártyája alá kerüljön
+// egy másik licenc visszavonási hibája.
+export type LicenseErrorSource =
+  | 'load'
+  | 'create'
+  | 'edit'
+  | 'revoke'
+  | 'releaseSeat'
+  | 'loadSeats'
+  | 'loadUsage';
+
 @Injectable({ providedIn: 'root' })
 export class AdminLicenseStore {
   private readonly destroyRef = inject(DestroyRef);
@@ -21,12 +35,19 @@ export class AdminLicenseStore {
   private readonly _usage = signal<Record<number, InstitutionalLicenseUsageDto | undefined>>({});
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
+  // UI-TT-206: melyik művelet (és - ha értelmezhető - melyik konkrét licenc) állította be
+  // a jelenlegi `_error`-t. `errorLicenseId` `null`, ha a hiba nem egy MEGLÉVŐ licenchez
+  // kötött (pl. `load()` a teljes listáért, vagy `create()`, aminek még nincs id-je).
+  private readonly _errorSource = signal<LicenseErrorSource | null>(null);
+  private readonly _errorLicenseId = signal<number | null>(null);
 
   readonly licenses = computed(() => this._licenses());
   readonly seats = computed(() => this._seats());
   readonly usage = computed(() => this._usage());
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
+  readonly errorSource = computed(() => this._errorSource());
+  readonly errorLicenseId = computed(() => this._errorLicenseId());
 
   /** Egy adott intézményhez tartozó licencek (az Intézmények oldal sorai alá). */
   licensesForSchool(schoolId: number): InstitutionalLicenseDto[] {
@@ -35,11 +56,19 @@ export class AdminLicenseStore {
 
   clearError(): void {
     this._error.set(null);
+    this._errorSource.set(null);
+    this._errorLicenseId.set(null);
+  }
+
+  private setError(message: string, source: LicenseErrorSource, licenseId: number | null = null): void {
+    this._error.set(message);
+    this._errorSource.set(source);
+    this._errorLicenseId.set(licenseId);
   }
 
   load(): void {
     this._loading.set(true);
-    this._error.set(null);
+    this.clearError();
 
     // Mindig next + error ág: egy next-only subscribe esetén hiba után a store
     // némán üres listát mutatna, és egy kezeletlen HttpErrorResponse is landolna
@@ -53,7 +82,7 @@ export class AdminLicenseStore {
       )
       .subscribe({
         next: (licenses) => this._licenses.set(licenses),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A licencek betöltése sikertelen.'),
+        error: (err) => this.setError(err.error?.errorMessage ?? 'A licencek betöltése sikertelen.', 'load'),
       });
   }
 
@@ -61,7 +90,7 @@ export class AdminLicenseStore {
     if (this._loading()) return;
 
     this._loading.set(true);
-    this._error.set(null);
+    this.clearError();
 
     // Nincs finalize(): siker esetén a load() felel a loading ki/be kapcsolásáért
     // (és a lista frissítéséért), így a gomb a teljes műveletsor alatt letiltva
@@ -72,7 +101,7 @@ export class AdminLicenseStore {
       .subscribe({
         next: () => this.load(),
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A licenc létrehozása sikertelen.');
+          this.setError(err.error?.errorMessage ?? 'A licenc létrehozása sikertelen.', 'create');
           this._loading.set(false);
         },
       });
@@ -93,7 +122,7 @@ export class AdminLicenseStore {
     if (this._loading()) return;
 
     this._loading.set(true);
-    this._error.set(null);
+    this.clearError();
 
     this.service
       .update(id, request)
@@ -114,7 +143,7 @@ export class AdminLicenseStore {
           if (onSuccess) onSuccess(license);
         },
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A licenc módosítása sikertelen.');
+          this.setError(err.error?.errorMessage ?? 'A licenc módosítása sikertelen.', 'edit', id);
           this._loading.set(false);
         },
       });
@@ -127,7 +156,7 @@ export class AdminLicenseStore {
     if (this._loading()) return;
 
     this._loading.set(true);
-    this._error.set(null);
+    this.clearError();
 
     this.service
       .revoke(id)
@@ -148,33 +177,35 @@ export class AdminLicenseStore {
           if (onSuccess) onSuccess(result);
         },
         error: (err) => {
-          this._error.set(err.error?.errorMessage ?? 'A licenc visszavonása sikertelen.');
+          this.setError(err.error?.errorMessage ?? 'A licenc visszavonása sikertelen.', 'revoke', id);
           this._loading.set(false);
         },
       });
   }
 
   loadSeats(licenseId: number): void {
-    this._error.set(null);
+    this.clearError();
 
     this.service
       .getSeats(licenseId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (seats) => this._seats.update((current) => ({ ...current, [licenseId]: seats })),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A helyek betöltése sikertelen.'),
+        error: (err) =>
+          this.setError(err.error?.errorMessage ?? 'A helyek betöltése sikertelen.', 'loadSeats', licenseId),
       });
   }
 
   loadUsage(licenseId: number): void {
-    this._error.set(null);
+    this.clearError();
 
     this.service
       .getUsage(licenseId)
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (usage) => this._usage.update((current) => ({ ...current, [licenseId]: usage })),
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A kimutatás betöltése sikertelen.'),
+        error: (err) =>
+          this.setError(err.error?.errorMessage ?? 'A kimutatás betöltése sikertelen.', 'loadUsage', licenseId),
       });
   }
 
@@ -182,7 +213,7 @@ export class AdminLicenseStore {
     if (this._loading()) return;
 
     this._loading.set(true);
-    this._error.set(null);
+    this.clearError();
 
     this.service
       .releaseSeat(licenseId, userId)
@@ -197,7 +228,8 @@ export class AdminLicenseStore {
           this.loadSeats(licenseId);
           this.load();
         },
-        error: (err) => this._error.set(err.error?.errorMessage ?? 'A hely felszabadítása sikertelen.'),
+        error: (err) =>
+          this.setError(err.error?.errorMessage ?? 'A hely felszabadítása sikertelen.', 'releaseSeat', licenseId),
       });
   }
 }

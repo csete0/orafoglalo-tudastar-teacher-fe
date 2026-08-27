@@ -43,11 +43,17 @@ import {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
 
-      <!-- UI-TT-201: ez a globális hely csak akkor mutatja a hibát, ha épp NINCS nyitott
-           licenc-szerkesztő form - amíg van (editingLicenseId nem null), a hiba a szerkesztett
-           licenc kártyája MELLETT jelenik meg (lásd lejjebb), hogy egy hosszú intézmény-listán
-           görgetés nélkül is látsszon, és ne duplikálódjon ugyanaz az üzenet két helyen. -->
-      @if (licenseStore.error() && editingLicenseId === null) {
+      <!-- UI-TT-201/UI-TT-206: ez a globális hely csak akkor mutatja a hibát, ha az NEM
+           tartozik már megjelenítve valahova máshoz - vagyis nem a jelenleg nyitott
+           szerkesztő form MENTÉSI hibája (az a szerkesztett licenc kártyája MELLETT jelenik
+           meg, lásd lejjebb), és nem egy konkrét licenc visszavonási/felszabadítási hibája
+           (az a MAGA licenc kártyáján jelenik meg, lásd lejjebb). licenseStore.error() egy
+           EGYETLEN, megosztott signal minden licenc-műveletre (admin-license.store.ts) -
+           errorSource/errorLicenseId mondja meg, MELYIK művelet/licenc okozta, hogy a
+           hiba ne kerülhessen tévesen egy másik, épp nyitva hagyott szerkesztő form alá
+           (UI-TT-206: egy B licenc visszavonási hibája korábban A licenc nyitott formája
+           alatt jelent meg, ha A formja épp nyitva volt). -->
+      @if (licenseStore.error() && !isLicenseErrorHandledInline()) {
         <p class="text-danger text-sm mb-4">{{ licenseStore.error() }}</p>
       }
 
@@ -134,6 +140,16 @@ import {
                       <span class="text-text-muted">Számlázás: {{ license.billingNote }}</span>
                     }
 
+                    <!-- UI-TT-206: a Visszavonás/Felszabadítás gombok NEM editingLicenseId-hez
+                         kötöttek - BÁRMELYIK licenc kártyáján elérhetők, függetlenül attól, hogy
+                         épp melyik licenc szerkesztő formja van nyitva. Ezért a hibájuk is ITT,
+                         a saját licenc-kártyájuk alatt jelenik meg - nem a globális sávban (azt
+                         elnyomnánk vele, ha épp más licenc formja nyitva van), és semmiképp sem
+                         egy másik, épp nyitva hagyott licenc szerkesztő formja alatt. -->
+                    @if (isCardLicenseError(license)) {
+                      <p class="text-danger text-xs mt-1">{{ licenseStore.error() }}</p>
+                    }
+
                     <div class="flex gap-2 mt-1 flex-wrap">
                       <button (click)="toggleSeats(license.id)" class="btn btn-ghost !px-2 !py-1 !text-xs">
                         {{ expandedLicenseId === license.id ? 'Helyek elrejtése' : 'Helyek megtekintése' }}
@@ -164,8 +180,13 @@ import {
                         <!-- UI-TT-201: a mentés-hiba itt, a szerkesztett licenc mellett is
                              megjelenik - eddig kizárólag a komponens legtetején jelent meg, ahol
                              egy hosszabb intézmény-listán (élesben 7+ intézmény) a lista alján
-                             szerkesztő admin görgetés nélkül nem is látta. -->
-                        @if (licenseStore.error()) {
+                             szerkesztő admin görgetés nélkül nem is látta.
+                             UI-TT-206: DE csak akkor, ha a hiba TÉNYLEGESEN ennek a formnak a
+                             mentési kísérletéből származik (errorSource === 'edit' ÉS
+                             errorLicenseId === ennek a licencnek az id-je) - különben egy másik
+                             licencen végzett visszavonás/felszabadítás hibája tévesen ide,
+                             egy érintetlen licenc nyitott formája alá kerülne. -->
+                        @if (isEditFormLicenseError(license)) {
                           <p class="text-danger text-xs w-full mb-1">{{ licenseStore.error() }}</p>
                         }
                         <div>
@@ -390,6 +411,40 @@ export class AdminIntezmenyekComponent {
 
   tierLabel(tier: string): string {
     return tier === 'premium' ? 'Prémium' : 'Standard';
+  }
+
+  // UI-TT-206: a globális hiba-sáv (a komponens tetején) csak akkor legyen elnyomva, ha a
+  // hibát MÁR megjelenítjük valahol máshol - vagy a jelenleg nyitott szerkesztő form
+  // MENTÉSI hibájaként (`isEditFormLicenseError`), vagy egy konkrét licenc-kártya
+  // visszavonási/felszabadítási hibájaként (`isCardLicenseError`). Minden más esetben
+  // (pl. `load()`/`create()`/`loadSeats()`/`loadUsage()` hiba) a globális sáv az EGYETLEN
+  // hely, ahol a hiba látszana - azt nem szabad elnyomni, akkor sem, ha épp nyitva van egy
+  // (a hibától teljesen független) szerkesztő form.
+  isLicenseErrorHandledInline(): boolean {
+    const source = this.licenseStore.errorSource();
+    if (source === 'edit') {
+      return this.licenseStore.errorLicenseId() === this.editingLicenseId;
+    }
+    return source === 'revoke' || source === 'releaseSeat';
+  }
+
+  // UI-TT-206: a Visszavonás/Felszabadítás hiba a MŰVELET CÉL-licencének kártyáján jelenik
+  // meg - függetlenül attól, hogy épp melyik (akár egy MÁSIK) licenc szerkesztő formja van
+  // nyitva. `errorLicenseId` a store-ban a mutáló hívás `id`/`licenseId` paraméterével kerül
+  // beállításra, tehát pontosan azt a licencet azonosítja, amin a művelet történt.
+  isCardLicenseError(license: InstitutionalLicenseDto): boolean {
+    if (!this.licenseStore.error()) return false;
+    const source = this.licenseStore.errorSource();
+    return (source === 'revoke' || source === 'releaseSeat') && this.licenseStore.errorLicenseId() === license.id;
+  }
+
+  // UI-TT-206: a nyitott szerkesztő form alatti hiba KIZÁRÓLAG akkor jelenjen meg, ha a hiba
+  // TÉNYLEGESEN ennek a licencnek a mentési kísérletéből (`update()`) származik - nem elég,
+  // hogy `editingLicenseId === license.id` (ez csak azt jelenti, hogy ÉPP EZ a form van
+  // nyitva, nem azt, hogy a jelenlegi hiba is ehhez tartozik).
+  isEditFormLicenseError(license: InstitutionalLicenseDto): boolean {
+    if (!this.licenseStore.error()) return false;
+    return this.licenseStore.errorSource() === 'edit' && this.licenseStore.errorLicenseId() === license.id;
   }
 
   toggleUsage(licenseId: number): void {

@@ -57,6 +57,8 @@ describe('AdminIntezmenyekComponent', () => {
     usage: ReturnType<typeof signal<Record<number, unknown>>>;
     loading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
+    errorSource: ReturnType<typeof signal<string | null>>;
+    errorLicenseId: ReturnType<typeof signal<number | null>>;
     licensesForSchool: ReturnType<typeof vi.fn>;
     load: ReturnType<typeof vi.fn>;
     loadSeats: ReturnType<typeof vi.fn>;
@@ -88,6 +90,13 @@ describe('AdminIntezmenyekComponent', () => {
       usage: signal({}),
       loading: signal(false),
       error: signal(null),
+      // UI-TT-206: a valódi store minden mutáló hívás hibáján beállítja, MELYIK
+      // művelet ('edit'/'revoke'/'releaseSeat'/...) és MELYIK licenc-id okozta a
+      // jelenlegi `error()`-t - a komponens ez alapján dönti el, HOVA irányítsa a
+      // megjelenítést. A mock update()/revoke()/releaseSeat() implementációi lent
+      // ezt a valódi store viselkedését szimulálják hiba-ág esetén.
+      errorSource: signal(null),
+      errorLicenseId: signal(null),
       licensesForSchool: vi.fn((schoolId: number) => licenses.filter((l) => l.schoolId === schoolId)),
       load: vi.fn(),
       loadSeats: vi.fn(),
@@ -631,7 +640,11 @@ describe('AdminIntezmenyekComponent', () => {
     const component = fixture.componentInstance;
 
     component.startEditLicense(license);
+    // A valódi store `update()` hiba-ága a signal mellett `errorSource`/`errorLicenseId`-t
+    // is beállítja ('edit', a szerkesztett licenc id-je) - ezt szimuláljuk itt is (UI-TT-206).
     licenseStoreMock.error.set('Az érvényesség vége nem lehet korábbi a kezdeténél.');
+    licenseStoreMock.errorSource.set('edit');
+    licenseStoreMock.errorLicenseId.set(license.id);
     fixture.detectChanges();
 
     const schoolCards: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('li.card');
@@ -639,5 +652,97 @@ describe('AdminIntezmenyekComponent', () => {
     expect(editedSchoolCard.textContent).toContain(
       'Az érvényesség vége nem lehet korábbi a kezdeténél.',
     );
+  });
+
+  // UI-TT-206 (REGRESSION a mai UI-TT-201 fixre): a `licenseStore.error()` EGYETLEN,
+  // megosztott signal MINDEN licenc-műveletre (create/update/revoke/releaseSeat -
+  // admin-license.store.ts). A "Visszavonás"/"Felszabadítás" gombok NEM
+  // `editingLicenseId`-hez kötöttek - bármelyik licenc kártyáján elérhetők, függetlenül
+  // attól, hogy melyik licenc szerkesztő formja van épp nyitva. Ha az admin megnyitja A
+  // licenc szerkesztő formját (nem menti/zárja be), majd egy MÁSIK, B licencen
+  // "Visszavonás"-t/"Felszabadítás"-t kattint, ami sikertelen, a hibának B licenc
+  // kártyáján kell megjelennie - nem A érintetlen, nyitott formája alatt, és nem szabad
+  // eltűnnie sehonnan.
+  it('UI-TT-206 javítva: egy MÁSIK licenc visszavonási hibája NEM tűnik el, és NEM egy harmadik licenc nyitott szerkesztő formája alatt jelenik meg', async () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    // capacity-vel különböztetjük meg a két licenc-blokkot a DOM-ban (ownerName nem
+    // jelenik meg a per-licenc blokkban, csak az intézmény neve, ami közös).
+    const licenseA = makeLicense({ id: 30, schoolId: 1, capacity: 11 });
+    const licenseB = makeLicense({ id: 31, schoolId: 1, capacity: 22 });
+    configure([school1], [licenseA, licenseB]);
+
+    licenseStoreMock.revoke = vi.fn((id: number) => {
+      // Sikertelen visszavonás: a store az error-ágra fut, onSuccess NEM hívódik meg -
+      // pontosan úgy, ahogy a valódi `AdminLicenseStore.revoke()` HTTP-hiba esetén
+      // viselkedik: `error`/`errorSource: 'revoke'`/`errorLicenseId: id` együtt frissül.
+      licenseStoreMock.error.set('A licenc visszavonása sikertelen.');
+      licenseStoreMock.errorSource.set('revoke');
+      licenseStoreMock.errorLicenseId.set(id);
+    });
+
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Az admin nyitva hagyja A licenc szerkesztő formját...
+    component.startEditLicense(licenseA);
+    fixture.detectChanges();
+
+    // ...majd megpróbálja visszavonni B licencet, ami sikertelen.
+    await component.confirmRevoke(licenseB);
+    fixture.detectChanges();
+
+    const licenseBlocks = Array.from(
+      fixture.nativeElement.querySelectorAll('div.text-xs.mb-2'),
+    ) as HTMLElement[];
+    const blockB = licenseBlocks.find((el) => el.textContent?.includes('/22 '));
+    const blockA = licenseBlocks.find((el) => el.textContent?.includes('/11 '));
+
+    // A hiba B licenc visszavonásából származik - B blokkjában kell megjelennie.
+    expect(blockB?.textContent).toContain('A licenc visszavonása sikertelen.');
+    // ...és semmiképp sem A (érintetlen, nyitott formájú) licenc alatt.
+    expect(blockA?.textContent).not.toContain('A licenc visszavonása sikertelen.');
+
+    // A globális sáv (a komponens tetején) se duplikálja - a hiba B kártyáján már
+    // megjelenik, a szerkesztés alatt lévő A form pedig érintetlen maradt.
+    const globalBanner = fixture.nativeElement.querySelector('p.text-danger.text-sm.mb-4');
+    expect(globalBanner).toBeFalsy();
+  });
+
+  // Ugyanaz a hibaosztály, mint UI-TT-206, de a "Felszabadítás" gombbal (releaseSeat) -
+  // a hunter write-up ezt is kifejezetten megemlíti ("Visszavonás" VAGY "Felszabadítás"),
+  // ezért itt is le kell fednünk, nem csak a revoke-ot.
+  it('UI-TT-206 javítva (releaseSeat variáns): egy MÁSIK licenc hely-felszabadítási hibája a saját kártyáján jelenik meg, nem egy nyitott szerkesztő form alatt', () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    const licenseA = makeLicense({ id: 30, schoolId: 1, capacity: 11 });
+    const licenseB = makeLicense({ id: 31, schoolId: 1, capacity: 22 });
+    configure([school1], [licenseA, licenseB]);
+
+    licenseStoreMock.releaseSeat = vi.fn((licenseId: number) => {
+      licenseStoreMock.error.set('A hely felszabadítása sikertelen.');
+      licenseStoreMock.errorSource.set('releaseSeat');
+      licenseStoreMock.errorLicenseId.set(licenseId);
+    });
+
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Az admin nyitva hagyja A licenc szerkesztő formját...
+    component.startEditLicense(licenseA);
+    fixture.detectChanges();
+
+    // ...majd B licencen egy hely felszabadítását próbálja, ami sikertelen.
+    component.licenseStore.releaseSeat(licenseB.id, 99);
+    fixture.detectChanges();
+
+    const licenseBlocks = Array.from(
+      fixture.nativeElement.querySelectorAll('div.text-xs.mb-2'),
+    ) as HTMLElement[];
+    const blockB = licenseBlocks.find((el) => el.textContent?.includes('/22 '));
+    const blockA = licenseBlocks.find((el) => el.textContent?.includes('/11 '));
+
+    expect(blockB?.textContent).toContain('A hely felszabadítása sikertelen.');
+    expect(blockA?.textContent).not.toContain('A hely felszabadítása sikertelen.');
   });
 });
