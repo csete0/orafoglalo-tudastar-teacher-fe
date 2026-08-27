@@ -204,6 +204,36 @@ describe('KvizSzerkesztoComponent', () => {
     expect(request.questionType).toBe('cloze');
   });
 
+  /**
+   * UI-TT-209: a gomb `[disabled]`-je korábban nem nézte a form `invalid` állapotát. A
+   * `topicId` legördülő kezdőértéke `null` és kötelező - ha a tanár nem nyúlt hozzá
+   * explicit, a gomb AKTÍVNAK látszott, a kattintás viszont némán, hálózati forgalom
+   * nélkül visszatért. Se mentés, se hibaüzenet.
+   */
+  it('BUG UI-TT-209 javítva: hiányzó témakörnél a "Hozzáadás" gomb letiltva marad', () => {
+    const fixture = configure();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Minden ki van töltve, KIVÉVE a kötelező témakört.
+    component.questionForm.patchValue({
+      questionType: 'single',
+      questionText: 'Melyik keres értéket?',
+      optionsText: 'XKERES\nSZUM',
+    });
+    component.toggleCorrect('XKERES');
+    fixture.detectChanges();
+
+    // A saját tartalmi figyelmeztetés már nem szól - korábban ettől látszott aktívnak.
+    expect(component.formWarning()).toBeNull();
+    expect(component.questionForm.invalid).toBe(true);
+
+    const addButton: HTMLButtonElement = fixture.nativeElement.querySelector(
+      'form[novalidate] button[type="submit"], section button[type="submit"]',
+    );
+    expect(addButton?.disabled).toBe(true);
+  });
+
   // Admin-takedown alatt a tartalom nem módosítható - a felületnek ezt jeleznie is kell,
   // nem csak a backendnek elutasítania.
   it('admin-visszavonásnál jelzi az okot és letiltja a publikálást', () => {

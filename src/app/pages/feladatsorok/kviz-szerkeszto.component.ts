@@ -310,7 +310,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
             }
 
             <div class="flex gap-2">
-              <button type="submit" class="btn btn-primary" [disabled]="store.loading() || !!formWarning()">
+              <button type="submit" class="btn btn-primary" [disabled]="questionForm.invalid || store.loading() || !!formWarning()">
                 {{ editingId() ? 'Mentés' : 'Hozzáadás' }}
               </button>
               @if (editingId()) {
@@ -346,7 +346,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
             <button
               type="submit"
               class="btn btn-primary"
-              [disabled]="store.generating() || topics().length === 0 || !!quiz.takedownAt"
+              [disabled]="generateForm.invalid || store.generating() || topics().length === 0 || !!quiz.takedownAt"
             >
               {{ store.generating() ? 'Generálás folyamatban…' : 'Generálás' }}
             </button>
@@ -397,7 +397,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               <button
                 type="submit"
                 class="btn btn-primary"
-                [disabled]="store.loading() || assignableGroups().length === 0"
+                [disabled]="assignForm.invalid || store.loading() || assignableGroups().length === 0"
               >
                 Kiadás
               </button>
@@ -482,6 +482,12 @@ export class KvizSzerkesztoComponent {
     examLevel: this.fb.control<QuizExamLevel>(null),
   });
 
+  // UI-TT-209: a gombok `[disabled]`-je korábban NEM nézte a form `invalid` állapotát,
+  // csak a store-t és a saját figyelmeztetéseket. A `topicId`/`groupId` legördülők
+  // kezdőértéke `null` és `Validators.required`-esek - ha a tanár nem nyúlt hozzájuk
+  // explicit, a form érvénytelen maradt, a gomb viszont AKTÍVNAK látszott, és a metódus
+  // első sora (`if (form.invalid) return;`) némán, hálózati forgalom nélkül visszatért.
+  // A kattintás semmit nem csinált és semmit nem üzent.
   readonly questionForm = this.fb.nonNullable.group({
     questionType: ['single' as QuizQuestionType, Validators.required],
     questionText: ['', [Validators.required, notBlankValidator()]],
