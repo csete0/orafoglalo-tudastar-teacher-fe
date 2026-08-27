@@ -97,6 +97,11 @@ export const routes: Routes = [
           import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
       },
       {
+        path: 'kvizek/:id/eredmenyek',
+        loadComponent: () =>
+          import('./pages/feladatsorok/kviz-eredmenyek.component').then((m) => m.KvizEredmenyekComponent),
+      },
+      {
         path: ':id/szerkesztes',
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-szerkeszto.component').then((m) => m.FeladatsorSzerkesztoComponent),

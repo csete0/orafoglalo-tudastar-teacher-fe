@@ -138,3 +138,42 @@ export const QUIZ_DIFFICULTY_LABELS: Record<QuizDifficulty, string> = {
   Medium: 'Közepes',
   Hard: 'Nehéz',
 };
+
+// ── Eredmények ────────────────────────────────────────────────
+
+export interface TeacherQuizResultsDto {
+  quizId: number;
+  title: string;
+  questionCount: number;
+  assignedStudentCount: number;
+  completedStudentCount: number;
+  averageScorePercent?: number | null;
+  students: TeacherQuizStudentResultDto[];
+  questions: TeacherQuizQuestionStatDto[];
+}
+
+export interface TeacherQuizStudentResultDto {
+  userId: number;
+  name: string;
+  groupName: string;
+  attemptCount: number;
+  bestScore?: number | null;
+  totalQuestions: number;
+  lastCompletedAt?: string | null;
+  hasInProgress: boolean;
+  completedLate: boolean;
+}
+
+/** Kérdésenkénti item-analízis - ez mondja meg, MIT kell újra elmagyarázni. */
+export interface TeacherQuizQuestionStatDto {
+  questionId: number;
+  displayOrder?: number | null;
+  questionText: string;
+  questionType: QuizQuestionType;
+  answerCount: number;
+  correctCount: number;
+  correctPercent?: number | null;
+  /** A leggyakoribb hibás válasz - ebből derül ki, milyen tévhit él a csoportban. */
+  mostCommonWrongAnswer?: string | null;
+  mostCommonWrongAnswerCount: number;
+}

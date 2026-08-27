@@ -40,7 +40,11 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
   imports: [ReactiveFormsModule, RouterLink, IconComponent, DatePipe],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
-      <a routerLink="/feladatsorok/kvizek" class="text-sm text-text-muted hover:underline">← Kvízeim</a>
+      <div class="flex items-center gap-4">
+        <a routerLink="/feladatsorok/kvizek" class="text-sm text-text-muted hover:underline">← Kvízeim</a>
+        <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'eredmenyek']"
+           class="text-sm text-text-muted hover:underline ml-auto">Eredmények →</a>
+      </div>
 
       @if (store.error()) {
         <p class="text-danger text-sm mt-4">{{ store.error() }}</p>

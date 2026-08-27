@@ -9,6 +9,7 @@ import {
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
   QuizTopicGroupDto,
+  TeacherQuizResultsDto,
   TeacherQuizAssignmentDto,
   TeacherQuizDetailDto,
   TeacherQuizDto,
@@ -80,6 +81,10 @@ export class TeacherQuizService {
 
   revokeAssignment(assignmentId: number): Observable<unknown> {
     return this.http.delete(`${this.baseUrl}/quiz-assignments/${assignmentId}`);
+  }
+
+  getResults(quizId: number): Observable<TeacherQuizResultsDto> {
+    return this.http.get<TeacherQuizResultsDto>(`${this.baseUrl}/quizzes/${quizId}/results`);
   }
 
   /**
