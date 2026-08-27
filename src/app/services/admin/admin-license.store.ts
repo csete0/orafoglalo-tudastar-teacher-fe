@@ -184,7 +184,16 @@ export class AdminLicenseStore {
   }
 
   loadSeats(licenseId: number): void {
-    this.clearError();
+    // UI-TT-207: ez a metódus BÁRMELYIK licenc kártyájáról indítható ("Helyek
+    // megtekintése"), az `editingLicenseId`/`errorLicenseId`-től függetlenül. A korábbi
+    // feltétel nélküli `clearError()` egy MÁSIK, még megoldatlan licenc-hiba üzenetét
+    // (pl. B licenc sikertelen visszavonása) némán eltüntette, amint az admin C licencen
+    // rákattintott erre az ártalmatlan, csak-olvasó gombra - csak akkor töröljük a hibát,
+    // ha az ÉPPEN ERRE a licencre vonatkozik (pl. egy korábbi, ugyanerre a licencre eső
+    // loadSeats-hiba utáni újrapróbálkozás).
+    if (this._errorLicenseId() === licenseId) {
+      this.clearError();
+    }
 
     this.service
       .getSeats(licenseId)
@@ -197,7 +206,11 @@ export class AdminLicenseStore {
   }
 
   loadUsage(licenseId: number): void {
-    this.clearError();
+    // UI-TT-207: ld. loadSeats() ugyanezen megjegyzését - csak a SAJÁT, korábbi hibáját
+    // töröljük, egy másik licenc még megoldatlan hibáját nem érinthetjük.
+    if (this._errorLicenseId() === licenseId) {
+      this.clearError();
+    }
 
     this.service
       .getUsage(licenseId)

@@ -188,6 +188,72 @@ describe('AdminLicenseStore', () => {
     expect(store.error()).toBe('A licenc nem található.');
   });
 
+  // UI-TT-207 (a UI-TT-206 fixszel bevezetett per-kártya hibamegjelenítés testvér-hézaga):
+  // loadSeats()/loadUsage() korábban FELTÉTEL NÉLKÜL hívott clearError()-t, még a HTTP-hívás
+  // elindítása előtt - ez egy TELJESEN MÁS licenc (pl. egy sikertelen revoke()) még
+  // megoldatlan hibáját is némán eltüntette, amint az admin egy harmadik, ártalmatlan
+  // "Helyek megtekintése"/"Kihasználtság" gombra kattintott. A javítás után csak akkor törli
+  // a hibát, ha az ÉPPEN ERRE a licencre (licenseId) vonatkozott.
+  it('loadSeats() egy MÁSIK licenc "Helyek megtekintése" hívására nem törli egy harmadik licenc még megoldatlan hibáját', async () => {
+    serviceMock.revoke.mockReturnValue(
+      throwError(() => ({ error: { errorMessage: 'A licenc visszavonása sikertelen.' } })),
+    );
+    const store = configure();
+
+    // B licenc (id=10) visszavonása sikertelen - a hiba B-hez van kötve.
+    store.revoke(10);
+    await Promise.resolve();
+    expect(store.error()).toBe('A licenc visszavonása sikertelen.');
+    expect(store.errorLicenseId()).toBe(10);
+
+    // Az admin egy TELJESEN MÁS, C licenc (id=99) helyeit nézi meg - ártalmatlan, csak-olvasó
+    // művelet, aminek semmi köze B hibájához.
+    store.loadSeats(99);
+    await Promise.resolve();
+
+    // B licenc hibájának addig kell látszania, amíg B problémája ténylegesen meg nem oldódik -
+    // C licenc lekérdezése nem oldhatja meg B hibáját, tehát nem is tüntetheti el.
+    expect(store.error()).toBe('A licenc visszavonása sikertelen.');
+    expect(store.errorLicenseId()).toBe(10);
+  });
+
+  it('loadUsage() egy MÁSIK licenc "Kihasználtság" hívására nem törli egy harmadik licenc még megoldatlan hibáját', async () => {
+    serviceMock.revoke.mockReturnValue(
+      throwError(() => ({ error: { errorMessage: 'A licenc visszavonása sikertelen.' } })),
+    );
+    const store = configure();
+
+    store.revoke(10);
+    await Promise.resolve();
+    expect(store.errorLicenseId()).toBe(10);
+
+    store.loadUsage(99);
+    await Promise.resolve();
+
+    expect(store.error()).toBe('A licenc visszavonása sikertelen.');
+    expect(store.errorLicenseId()).toBe(10);
+  });
+
+  it('loadSeats() a SAJÁT, korábbi hibáját (ugyanarra a licencre) törli egy sikeres újrapróbálkozásnál', async () => {
+    serviceMock.getSeats.mockReturnValueOnce(
+      throwError(() => ({ error: { errorMessage: 'A helyek betöltése sikertelen.' } })),
+    );
+    const store = configure();
+
+    store.loadSeats(10);
+    await Promise.resolve();
+    expect(store.error()).toBe('A helyek betöltése sikertelen.');
+    expect(store.errorLicenseId()).toBe(10);
+
+    // Újrapróbálkozás UGYANARRA a licencre - ezt a hibát törölnie kell.
+    serviceMock.getSeats.mockReturnValue(of([]));
+    store.loadSeats(10);
+    await Promise.resolve();
+
+    expect(store.error()).toBeNull();
+    expect(store.errorLicenseId()).toBeNull();
+  });
+
   it('folyamatban lévő művelet alatt nem indít másodikat', () => {
     const pending = new Subject<void>();
     serviceMock.revoke.mockReturnValue(pending);
