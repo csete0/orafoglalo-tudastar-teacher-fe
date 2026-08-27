@@ -611,4 +611,33 @@ describe('AdminIntezmenyekComponent', () => {
 
     expect(toastServiceMock.warning).not.toHaveBeenCalled();
   });
+
+  // UI-TT-201: a UI-TT-199 fix (`saveLicenseEdit`) helyesen NYITVA tartja a
+  // szerkesztő űrlapot backend-elutasítás esetén, a begépelt értékekkel együtt - de
+  // maga a hibaüzenet (`licenseStore.error()`) korábban kizárólag egy egyetlen, a
+  // komponens LEGTETEJÉN (a "Intézmények egyesítése" kártya FÖLÖTT) megjelenő <p>-ben
+  // jelent meg, nem a szerkesztett licenc kártyája mellett. Egy hosszabb intézmény-listán
+  // (élesben már most 7 valódi intézmény van staging-en) az admin, aki a lista alján
+  // lévő licencet szerkeszti, a "Mentés" kattintás után NEM látott semmilyen visszajelzést
+  // a látóterében - a form nyitva maradt, de úgy tűnt, mintha a kattintás nem
+  // csinált volna semmit, hacsak nem görget vissza a lap tetejére.
+  it('UI-TT-201 fix: a licenc-mentés hibaüzenete megjelenik a szerkesztett licenc kártyája mellett is', () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    const school2 = makeSchool({ id: 2, name: 'Cél' });
+    const license = makeLicense({ id: 20, schoolId: 2 });
+    configure([school1, school2], [license]);
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startEditLicense(license);
+    licenseStoreMock.error.set('Az érvényesség vége nem lehet korábbi a kezdeténél.');
+    fixture.detectChanges();
+
+    const schoolCards: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('li.card');
+    const editedSchoolCard = schoolCards[1];
+    expect(editedSchoolCard.textContent).toContain(
+      'Az érvényesség vége nem lehet korábbi a kezdeténél.',
+    );
+  });
 });

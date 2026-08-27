@@ -43,7 +43,11 @@ import {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
       }
 
-      @if (licenseStore.error()) {
+      <!-- UI-TT-201: ez a globális hely csak akkor mutatja a hibát, ha épp NINCS nyitott
+           licenc-szerkesztő form - amíg van (editingLicenseId nem null), a hiba a szerkesztett
+           licenc kártyája MELLETT jelenik meg (lásd lejjebb), hogy egy hosszú intézmény-listán
+           görgetés nélkül is látsszon, és ne duplikálódjon ugyanaz az üzenet két helyen. -->
+      @if (licenseStore.error() && editingLicenseId === null) {
         <p class="text-danger text-sm mb-4">{{ licenseStore.error() }}</p>
       }
 
@@ -157,6 +161,13 @@ import {
 
                     @if (editingLicenseId === license.id) {
                       <div class="mt-2 flex flex-wrap gap-2 items-end border-t border-border-default pt-2">
+                        <!-- UI-TT-201: a mentés-hiba itt, a szerkesztett licenc mellett is
+                             megjelenik - eddig kizárólag a komponens legtetején jelent meg, ahol
+                             egy hosszabb intézmény-listán (élesben 7+ intézmény) a lista alján
+                             szerkesztő admin görgetés nélkül nem is látta. -->
+                        @if (licenseStore.error()) {
+                          <p class="text-danger text-xs w-full mb-1">{{ licenseStore.error() }}</p>
+                        }
                         <div>
                           <label class="text-xs text-text-muted block mb-1">Helyek</label>
                           <input type="number" min="0" [(ngModel)]="editCapacity"

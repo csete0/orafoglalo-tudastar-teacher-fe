@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GroupStore } from '../../services/group/group.store';
 import { GroupSeatStore } from '../../services/group/group-seat.store';
+import { GroupSeatOverviewDto } from '../../models/group-seat.model';
 import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
@@ -102,6 +103,16 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                       <span [class.text-danger]="seats.usedSeatsOnLicense >= seats.capacity">
                         {{ seats.usedSeatsOnLicense }}/{{ seats.capacity }} hely használatban
                       </span>
+                      <!-- UI-TT-202: usedSeatsOnLicense csak a licenc IdleWindowMinutes-én belül
+                           friss helyeket számolja, míg a lenti "Helyet használó diákok" lista
+                           MINDEN fel nem szabadított helyet felsorol, tétlent is - enélkül a
+                           magyarázat nélkül a fejléc ("0/0") ellentmondani látszik a lista alatta.
+                           Az admin-oldali admin-intezmenyek.component.ts:115-119 mintáját követi. -->
+                      @if (idleTransferableSeatCount(seats) > 0) {
+                        <span class="text-text-muted">
+                          ({{ idleTransferableSeatCount(seats) }} tétlen, átadható)
+                        </span>
+                      }
                       <span class="text-text-muted">(az intézmény összes csoportjával együtt)</span>
                     </div>
                     @if (seats.holders.length > 0) {
@@ -368,6 +379,15 @@ export class CsoportReszletekComponent implements OnInit {
     if (this.schoolStore.schools().length === 0) {
       this.schoolStore.loadMine();
     }
+  }
+
+  // UI-TT-202: usedSeatsOnLicense (backend) kizárólag a licenc IdleWindowMinutes-én
+  // belül friss helyeket számolja, a holders lista viszont MINDEN fel nem szabadított
+  // helyet felsorol, tétlent is - a kettő szándékosan eltérhet. Az admin-oldali
+  // admin-intezmenyek.component.ts:117 mintáját követve itt is megszámoljuk, hány
+  // listázott hely tétlen (heldSeats - usedSeats ekvivalense a teacher DTO-ban).
+  idleTransferableSeatCount(seats: GroupSeatOverviewDto): number {
+    return seats.holders.filter((h) => !h.isFresh).length;
   }
 
   async confirmEndLesson(): Promise<void> {

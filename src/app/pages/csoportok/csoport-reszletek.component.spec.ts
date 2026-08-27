@@ -6,9 +6,11 @@ import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
+import { GroupSeatStore } from '../../services/group/group-seat.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { GroupDto } from '../../models/group.model';
 import { SchoolDto } from '../../models/school.model';
+import { GroupSeatOverviewDto } from '../../models/group-seat.model';
 
 function makeGroup(overrides: Partial<GroupDto> = {}): GroupDto {
   return {
@@ -56,6 +58,15 @@ describe('CsoportReszletekComponent', () => {
     error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
   };
+  let seatStoreMock: {
+    overview: ReturnType<typeof signal<GroupSeatOverviewDto | null>>;
+    lastReleaseResult: ReturnType<typeof signal<unknown | null>>;
+    loading: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
+    load: ReturnType<typeof vi.fn>;
+    releaseSeat: ReturnType<typeof vi.fn>;
+    releaseAll: ReturnType<typeof vi.fn>;
+  };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn> };
 
   function configure(group: GroupDto, schools: SchoolDto[] = []) {
@@ -91,6 +102,15 @@ describe('CsoportReszletekComponent', () => {
       error: signal(null),
       loadMine: vi.fn(),
     };
+    seatStoreMock = {
+      overview: signal(null),
+      lastReleaseResult: signal(null),
+      loading: signal(false),
+      error: signal(null),
+      load: vi.fn(),
+      releaseSeat: vi.fn(),
+      releaseAll: vi.fn(),
+    };
 
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(true) };
 
@@ -102,6 +122,7 @@ describe('CsoportReszletekComponent', () => {
         { provide: SchoolStore, useValue: schoolStoreMock },
         { provide: ReportStore, useValue: reportStoreMock },
         { provide: LeaderboardStore, useValue: leaderboardStoreMock },
+        { provide: GroupSeatStore, useValue: seatStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
       ],
@@ -348,6 +369,53 @@ describe('CsoportReszletekComponent', () => {
 
     // Elvárás: a felhasználó lássa, hogy az intézmény-lista betöltése sikertelen volt.
     expect(fixture.nativeElement.textContent).toContain('Az intézmények betöltése sikertelen.');
+  });
+
+  // UI-TT-202: a `usedSeatsOnLicense` szám a backendben (TeacherSeatService.
+  // GetGroupOverviewAsync) KIZÁRÓLAG a friss (IdleWindowMinutes-en belül aktív)
+  // helyeket számolja - egy tétlen, de MÉG BE NEM FEJEZETT/fel nem szabadított
+  // helyet (pl. a BE-SEATCAPACITY-REDUCTION-STRANDEDSEAT-NO-AUTORECLAIM állapot)
+  // NEM számol bele. A "Helyet használó diákok" lista viszont MINDEN meg nem
+  // szabadított helyet felsorol, tétlenül is - ugyanazon az oldalon a fejléc
+  // száma és az alatta lévő lista így ellentmondtak egymásnak (pl. "0/0 hely
+  // használatban", miközben a lista 1 diákot mutat). Az admin-oldali egyenértékű
+  // nézet (admin-intezmenyek.component.ts:113-117) ezt "(N tétlen, átadható)"
+  // felirattal magyarázza - ezt kapja meg most a tanári "Helyek" fül is.
+  it('UI-TT-202 fix: a fejléc jelzi, ha a "X/Y hely használatban" száma tétlen (de listázott) helyet rejt', () => {
+    configure(makeGroup());
+    const overview: GroupSeatOverviewDto = {
+      groupId: 1,
+      groupName: 'Teszt Csoport',
+      licenseId: 5,
+      tier: 'premium',
+      capacity: 0,
+      usedSeatsOnLicense: 0,
+      holders: [
+        {
+          userId: 9,
+          displayName: 'Tétlen Diák',
+          claimedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          isFresh: false,
+          sessionInProgress: false,
+          hasSessionInProgress: false,
+          inMultipleGroups: false,
+        },
+      ],
+      withoutSeat: [],
+    };
+    seatStoreMock.overview.set(overview);
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('helyek');
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('0/0 hely használatban');
+    expect(text).toContain('Tétlen Diák');
+    expect(text).toContain('tétlen, átadható');
   });
 
   it('nem archivált csoportnál "Archiválás" gomb jelenik meg, "Visszaállítás" nem', () => {
