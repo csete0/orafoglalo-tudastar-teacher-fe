@@ -795,4 +795,46 @@ describe('AdminIntezmenyekComponent', () => {
     expect(blockB?.textContent).toContain('A hely felszabadítása sikertelen.');
     expect(blockA?.textContent).not.toContain('A hely felszabadítása sikertelen.');
   });
+
+  // UI-TT-210 testvér-hiba (teacher-fe csoport-reszletek.component.ts): a per-diák
+  // jelvény ott KIZÁRÓLAG "vizsga folyamatban"-t ír `hasSessionInProgress=true` esetén,
+  // holott a mögöttes flag vizsga VAGY kvíz miatt is igaz lehet. Ugyanez a hiba itt, a
+  // platform-admin "Helyek megtekintése" listáján is megvan: a backend
+  // (InstitutionalLicenseAdminService.GetSeatHoldersAsync) explicit kommentben mondja
+  // "Ugyanaz a predikátum, mint a tanári áttekintésben" (ExamSessions VAGY QuizSessions),
+  // és a DTO mezőjének saját kommentje is "Éppen vizsgát/kvízt ír" - de a felület
+  // "vizsgázik" (kizárólag vizsgára utaló) szöveget renderel egy kvíz-only diáknál is.
+  it('UI-TT-210 testvér javítva: a "vizsgázik/kvízt ír" jelvény kvíz-only munkamenetnél is típus-semleges szöveget ír', () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    const license = makeLicense({ id: 40, schoolId: 1, capacity: 5 });
+    configure([school1], [license]);
+
+    licenseStoreMock.seats.set({
+      40: [
+        {
+          userId: 1,
+          displayName: 'Kovács Anna',
+          email: 'anna@example.com',
+          seatIndex: 0,
+          claimedAt: '2026-08-28T08:00:00Z',
+          lastActivityAt: '2026-08-28T08:05:00Z',
+          isFresh: true,
+          // A diák valójában csak egy TANÁRI KVÍZT tölt ki, nincs vizsgája - de a
+          // backend flag (ExamSessions VAGY QuizSessions) emiatt is igaz.
+          sessionInProgress: true,
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const seatsButton = buttons.find((b) => b.textContent?.includes('Helyek megtekintése'));
+    seatsButton!.click();
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('.text-warning');
+    expect(badge?.textContent).toContain('kvíz');
+  });
 });

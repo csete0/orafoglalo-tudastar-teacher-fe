@@ -243,7 +243,7 @@ import {
                                  lássa, kinél nem fog végrehajtódni a művelet. -->
                             @if (seat.sessionInProgress) {
                               <span class="text-warning" title="Vizsga vagy kvíz van folyamatban - a helyét most nem lehet felszabadítani.">
-                                &middot; vizsgázik
+                                &middot; vizsgázik/kvízt ír
                               </span>
                             }
                             <span class="text-text-muted">

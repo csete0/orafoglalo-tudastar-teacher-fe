@@ -123,7 +123,7 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                     }
                   </div>
                   <p class="text-xs text-text-muted mt-2">
-                    Csak ennek a csoportnak a tagjaira hat. Aki épp vizsgázik, attól nem veszi el a helyet.
+                    Csak ennek a csoportnak a tagjaira hat. Aki épp vizsgázik vagy kvízt ír, attól nem veszi el a helyet.
                   </p>
                 </div>
 
@@ -151,7 +151,7 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                           </span>
                           · utoljára: {{ holder.lastActivityAt | date: 'MM.dd HH:mm' }}
                           @if (holder.hasSessionInProgress) {
-                            · <span class="text-warning">vizsga folyamatban</span>
+                            · <span class="text-warning">vizsga/kvíz folyamatban</span>
                           }
                           @if (holder.inMultipleGroups) {
                             · <span class="text-text-muted">több csoport tagja</span>
@@ -403,7 +403,7 @@ export class CsoportReszletekComponent implements OnInit {
           ? `Figyelem: ${multiGroup} diák más csoportnak is tagja — egy diáknak egy helye van, ` +
             'így a felszabadítás a másik óráján is látszani fog. '
           : '') +
-        'Aki épp vizsgázik, attól a rendszer nem veszi el a helyet.',
+        'Aki épp vizsgázik vagy kvízt ír, attól a rendszer nem veszi el a helyet.',
       danger: true,
       confirmLabel: 'Óra vége',
     });

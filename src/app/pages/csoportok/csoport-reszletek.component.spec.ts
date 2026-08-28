@@ -418,6 +418,97 @@ describe('CsoportReszletekComponent', () => {
     expect(text).toContain('tétlen, átadható');
   });
 
+  // BUG UI-TT-210: a hasSessionInProgress flag a backendben (TeacherSeatService.cs:173-177)
+  // ExamSessions VAGY QuizSessions alapján igaz - a modell komment (group-seat.model.ts:8-11)
+  // és a sikeres-felszabadítás banner (soremon lejjebb, "folyamatban lévő vizsga/kvíz") ezt
+  // helyesen tükrözi is, de EZ a per-diák jelvény "vizsga folyamatban"-t ír, FÜGGETLENÜL attól,
+  // hogy a diák valójában vizsgázik vagy csak egy tanári kvízt tölt ki - élőben megerősítve
+  // (SQL: 0 aktív ExamSessions, 1 aktív QuizSessions ugyanarra a userre, mégis "vizsga
+  // folyamatban" jelent meg a tanárnak).
+  it('BUG UI-TT-210 javítva: hasSessionInProgress=true esetén a jelvény ne állítsa kifejezetten, hogy vizsga folyik, mert kvíz is kiválthatja', () => {
+    configure(makeGroup());
+    const overview: GroupSeatOverviewDto = {
+      groupId: 1,
+      groupName: 'Teszt Csoport',
+      licenseId: 5,
+      tier: 'premium',
+      capacity: 3,
+      usedSeatsOnLicense: 1,
+      holders: [
+        {
+          userId: 9,
+          displayName: 'Kvízző Diák',
+          claimedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          isFresh: true,
+          sessionInProgress: true,
+          hasSessionInProgress: true,
+          inMultipleGroups: false,
+        },
+      ],
+      withoutSeat: [],
+    };
+    seatStoreMock.overview.set(overview);
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('helyek');
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+
+    // A flag exam-OR-quiz jelentésű, tehát a jelvény sem állíthatja kizárólag a vizsgát -
+    // a "vizsga/kvíz folyamatban" típus-semleges szöveget kell mutatnia.
+    expect(text).not.toContain('vizsga folyamatban');
+    expect(text).toContain('vizsga/kvíz folyamatban');
+  });
+
+  // BUG UI-TT-212: a hasSessionInProgress flag (TeacherSeatService.cs:173-177) ExamSessions
+  // VAGY QuizSessions alapján igaz - UI-TT-210 testvére, más helyen ugyanabban a komponensben.
+  // A tömeges "Óra vége — helyek felszabadítása" gomb ELŐTTI megerősítő párbeszéd szövege
+  // ("Aki épp vizsgázik, attól a rendszer nem veszi el a helyet.") kizárólag a vizsgát említi,
+  // holott a védelem ugyanúgy vonatkozik egy kvízt kitöltő diákra is. A tanár emiatt tévesen
+  // azt hiheti, hogy a gomb egy kvízt kitöltő diák helyét el fogja venni (miközben valójában
+  // nem fogja) - ez éppen a bulk-release döntés pillanatában félrevezető, nem csak kozmetikai.
+  it('BUG UI-TT-212 javítva: az "Óra vége" megerősítő szövege ne állítsa kizárólag a vizsgát, mert kvíz is védi a helyet', async () => {
+    configure(makeGroup());
+    const overview: GroupSeatOverviewDto = {
+      groupId: 1,
+      groupName: 'Teszt Csoport',
+      licenseId: 5,
+      tier: 'premium',
+      capacity: 3,
+      usedSeatsOnLicense: 1,
+      holders: [
+        {
+          userId: 9,
+          displayName: 'Kvízző Diák',
+          claimedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          isFresh: true,
+          sessionInProgress: true,
+          hasSessionInProgress: true,
+          inMultipleGroups: false,
+        },
+      ],
+      withoutSeat: [],
+    };
+    seatStoreMock.overview.set(overview);
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('helyek');
+    fixture.detectChanges();
+
+    await fixture.componentInstance.confirmEndLesson();
+
+    expect(confirmServiceMock.ask).toHaveBeenCalled();
+    const message = confirmServiceMock.ask.mock.calls[0][0].message as string;
+
+    expect(message).not.toContain('Aki épp vizsgázik, attól a rendszer nem veszi el a helyet.');
+    expect(message).toContain('Aki épp vizsgázik vagy kvízt ír, attól a rendszer nem veszi el a helyet.');
+  });
+
   it('nem archivált csoportnál "Archiválás" gomb jelenik meg, "Visszaállítás" nem', () => {
     configure(makeGroup({ isArchived: false }));
 
