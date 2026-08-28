@@ -131,18 +131,73 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 <div class="px-4 pb-4 space-y-3">
                   @for (task of section.tasks; track task.id) {
                     <div class="bg-bg-element rounded-xl p-4">
-                      <div class="flex justify-between items-start gap-2">
-                        <button (click)="toggleTask(task.id)" [attr.aria-expanded]="expandedTaskId() === task.id"
-                          class="text-left flex-1 flex items-start gap-2 group">
-                          <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
-                            [class.-rotate-90]="expandedTaskId() !== task.id" />
-                          <span class="min-w-0 flex-1">
-                            <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
-                            <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
-                          </span>
-                        </button>
-                        <button (click)="deleteTask(detail.id, task.id, task.title)" class="text-sm text-danger hover:underline shrink-0">Törlés</button>
-                      </div>
+                      @if (editingTaskId() === task.id) {
+                        <!-- UI-TT-214: inline szerkesztő - a UI-TT-193 részfeladat-mintáját
+                             tükrözi (cím/leírás/pont, ITT + sorrend-mező is), ugyanazokra a
+                             store-metódusokra (updateTask) kötve, amit eddig egyetlen
+                             komponens sem hívott. A sorrend-mező (taskOrder) adja a
+                             legkisebb konzisztens lépést az átrendezéshez, teljes drag&drop
+                             nélkül - a backend UpdateTaskAsync már elfogadja. -->
+                        <div class="space-y-2">
+                          <div>
+                            <label class="text-xs text-text-muted">Cím</label>
+                            <input [ngModel]="editTaskDraft(task).title"
+                              (ngModelChange)="setEditTaskTitle(task.id, $event)"
+                              [ngModelOptions]="{standalone: true}"
+                              class="input !px-2 !py-1" />
+                          </div>
+                          <div>
+                            <label class="text-xs text-text-muted">Leírás</label>
+                            <textarea rows="2"
+                              [ngModel]="editTaskDraft(task).description"
+                              (ngModelChange)="setEditTaskDescription(task.id, $event)"
+                              [ngModelOptions]="{standalone: true}"
+                              class="input !px-2 !py-1"></textarea>
+                          </div>
+                          <div class="flex gap-2 items-end">
+                            <div class="w-24">
+                              <label class="text-xs text-text-muted">Max pont</label>
+                              <input type="number" min="1" max="1000"
+                                [ngModel]="editTaskDraft(task).maxPoints"
+                                (ngModelChange)="setEditTaskMaxPoints(task.id, $event)"
+                                [ngModelOptions]="{standalone: true}"
+                                class="input !px-2 !py-1" />
+                            </div>
+                            <div class="w-24">
+                              <label class="text-xs text-text-muted">Sorrend</label>
+                              <input type="number" min="1"
+                                [ngModel]="editTaskDraft(task).taskOrder"
+                                (ngModelChange)="setEditTaskOrder(task.id, $event)"
+                                [ngModelOptions]="{standalone: true}"
+                                class="input !px-2 !py-1" />
+                            </div>
+                            <button (click)="saveEditTask(detail.id, task)"
+                              [disabled]="isEditTaskDraftInvalid(task.id) || store.loading()"
+                              class="btn btn-primary !px-3 !py-1.5">
+                              Mentés
+                            </button>
+                            <button (click)="cancelEditTask()" class="btn btn-ghost !px-3 !py-1.5">
+                              Mégsem
+                            </button>
+                          </div>
+                        </div>
+                      } @else {
+                        <div class="flex justify-between items-start gap-2">
+                          <button (click)="toggleTask(task.id)" [attr.aria-expanded]="expandedTaskId() === task.id"
+                            class="text-left flex-1 flex items-start gap-2 group">
+                            <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
+                              [class.-rotate-90]="expandedTaskId() !== task.id" />
+                            <span class="min-w-0 flex-1">
+                              <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
+                              <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
+                            </span>
+                          </button>
+                          <div class="flex items-center gap-3 shrink-0">
+                            <button (click)="startEditTask(task)" class="text-sm text-primary hover:underline">Szerkesztés</button>
+                            <button (click)="deleteTask(detail.id, task.id, task.title)" class="text-sm text-danger hover:underline">Törlés</button>
+                          </div>
+                        </div>
+                      }
 
                       @if (expandedTaskId() === task.id) {
                         <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
@@ -413,6 +468,17 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // van éppen inline-szerkesztés alatt - egyszerre legfeljebb egy.
   readonly editingSolutionId = signal<number | null>(null);
   private readonly editSolutionDrafts: Record<number, { description: string; points: number }> = {};
+
+  // UI-TT-214: a UI-TT-193 mintájának a FELADAT (nem részfeladat) szintre vitele - a
+  // feladat-kártyának eddig kizárólag "Törlés" gombja volt, a teljesen kiépített és
+  // guardolt backend UpdateTaskAsync-ot (cím/leírás/pont ÉS taskOrder is elfogadja)
+  // semelyik komponens nem hívta. Típó/rossz kategória/rossz sorrend javítása emiatt
+  // csak a részfeladatokat is elvesztő Törlés+újralétrehozással volt lehetséges. A
+  // sorrend-mezőt (`taskOrder`) is ide vettük fel, NEM külön fel/le gomb-párként - a
+  // meglévő `UpdateTaskAsync` már elfogadja, ez a legkisebb konzisztens lépés teljes
+  // drag&drop/reorder-végpont építése nélkül.
+  readonly editingTaskId = signal<number | null>(null);
+  private readonly editTaskDrafts: Record<number, { title: string; description: string; maxPoints: number; taskOrder: number }> = {};
 
   /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
    *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
@@ -810,6 +876,76 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       () => {
         this.editingSolutionId.set(null);
         this.toastService.success('Részfeladat frissítve.');
+      },
+    );
+  }
+
+  // UI-TT-214: lazy-létrehozott draft, a task AKTUÁLIS (mentett) mezőivel előtöltve -
+  // az editSolutionDraft() mintáját követi.
+  editTaskDraft(task: TeacherTaskDto): { title: string; description: string; maxPoints: number; taskOrder: number } {
+    return (this.editTaskDrafts[task.id] ??= {
+      title: task.title,
+      description: task.description ?? '',
+      maxPoints: task.maxPoints,
+      taskOrder: task.taskOrder,
+    });
+  }
+
+  startEditTask(task: TeacherTaskDto): void {
+    // Minden megnyitáskor a JELENLEGI (mentett) értékekről indítunk - ld. startEditSolution().
+    this.editTaskDrafts[task.id] = {
+      title: task.title,
+      description: task.description ?? '',
+      maxPoints: task.maxPoints,
+      taskOrder: task.taskOrder,
+    };
+    this.editingTaskId.set(task.id);
+  }
+
+  cancelEditTask(): void {
+    this.editingTaskId.set(null);
+  }
+
+  isEditTaskDraftInvalid(taskId: number): boolean {
+    const draft = this.editTaskDrafts[taskId];
+    if (!draft) return true;
+    return !draft.title.trim() || !draft.description.trim() || draft.maxPoints < 1 || draft.maxPoints > 1000;
+  }
+
+  setEditTaskTitle(taskId: number, value: string): void {
+    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].title = value;
+  }
+
+  setEditTaskDescription(taskId: number, value: string): void {
+    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].description = value;
+  }
+
+  setEditTaskMaxPoints(taskId: number, value: number): void {
+    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].maxPoints = value;
+  }
+
+  setEditTaskOrder(taskId: number, value: number): void {
+    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].taskOrder = value;
+  }
+
+  saveEditTask(taskSetId: number, task: TeacherTaskDto): void {
+    // UI-TT-115/123 testvér-guard - ld. addSolution()/deleteSolution() fenti kommentje.
+    if (this.store.loading()) return;
+    const draft = this.editTaskDrafts[task.id];
+    if (!draft || this.isEditTaskDraftInvalid(task.id)) return;
+    this.store.updateTask(
+      taskSetId,
+      task.id,
+      {
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        maxPoints: draft.maxPoints,
+        taskOrder: draft.taskOrder,
+        taskTypeIds: task.taskTypeIds,
+      },
+      () => {
+        this.editingTaskId.set(null);
+        this.toastService.success('Feladat frissítve.');
       },
     );
   }

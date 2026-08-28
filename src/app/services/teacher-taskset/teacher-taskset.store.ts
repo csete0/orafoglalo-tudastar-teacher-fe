@@ -202,8 +202,8 @@ export class TeacherTaskSetStore {
     this.mutateAndReload(this.service.addTask(taskSetId, request), taskSetId, onSuccess);
   }
 
-  updateTask(taskSetId: number, taskId: number, request: CreateTeacherTaskRequest): void {
-    this.mutateAndReload(this.service.updateTask(taskId, request), taskSetId);
+  updateTask(taskSetId: number, taskId: number, request: CreateTeacherTaskRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.updateTask(taskId, request), taskSetId, onSuccess);
   }
 
   deleteTask(taskSetId: number, taskId: number, onSuccess?: () => void): void {
