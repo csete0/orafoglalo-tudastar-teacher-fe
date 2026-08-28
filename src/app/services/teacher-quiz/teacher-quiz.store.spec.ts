@@ -36,6 +36,7 @@ describe('TeacherQuizStore', () => {
     publish: ReturnType<typeof vi.fn>;
     addQuestion: ReturnType<typeof vi.fn>;
     generateQuestions: ReturnType<typeof vi.fn>;
+    reorderQuestion: ReturnType<typeof vi.fn>;
   };
   let store: TeacherQuizStore;
 
@@ -46,6 +47,7 @@ describe('TeacherQuizStore', () => {
       publish: vi.fn(),
       addQuestion: vi.fn(),
       generateQuestions: vi.fn(),
+      reorderQuestion: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -178,5 +180,44 @@ describe('TeacherQuizStore', () => {
     generate$.next([]);
     generate$.complete();
     expect(store.generating()).toBe(false);
+  });
+
+  // UI-TT-213: a reorderQuestion() a dedikált, atomi BE-végpontot hívja (egyetlen
+  // hívás, nem a régi két-updateQuestion-mintát) - siker esetén újratölti a részletet,
+  // hiba esetén (a mutateAndReload általános szerződése szerint) NEM tölt újra és a
+  // hibát az error()-ban teszi elérhetővé, tehát nem maradhat olyan köztes állapot, ahol
+  // a felület egy félig végrehajtott csere eredményét mutatná sikeres jelzés nélkül.
+  it('reorderQuestion() siker esetén újratölti a részletet, hiba esetén nem és a hibát jelzi', () => {
+    configure();
+
+    serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 1 })));
+    store.loadDetail(1);
+
+    const reorder$ = new Subject<unknown>();
+    serviceMock.reorderQuestion.mockReturnValue(reorder$);
+
+    store.reorderQuestion(1, 10, 20);
+    expect(serviceMock.reorderQuestion).toHaveBeenCalledWith(10, 20);
+
+    serviceMock.getDetail.mockClear();
+    serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 1, title: 'Cserélt sorrend' })));
+    reorder$.next({});
+    reorder$.complete();
+
+    expect(serviceMock.getDetail).toHaveBeenCalledTimes(1);
+    expect(store.selectedDetail()?.title).toBe('Cserélt sorrend');
+    expect(store.error()).toBeNull();
+
+    // Egy MÁSODIK, sikertelen csere - sem újratöltés, sem csendes állapot: a hibát
+    // az error() jelzi.
+    const failingReorder$ = new Subject<unknown>();
+    serviceMock.reorderQuestion.mockReturnValue(failingReorder$);
+    serviceMock.getDetail.mockClear();
+
+    store.reorderQuestion(1, 20, 10);
+    failingReorder$.error({ error: { errorMessage: 'Hálózati hiba.' } });
+
+    expect(serviceMock.getDetail).not.toHaveBeenCalled();
+    expect(store.error()).toBe('Hálózati hiba.');
   });
 });

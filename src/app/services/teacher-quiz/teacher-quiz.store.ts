@@ -180,6 +180,15 @@ export class TeacherQuizStore {
     this.mutateAndReload(this.service.deleteQuestion(questionId), quizId, onSuccess);
   }
 
+  /**
+   * UI-TT-213: két szomszédos kérdés sorrend-cseréje EGYETLEN, atomi BE-hívással - a
+   * korábbi mintában a komponens két külön updateQuestion()-t hívott egymás után, aminek
+   * a második lépése hálózati/átmeneti hibával duplikált DisplayOrder-t hagyhatott hátra.
+   */
+  reorderQuestion(quizId: number, questionId: number, neighbourQuestionId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.reorderQuestion(questionId, neighbourQuestionId), quizId, onSuccess);
+  }
+
   approveQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
     this.mutateAndReload(this.service.approveQuestion(questionId), quizId, onSuccess);
   }

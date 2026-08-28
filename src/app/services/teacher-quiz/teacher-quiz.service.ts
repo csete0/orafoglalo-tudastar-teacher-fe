@@ -65,6 +65,16 @@ export class TeacherQuizService {
     return this.http.post<TeacherQuizQuestionDto>(`${this.baseUrl}/quiz-questions/${questionId}/approve`, {});
   }
 
+  /**
+   * UI-TT-213: két szomszédos kérdés DisplayOrder-jének ATOMI cseréje - a BE egyetlen
+   * mentésben végzi mindkettőt, nem két külön updateQuestion()-hívással, mint korábban.
+   */
+  reorderQuestion(questionId: number, neighbourQuestionId: number): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/quiz-questions/${questionId}/reorder`, {
+      neighbourQuestionId,
+    });
+  }
+
   generateQuestions(
     quizId: number,
     request: GenerateTeacherQuizQuestionsRequest,

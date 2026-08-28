@@ -715,8 +715,11 @@ export class KvizSzerkesztoComponent {
    * nem "beszúrunk" - így nem kell az egész listát újraszámozni, és két gyors kattintás
    * sem tud lyukat hagyni a sorszámozásban.
    *
-   * A második mentés az első sikere UTÁN indul: a store minden mutáció után újratölti a
-   * részletet, két egyidejű hívás pedig egymás újratöltésével versenyezne.
+   * UI-TT-213: korábban két külön updateQuestion()-hívással történt (a második csak az
+   * első sikere UTÁN indult) - ha a MÁSODIK hívás hálózati/átmeneti hibával elbukott, a
+   * szerveren két kérdés maradt UGYANAZZAL a DisplayOrder-rel, a hibaüzenet pedig nem
+   * jelezte, hogy az állapot félig módosult. A dedikált reorderQuestion() végpont mindkét
+   * kérdés DisplayOrder-jét EGYETLEN, atomi BE-hívással cseréli.
    */
   moveQuestion(question: TeacherQuizQuestionDto, direction: -1 | 1): void {
     const questions = this.detail()?.questions ?? [];
@@ -724,34 +727,7 @@ export class KvizSzerkesztoComponent {
     const neighbour = questions[index + direction];
     if (!neighbour || this.store.loading()) return;
 
-    const questionOrder = question.displayOrder ?? index;
-    const neighbourOrder = neighbour.displayOrder ?? index + direction;
-
-    this.store.updateQuestion(
-      this.quizId,
-      question.id,
-      { ...this.toRequest(question), displayOrder: neighbourOrder },
-      () =>
-        this.store.updateQuestion(this.quizId, neighbour.id, {
-          ...this.toRequest(neighbour),
-          displayOrder: questionOrder,
-        }),
-    );
-  }
-
-  /** Egy meglévő kérdés visszaalakítása mentési kéréssé (mozgatáshoz, tartalom nélkül változtatva). */
-  private toRequest(question: TeacherQuizQuestionDto): CreateTeacherQuizQuestionRequest {
-    return {
-      topicId: question.topicId,
-      questionType: question.questionType,
-      questionText: question.questionText,
-      options: question.options,
-      correctAnswers: question.correctAnswers,
-      explanation: question.explanation ?? null,
-      difficulty: question.difficulty,
-      secondsLimit: question.secondsLimit ?? null,
-      displayOrder: question.displayOrder ?? null,
-    };
+    this.store.reorderQuestion(this.quizId, question.id, neighbour.id);
   }
 
   approve(question: TeacherQuizQuestionDto): void {
