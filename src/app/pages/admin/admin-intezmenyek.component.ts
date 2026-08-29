@@ -478,10 +478,20 @@ export class AdminIntezmenyekComponent {
    * mostantól ahhoz a kerethez viszonyítjuk, ami AZON A NAPON ténylegesen érvényes volt,
    * amikor a csúcs ténylegesen történt - ez sosem lehet önellentmondó, mert egy adott napon
    * a peakSeatsInUse sosem haladhatja meg az aznap érvényes kapacitást.
+   *
+   * UI-TT-221: ha TÖBB nap is eléri az összesített csúcsot (pl. egy kapacitás-csökkentés
+   * előtti tágabb kereten belüli nap ÉS egy utána következő, a szűkebb keretet éppen
+   * betöltő nap ugyanannyi egyidejű foglalást mutat), az első találat a régi, tágabb
+   * kerethez viszonyítana, elrejtve a valódi (későbbi) telítettséget. A tie-elt napok
+   * közül mindig a LEGKISEBB capacityThatDay-t választjuk - ez sosem lehet félrevezetőbb
+   * bármelyik másik tie-elt napnál (a capacityThatDay sosem lehet kisebb, mint az adott
+   * napi peakSeatsInUse, tehát a minimum mindig legalább annyira szoros közelítés, mint a
+   * ténylegesen telített nap kerete).
    */
   peakCapacity(usage: InstitutionalLicenseUsageDto): number {
-    const peakDay = usage.daily.find((d) => d.peakSeatsInUse === usage.peakSeatsInUse);
-    return peakDay ? peakDay.capacityThatDay : usage.capacity;
+    const tiedDays = usage.daily.filter((d) => d.peakSeatsInUse === usage.peakSeatsInUse);
+    if (tiedDays.length === 0) return usage.capacity;
+    return Math.min(...tiedDays.map((d) => d.capacityThatDay));
   }
 
   toggleSeats(licenseId: number): void {

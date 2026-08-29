@@ -933,4 +933,63 @@ describe('AdminIntezmenyekComponent', () => {
     expect(text).toContain('Csúcs: 2/2 hely');
     expect(text).not.toContain('Csúcs: 2/0 hely');
   });
+
+  // UI-TT-220 reziduális testvér (UI-TT-221): peakCapacity() a `usage.daily.find(...)`-dal az
+  // ELSŐ (időrendben legkorábbi) napot választja, ami eléri az összesített csúcsot - ha a
+  // kapacitás-csökkentés ELŐTTI és UTÁNI napok EGYFORMA peakSeatsInUse-t produkálnak (a régi,
+  // tágabb kereten belül véletlenül ugyanannyian voltak bent, mint amennyi az új, szűkebb
+  // keretet pont betölti), a find() a régi, immár érvénytelen, TÁGABB kerethez viszonyít -
+  // miközben a licenc az UTÓBBI napon ténylegesen 100%-on állt (atCapacity: true,
+  // daysAtCapacity: 1). Az eredmény nem önellentmondó (2 <= 5), de FÉLREVEZETŐ: azt sugallja,
+  // bőven van hely, holott a legutóbbi adat szerint a licenc be van telve.
+  it('BUG UI-TT-221 javítva: azonos csúcs-értékű napok között a LEGSZŰKEBB (tie-elt) kerethez viszonyít, nem a régi, tágabb kerethez', () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    const license = makeLicense({ id: 42, schoolId: 1, capacity: 2 });
+    configure([school1], [license]);
+
+    const usage: InstitutionalLicenseUsageDto = {
+      licenseId: 42,
+      capacity: 2,
+      rangeDays: 7,
+      totalDenied: 0,
+      totalReclaimed: 0,
+      peakSeatsInUse: 2,
+      daysAtCapacity: 1,
+      daily: [
+        {
+          // Régebbi nap: akkor még 5-ös volt a keret, 2 fő volt bent - bőven ráért.
+          day: '2026-08-20T00:00:00Z',
+          peakSeatsInUse: 2,
+          denied: 0,
+          reclaimed: 0,
+          atCapacity: false,
+          capacityThatDay: 5,
+        },
+        {
+          // Admin időközben 2-re csökkentette a keretet - ezen a napon a 2 fő már 100%.
+          day: '2026-08-27T00:00:00Z',
+          peakSeatsInUse: 2,
+          denied: 0,
+          reclaimed: 0,
+          atCapacity: true,
+          capacityThatDay: 2,
+        },
+      ],
+    };
+    licenseStoreMock.usage.set({ 42: usage });
+
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const usageButton = buttons.find((b) => b.textContent?.includes('Kihasználtság'));
+    usageButton!.click();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    // A helyes viselkedés: mivel VOLT olyan nap, ami ténylegesen betelt (daysAtCapacity: 1),
+    // az összegzőnek ezt kellene tükröznie, nem a régi, már érvénytelen, tágabb keretet.
+    expect(text).toContain('Csúcs: 2/2 hely');
+    expect(text).not.toContain('Csúcs: 2/5 hely');
+  });
 });
