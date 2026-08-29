@@ -274,7 +274,7 @@ import {
                             {{ usage.totalDenied }} alkalommal nem jutott hely olyan diáknak, aki jogosult lett volna
                           </p>
                           <p class="text-text-muted">
-                            Csúcs: {{ usage.peakSeatsInUse }}/{{ usage.capacity }} hely ·
+                            Csúcs: {{ usage.peakSeatsInUse }}/{{ peakCapacity(usage) }} hely ·
                             {{ usage.daysAtCapacity }} napon telt be ·
                             {{ usage.totalReclaimed }} átvétel tétlen diáktól
                           </p>
@@ -468,6 +468,20 @@ export class AdminIntezmenyekComponent {
    */
   activeUsageDays(usage: InstitutionalLicenseUsageDto): InstitutionalLicenseUsageDayDto[] {
     return usage.daily.filter((d) => d.peakSeatsInUse > 0 || d.denied > 0 || d.reclaimed > 0);
+  }
+
+  /**
+   * UI-TT-220: az összegző sor korábban a teljes időszak `peakSeatsInUse`-át a MOSTANI
+   * (`usage.capacity`) kerethez viszonyította - egy utólagos kapacitás-csökkentés után ez
+   * ugyanazt az önellentmondó "csúcs 2/0" számpárt mutatta, mint amit a
+   * BE-LICENSEUSAGE-ATCAPACITY-DISPLAY-CURRENTCAP már javított a napi soroknál. A csúcsot
+   * mostantól ahhoz a kerethez viszonyítjuk, ami AZON A NAPON ténylegesen érvényes volt,
+   * amikor a csúcs ténylegesen történt - ez sosem lehet önellentmondó, mert egy adott napon
+   * a peakSeatsInUse sosem haladhatja meg az aznap érvényes kapacitást.
+   */
+  peakCapacity(usage: InstitutionalLicenseUsageDto): number {
+    const peakDay = usage.daily.find((d) => d.peakSeatsInUse === usage.peakSeatsInUse);
+    return peakDay ? peakDay.capacityThatDay : usage.capacity;
   }
 
   toggleSeats(licenseId: number): void {
