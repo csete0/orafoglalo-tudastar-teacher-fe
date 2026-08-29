@@ -6,7 +6,7 @@ import { AdminLicenseStore } from '../../services/admin/admin-license.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { SchoolAdminDto } from '../../models/teacher-moderation.model';
-import { InstitutionalLicenseDto } from '../../models/institutional-license.model';
+import { InstitutionalLicenseDto, InstitutionalLicenseUsageDto } from '../../models/institutional-license.model';
 
 function makeSchool(overrides: Partial<SchoolAdminDto> = {}): SchoolAdminDto {
   return {
@@ -836,5 +836,50 @@ describe('AdminIntezmenyekComponent', () => {
 
     const badge = fixture.nativeElement.querySelector('.text-warning');
     expect(badge?.textContent).toContain('kvíz');
+  });
+
+  // BE-LICENSEUSAGE-ATCAPACITY-DISPLAY-CURRENTCAP: a napi "csúcs X/Y" sor korábban a
+  // top-szintű (MOSTANI) usage.capacity-vel párosította a napi peakSeatsInUse-t - ha egy
+  // admin időközben lecsökkentette a licenc kapacitását, ez a tegnapi (történelmileg
+  // helyesen 100%-on futó) napra "csúcs 2/0"-t mutatott, ellentmondva a mellette helyesen
+  // számolt AtCapacity-nek. A napi sornak a saját, aznapi (CapacityThatDay) kerethez kell
+  // viszonyítania.
+  it('UI-TT-214 testvér javítva: a napi kihasználtsági sor a TÖRTÉNELMI (aznapi) kerethez viszonyít, nem a licenc mostani kapacitásához', () => {
+    const school1 = makeSchool({ id: 1, name: 'Forrás' });
+    const license = makeLicense({ id: 40, schoolId: 1, capacity: 0 });
+    configure([school1], [license]);
+
+    const usage: InstitutionalLicenseUsageDto = {
+      licenseId: 40,
+      capacity: 0,
+      rangeDays: 7,
+      totalDenied: 0,
+      totalReclaimed: 0,
+      peakSeatsInUse: 2,
+      daysAtCapacity: 1,
+      daily: [
+        {
+          day: '2026-08-27T00:00:00Z',
+          peakSeatsInUse: 2,
+          denied: 0,
+          reclaimed: 0,
+          atCapacity: true,
+          capacityThatDay: 2,
+        },
+      ],
+    };
+    licenseStoreMock.usage.set({ 40: usage });
+
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    const usageButton = buttons.find((b) => b.textContent?.includes('Kihasználtság'));
+    usageButton!.click();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('csúcs 2/2');
+    expect(text).not.toContain('csúcs 2/0');
   });
 });

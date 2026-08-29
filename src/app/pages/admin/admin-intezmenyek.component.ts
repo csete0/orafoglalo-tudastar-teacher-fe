@@ -290,7 +290,12 @@ import {
                               @for (day of activeUsageDays(usage); track day.day) {
                                 <li>
                                   <span class="text-text-muted">{{ day.day | date: 'MM.dd' }}</span>
-                                  · csúcs {{ day.peakSeatsInUse }}/{{ usage.capacity }}
+                                  <!-- BE-LICENSEUSAGE-ATCAPACITY-DISPLAY-CURRENTCAP: az AZNAP
+                                       érvényes kerethez (capacityThatDay) viszonyítunk, nem a
+                                       mostanihoz (usage.capacity) - egy utólagos kapacitás-
+                                       módosítás után a kettő eltérhet, és a mostanihoz mérve
+                                       önellentmondó számpárt mutatott (pl. "csúcs 2/0"). -->
+                                  · csúcs {{ day.peakSeatsInUse }}/{{ day.capacityThatDay }}
                                   @if (day.denied > 0) {
                                     · <span class="text-danger">{{ day.denied }} kiszorult</span>
                                   }

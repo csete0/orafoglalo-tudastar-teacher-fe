@@ -78,6 +78,10 @@ export interface InstitutionalLicenseUsageDayDto {
   denied: number;
   reclaimed: number;
   atCapacity: boolean;
+  /** BE-LICENSEUSAGE-ATCAPACITY-DISPLAY-CURRENTCAP: az AZNAP érvényes kapacitás - a
+   *  top-szintű `capacity` mindig a MOSTANI keretet mutatja, ami egy utólagos
+   *  kapacitás-módosítás után ellentmondana a napi soron megjelenített `peakSeatsInUse`-nak. */
+  capacityThatDay: number;
 }
 
 export interface InstitutionalLicenseUsageDto {
