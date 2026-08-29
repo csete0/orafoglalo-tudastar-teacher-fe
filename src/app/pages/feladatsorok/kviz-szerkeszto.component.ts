@@ -2,9 +2,10 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, map, of } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { catchError, finalize, map, of, take } from 'rxjs';
 import { GroupStore } from '../../services/group/group.store';
+import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import {
@@ -20,6 +21,7 @@ import {
   TeacherQuizQuestionDto,
 } from '../../models/teacher-quiz.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { ToastService } from '../../shared/toast/toast.service';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
@@ -351,6 +353,41 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               {{ store.generating() ? 'Generálás folyamatban…' : 'Generálás' }}
             </button>
           </form>
+        </section>
+
+        <!-- ── Élő játék (Kahoot-mód) ─────────────────────────── -->
+        <section class="card p-5">
+          <h2 class="font-bold mb-1">Élő játék</h2>
+          <p class="text-sm text-text-muted mb-3">
+            Tanár-vezérelt, valós idejű kvízjáték: a diákok a saját eszközükön válaszolnak,
+            a pontszám a gyorsaságtól is függ. Az indítás kiadja a kvízt a csoportnak, ha
+            még nem volt kiadva.
+          </p>
+
+          @if (!quiz.isPublished) {
+            <p class="text-sm text-text-muted">Előbb publikáld a kvízt, utána indíthatsz élő játékot.</p>
+          } @else {
+            <div class="flex flex-wrap items-end gap-3">
+              <label class="block grow max-w-xs">
+                <span class="text-sm text-text-muted">Csoport</span>
+                <select class="input mt-1" [value]="liveGroupId() ?? ''"
+                        (change)="liveGroupId.set($any($event.target).value ? +$any($event.target).value : null)">
+                  <option value="">Válassz csoportot…</option>
+                  @for (group of groupOptions(); track group.id) {
+                    <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
+                  }
+                </select>
+              </label>
+              <button type="button" class="btn btn-primary"
+                      (click)="startLive()"
+                      [disabled]="liveGroupId() === null || livePending() || !!quiz.takedownAt">
+                {{ livePending() ? 'Szoba nyitása…' : 'Élő játék indítása' }}
+              </button>
+            </div>
+            @if (liveError(); as err) {
+              <p class="text-sm text-danger mt-2">{{ err }}</p>
+            }
+          }
         </section>
 
         <!-- ── Kiadás csoportnak ──────────────────────────────── -->
@@ -795,6 +832,38 @@ export class KvizSzerkesztoComponent {
       { topicId: Number(raw.topicId), count: Number(raw.count), difficulty: 'Medium' },
       (count) => this.toastService.success(`${count} kérdés generálva — nézd át és hagyd jóvá őket.`),
     );
+  }
+
+  // ── Élő játék (Kahoot-mód) ────────────────────────────────
+
+  private readonly kahootHostService = inject(KahootHostService);
+  private readonly router = inject(Router);
+
+  readonly liveGroupId = signal<number | null>(null);
+  readonly livePending = signal(false);
+  readonly liveError = signal<string | null>(null);
+
+  /** Élő játékhoz BÁRMELY saját csoport választható - a szoba-nyitás kiadást
+   *  is létrehoz, ha még nincs (a jogosultság azon öröklődik a diákokra). */
+  readonly groupOptions = computed(() => this.groupStore.groups());
+
+  startLive(): void {
+    const groupId = this.liveGroupId();
+    if (groupId === null || this.livePending()) return;
+
+    this.livePending.set(true);
+    this.liveError.set(null);
+    this.kahootHostService
+      .createRoom(this.quizId, groupId)
+      .pipe(take(1), finalize(() => this.livePending.set(false)))
+      .subscribe({
+        next: (room) =>
+          void this.router.navigate([
+            '/feladatsorok', 'kvizek', this.quizId, 'elo', room.kahootSessionId,
+          ]),
+        error: (err) =>
+          this.liveError.set(extractErrorMessage(err, 'Az élő játék indítása sikertelen.')),
+      });
   }
 
   assign(): void {
