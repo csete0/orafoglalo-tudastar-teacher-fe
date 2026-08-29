@@ -909,7 +909,17 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   isEditTaskDraftInvalid(taskId: number): boolean {
     const draft = this.editTaskDrafts[taskId];
     if (!draft) return true;
-    return !draft.title.trim() || !draft.description.trim() || draft.maxPoints < 1 || draft.maxPoints > 1000;
+    // BE-TEACHERCONTENT-UPDATETASK-TASKORDER-NO-LOWER-BOUND: a Sorrend mező a template-ben
+    // ugyanúgy `min="1"`-et deklarál, mint a maxPoints - de az a HTML attribútum önmagában
+    // nem blokkolja a tényleges értékadást egy [ngModelOptions]="{standalone: true}"-dal
+    // kötött mezőnél, ezért ezt is ide, a tényleges guard-ba kell felvenni.
+    return (
+      !draft.title.trim() ||
+      !draft.description.trim() ||
+      draft.maxPoints < 1 ||
+      draft.maxPoints > 1000 ||
+      draft.taskOrder < 1
+    );
   }
 
   setEditTaskTitle(taskId: number, value: string): void {

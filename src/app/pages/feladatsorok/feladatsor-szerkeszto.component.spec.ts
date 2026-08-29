@@ -1410,5 +1410,19 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
     });
+
+    it('BE-TEACHERCONTENT-UPDATETASK-TASKORDER-NO-LOWER-BOUND: 0/negatív Sorrend értékkel a draft érvénytelen, mint a tartományhoz kötött maxPoints-nál', () => {
+      configureWithTask();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] };
+      component.startEditTask(task);
+      component.setEditTaskOrder(1, -3);
+
+      expect(component.isEditTaskDraftInvalid(1)).toBe(true);
+      component.saveEditTask(1, task);
+      expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
+    });
   });
 });
