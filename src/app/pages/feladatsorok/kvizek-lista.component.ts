@@ -52,24 +52,34 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
                 [class]="'accent-' + (quiz.id % 4)"
               >
                 <div class="accent-bar"></div>
-                <div class="p-4 flex items-center gap-3">
-                  <div class="icon-tile icon-tile-success">
-                    <app-icon name="academic-cap" class="w-6 h-6 block" />
-                  </div>
-                  <span class="min-w-0 flex-1">
-                    <span class="font-bold block truncate">{{ quiz.title }}</span>
-                    <span class="text-text-muted text-xs">{{ questionSummary(quiz) }}</span>
-                  </span>
-                  @if (quiz.pendingQuestionCount > 0) {
-                    <span class="badge badge-warning shrink-0">
-                      {{ quiz.pendingQuestionCount }} jóváhagyásra vár
+                <div class="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="icon-tile icon-tile-success shrink-0">
+                      <app-icon name="academic-cap" class="w-6 h-6 block" />
+                    </div>
+                    <span class="min-w-0 flex-1">
+                      <span class="font-bold block truncate">{{ quiz.title }}</span>
+                      <span class="text-text-muted text-xs">{{ questionSummary(quiz) }}</span>
                     </span>
-                  }
-                  <span class="badge shrink-0" [class]="badgeClass(quiz)">{{ badgeLabel(quiz) }}</span>
-                  <app-icon
-                    name="arrow-right"
-                    class="w-4 h-4 block text-text-muted transition-transform group-hover:translate-x-1 shrink-0"
-                  />
+                  </div>
+                  <!-- UI-TT-217: a jelvények (kiváltképp mindkettő EGYIDEJŰLEG) a cím-blokkal
+                       egy sorban 360px-en nullára szorították a min-w-0 flex-1 cím
+                       szélességét, és a truncate emiatt a teljes címet láthatatlanná tette
+                       (nem csonkolta, hanem eltüntette). Külön sor 360px alatt (sm: alatt még
+                       flex-col-ban a szülő), hogy a cím mindig a teljes kártya-szélességet
+                       kaphassa. -->
+                  <div class="flex items-center gap-3 shrink-0 justify-between sm:justify-start sm:ml-auto">
+                    @if (quiz.pendingQuestionCount > 0) {
+                      <span class="badge badge-warning shrink-0">
+                        {{ quiz.pendingQuestionCount }} jóváhagyásra vár
+                      </span>
+                    }
+                    <span class="badge shrink-0" [class]="badgeClass(quiz)">{{ badgeLabel(quiz) }}</span>
+                    <app-icon
+                      name="arrow-right"
+                      class="w-4 h-4 block text-text-muted transition-transform group-hover:translate-x-1 shrink-0"
+                    />
+                  </div>
                 </div>
               </a>
             </li>
