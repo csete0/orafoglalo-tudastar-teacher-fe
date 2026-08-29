@@ -2,11 +2,31 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { TeacherQuizDetailDto } from '../../models/teacher-quiz.model';
+import { TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
 import { GroupStore } from '../../services/group/group.store';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { KvizSzerkesztoComponent } from './kviz-szerkeszto.component';
+
+function makeQuestion(overrides: Partial<TeacherQuizQuestionDto> = {}): TeacherQuizQuestionDto {
+  return {
+    id: 1,
+    topicId: 1,
+    topicName: 'SQL alapok',
+    questionType: 'single',
+    questionText: 'Melyik keres értéket?',
+    options: ['XKERES', 'SZUM'],
+    correctAnswers: ['XKERES'],
+    explanation: null,
+    difficulty: 'Medium',
+    displayOrder: 1,
+    secondsLimit: null,
+    isApproved: true,
+    isAiGenerated: false,
+    ...overrides,
+  };
+}
 
 function makeDetail(overrides: Partial<TeacherQuizDetailDto> = {}): TeacherQuizDetailDto {
   return {
@@ -245,5 +265,73 @@ describe('KvizSzerkesztoComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Tartalmi kifogás');
     const publishButton: HTMLButtonElement = fixture.nativeElement.querySelector('section button.btn-primary');
     expect(publishButton.disabled).toBe(true);
+  });
+
+  // UI-TT-218: minden kérdés ugyanazt a questionForm-ot/editingId signalt osztja -
+  // startEdit() korábban feltétel nélkül patchValue-olta a formot az újonnan kattintott
+  // kérdés adataival, akkor is, ha a tanár épp egy MÁSIK kérdést módosított (de nem
+  // mentett) - az el nem mentett szöveg figyelmeztetés nélkül, nyomtalanul elveszett.
+  describe('startEdit() - el nem mentett módosítás védelme (UI-TT-218)', () => {
+    const q1 = makeQuestion({ id: 1, questionText: 'Első kérdés' });
+    const q2 = makeQuestion({ id: 2, questionText: 'Második kérdés' });
+
+    it('BUG UI-TT-218 javítva: dirty formmal másik kérdésre váltva megerősítést kér, elutasításnál a form változatlan marad', async () => {
+      const fixture = configure(makeDetail({ questions: [q1, q2] }));
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      component.startEdit(q1);
+      fixture.detectChanges();
+      component.questionForm.patchValue({ explanation: 'ÚJ, NEM MENTETT MAGYARÁZAT' });
+      component.questionForm.controls.explanation.markAsDirty();
+      fixture.detectChanges();
+
+      const switchPromise = component.startEdit(q2);
+      // Amíg a megerősítés függőben van, a form MÉG NEM váltott át q2-re.
+      expect(confirmService.pending()).not.toBeNull();
+      expect(component.editingId()).toBe(1);
+
+      confirmService.resolve(false);
+      await switchPromise;
+
+      expect(component.editingId()).toBe(1);
+      expect(component.questionForm.controls.explanation.value).toBe('ÚJ, NEM MENTETT MAGYARÁZAT');
+    });
+
+    it('megerősítés elfogadásánál a form áttölti a másik kérdés adataira', async () => {
+      const fixture = configure(makeDetail({ questions: [q1, q2] }));
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      component.startEdit(q1);
+      fixture.detectChanges();
+      component.questionForm.patchValue({ explanation: 'ÚJ, NEM MENTETT MAGYARÁZAT' });
+      component.questionForm.controls.explanation.markAsDirty();
+      fixture.detectChanges();
+
+      const switchPromise = component.startEdit(q2);
+      confirmService.resolve(true);
+      await switchPromise;
+
+      expect(component.editingId()).toBe(2);
+      expect(component.questionForm.controls.questionText.value).toBe('Második kérdés');
+    });
+
+    it('nem-dirty formnál (nincs el nem mentett módosítás) NEM kér megerősítést', async () => {
+      const fixture = configure(makeDetail({ questions: [q1, q2] }));
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      component.startEdit(q1);
+      fixture.detectChanges();
+
+      await component.startEdit(q2);
+
+      expect(confirmService.pending()).toBeNull();
+      expect(component.editingId()).toBe(2);
+    });
   });
 });

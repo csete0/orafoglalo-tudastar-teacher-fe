@@ -659,7 +659,24 @@ export class KvizSzerkesztoComponent {
     this.store.publish(this.quizId, () => this.toastService.success('Kvíz publikálva.'));
   }
 
-  startEdit(question: TeacherQuizQuestionDto): void {
+  /**
+   * UI-TT-218: minden kérdés UGYANAZT a questionForm-ot/editingId signalt osztja - ha a
+   * tanár egy másik kérdést épp szerkeszt és MÓDOSÍTOTT (de még nem mentett), egy másik
+   * kérdés "Szerkesztés" gombjára kattintva a patchValue korábban figyelmeztetés nélkül,
+   * nyomtalanul eldobta az el nem mentett szöveget.
+   */
+  async startEdit(question: TeacherQuizQuestionDto): Promise<void> {
+    if (this.editingId() !== null && this.questionForm.dirty) {
+      const confirmed = await this.confirmService.ask({
+        title: 'Nem mentett módosítás',
+        message: 'A jelenleg szerkesztett kérdésen el nem mentett módosításaid vannak - másik kérdésre váltva ezek elvesznek.',
+        confirmLabel: 'Váltás mentés nélkül',
+        cancelLabel: 'Mégsem',
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
+
     this.editingId.set(question.id);
     this.questionForm.patchValue({
       questionType: question.questionType,
