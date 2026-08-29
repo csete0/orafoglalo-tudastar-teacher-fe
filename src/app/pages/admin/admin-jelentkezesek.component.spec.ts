@@ -108,4 +108,31 @@ describe('AdminJelentkezesekComponent', () => {
     onSuccess();
     expect(toastServiceMock.success).toHaveBeenCalledWith('Jelentkezés elfogadva.');
   });
+
+  // UI-TT-216: az "Összes" fülön (statusFilter==='all') a kártya-template CSAK a
+  // `status === 'Rejected' && rejectionReason` esetben ír ki bármit (a piros "Indoklás:"
+  // sort) - egy Approved és egy indoklás NÉLKÜL elutasított (rejectionReason opcionális,
+  // a `confirmReject()` üresen is elküldi) jelentkezés emiatt PIXEL-AZONOSAN, semmilyen
+  // státusz-jelzés nélkül jelenik meg. A backend valós "status" mezőt küld (élőben
+  // ellenőrizve: GET /api/admin/teacher-applications?status=all), a frontend csak nem
+  // jeleníti meg.
+  it('UI-TT-216: "Összes" fülön egy Approved és egy indoklás nélkül Rejected jelentkezés státusza megkülönböztethető', () => {
+    configure(
+      [
+        makeApplication({ id: 1, applicantName: 'Elfogadott Tanár', status: 'Approved' }),
+        makeApplication({ id: 2, applicantName: 'Indoklás Nélkül Elutasított', status: 'Rejected', rejectionReason: undefined }),
+      ],
+      false,
+    );
+    storeMock.statusFilter = signal('all');
+    const fixture = TestBed.createComponent(AdminJelentkezesekComponent);
+    fixture.detectChanges();
+
+    const cards = Array.from(fixture.nativeElement.querySelectorAll('li.card')) as HTMLLIElement[];
+    const approvedCard = cards.find((c) => c.textContent?.includes('Elfogadott Tanár'));
+    const rejectedCard = cards.find((c) => c.textContent?.includes('Indoklás Nélkül Elutasított'));
+
+    expect(approvedCard?.textContent).toMatch(/Elfogadva/i);
+    expect(rejectedCard?.textContent).toMatch(/Elutasítva/i);
+  });
 });

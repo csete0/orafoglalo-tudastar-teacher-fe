@@ -48,6 +48,11 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
               </div>
               <span class="text-xs text-text-muted shrink-0">{{ application.createdAt | date: 'yyyy.MM.dd' }}</span>
             </div>
+            @if (application.status === 'Approved') {
+              <span class="badge badge-success mb-2">Elfogadva</span>
+            } @else if (application.status === 'Rejected') {
+              <span class="badge badge-danger mb-2">Elutasítva</span>
+            }
             <p class="text-sm mb-1 break-words">{{ application.motivation }}</p>
             @if (application.institutionName) {
               <p class="text-sm text-text-muted mb-3 break-words">Intézmény: {{ application.institutionName }}</p>
