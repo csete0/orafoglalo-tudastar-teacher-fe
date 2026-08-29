@@ -2,7 +2,8 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
+import { TeacherQuizAssignmentDto, TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
+import { GroupDto } from '../../models/group.model';
 import { GroupStore } from '../../services/group/group.store';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
@@ -24,6 +25,31 @@ function makeQuestion(overrides: Partial<TeacherQuizQuestionDto> = {}): TeacherQ
     secondsLimit: null,
     isApproved: true,
     isAiGenerated: false,
+    ...overrides,
+  };
+}
+
+function makeGroup(overrides: Partial<GroupDto> = {}): GroupDto {
+  return {
+    id: 1,
+    name: 'Teszt csoport',
+    inviteCode: 'ABCD1234',
+    isArchived: false,
+    isJoinEnabled: true,
+    createdAt: new Date().toISOString(),
+    memberCount: 3,
+    ...overrides,
+  };
+}
+
+function makeAssignment(overrides: Partial<TeacherQuizAssignmentDto> = {}): TeacherQuizAssignmentDto {
+  return {
+    id: 1,
+    groupId: 1,
+    groupName: 'Teszt csoport',
+    assignedAt: new Date().toISOString(),
+    dueAt: null,
+    revokedAt: null,
     ...overrides,
   };
 }
@@ -66,7 +92,7 @@ describe('KvizSzerkesztoComponent', () => {
     clearPublishResult: ReturnType<typeof vi.fn>;
   };
 
-  function configure(detail: TeacherQuizDetailDto | null = makeDetail()) {
+  function configure(detail: TeacherQuizDetailDto | null = makeDetail(), groups: GroupDto[] = []) {
     storeMock = {
       selectedDetail: signal(detail),
       loading: signal(false),
@@ -86,7 +112,7 @@ describe('KvizSzerkesztoComponent', () => {
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
-        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+        { provide: GroupStore, useValue: { groups: signal(groups), loadMine: vi.fn() } },
       ],
     });
 
@@ -332,6 +358,51 @@ describe('KvizSzerkesztoComponent', () => {
 
       expect(confirmService.pending()).toBeNull();
       expect(component.editingId()).toBe(2);
+    });
+  });
+
+  // UI-TT-219: a StudentGroups.Name-en nincs unique constraint - élőben ténylegesen
+  // előfordul, hogy egy tanárnak két, egyaránt aktív, azonos nevű csoportja van (élő
+  // reprodukció: browserhunt-csoport-20260721, Id=1 és Id=12, két külön invite-kóddal).
+  // A "Csoport" választó és a kiadás-lista korábban KIZÁRÓLAG a nevet mutatta - a tanár
+  // nem tudta megmondani, melyik "Visszavonás" gomb melyik csoportot érinti.
+  describe('groupLabel() - azonos nevű csoportok megkülönböztetése (UI-TT-219)', () => {
+    it('BUG UI-TT-219 javítva: két azonos nevű csoportnál a kiadás-lista és a választó invite-kóddal egészíti ki a nevet', () => {
+      const groupA = makeGroup({ id: 1, name: 'browserhunt-csoport-20260721', inviteCode: 'YGNEGXM7' });
+      const groupB = makeGroup({ id: 12, name: 'browserhunt-csoport-20260721', inviteCode: '6QZ5RN6S' });
+      const assignment = makeAssignment({ id: 2, groupId: 1, groupName: 'browserhunt-csoport-20260721' });
+
+      const fixture = configure(
+        makeDetail({ isPublished: true, assignments: [assignment] }),
+        [groupA, groupB],
+      );
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      // A kiadás-listában (groupId=1, a régi kiadás) a YGNEGXM7 kódnak kell megjelennie.
+      expect(component.groupLabel(1, 'browserhunt-csoport-20260721')).toBe(
+        'browserhunt-csoport-20260721 (kód: YGNEGXM7)',
+      );
+      // A választóban a MÉG NEM kiadott (groupId=12) csoportnak a MÁSIK kódot kell mutatnia -
+      // a két sor emiatt megkülönböztethető, nem pixel-azonos.
+      expect(component.groupLabel(12, 'browserhunt-csoport-20260721')).toBe(
+        'browserhunt-csoport-20260721 (kód: 6QZ5RN6S)',
+      );
+      expect(component.groupLabel(1, 'browserhunt-csoport-20260721')).not.toBe(
+        component.groupLabel(12, 'browserhunt-csoport-20260721'),
+      );
+
+      const assignmentText = (fixture.nativeElement as HTMLElement).querySelector('section:last-of-type li')
+        ?.textContent;
+      expect(assignmentText).toContain('YGNEGXM7');
+    });
+
+    it('kontroll: egyedi nevű csoportnál a felület változatlan marad, nincs invite-kód a névhez fűzve', () => {
+      const group = makeGroup({ id: 1, name: 'Egyedi csoport', inviteCode: 'ZZZZ9999' });
+      const fixture = configure(makeDetail({ isPublished: true, assignments: [] }), [group]);
+      const component = fixture.componentInstance;
+
+      expect(component.groupLabel(1, 'Egyedi csoport')).toBe('Egyedi csoport');
     });
   });
 });

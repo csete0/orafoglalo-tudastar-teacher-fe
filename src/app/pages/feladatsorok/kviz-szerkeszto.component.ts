@@ -362,7 +362,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               <li class="flex items-center gap-2 text-sm">
                 <app-icon name="users" class="w-4 h-4 block text-text-muted" />
                 <span class="flex-1">
-                  {{ assignment.groupName }}
+                  {{ groupLabel(assignment.groupId, assignment.groupName) }}
                   @if (assignment.dueAt) {
                     <span class="text-text-muted">· határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
                   }
@@ -384,7 +384,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                 <span class="text-sm text-text-muted">Csoport</span>
                 <select formControlName="groupId" class="input mt-1">
                   @for (group of assignableGroups(); track group.id) {
-                    <option [value]="group.id">{{ group.name }}</option>
+                    <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
                   }
                 </select>
               </label>
@@ -542,6 +542,28 @@ export class KvizSzerkesztoComponent {
     const assigned = new Set(this.activeAssignments().map((a) => a.groupId));
     return this.groupStore.groups().filter((g) => !assigned.has(g.id));
   });
+
+  /**
+   * UI-TT-219: a `StudentGroups.Name`-en nincs unique constraint - egy tanárnak élőben
+   * ténylegesen lehet két, egyaránt aktív, azonos nevű csoportja. A "Csoport" választó és a
+   * kiadás-lista korábban KIZÁRÓLAG a nevet mutatta, így a két sor megkülönböztethetetlen
+   * volt, és a tanár nem tudta megmondani, melyik "Visszavonás" gomb melyik csoportot
+   * érinti. Csak akkor fűzünk hozzá invite-kódot, ha a név ténylegesen duplikált - a
+   * megszokott (egyedi nevű csoportok) esetben a felület változatlan marad.
+   */
+  private readonly duplicateGroupNameCounts = computed(() => {
+    const counts = new Map<string, number>();
+    for (const g of this.groupStore.groups()) {
+      counts.set(g.name, (counts.get(g.name) ?? 0) + 1);
+    }
+    return counts;
+  });
+
+  groupLabel(groupId: number, groupName: string): string {
+    if ((this.duplicateGroupNameCounts().get(groupName) ?? 0) <= 1) return groupName;
+    const full = this.groupStore.groups().find((g) => g.id === groupId);
+    return full ? `${groupName} (kód: ${full.inviteCode})` : groupName;
+  }
 
   /**
    * Beküldés előtti, felhasználóbarát ellenőrzés. A backend ugyanezeket kikényszeríti —
