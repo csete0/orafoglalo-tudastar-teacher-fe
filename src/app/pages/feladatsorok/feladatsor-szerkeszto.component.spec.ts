@@ -1396,6 +1396,32 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.editingTaskId()).toBeNull();
     });
 
+    it('UI-TT-215: a kategória (taskTypeIds) is szerkeszthető, a mentés az ÚJ kategóriát küldi, nem a task eredetijét', () => {
+      configureWithTask();
+      taskSetStoreMock.updateTask.mockImplementation(
+        (_taskSetId: number, _taskId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [] };
+      component.startEditTask(task);
+
+      // A draft eredetileg a task jelenlegi (Programozás=6) kategóriáját tükrözi.
+      expect(component.editTaskDraft(task).taskTypeId).toBe(6);
+
+      // A tanár SQL-re (5) váltja - korábban ez sehol nem volt elérhető, a mentés mindig a
+      // task EREDETI taskTypeIds-ét küldte vissza.
+      component.setEditTaskCategory(1, 5);
+      component.saveEditTask(1, task);
+
+      expect(taskSetStoreMock.updateTask).toHaveBeenCalledWith(
+        1, 1,
+        expect.objectContaining({ taskTypeIds: [5] }),
+        expect.any(Function),
+      );
+    });
+
     it('folyamatban lévő mentésnél (store.loading()===true) saveEditTask() nem hívja meg a store-t', () => {
       configureWithTask();
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);

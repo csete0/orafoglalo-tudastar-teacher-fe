@@ -154,6 +154,23 @@ type SnippetDraft = Record<number, Record<number, string>>;
                               [ngModelOptions]="{standalone: true}"
                               class="input !px-2 !py-1"></textarea>
                           </div>
+                          <!-- UI-TT-215: kategória-választó - a UI-TT-214 saját indoklása
+                               (rossz kategóriájú feladat javítása) eddig nem volt
+                               megvalósítva, a mentés a task EREDETI taskTypeIds-ét küldte
+                               vissza változatlanul. -->
+                          <div>
+                            <label class="text-xs text-text-muted block mb-1">Kategória</label>
+                            <div class="flex gap-3">
+                              @for (type of taskTypes; track type.id) {
+                                <label class="flex items-center gap-1 text-sm cursor-pointer">
+                                  <input type="radio" [name]="'editTaskCategory-' + task.id"
+                                    [checked]="editTaskDraft(task).taskTypeId === type.id"
+                                    (change)="setEditTaskCategory(task.id, type.id)" />
+                                  {{ type.label }}
+                                </label>
+                              }
+                            </div>
+                          </div>
                           <div class="flex gap-2 items-end">
                             <div class="w-24">
                               <label class="text-xs text-text-muted">Max pont</label>
@@ -478,7 +495,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // meglévő `UpdateTaskAsync` már elfogadja, ez a legkisebb konzisztens lépés teljes
   // drag&drop/reorder-végpont építése nélkül.
   readonly editingTaskId = signal<number | null>(null);
-  private readonly editTaskDrafts: Record<number, { title: string; description: string; maxPoints: number; taskOrder: number }> = {};
+  private readonly editTaskDrafts: Record<number, { title: string; description: string; maxPoints: number; taskOrder: number; taskTypeId: number | null }> = {};
 
   /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
    *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
@@ -880,14 +897,27 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     );
   }
 
+  // UI-TT-215: a task.taskTypeIds ELVILEG tömb (a modell szintjén több típus is elférne
+  // rajta), a gyakorlatban viszont (ld. typeSections() "Egyéb"-be gyűjtő komment - "nincs
+  // jelenleg vegyes-típusú feladatsor-igény") pontosan EGY típussal rendelkezik minden
+  // valódi feladat - a "Új feladat" forma is emiatt implicit, szekció-szintű egy-típusú
+  // választással dolgozik. A szerkesztő draft ugyanezt a leegyszerűsítést követi: egyetlen
+  // választható kategória, `null` ha a task kivételesen 0/2+ típussal rendelkezik (ilyenkor
+  // a mentés a task EREDETI taskTypeIds-ét változatlanul hagyja, amíg a tanár tényleg nem
+  // választ egy konkrét kategóriát).
+  private taskTypeIdFor(task: TeacherTaskDto): number | null {
+    return task.taskTypeIds.length === 1 ? task.taskTypeIds[0] : null;
+  }
+
   // UI-TT-214: lazy-létrehozott draft, a task AKTUÁLIS (mentett) mezőivel előtöltve -
   // az editSolutionDraft() mintáját követi.
-  editTaskDraft(task: TeacherTaskDto): { title: string; description: string; maxPoints: number; taskOrder: number } {
+  editTaskDraft(task: TeacherTaskDto): { title: string; description: string; maxPoints: number; taskOrder: number; taskTypeId: number | null } {
     return (this.editTaskDrafts[task.id] ??= {
       title: task.title,
       description: task.description ?? '',
       maxPoints: task.maxPoints,
       taskOrder: task.taskOrder,
+      taskTypeId: this.taskTypeIdFor(task),
     });
   }
 
@@ -898,6 +928,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       description: task.description ?? '',
       maxPoints: task.maxPoints,
       taskOrder: task.taskOrder,
+      taskTypeId: this.taskTypeIdFor(task),
     };
     this.editingTaskId.set(task.id);
   }
@@ -938,6 +969,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].taskOrder = value;
   }
 
+  // UI-TT-215: a UI-TT-214 commit-üzenete kifejezetten a "rossz kategória" javítását
+  // nevezte meg indokként, de a leszállított szerkesztő ezt eddig nem tette lehetővé -
+  // saveEditTask() mindig a task EREDETI taskTypeIds-ét küldte vissza változatlanul.
+  setEditTaskCategory(taskId: number, typeId: number): void {
+    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].taskTypeId = typeId;
+  }
+
   saveEditTask(taskSetId: number, task: TeacherTaskDto): void {
     // UI-TT-115/123 testvér-guard - ld. addSolution()/deleteSolution() fenti kommentje.
     if (this.store.loading()) return;
@@ -951,7 +989,11 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         description: draft.description.trim(),
         maxPoints: draft.maxPoints,
         taskOrder: draft.taskOrder,
-        taskTypeIds: task.taskTypeIds,
+        // UI-TT-215: ha a tanár tényleg választott egy konkrét kategóriát, azt küldjük -
+        // egyébként (0/2+ típusú "Egyéb" feladatnál, ahol a draft null marad) a task
+        // EREDETI taskTypeIds-ét hagyjuk változatlanul, hogy egy meg nem érintett mező ne
+        // veszíthessen el legacy adatot.
+        taskTypeIds: draft.taskTypeId != null ? [draft.taskTypeId] : task.taskTypeIds,
       },
       () => {
         this.editingTaskId.set(null);
