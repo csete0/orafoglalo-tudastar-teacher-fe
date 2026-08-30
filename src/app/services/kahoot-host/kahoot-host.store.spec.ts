@@ -76,6 +76,7 @@ describe('KahootHostStore', () => {
       participantCount: 1,
       participantNames: ['Anna'],
       leaderboard: [],
+      answeredCount: 0,
       isHost: true,
       ...overrides,
     };
@@ -170,6 +171,27 @@ describe('KahootHostStore', () => {
 
     expect(store.phase()).toBe('question');
     expect(store.timeLeftSeconds()).toBeGreaterThan(25);
+  });
+
+  // BE-KAHOOT-HOST-RECONNECT-ANSWEREDCOUNT-RESETS-TO-ZERO: az "N/M válaszolt" számláló
+  // korábban KIZÁRÓLAG a push-eseményen (AnswerReceived) keresztül frissült - a snapshot
+  // (amit a host F5/wifi-hiccup utáni reconnect-je hív) ezt a mezőt nem tartalmazta, tehát
+  // reconnect után hamisan 0-t mutatott egy MÁR folyamatban lévő kérdésen, a KÖVETKEZŐ
+  // beküldésig.
+  it('BUG javítva: futó kérdés snapshotja (host F5) a MÁR beadott válaszokat is mutatja, nem nullázódik vissza', async () => {
+    signalrMock.joinRoom.mockResolvedValue(
+      makeSnapshot({
+        status: 'question',
+        currentQuestionIndex: 1,
+        currentQuestion: makeQuestion({ index: 1 }),
+        answeredCount: 3,
+      }),
+    );
+
+    await store.join(5);
+
+    expect(store.phase()).toBe('question');
+    expect(store.answeredCount()).toBe(3);
   });
 
   it('vezérlő művelet alatt a második hívás nem megy ki (actionPending kapu)', async () => {

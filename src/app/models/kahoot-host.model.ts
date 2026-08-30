@@ -52,6 +52,13 @@ export interface KahootRoomSnapshotDto {
   participantCount: number;
   participantNames: string[];
   leaderboard: KahootLeaderboardEntryDto[];
+  /**
+   * BE-KAHOOT-HOST-RECONNECT-ANSWEREDCOUNT-RESETS-TO-ZERO: az "N/M válaszolt" számláló
+   * korábban csak a push-eseményen (KahootAnswerReceivedDto) keresztül frissült - egy
+   * host-reconnect hamisan 0-ra esett vissza a következő beküldésig. Csak `question`
+   * státuszban van értelme, más állapotban 0.
+   */
+  answeredCount: number;
   isHost: boolean;
 }
 

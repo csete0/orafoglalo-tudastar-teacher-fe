@@ -208,6 +208,10 @@ export class KahootHostStore {
     this._questionCount.set(snapshot.questionCount);
     this._participantCount.set(snapshot.participantCount);
     this._participantNames.set(snapshot.participantNames);
+    // BE-KAHOOT-HOST-RECONNECT-ANSWEREDCOUNT-RESETS-TO-ZERO: korábban a snapshot nem
+    // hordozta ezt az értéket, csak a push-esemény - egy host-reconnect a következő
+    // beküldésig hamisan 0-t mutatott egy folyamatban lévő kérdésen.
+    this._answeredCount.set(snapshot.answeredCount);
 
     switch (snapshot.status) {
       case 'lobby':
