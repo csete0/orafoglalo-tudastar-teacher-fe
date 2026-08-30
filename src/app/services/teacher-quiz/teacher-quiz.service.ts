@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -8,6 +8,7 @@ import {
   CreateTeacherQuizQuestionRequest,
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
+  QuizResultsMode,
   QuizTopicGroupDto,
   TeacherQuizResultsDto,
   TeacherQuizAssignmentDto,
@@ -93,8 +94,19 @@ export class TeacherQuizService {
     return this.http.delete(`${this.baseUrl}/quiz-assignments/${assignmentId}`);
   }
 
-  getResults(quizId: number): Observable<TeacherQuizResultsDto> {
-    return this.http.get<TeacherQuizResultsDto>(`${this.baseUrl}/quizzes/${quizId}/results`);
+  /**
+   * @param mode 'all' = minden kitöltés; 'live' = csak élő menetek; 'solo' = csak önálló.
+   * @param kahootSessionId egy KONKRÉT élő játékra szűkítés.
+   */
+  getResults(
+    quizId: number,
+    mode: QuizResultsMode = 'all',
+    kahootSessionId: number | null = null,
+  ): Observable<TeacherQuizResultsDto> {
+    let params = new HttpParams();
+    if (mode !== 'all') params = params.set('mode', mode);
+    if (kahootSessionId != null) params = params.set('kahootSessionId', kahootSessionId);
+    return this.http.get<TeacherQuizResultsDto>(`${this.baseUrl}/quizzes/${quizId}/results`, { params });
   }
 
   /**

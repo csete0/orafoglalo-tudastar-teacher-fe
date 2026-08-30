@@ -184,6 +184,13 @@ export class KahootHostStore {
       this.stopTicker();
     });
 
+    // A takarító (Hangfire) zárta le az elárvult szobát - a képernyő ne "fagyjon be".
+    this.signalr.on<{ kahootSessionId: number; reason: string }>('RoomCancelled', (p) => {
+      this._phase.set('error');
+      this._error.set(p.reason);
+      this.stopTicker();
+    });
+
     this.signalr.on<KahootParticipantEventDto>('ParticipantJoined', (p) => {
       this._participantCount.set(p.participantCount);
       this._participantNames.update((names) =>

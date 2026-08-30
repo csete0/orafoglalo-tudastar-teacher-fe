@@ -162,7 +162,16 @@ export interface TeacherQuizStudentResultDto {
   lastCompletedAt?: string | null;
   hasInProgress: boolean;
   completedLate: boolean;
+  /** Befejezett ÉLŐ (Kahoot-módú) kitöltések száma a szűrt nézetben. */
+  liveAttemptCount: number;
+  /** A beszámított legjobb próbálkozás módja - ebből lesz az "Élő" jelvény. */
+  bestScoreMode?: 'solo' | 'live' | null;
+  /** A legjobb élő kitöltés sebesség+streak pontszáma. */
+  bestLivePoints?: number | null;
 }
+
+/** Az eredmény-nézet forrás-szűrője. */
+export type QuizResultsMode = 'all' | 'live' | 'solo';
 
 /** Kérdésenkénti item-analízis - ez mondja meg, MIT kell újra elmagyarázni. */
 export interface TeacherQuizQuestionStatDto {
