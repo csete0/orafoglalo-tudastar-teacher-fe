@@ -87,9 +87,9 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
             </p>
             <ul class="space-y-2">
               @for (game of games(); track game.kahootSessionId) {
-                <li>
+                <li class="flex items-center gap-2">
                   <button type="button"
-                          class="w-full text-left flex items-center gap-3 text-sm rounded-lg px-2 py-1.5 hover:bg-bg-element"
+                          class="min-w-0 flex-1 text-left flex items-center gap-3 text-sm rounded-lg px-2 py-1.5 hover:bg-bg-element"
                           [class.bg-primary-subtle]="selectedGameId() === game.kahootSessionId"
                           (click)="selectGame(game.kahootSessionId)">
                     <span class="min-w-0 flex-1">
@@ -107,6 +107,21 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
                       {{ gameBadgeLabel(game) }}
                     </span>
                   </button>
+                  <!-- UI-TT-222: egy beragadt/félbeszakadt (böngésző-összeomlás, tab-bezárás)
+                       élő szoba véglegesen letiltotta új élő játék indítását ugyanarra a
+                       (kvíz, csoport) párra, és a tanárnak SEHOL nem volt felfedezhető
+                       útja megtalálni/lezárni - ez a lista csak szűrt, nem navigált. A
+                       vezérlő route (/elo/:kahootSessionId) maga már működött, csak nem
+                       volt hozzá link. Bármely MÉG NEM lezárult (finished) játékhoz
+                       közvetlen út a vezérlő nézetre, ahonnan a "Játék befejezése" gomb
+                       feloldja a beragadást. -->
+                  @if (game.status !== 'finished') {
+                    <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'elo', game.kahootSessionId]"
+                       class="btn btn-ghost shrink-0 !px-2 !py-1 !text-xs"
+                       title="Vezérlés / lezárás">
+                      Vezérlés
+                    </a>
+                  }
                 </li>
               }
             </ul>
