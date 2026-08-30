@@ -102,6 +102,13 @@ export const routes: Routes = [
           import('./pages/feladatsorok/kviz-eredmenyek.component').then((m) => m.KvizEredmenyekComponent),
       },
       {
+        // Élő (Kahoot-módú) játék vezérlő-képernyője - a játékmenet a
+        // /kahoothub-on zajlik, ez a route csak a host-nézet.
+        path: 'kvizek/:id/elo/:kahootSessionId',
+        loadComponent: () =>
+          import('./pages/feladatsorok/kahoot-host.component').then((m) => m.KahootHostComponent),
+      },
+      {
         path: ':id/szerkesztes',
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-szerkeszto.component').then((m) => m.FeladatsorSzerkesztoComponent),
