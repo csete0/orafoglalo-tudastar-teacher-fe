@@ -168,6 +168,13 @@ export interface TeacherQuizStudentResultDto {
   bestScoreMode?: 'solo' | 'live' | null;
   /** A legjobb élő kitöltés sebesség+streak pontszáma. */
   bestLivePoints?: number | null;
+  /**
+   * UI-TT-223: a bestLivePoints-ot adó UGYANAZON élő session helyes válaszai/kérdésszáma -
+   * enélkül a felület a legjobb élő pontszámot a legjobb ARÁNYÚ (esetleg önálló)
+   * próbálkozás mellé írta ki, egy sosem megtörtént kombinációt sugallva.
+   */
+  bestLiveCorrectAnswers?: number | null;
+  bestLiveTotalQuestions?: number | null;
 }
 
 /** Az eredmény-nézet forrás-szűrője. */

@@ -184,10 +184,22 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
                     @if (s.liveAttemptCount > 0 && s.attemptCount !== s.liveAttemptCount) {
                       · ebből {{ s.liveAttemptCount }} élő
                     }
-                    @if (s.bestLivePoints != null) {
+                    <!-- UI-TT-223: a "⚡ N pont" csak akkor mehet EBBE a sorba, ha a kiírt
+                         fő arány (bestScore / totalQuestions) UGYANABBÓL az élő session-ből
+                         jön (bestScoreMode === 'live') - máskülönben egy sosem megtörtént
+                         kombinációt (idegen session arányát idegen session pontjával)
+                         sugallna. Ha a legjobb élő próbálkozás nem a legjobb arányú, külön,
+                         egyértelműen jelölt sorban jelenik meg (ld. lent). -->
+                    @if (s.bestScoreMode === 'live' && s.bestLivePoints != null) {
                       · ⚡ {{ s.bestLivePoints }} pont
                     }
                   </span>
+                  @if (s.bestScoreMode !== 'live' && s.bestLivePoints != null) {
+                    <span class="block text-xs text-text-muted">
+                      Legjobb élő menet: {{ s.bestLiveCorrectAnswers }} / {{ s.bestLiveTotalQuestions }}
+                      · ⚡ {{ s.bestLivePoints }} pont
+                    </span>
+                  }
                 </span>
 
                 @if (s.bestScoreMode === 'live') {
