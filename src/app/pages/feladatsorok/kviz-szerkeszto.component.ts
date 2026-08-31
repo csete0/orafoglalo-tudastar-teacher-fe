@@ -68,41 +68,21 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 
         <div class="hairline"></div>
 
-        <!-- ── Publikálás ─────────────────────────────────────── -->
-        <section class="card p-5 mb-6">
-          <div class="flex items-center gap-3">
-            <div class="flex-1">
-              <h2 class="font-bold">Kiadásra kész?</h2>
-              <p class="text-sm text-text-muted">
-                {{ quiz.questionCount }} kérdés
-                @if (quiz.pendingQuestionCount > 0) {
-                  <span class="text-danger">, ebből {{ quiz.pendingQuestionCount }} jóváhagyásra vár</span>
-                }
-              </p>
-            </div>
-            <button
-              type="button"
-              class="btn btn-primary"
-              [disabled]="store.loading() || !!quiz.takedownAt"
-              (click)="publish()"
-            >
-              {{ quiz.isPublished ? 'Újrapublikálás' : 'Publikálás' }}
-            </button>
-          </div>
-
-          @if (store.publishResult(); as result) {
-            @if (!result.success) {
-              <ul class="mt-3 space-y-1">
-                @for (error of result.errors; track error) {
-                  <li class="text-sm text-danger">{{ error }}</li>
-                }
-              </ul>
-            }
+        <!-- ── UI-UX-T8: ragadós szekció-navigáció - 10+ kérdésnél a lap hosszú,
+             a lap alji Kiadás/Élő szekciók e nélkül "eltűnnek". A sorrend a
+             munkafolyamatot követi: tartalom → publikálás → kiadás. -->
+        <nav class="sticky top-[57px] z-20 -mx-4 px-4 py-2 mb-6 flex gap-1 overflow-x-auto
+                    bg-bg-panel/95 backdrop-blur border-b border-border-default text-sm"
+             aria-label="Szekciók">
+          @for (anchor of sectionAnchors; track anchor.id) {
+            <a [href]="'#' + anchor.id"
+               class="px-3 py-1 rounded-lg whitespace-nowrap text-text-muted hover:text-text-primary hover:bg-bg-element">
+              {{ anchor.label }}</a>
           }
-        </section>
+        </nav>
 
         <!-- ── Beállítások ────────────────────────────────────── -->
-        <section class="card p-5 mb-6">
+        <section id="beallitasok" aria-label="Beállítások" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-3">Beállítások</h2>
           <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()" class="space-y-3">
             <input formControlName="title" placeholder="Cím" maxlength="200" class="input" />
@@ -153,27 +133,36 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         </section>
 
         <!-- ── Kérdések ───────────────────────────────────────── -->
-        <section class="card p-5 mb-6">
+        <section id="kerdesek" aria-label="Kérdések" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-3">Kérdések</h2>
 
           <ul class="space-y-3 mb-5">
             @for (question of quiz.questions; track question.id) {
               <li class="border border-border rounded p-3">
-                <div class="flex items-start gap-2">
+                <!-- UI-UX-T8: alapból összecsukva - 10+ kérdésnél a részletek
+                     (megoldás, gombsor) csak kibontásra látszanak. -->
+                <button type="button" (click)="toggleQuestion(question.id)"
+                        class="w-full flex items-start gap-2 text-left cursor-pointer"
+                        [attr.aria-expanded]="isQuestionExpanded(question.id)">
                   <span class="min-w-0 flex-1">
-                    <span class="block font-semibold">{{ question.questionText }}</span>
+                    <span class="block font-semibold"
+                          [class.truncate]="!isQuestionExpanded(question.id)">{{ question.questionText }}</span>
                     <span class="text-xs text-text-muted">
                       {{ typeLabel(question.questionType) }} · {{ question.topicName }} ·
                       {{ difficultyLabel(question.difficulty) }}
-                    </span>
-                    <span class="block text-xs text-text-muted mt-1">
-                      Helyes: {{ question.correctAnswers.join(', ') }}
                     </span>
                   </span>
                   @if (!question.isApproved) {
                     <span class="badge badge-warning shrink-0">Jóváhagyásra vár</span>
                   }
-                </div>
+                  <app-icon name="chevron-down" class="w-4 h-4 block shrink-0 transition-transform"
+                            [class.rotate-180]="isQuestionExpanded(question.id)" />
+                </button>
+
+                @if (isQuestionExpanded(question.id)) {
+                  <span class="block text-xs text-text-muted mt-2">
+                    Helyes: {{ question.correctAnswers.join(', ') }}
+                  </span>
 
                 <div class="flex gap-2 mt-2">
                   <button
@@ -198,6 +187,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                     Törlés
                   </button>
                 </div>
+                }
               </li>
             } @empty {
               <li class="text-sm text-text-muted">Még nincs kérdés. Vegyél fel egyet, vagy generáltass AI-jal.</li>
@@ -323,7 +313,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         </section>
 
         <!-- ── AI-generálás ───────────────────────────────────── -->
-        <section class="card p-5 mb-6">
+        <section id="ai" aria-label="AI-generálás" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-1">Kérdések generálása AI-jal</h2>
           <p class="text-sm text-text-muted mb-3">
             A generált kérdések piszkozatként kerülnek be — átnézés és jóváhagyás után válnak
@@ -355,8 +345,42 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
           </form>
         </section>
 
+        <!-- ── Publikálás ─────────────────────────────────────── -->
+        <section id="publikalas" aria-label="Publikálás" class="card p-5 mb-6 scroll-mt-24">
+          <div class="flex items-center gap-3">
+            <div class="flex-1">
+              <h2 class="font-bold">Kiadásra kész?</h2>
+              <p class="text-sm text-text-muted">
+                {{ quiz.questionCount }} kérdés
+                @if (quiz.pendingQuestionCount > 0) {
+                  <span class="text-danger">, ebből {{ quiz.pendingQuestionCount }} jóváhagyásra vár</span>
+                }
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="store.loading() || !!quiz.takedownAt"
+              (click)="publish()"
+              data-testid="publish-btn"
+            >
+              {{ quiz.isPublished ? 'Újrapublikálás' : 'Publikálás' }}
+            </button>
+          </div>
+
+          @if (store.publishResult(); as result) {
+            @if (!result.success) {
+              <ul class="mt-3 space-y-1">
+                @for (error of result.errors; track error) {
+                  <li class="text-sm text-danger">{{ error }}</li>
+                }
+              </ul>
+            }
+          }
+        </section>
+
         <!-- ── Élő játék (Kahoot-mód) ─────────────────────────── -->
-        <section class="card p-5">
+        <section id="elo" aria-label="Élő játék" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-1">Élő játék</h2>
           <p class="text-sm text-text-muted mb-3">
             Tanár-vezérelt, valós idejű kvízjáték: a diákok a saját eszközükön válaszolnak,
@@ -392,7 +416,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         </section>
 
         <!-- ── Kiadás csoportnak ──────────────────────────────── -->
-        <section class="card p-5">
+        <section id="kiadas" aria-label="Kiadás csoportnak" class="card p-5 scroll-mt-24">
           <h2 class="font-bold mb-3">Kiadás csoportnak</h2>
 
           <ul class="space-y-2 mb-4">
@@ -738,6 +762,7 @@ export class KvizSzerkesztoComponent {
     }
 
     this.editingId.set(question.id);
+    this.expandedQuestionIds.update((ids) => new Set(ids).add(question.id));
     this.questionForm.patchValue({
       questionType: question.questionType,
       questionText: question.questionText,
@@ -839,6 +864,30 @@ export class KvizSzerkesztoComponent {
 
   private readonly kahootHostService = inject(KahootHostService);
   private readonly router = inject(Router);
+
+  // ── UI-UX-T8 ──
+  readonly sectionAnchors = [
+    { id: 'beallitasok', label: 'Beállítások' },
+    { id: 'kerdesek', label: 'Kérdések' },
+    { id: 'ai', label: 'AI' },
+    { id: 'publikalas', label: 'Publikálás' },
+    { id: 'elo', label: 'Élő játék' },
+    { id: 'kiadas', label: 'Kiadás' },
+  ];
+  private readonly expandedQuestionIds = signal<Set<number>>(new Set());
+
+  isQuestionExpanded(questionId: number): boolean {
+    return this.expandedQuestionIds().has(questionId);
+  }
+
+  toggleQuestion(questionId: number): void {
+    this.expandedQuestionIds.update((ids) => {
+      const next = new Set(ids);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  }
 
   readonly liveGroupId = signal<number | null>(null);
   readonly livePending = signal(false);

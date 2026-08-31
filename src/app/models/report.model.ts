@@ -154,3 +154,34 @@ export interface TeacherScoreOverrideRequest {
    */
   feedbackProvided: boolean;
 }
+
+/** UI-UX-T2: a tanári vezérlőpult élő blokkjai. */
+export interface TeacherDashboardDto {
+  recentQuizResults: TeacherRecentQuizResultDto[];
+  upcomingDeadlines: TeacherUpcomingDeadlineDto[];
+}
+
+export interface TeacherRecentQuizResultDto {
+  sessionId: number;
+  userId: number;
+  studentName: string;
+  quizId: number;
+  quizTitle: string;
+  correctAnswers: number;
+  totalQuestions: number;
+  successRate: number;
+  mode: 'solo' | 'live';
+  totalPoints: number;
+  completedAt?: string | null;
+}
+
+export interface TeacherUpcomingDeadlineDto {
+  assignmentId: number;
+  quizId: number;
+  quizTitle: string;
+  groupId: number;
+  groupName: string;
+  dueAt: string;
+  completedMemberCount: number;
+  memberCount: number;
+}
