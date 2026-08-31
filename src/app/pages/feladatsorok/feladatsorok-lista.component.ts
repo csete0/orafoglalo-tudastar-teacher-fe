@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
@@ -22,13 +22,57 @@ const LEVELS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsorok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent, TartalomFulekComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <h1 class="page-title">Feladatsoraim</h1>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="page-title">Feladatsoraim</h1>
       <p class="text-sm text-text-muted mt-1">Saját feladatsorok szerkesztése és publikálása</p>
 
+        </div>
+        <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
+          {{ createOpen() ? 'Mégse' : '+ Új feladatsor' }}
+        </button>
+      </div>
+
       <app-tartalom-fulek />
+
+      @if (createOpen()) {
+        <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3 mt-4 mb-6">
+          <h2 class="font-bold">Új feladatsor</h2>
+          <input formControlName="title" placeholder="Cím" maxlength="250" class="input" />
+          @if (createForm.controls.title.hasError('blank')) {
+            <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
+          }
+          @if (createForm.controls.title.hasError('maxlength')) {
+            <p class="text-sm text-danger">A cím legfeljebb 250 karakter hosszú lehet.</p>
+          }
+          <textarea formControlName="description" placeholder="Leírás" rows="3" class="input"></textarea>
+          <select formControlName="levelId" class="input">
+            @for (level of levels; track level.id) {
+              <option [value]="level.id">{{ level.label }}</option>
+            }
+          </select>
+          <select formControlName="subjectCategoryId" class="input">
+            <option [ngValue]="null">Nincs tantárgyi kategória</option>
+            @for (category of categories(); track category.id) {
+              <option [ngValue]="category.id">{{ category.name }}</option>
+            }
+          </select>
+
+          <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
+            Létrehozás
+          </button>
+        </form>
+      }
+
+      @if (visibleTaskSets().length >= 8 || search() || store.error()) {
+        <input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="Keresés a feladatsorok között…" class="input mt-4 mb-1"
+          aria-label="Keresés a feladatsorok között…" />
+      }
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
@@ -42,7 +86,7 @@ const LEVELS = [
         </div>
       } @else {
         <ul class="space-y-3 mb-8">
-          @for (taskSet of store.taskSets(); track taskSet.id) {
+          @for (taskSet of visibleTaskSets(); track taskSet.id) {
             <li>
               <a [routerLink]="['/feladatsorok', taskSet.id, 'szerkesztes']"
                 class="card-link block group" [class]="'accent-' + (taskSet.id % 4)">
@@ -80,32 +124,6 @@ const LEVELS = [
         </ul>
       }
 
-      <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
-        <h2 class="font-bold">Új feladatsor</h2>
-        <input formControlName="title" placeholder="Cím" maxlength="250" class="input" />
-        @if (createForm.controls.title.hasError('blank')) {
-          <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
-        }
-        @if (createForm.controls.title.hasError('maxlength')) {
-          <p class="text-sm text-danger">A cím legfeljebb 250 karakter hosszú lehet.</p>
-        }
-        <textarea formControlName="description" placeholder="Leírás" rows="3" class="input"></textarea>
-        <select formControlName="levelId" class="input">
-          @for (level of levels; track level.id) {
-            <option [value]="level.id">{{ level.label }}</option>
-          }
-        </select>
-        <select formControlName="subjectCategoryId" class="input">
-          <option [ngValue]="null">Nincs tantárgyi kategória</option>
-          @for (category of categories(); track category.id) {
-            <option [ngValue]="category.id">{{ category.name }}</option>
-          }
-        </select>
-
-        <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
-          Létrehozás
-        </button>
-      </form>
     </div>
   `,
 })
@@ -116,6 +134,14 @@ export class FeladatsorokListaComponent {
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
   readonly store = inject(TeacherTaskSetStore);
+
+  readonly createOpen = signal(false);
+  readonly search = signal('');
+
+  readonly visibleTaskSets = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    return this.store.taskSets().filter((t) => !term || t.title.toLowerCase().includes(term));
+  });
 
   readonly levels = LEVELS;
   // UI-TT-133: catchError NÉLKÜL a toSignal() a forrás Observable hibáját minden KÖVETKEZŐ
@@ -216,6 +242,7 @@ export class FeladatsorokListaComponent {
         subjectCategoryId: raw.subjectCategoryId ?? undefined,
       },
       (taskSet) => {
+        this.createOpen.set(false);
         this.toastService.success('Feladatsor létrehozva.');
         this.router.navigate(['/feladatsorok', taskSet.id, 'szerkesztes']);
       },

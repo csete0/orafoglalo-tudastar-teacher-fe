@@ -43,6 +43,8 @@ describe('FeladatsorokListaComponent', () => {
   it('BUG UI-TT-60 javítva: whitespace-only cím esetén a "Létrehozás" gomb letiltva marad, inline hibaüzenettel', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title, description } = fixture.componentInstance.createForm.controls;
@@ -59,6 +61,8 @@ describe('FeladatsorokListaComponent', () => {
   it('valódi cím és leírás esetén a form érvényes, a gomb aktív', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title, description } = fixture.componentInstance.createForm.controls;
@@ -74,6 +78,8 @@ describe('FeladatsorokListaComponent', () => {
   it('üres cím esetén a required hiba jelentkezik, NEM a blank (nincs duplikált/félrevezető üzenet)', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title } = fixture.componentInstance.createForm.controls;
@@ -84,6 +90,8 @@ describe('FeladatsorokListaComponent', () => {
   it('create() whitespace-only címmel NEM hívja meg a store.create()-et', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     fixture.componentInstance.createForm.controls.title.setValue('   ');
@@ -99,6 +107,8 @@ describe('FeladatsorokListaComponent', () => {
     configure();
     storeMock.loading.set(true);
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title, description } = fixture.componentInstance.createForm.controls;
@@ -119,6 +129,8 @@ describe('FeladatsorokListaComponent', () => {
   it('BUG UI-TT-79 javítva: 250 karakternél hosszabb cím esetén a form érvénytelen, a gomb letiltva', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title, description } = fixture.componentInstance.createForm.controls;
@@ -136,6 +148,8 @@ describe('FeladatsorokListaComponent', () => {
   it('pontosan 250 karakteres cím esetén a form érvényes', () => {
     configure();
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const { title, description } = fixture.componentInstance.createForm.controls;
@@ -168,6 +182,8 @@ describe('FeladatsorokListaComponent', () => {
     storeMock.taskSets.set([{ id: 1, title: 'Meglévő feladatsor', taskCount: 3, isPublished: true }]);
 
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
 
     // Elvárt (helyes) viselkedés lenne: a kategória-hiba nem töri el a lapot, a meglévő feladatsor és az
     // űrlap továbbra is látszik. A jelenlegi kódban ez a detectChanges() hibát dob.
@@ -187,6 +203,8 @@ describe('FeladatsorokListaComponent', () => {
     ]);
 
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     const badges = Array.from(fixture.nativeElement.querySelectorAll('.badge')) as HTMLElement[];
@@ -227,6 +245,8 @@ describe('FeladatsorokListaComponent', () => {
     const confirmService = TestBed.inject(ConfirmService);
     const askSpy = vi.spyOn(confirmService, 'ask');
     const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
     return { fixture, askSpy };
   }

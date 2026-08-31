@@ -180,6 +180,21 @@ export interface TeacherQuizStudentResultDto {
 /** Az eredmény-nézet forrás-szűrője. */
 export type QuizResultsMode = 'all' | 'live' | 'solo';
 
+/** UI-UX-T3: egy csoport aktív kvíz-kiadása a csoport-oldal "Kiadva" füléhez. */
+export interface TeacherGroupAssignmentDto {
+  assignmentId: number;
+  quizId: number;
+  quizTitle: string;
+  questionCount: number;
+  assignedAt: string;
+  opensAt?: string | null;
+  dueAt?: string | null;
+  completedMemberCount: number;
+  memberCount: number;
+  hasActiveLiveRoom: boolean;
+  activeKahootSessionId?: number | null;
+}
+
 /** Kérdésenkénti item-analízis - ez mondja meg, MIT kell újra elmagyarázni. */
 export interface TeacherQuizQuestionStatDto {
   questionId: number;

@@ -10,6 +10,7 @@ import {
   GenerateTeacherQuizQuestionsRequest,
   QuizResultsMode,
   QuizTopicGroupDto,
+  TeacherGroupAssignmentDto,
   TeacherQuizResultsDto,
   TeacherQuizAssignmentDto,
   TeacherQuizDetailDto,
@@ -92,6 +93,12 @@ export class TeacherQuizService {
 
   revokeAssignment(assignmentId: number): Observable<unknown> {
     return this.http.delete(`${this.baseUrl}/quiz-assignments/${assignmentId}`);
+  }
+
+  /** UI-UX-T3: a csoport aktív kvíz-kiadásai a csoport-oldal "Kiadva" füléhez. */
+  getGroupAssignments(groupId: number): Observable<TeacherGroupAssignmentDto[]> {
+    return this.http.get<TeacherGroupAssignmentDto[]>(
+      `${this.baseUrl}/groups/${groupId}/quiz-assignments`);
   }
 
   /**
