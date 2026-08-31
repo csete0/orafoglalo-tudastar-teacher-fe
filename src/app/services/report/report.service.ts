@@ -9,6 +9,7 @@ import {
   TeacherAttemptReviewDto,
   TeacherScoreOverrideRequest,
   TeacherTaskSetResultsDto,
+  TeacherDashboardDto,
 } from '../../models/report.model';
 
 @Injectable({ providedIn: 'root' })
@@ -28,6 +29,11 @@ export class ReportService {
       `${this.baseUrl}/schools/${schoolId}/activity`,
       { params: this.dateRangeParams(from, to) },
     );
+  }
+
+  /** UI-UX-T2: a vezérlőpult élő blokkjai (friss kvíz-eredmények + határidők). */
+  getDashboard(): Observable<TeacherDashboardDto> {
+    return this.http.get<TeacherDashboardDto>(`${this.baseUrl}/dashboard`);
   }
 
   getStudentActivity(studentUserId: number, from?: Date, to?: Date): Observable<StudentActivityDetailDto> {

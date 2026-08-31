@@ -289,7 +289,7 @@ describe('KvizSzerkesztoComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Tartalmi kifogás');
-    const publishButton: HTMLButtonElement = fixture.nativeElement.querySelector('section button.btn-primary');
+    const publishButton: HTMLButtonElement = fixture.nativeElement.querySelector('[data-testid="publish-btn"]');
     expect(publishButton.disabled).toBe(true);
   });
 
