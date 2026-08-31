@@ -4,9 +4,13 @@ import {
   inject,
   OnDestroy,
   OnInit,
+  signal,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { environment } from '../../../environments/environment';
 import { KahootHostStore } from '../../services/kahoot-host/kahoot-host.store';
+import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 
 /**
@@ -23,7 +27,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kahoot-host',
   standalone: true,
-  imports: [RouterLink, IconComponent],
+  imports: [RouterLink, IconComponent, CopyButtonComponent, QrCodeComponent],
   template: `
     <div class="max-w-4xl mx-auto px-4 py-8">
 
@@ -78,7 +82,22 @@ import { IconComponent } from '../../shared/icon/icon.component';
             <p class="text-sm text-text-muted mb-2">Csatlakozás a diák-appban: Kvíz → Élő játék</p>
             @if (store.joinCode(); as code) {
               <p class="text-xs uppercase tracking-widest text-text-muted mb-1">Játék-kód</p>
-              <p class="text-5xl font-black tracking-[0.3em] mb-4 select-all">{{ code }}</p>
+              <p class="text-5xl font-black tracking-[0.3em] mb-1 select-all">{{ code }}</p>
+              <div class="flex items-center justify-center gap-2 mb-4">
+                <app-copy-button [value]="code" label="Játék-kód" />
+                <button type="button" (click)="qrVisible.set(!qrVisible())"
+                  class="btn btn-ghost !px-2 !py-1 !text-xs">
+                  {{ qrVisible() ? 'QR elrejtése' : 'QR-kód kivetítéshez' }}
+                </button>
+              </div>
+              <!-- UI-UX-T1: a QR a diák-app kvíz-oldalára visz - ott az "Élő játék most"
+                   blokk egy kattintás (a belépést a csoporttagság kapuzza, a kód csak
+                   keresés-könnyítés). -->
+              @if (qrVisible()) {
+                <div class="flex justify-center mb-4">
+                  <app-qr-code [value]="studentQuizUrl" [size]="280" />
+                </div>
+              }
             }
             <button type="button" class="btn btn-primary text-base px-8 py-3"
                     (click)="start()"
@@ -253,7 +272,9 @@ import { IconComponent } from '../../shared/icon/icon.component';
             <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'szerkesztes']" class="btn btn-ghost">
               Vissza a szerkesztőhöz
             </a>
-            <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'eredmenyek']" class="btn btn-primary">
+            <!-- UI-UX-T10: egyből az imént lejátszott menetre szűrt eredmény-nézet. -->
+            <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'eredmenyek']"
+               [queryParams]="{ kahootSessionId: store.roomId() }" class="btn btn-primary">
               Eredmények megnyitása
             </a>
           </div>
@@ -268,6 +289,8 @@ export class KahootHostComponent implements OnInit, OnDestroy {
   readonly store = inject(KahootHostStore);
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
+  readonly qrVisible = signal(false);
+  readonly studentQuizUrl = environment.studentAppUrl + '/quiz';
 
   ngOnInit(): void {
     const kahootSessionId = Number(this.route.snapshot.paramMap.get('kahootSessionId'));

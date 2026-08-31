@@ -29,6 +29,27 @@ export interface StudentExamSessionDto {
 
 export interface StudentActivityDetailDto extends StudentActivitySummaryDto {
   recentExams: StudentExamSessionDto[];
+  /** UI-UX-T9: a kvíz-előzmény móddal (élő/önálló) és játék-ponttal. */
+  recentQuizzes: StudentQuizSessionDto[];
+  /** UI-UX-T9: a diák csoporttagságai - a KÉRŐ tanár látókörére szűkítve. */
+  groups: StudentGroupRefDto[];
+}
+
+export interface StudentGroupRefDto {
+  groupId: number;
+  name: string;
+}
+
+export interface StudentQuizSessionDto {
+  sessionId: number;
+  quizTitle?: string | null;
+  topics: string[];
+  totalQuestions: number;
+  correctAnswers: number;
+  successRate: number;
+  completedAt?: string | null;
+  mode: 'solo' | 'live';
+  totalPoints: number;
 }
 
 export interface TeacherTaskColumnDto {

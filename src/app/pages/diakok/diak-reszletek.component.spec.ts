@@ -17,6 +17,8 @@ function makeDetail(overrides: Partial<StudentActivityDetailDto> = {}): StudentA
     currentStreak: 3,
     longestStreak: 5,
     badgeCount: 1,
+    recentQuizzes: [],
+    groups: [],
     recentExams: [],
     ...overrides,
   };

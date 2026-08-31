@@ -32,6 +32,18 @@ There are **two distinct "admin" concepts — don't conflate them:**
   `<a href target="_blank">` — the JWT lives in localStorage, not a cookie, so a raw navigation
   won't carry it and a teacher gets a 401 on their own uploaded file.
 
+## Terminológia (UI-UX-K1 - a feliratok EZEKET a szavakat használják, mindkét appban)
+
+| Fogalom | Tanári app | Diák app | NE használd |
+|---|---|---|---|
+| Tanár → csoport tartalom-hozzárendelés | „Kiadás” (kiadva, kiadás visszavonása) | „Tanárod adta ki” | hozzárendelés, megosztás |
+| Élő, tanár-vezérelt kvízjáték | „Élő játék” | „Élő játék” | Kahoot (védjegy - csak kódban/kommentben) |
+| Önálló tempójú kitöltés | „önálló” | „önálló” | solo (csak kódban) |
+| Vizsga-szimulátor gyakorlósorai | „Feladatsor” | „Feladatsor” (a kategória-oldal feladatsorokat listáz) | teszt |
+| Diák statisztika-oldalai | „Statisztikák” | „Statisztikáim” (vizsga + kvíz) | riport (az a tanári oldal szava) |
+| Csoportba lépés kódja | „Meghívó kód” | „Meghívó kód” | invite, belépőkód |
+
+
 ## Test infra
 Vitest, same pattern as the student frontend (no Karma). Playwright E2E lives in this repo's own
 `e2e/` directory, with a real Docker SQL Server + DACPAC seed via a standalone

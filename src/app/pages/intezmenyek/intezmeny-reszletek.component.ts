@@ -11,6 +11,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
@@ -25,7 +26,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -78,6 +79,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                 <span class="flex items-center gap-2">
                   <app-icon name="link" class="w-4 h-4 block text-primary" />
                   Tanári meghívó kód: <code class="font-bold">{{ s.teacherInviteCode }}</code>
+                  <app-copy-button [value]="s.teacherInviteCode" label="Tanári meghívó kód" />
                 </span>
                 <button (click)="regenerateInvite(s.id)" [disabled]="school.loading()" class="text-primary hover:underline">Új kód generálása</button>
               </div>
@@ -147,7 +149,12 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                     [class.!border-primary]="entry.isCurrentUser">
                     <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                       [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                    <span class="flex-1 truncate">{{ entry.nickname }}</span>
+                    <span class="flex-1 truncate">
+                      {{ entry.realName ?? entry.nickname }}
+                      @if (entry.realName && entry.realName !== entry.nickname) {
+                        <span class="text-text-muted text-xs">({{ entry.nickname }})</span>
+                      }
+                    </span>
                     <span class="font-bold">{{ entry.score }}</span>
                   </li>
                 } @empty {
