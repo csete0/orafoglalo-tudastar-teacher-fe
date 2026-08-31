@@ -83,6 +83,16 @@ export interface KahootGameEndedDto {
   leaderboard: KahootLeaderboardEntryDto[];
 }
 
+/** A tanár SAJÁT kvízeinek éppen élő szobája - GET /teacher/kahoot-sessions/active. */
+export interface KahootActiveRoomDto {
+  kahootSessionId: number;
+  quizId: number;
+  quizTitle: string;
+  groupName: string;
+  status: KahootStatus;
+  participantCount: number;
+}
+
 export interface KahootGameSummaryDto {
   kahootSessionId: number;
   status: KahootStatus;

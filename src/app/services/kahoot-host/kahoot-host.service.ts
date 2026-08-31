@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  KahootActiveRoomDto,
   KahootGameSummaryDto,
   KahootRoomDto,
   KahootRoomSnapshotDto,
@@ -40,5 +41,10 @@ export class KahootHostService {
     return this.http.get<KahootRoomSnapshotDto>(
       `${this.baseUrl}/kahoot-sessions/${kahootSessionId}`,
     );
+  }
+
+  /** Az összes SAJÁT kvíz éppen élő szobája, minden csoport között - a dashboard kártyájának. */
+  getActiveRooms(): Observable<KahootActiveRoomDto[]> {
+    return this.http.get<KahootActiveRoomDto[]>(`${this.baseUrl}/kahoot-sessions/active`);
   }
 }
