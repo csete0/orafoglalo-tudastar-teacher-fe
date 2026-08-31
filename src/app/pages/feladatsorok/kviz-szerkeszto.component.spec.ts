@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
-import { TeacherQuizAssignmentDto, TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
+import { QuizBankQuestionDto, TeacherQuizAssignmentDto, TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
 import { GroupDto } from '../../models/group.model';
 import { GroupStore } from '../../services/group/group.store';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
@@ -86,10 +86,16 @@ describe('KvizSzerkesztoComponent', () => {
     generating: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     publishResult: ReturnType<typeof signal<unknown>>;
+    bankResults: ReturnType<typeof signal<QuizBankQuestionDto[]>>;
+    bankSearching: ReturnType<typeof signal<boolean>>;
+    bankSearchError: ReturnType<typeof signal<string | null>>;
     loadDetail: ReturnType<typeof vi.fn>;
     addQuestion: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
     clearPublishResult: ReturnType<typeof vi.fn>;
+    searchBankQuestions: ReturnType<typeof vi.fn>;
+    addExistingQuestion: ReturnType<typeof vi.fn>;
+    clearBankResults: ReturnType<typeof vi.fn>;
   };
 
   function configure(detail: TeacherQuizDetailDto | null = makeDetail(), groups: GroupDto[] = []) {
@@ -99,10 +105,16 @@ describe('KvizSzerkesztoComponent', () => {
       generating: signal(false),
       error: signal(null),
       publishResult: signal(null),
+      bankResults: signal([]),
+      bankSearching: signal(false),
+      bankSearchError: signal(null),
       loadDetail: vi.fn(),
       addQuestion: vi.fn(),
       publish: vi.fn(),
       clearPublishResult: vi.fn(),
+      searchBankQuestions: vi.fn(),
+      addExistingQuestion: vi.fn(),
+      clearBankResults: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -404,5 +416,166 @@ describe('KvizSzerkesztoComponent', () => {
 
       expect(component.groupLabel(1, 'Egyedi csoport')).toBe('Egyedi csoport');
     });
+  });
+});
+
+/**
+ * UI-UX: "Meglévő kérdés hozzáadása a bankból" - keresés a közös, jóváhagyott
+ * AI-kérdésbankban és a kiválasztott találat felvétele a kvízbe.
+ */
+describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból', () => {
+  function makeBankQuestion(overrides: Partial<QuizBankQuestionDto> = {}): QuizBankQuestionDto {
+    return {
+      id: 42,
+      topicId: 1,
+      topicName: 'SQL alapok',
+      questionType: 'single',
+      questionText: 'Melyik függvény keres értéket egy táblázatban?',
+      options: ['XKERES', 'SZUM'],
+      correctAnswers: ['XKERES'],
+      explanation: null,
+      difficulty: 'Medium',
+      ...overrides,
+    };
+  }
+
+  function makeDetail(): TeacherQuizDetailDto {
+    return {
+      id: 7,
+      title: 'Teszt kvíz',
+      description: null,
+      isPublished: false,
+      takedownAt: null,
+      takedownReason: null,
+      examLevel: null,
+      questionCount: 0,
+      pendingQuestionCount: 0,
+      assignedGroupCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      feedbackMode: 'after',
+      secondsPerQuestion: null,
+      maxAttempts: null,
+      shuffleQuestions: true,
+      allowLateSubmission: true,
+      questions: [],
+      assignments: [],
+    };
+  }
+
+  let storeMock: {
+    selectedDetail: ReturnType<typeof signal<TeacherQuizDetailDto | null>>;
+    loading: ReturnType<typeof signal<boolean>>;
+    generating: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
+    publishResult: ReturnType<typeof signal<unknown>>;
+    bankResults: ReturnType<typeof signal<QuizBankQuestionDto[]>>;
+    bankSearching: ReturnType<typeof signal<boolean>>;
+    bankSearchError: ReturnType<typeof signal<string | null>>;
+    loadDetail: ReturnType<typeof vi.fn>;
+    addQuestion: ReturnType<typeof vi.fn>;
+    publish: ReturnType<typeof vi.fn>;
+    searchBankQuestions: ReturnType<typeof vi.fn>;
+    addExistingQuestion: ReturnType<typeof vi.fn>;
+    clearBankResults: ReturnType<typeof vi.fn>;
+  };
+
+  function configure() {
+    storeMock = {
+      selectedDetail: signal(makeDetail()),
+      loading: signal(false),
+      generating: signal(false),
+      error: signal(null),
+      publishResult: signal(null),
+      bankResults: signal([]),
+      bankSearching: signal(false),
+      bankSearchError: signal(null),
+      loadDetail: vi.fn(),
+      addQuestion: vi.fn(),
+      publish: vi.fn(),
+      searchBankQuestions: vi.fn(),
+      addExistingQuestion: vi.fn(),
+      clearBankResults: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [KvizSzerkesztoComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
+        { provide: TeacherQuizStore, useValue: storeMock },
+        { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
+        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(KvizSzerkesztoComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('alapból összecsukva - a keresőmező nem látszik', () => {
+    const fixture = configure();
+    expect(fixture.nativeElement.querySelector('input[formcontrolname="search"]')).toBeFalsy();
+  });
+
+  it('kinyitva megjelenik a keresőforma, keresésre a store-t hívja a megadott szűrőkkel', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+
+    component.toggleBankSearch();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[formcontrolname="search"]')).toBeTruthy();
+
+    component.bankSearchForm.patchValue({ search: 'XKERES', topicId: 3, difficulty: 'Hard' });
+    component.searchBank();
+
+    expect(storeMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard');
+  });
+
+  it('üres keresőszöveget null-ra normalizálja (nem küld whitespace-only stringet)', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+    component.toggleBankSearch();
+    fixture.detectChanges();
+
+    component.bankSearchForm.patchValue({ search: '   ', topicId: null, difficulty: null });
+    component.searchBank();
+
+    expect(storeMock.searchBankQuestions).toHaveBeenCalledWith(null, null, null);
+  });
+
+  it('a találatok megjelennek, a "Hozzáadás" a kiválasztott kérdés id-jével hívja a store-t', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+    component.toggleBankSearch();
+    storeMock.bankResults.set([makeBankQuestion({ id: 99, questionText: 'XKERES kérdés' })]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('XKERES kérdés');
+
+    const addButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((b) =>
+      (b as HTMLElement).textContent?.includes('Hozzáadás a kvízhez'),
+    ) as HTMLButtonElement;
+    expect(addButton).toBeTruthy();
+
+    addButton.click();
+    expect(storeMock.addExistingQuestion).toHaveBeenCalledWith(7, 99, expect.any(Function));
+  });
+
+  it('keresés előtt nem mutatja a "Nincs találat" üzenetet, csak egy lezárult, üres keresés után', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+    component.toggleBankSearch();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Nincs találat');
+
+    component.searchBank();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Nincs találat');
   });
 });

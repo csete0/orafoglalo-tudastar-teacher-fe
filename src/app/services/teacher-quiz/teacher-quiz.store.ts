@@ -8,6 +8,8 @@ import {
   CreateTeacherQuizQuestionRequest,
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
+  QuizBankQuestionDto,
+  QuizDifficulty,
   TeacherQuizDetailDto,
   TeacherQuizDto,
 } from '../../models/teacher-quiz.model';
@@ -41,6 +43,13 @@ export class TeacherQuizStore {
   private readonly _generating = signal(false);
   private readonly _error = signal<string | null>(null);
 
+  // UI-UX: közös AI-bank keresés ("meglévő kérdés hozzáadása") - a fő betöltés/hiba
+  // jelzőktől KÜLÖN, ugyanazzal az indoklással, mint a _generating-nél: a keresés a
+  // szerkesztő-oldal más részét ne fagyassza/hibáztassa, és fordítva.
+  private readonly _bankResults = signal<QuizBankQuestionDto[]>([]);
+  private readonly _bankSearching = signal(false);
+  private readonly _bankSearchError = signal<string | null>(null);
+
   private _detailGeneration = 0;
   private _detailQuizId: number | null = null;
 
@@ -52,6 +61,9 @@ export class TeacherQuizStore {
   /** Az AI-generálás külön jelzőt kap: hosszabb, és saját gombot tilt le. */
   readonly generating = computed(() => this._generating());
   readonly error = computed(() => this._error());
+  readonly bankResults = computed(() => this._bankResults());
+  readonly bankSearching = computed(() => this._bankSearching());
+  readonly bankSearchError = computed(() => this._bankSearchError());
 
   loadMine(): void {
     this._mineLoading.set(true);
@@ -220,6 +232,34 @@ export class TeacherQuizStore {
           this._error.set(extractErrorMessage(err, 'A kérdésgenerálás sikertelen.'));
         },
       });
+  }
+
+  /** UI-UX: keresés a közös AI-kérdésbankban ("meglévő kérdés hozzáadása"). */
+  searchBankQuestions(search: string | null, topicId: number | null, difficulty: QuizDifficulty | null): void {
+    this._bankSearching.set(true);
+    this._bankSearchError.set(null);
+
+    this.service
+      .searchBankQuestions(search, topicId, difficulty)
+      .pipe(
+        take(1),
+        finalize(() => this._bankSearching.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (results) => this._bankResults.set(results),
+        error: (err) => this._bankSearchError.set(extractErrorMessage(err, 'A keresés sikertelen.')),
+      });
+  }
+
+  clearBankResults(): void {
+    this._bankResults.set([]);
+    this._bankSearchError.set(null);
+  }
+
+  /** A kiválasztott bank-kérdés MÁSOLATÁNAK felvétele a kvízbe. */
+  addExistingQuestion(quizId: number, bankQuestionId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.addExistingQuestion(quizId, bankQuestionId), quizId, onSuccess);
   }
 
   // ── Kiadás ──────────────────────────────────────────────────

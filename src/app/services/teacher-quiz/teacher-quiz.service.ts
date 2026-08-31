@@ -8,6 +8,8 @@ import {
   CreateTeacherQuizQuestionRequest,
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
+  QuizBankQuestionDto,
+  QuizDifficulty,
   QuizResultsMode,
   QuizTopicGroupDto,
   TeacherGroupAssignmentDto,
@@ -84,6 +86,30 @@ export class TeacherQuizService {
     return this.http.post<TeacherQuizQuestionDto[]>(
       `${this.baseUrl}/quizzes/${quizId}/generate-questions`,
       request,
+    );
+  }
+
+  /**
+   * UI-UX: keresés a közös AI-kérdésbankban ("meglévő kérdés hozzáadása" a szerkesztőben) -
+   * csak jóváhagyott, szabad gyakorlásra használt kérdések között.
+   */
+  searchBankQuestions(
+    search: string | null,
+    topicId: number | null,
+    difficulty: QuizDifficulty | null,
+  ): Observable<QuizBankQuestionDto[]> {
+    let params = new HttpParams();
+    if (search) params = params.set('search', search);
+    if (topicId != null) params = params.set('topicId', topicId);
+    if (difficulty) params = params.set('difficulty', difficulty);
+    return this.http.get<QuizBankQuestionDto[]>(`${this.baseUrl}/quiz-bank-questions`, { params });
+  }
+
+  /** Egy közös bankbeli kérdés MÁSOLATÁNAK felvétele a tanár kvízébe. */
+  addExistingQuestion(quizId: number, bankQuestionId: number): Observable<TeacherQuizQuestionDto> {
+    return this.http.post<TeacherQuizQuestionDto>(
+      `${this.baseUrl}/quizzes/${quizId}/questions/existing`,
+      { bankQuestionId },
     );
   }
 

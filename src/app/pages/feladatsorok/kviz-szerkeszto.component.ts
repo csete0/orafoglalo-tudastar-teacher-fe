@@ -13,6 +13,7 @@ import {
   QUIZ_DIFFICULTY_LABELS,
   QUIZ_FEEDBACK_MODE_LABELS,
   QUIZ_QUESTION_TYPE_LABELS,
+  QuizBankQuestionDto,
   QuizDifficulty,
   QuizFeedbackMode,
   QuizExamLevel,
@@ -310,6 +311,82 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               }
             </div>
           </form>
+
+          <!-- ── Meglévő kérdés hozzáadása a közös bankból ─────── -->
+          <div class="border-t border-border pt-4 mt-4">
+            <button type="button" (click)="toggleBankSearch()"
+                    class="w-full flex items-center justify-between text-left cursor-pointer"
+                    [attr.aria-expanded]="bankSearchExpanded()">
+              <h3 class="font-semibold">Meglévő kérdés hozzáadása a bankból</h3>
+              <app-icon name="chevron-down" class="w-4 h-4 block shrink-0 transition-transform"
+                        [class.rotate-180]="bankSearchExpanded()" />
+            </button>
+
+            @if (bankSearchExpanded()) {
+              <p class="text-sm text-text-muted mt-2">
+                A közös, jóváhagyott kérdésbankból választott kérdés MÁSOLATA kerül a kvízedbe -
+                a bank-eredeti utólagos módosítása nem hat vissza rá.
+              </p>
+
+              <form [formGroup]="bankSearchForm" (ngSubmit)="searchBank()" class="space-y-3 mt-3">
+                <input formControlName="search" type="text" placeholder="Keresés a kérdés szövegében" class="input" />
+
+                <div class="grid grid-cols-2 gap-3">
+                  <label class="block">
+                    <span class="text-sm text-text-muted">Témakör</span>
+                    <select formControlName="topicId" class="input mt-1">
+                      <option [ngValue]="null">Mind</option>
+                      @for (topic of topics(); track topic.id) {
+                        <option [ngValue]="topic.id">{{ topic.name }}</option>
+                      }
+                    </select>
+                  </label>
+
+                  <label class="block">
+                    <span class="text-sm text-text-muted">Nehézség</span>
+                    <select formControlName="difficulty" class="input mt-1">
+                      <option [ngValue]="null">Mind</option>
+                      @for (level of difficulties; track level.value) {
+                        <option [ngValue]="level.value">{{ level.label }}</option>
+                      }
+                    </select>
+                  </label>
+                </div>
+
+                <button type="submit" class="btn btn-ghost" [disabled]="store.bankSearching()">
+                  {{ store.bankSearching() ? 'Keresés…' : 'Keresés' }}
+                </button>
+              </form>
+
+              @if (store.bankSearchError(); as error) {
+                <p class="text-sm text-danger mt-2">{{ error }}</p>
+              }
+
+              <ul class="space-y-2 mt-3">
+                @for (bq of store.bankResults(); track bq.id) {
+                  <li class="border border-border rounded p-3 flex items-start gap-2">
+                    <span class="min-w-0 flex-1">
+                      <span class="block font-semibold">{{ bq.questionText }}</span>
+                      <span class="text-xs text-text-muted">
+                        {{ typeLabel(bq.questionType) }} · {{ bq.topicName }} · {{ difficultyLabel(bq.difficulty) }}
+                      </span>
+                      <span class="block text-xs text-text-muted mt-1">
+                        Helyes: {{ bq.correctAnswers.join(', ') }}
+                      </span>
+                    </span>
+                    <button type="button" class="btn btn-ghost shrink-0" [disabled]="store.loading()"
+                            (click)="addExisting(bq)">
+                      Hozzáadás a kvízhez
+                    </button>
+                  </li>
+                } @empty {
+                  @if (bankSearched() && !store.bankSearching()) {
+                    <li class="text-sm text-text-muted">Nincs találat — próbálj más keresőszót/szűrőt.</li>
+                  }
+                }
+              </ul>
+            }
+          </div>
         </section>
 
         <!-- ── AI-generálás ───────────────────────────────────── -->
@@ -564,6 +641,16 @@ export class KvizSzerkesztoComponent {
   readonly generateForm = this.fb.nonNullable.group({
     topicId: this.fb.control<number | null>(null, Validators.required),
     count: [5, [Validators.required, Validators.min(1), Validators.max(20)]],
+  });
+
+  // UI-UX: "meglévő kérdés hozzáadása a bankból" - alapból összecsukva, ugyanazzal az
+  // indoklással, mint a kérdés-kártyáknál (UI-UX-T8): nem minden szerkesztésnél kell.
+  readonly bankSearchExpanded = signal(false);
+  readonly bankSearched = signal(false);
+  readonly bankSearchForm = this.fb.nonNullable.group({
+    search: [''],
+    topicId: this.fb.control<number | null>(null),
+    difficulty: this.fb.control<QuizDifficulty | null>(null),
   });
 
   readonly assignForm = this.fb.nonNullable.group({
@@ -857,6 +944,28 @@ export class KvizSzerkesztoComponent {
       this.quizId,
       { topicId: Number(raw.topicId), count: Number(raw.count), difficulty: 'Medium' },
       (count) => this.toastService.success(`${count} kérdés generálva — nézd át és hagyd jóvá őket.`),
+    );
+  }
+
+  toggleBankSearch(): void {
+    this.bankSearchExpanded.update((v) => !v);
+  }
+
+  searchBank(): void {
+    const raw = this.bankSearchForm.getRawValue();
+    this.bankSearched.set(true);
+    this.store.searchBankQuestions(
+      raw.search.trim() || null,
+      raw.topicId,
+      raw.difficulty,
+    );
+  }
+
+  addExisting(bankQuestion: QuizBankQuestionDto): void {
+    this.store.addExistingQuestion(
+      this.quizId,
+      bankQuestion.id,
+      () => this.toastService.success('Kérdés hozzáadva a kvízhez.'),
     );
   }
 

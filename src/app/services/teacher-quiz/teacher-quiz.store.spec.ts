@@ -37,6 +37,8 @@ describe('TeacherQuizStore', () => {
     addQuestion: ReturnType<typeof vi.fn>;
     generateQuestions: ReturnType<typeof vi.fn>;
     reorderQuestion: ReturnType<typeof vi.fn>;
+    searchBankQuestions: ReturnType<typeof vi.fn>;
+    addExistingQuestion: ReturnType<typeof vi.fn>;
   };
   let store: TeacherQuizStore;
 
@@ -48,6 +50,8 @@ describe('TeacherQuizStore', () => {
       addQuestion: vi.fn(),
       generateQuestions: vi.fn(),
       reorderQuestion: vi.fn(),
+      searchBankQuestions: vi.fn(),
+      addExistingQuestion: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -219,5 +223,57 @@ describe('TeacherQuizStore', () => {
 
     expect(serviceMock.getDetail).not.toHaveBeenCalled();
     expect(store.error()).toBe('Hálózati hiba.');
+  });
+
+  // ── UI-UX: közös bank keresés + meglévő kérdés hozzáadása ─────
+
+  it('searchBankQuestions() a service-t hívja, a találatokat bankResults()-ba írja, saját (nem a fő) betöltés-jelzőt használ', () => {
+    configure();
+    const search$ = new Subject<unknown>();
+    serviceMock.searchBankQuestions.mockReturnValue(search$);
+
+    store.searchBankQuestions('XKERES', 3, 'Hard');
+
+    expect(serviceMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard');
+    expect(store.bankSearching()).toBe(true);
+    // A keresés NEM a fő loading()-ot állítja - a szerkesztő többi része eközben
+    // is használható marad.
+    expect(store.loading()).toBe(false);
+
+    search$.next([{ id: 1, questionText: 'XKERES kérdés' }]);
+    search$.complete();
+
+    expect(store.bankSearching()).toBe(false);
+    expect(store.bankResults()).toEqual([{ id: 1, questionText: 'XKERES kérdés' }]);
+  });
+
+  it('searchBankQuestions() hibáját bankSearchError()-ban jelzi, a fő error()-t nem érinti', () => {
+    configure();
+    const search$ = new Subject<unknown>();
+    serviceMock.searchBankQuestions.mockReturnValue(search$);
+
+    store.searchBankQuestions(null, null, null);
+    search$.error({ error: { errorMessage: 'A keresés sikertelen.' } });
+
+    expect(store.bankSearchError()).toBe('A keresés sikertelen.');
+    expect(store.error()).toBeNull();
+  });
+
+  it('addExistingQuestion() sikeres hozzáadás után újratölti a kvíz-részletet, és meghívja az onSuccess callback-et', () => {
+    configure();
+    serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 1, title: 'Bővített kvíz' })));
+    const add$ = new Subject<unknown>();
+    serviceMock.addExistingQuestion.mockReturnValue(add$);
+    const onSuccess = vi.fn();
+
+    store.addExistingQuestion(1, 99, onSuccess);
+    expect(serviceMock.addExistingQuestion).toHaveBeenCalledWith(1, 99);
+
+    add$.next({ id: 5 });
+    add$.complete();
+
+    expect(serviceMock.getDetail).toHaveBeenCalledWith(1);
+    expect(store.selectedDetail()?.title).toBe('Bővített kvíz');
+    expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 });

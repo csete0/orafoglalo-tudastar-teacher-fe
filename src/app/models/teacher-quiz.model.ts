@@ -59,6 +59,23 @@ export interface TeacherQuizQuestionDto {
   isAiGenerated: boolean;
 }
 
+/**
+ * Egy közös AI-bankbeli kérdés keresési találata (UI-UX: "meglévő kérdés hozzáadása" a
+ * szerkesztőben) - kevesebb mezőt ad vissza, mint a TeacherQuizQuestionDto, mert ez a
+ * kérdés még nincs a tanár kvízéhez kötve (nincs displayOrder/isApproved).
+ */
+export interface QuizBankQuestionDto {
+  id: number;
+  topicId: number;
+  topicName: string;
+  questionType: QuizQuestionType;
+  questionText: string;
+  options: string[];
+  correctAnswers: string[];
+  explanation?: string | null;
+  difficulty: QuizDifficulty;
+}
+
 export interface TeacherQuizAssignmentDto {
   id: number;
   groupId: number;
