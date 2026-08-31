@@ -86,6 +86,44 @@ describe('authInterceptor', () => {
     expect(result).toEqual({ ok: true });
   });
 
+  // UI-TT-225: admin felfüggesztés (vagy bármilyen mid-session SecurityStamp-bump)
+  // után a JWT saját belső lejárati ideje szerint még "friss" lehet, miközben a
+  // szerver már elutasítja - a TokenService.refreshUnderLock rövidzárja force
+  // nélkül tévesen "nincs teendő"-t jelezne egy ilyen, még nem lejárt, de a
+  // szerver által már invalidált tokenre, a valódi hálózati refresh sosem
+  // futna le, és a felhasználó generikus hibaüzenetekkel ragadna be
+  // session-vég jelzés/kijelentkeztetés nélkül.
+  it('BUG UI-TT-225: 401-re force:true-val hívja a refresh-t, hogy egy még "friss"-nek látszó, de a szerver által invalidált token ne rövidzárolja a valódi hálózati ellenőrzést', async () => {
+    authStoreMock.refreshToken.mockResolvedValue('refreshed-token');
+
+    const promise = new Promise<void>((resolve) => {
+      httpClient.get('/api/schools').subscribe({ next: () => resolve(), error: () => resolve() });
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const firstReq = httpMock.expectOne('/api/schools');
+    firstReq.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A teljes kérés-életciklust (retry-flush + promise lezárása) MINDIG
+    // végigvisszük, MIELŐTT a hívási argumentumot vizsgálnánk - egy itt
+    // korábban elhelyezett, a régi (force nélküli) kódon menet közben bukó
+    // assert nyitva hagyott HTTP-mock-elvárást és lezáratlan promise-t
+    // hagyott volna hátra, ami az `afterEach` httpMock.verify()-ját és a
+    // fájl KÖVETKEZŐ tesztjeit is magával rántotta (TestBed-teardown
+    // csatolt hiba) - ez a sorrend attól függetlenül tiszta maradást
+    // biztosít, hogy a lenti assert bukik-e vagy sem.
+    const retryReq = httpMock.expectOne('/api/schools');
+    retryReq.flush({ ok: true });
+    await promise;
+
+    expect(authStoreMock.refreshToken).toHaveBeenCalledWith(true);
+  });
+
   it('sikertelen refresh esetén az eredeti 401 hibát adja tovább', async () => {
     authStoreMock.refreshToken.mockResolvedValue(null);
 

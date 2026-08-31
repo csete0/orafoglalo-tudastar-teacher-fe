@@ -61,8 +61,19 @@ export class AuthStore {
     return this.tokenService.getValidAccessToken();
   }
 
-  async refreshToken(): Promise<string | null> {
-    return this.tokenService.performTokenRefresh();
+  /**
+   * UI-TT-225: a `force` alapértelmezetten `false` marad az ambiens (proaktív,
+   * "frissíts, ha közel a lejárat") hívóknak - a 401-interceptor viszont
+   * KÖTELEZŐEN `true`-val hívja (ld. auth.interceptor.ts). Egy 401-válasz
+   * MINDIG azt jelenti, hogy a token a szerver szerint invalid (pl. admin
+   * felfüggesztés/SecurityStamp-bump), függetlenül attól, hogy a JWT saját
+   * belső lejárati ideje szerint még "friss" lenne - a `TokenService.
+   * refreshUnderLock` rövidzárja e nélkül tévesen "nincs teendő"-t jelezne,
+   * a halott token visszakerülne, a diák/tanár pedig sosem kapna session-vég
+   * jelzést/automatikus kijelentkeztetést.
+   */
+  async refreshToken(force = false): Promise<string | null> {
+    return this.tokenService.performTokenRefresh(force);
   }
 
   /** UI-TT-16/UI-TT-144 interakció: néhány hívó (pl. "Belépés tanárként" a

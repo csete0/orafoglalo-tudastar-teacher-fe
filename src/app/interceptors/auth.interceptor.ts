@@ -68,7 +68,14 @@ function handleTokenRefresh(
   next: HttpHandlerFn,
   originalError: HttpErrorResponse,
 ): Observable<HttpEvent<unknown>> {
-  return defer(() => from(authStore.refreshToken())).pipe(
+  // UI-TT-225: force:true KÖTELEZŐ itt - egy 401-válasz mindig azt jelenti,
+  // hogy a token INVALID (pl. admin felfüggesztés/SecurityStamp-bump)
+  // FÜGGETLENÜL a JWT saját lejárati idejétől. Force nélkül a
+  // TokenService.refreshUnderLock rövidzárja "még friss"-nek látta a halott
+  // tokent, sosem hívott valódi hálózati frissítést, a megismételt kérés
+  // ismét 401-et kapott, és a felhasználó generikus, megtévesztő
+  // hibaüzenetekkel ragadt be session-vég jelzés/kijelentkeztetés nélkül.
+  return defer(() => from(authStore.refreshToken(true))).pipe(
     switchMap((newToken): Observable<HttpEvent<unknown>> => {
       if (!newToken) {
         return throwError(() => originalError);
