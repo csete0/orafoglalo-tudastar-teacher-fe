@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
@@ -11,12 +11,63 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoportok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <h1 class="page-title">Csoportjaim</h1>
-      <p class="text-sm text-text-muted mt-1">Diák-csoportok meghívó kóddal és eredmény-riportokkal</p>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="page-title">Csoportjaim</h1>
+          <p class="text-sm text-text-muted mt-1">Diák-csoportok meghívó kóddal és eredmény-riportokkal</p>
+        </div>
+        <!-- UI-UX-T6: a létrehozás ritkább művelet, mint a belépés - gombbal nyílik,
+             a lista kerül felülre teljes egészében. -->
+        <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
+          {{ createOpen() ? 'Mégse' : '+ Új csoport' }}
+        </button>
+      </div>
       <div class="hairline"></div>
+
+      @if (createOpen()) {
+        <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3 mb-6">
+          <h2 class="font-bold">Új csoport</h2>
+          <input formControlName="name" placeholder="Csoport neve (pl. 11.A)" maxlength="255" class="input" />
+          @if (createForm.controls.name.hasError('blank')) {
+            <p class="text-sm text-danger">A csoport neve nem állhat kizárólag szóközökből.</p>
+          }
+          @if (createForm.controls.name.hasError('maxlength')) {
+            <p class="text-sm text-danger">A csoport neve legfeljebb 255 karakter hosszú lehet.</p>
+          }
+          @if (schoolStore.schools().length > 0) {
+            <select formControlName="schoolId" class="input">
+              <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
+              @for (school of schoolStore.schools(); track school.id) {
+                <option [ngValue]="school.id">{{ school.name }}</option>
+              }
+            </select>
+          } @else if (schoolStore.error()) {
+            <p class="text-danger text-sm">{{ schoolStore.error() }}</p>
+          }
+          <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
+            Létrehozás
+          </button>
+        </form>
+      }
+
+      <!-- UI-UX-T6: kliens-oldali keresés + archivált-szűrő - sok csoportnál a
+           lista kezelhetetlenné válik nélkülük. -->
+      @if (store.groups().length >= 8 || search()) {
+        <input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="Keresés a csoportok között…" class="input mb-3"
+          aria-label="Keresés a csoportok között" />
+      }
+      @if (hasArchived()) {
+        <label class="flex items-center gap-2 text-sm text-text-muted mb-3">
+          <input type="checkbox" [ngModel]="showArchived()" (ngModelChange)="showArchived.set($event)"
+            [ngModelOptions]="{ standalone: true }" />
+          Archivált csoportok mutatása
+        </label>
+      }
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
@@ -30,7 +81,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         </div>
       } @else {
         <ul class="space-y-3 mb-8">
-          @for (group of store.groups(); track group.id) {
+          @for (group of visibleGroups(); track group.id) {
             <li>
               <a [routerLink]="['/csoportok', group.id]"
                 class="card-link block group" [class]="'accent-' + (group.id % 4)">
@@ -73,31 +124,6 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         </ul>
       }
 
-      <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
-        <h2 class="font-bold">Új csoport</h2>
-        <input formControlName="name" placeholder="Csoport neve (pl. 11.A)" maxlength="255" class="input" />
-        @if (createForm.controls.name.hasError('blank')) {
-          <p class="text-sm text-danger">A csoport neve nem állhat kizárólag szóközökből.</p>
-        }
-        @if (createForm.controls.name.hasError('maxlength')) {
-          <p class="text-sm text-danger">A csoport neve legfeljebb 255 karakter hosszú lehet.</p>
-        }
-
-        @if (schoolStore.schools().length > 0) {
-          <select formControlName="schoolId" class="input">
-            <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
-            @for (school of schoolStore.schools(); track school.id) {
-              <option [ngValue]="school.id">{{ school.name }}</option>
-            }
-          </select>
-        } @else if (schoolStore.error()) {
-          <p class="text-danger text-sm">{{ schoolStore.error() }}</p>
-        }
-
-        <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
-          Létrehozás
-        </button>
-      </form>
     </div>
   `,
 })
@@ -106,6 +132,19 @@ export class CsoportokListaComponent {
   private readonly toastService = inject(ToastService);
   readonly store = inject(GroupStore);
   readonly schoolStore = inject(SchoolStore);
+
+  readonly createOpen = signal(false);
+  readonly search = signal('');
+  readonly showArchived = signal(false);
+
+  readonly hasArchived = computed(() => this.store.groups().some((g) => g.isArchived));
+
+  readonly visibleGroups = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    return this.store.groups().filter((g) =>
+      (this.showArchived() || !g.isArchived) &&
+      (!term || g.name.toLowerCase().includes(term) || (g.schoolName ?? '').toLowerCase().includes(term)));
+  });
 
   readonly createForm = this.fb.nonNullable.group({
     name: ['', [Validators.required, notBlankValidator(), Validators.maxLength(255)]],
@@ -122,6 +161,7 @@ export class CsoportokListaComponent {
     const raw = this.createForm.getRawValue();
     this.store.create({ name: raw.name, schoolId: raw.schoolId ?? undefined }, () => {
       this.createForm.reset();
+      this.createOpen.set(false);
       this.toastService.success('Csoport létrehozva.');
     });
   }

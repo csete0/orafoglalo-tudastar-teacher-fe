@@ -16,16 +16,21 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
+import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
+import { TeacherGroupAssignmentDto } from '../../models/teacher-quiz.model';
+import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
+import { finalize, take } from 'rxjs';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
-type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
+type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -239,6 +244,65 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
             </ul>
           }
 
+          @case ('kiadva') {
+            <!-- UI-UX-T3: a tanár fejben a csoportból indul ("a 9.A-nak mi van kiadva?").
+                 Feladatsoroknak nincs kiadás-fogalma (csoporttagság-alapú a láthatóság),
+                 ezért ez a fül a kvíz-kiadásokat mutatja. -->
+            @if (assignmentsError(); as err) {
+              <p class="text-danger text-sm mb-4">{{ err }}</p>
+            }
+            @if (assignmentsLoading()) {
+              <app-local-spinner />
+            } @else {
+              <ul class="space-y-2">
+                @for (assignment of groupAssignments(); track assignment.assignmentId) {
+                  <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+                    <div class="min-w-0 flex-1">
+                      <p class="font-medium truncate">{{ assignment.quizTitle }}</p>
+                      <p class="text-xs text-text-muted">
+                        {{ assignment.questionCount }} kérdés
+                        · megírta: {{ assignment.completedMemberCount }} / {{ assignment.memberCount }}
+                        @if (assignment.dueAt) {
+                          · <span [class.text-danger]="isDueSoon(assignment.dueAt)">
+                            határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                        }
+                        @if (assignment.hasActiveLiveRoom) {
+                          · <span class="text-warning font-semibold">élő játék fut</span>
+                        }
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'eredmenyek']"
+                         class="btn btn-ghost !px-2 !py-1 !text-xs">Eredmények</a>
+                      @if (assignment.hasActiveLiveRoom) {
+                        <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'elo', assignment.activeKahootSessionId]"
+                           class="btn btn-primary !px-2 !py-1 !text-xs">Vezérlés</a>
+                      } @else {
+                        <button type="button" (click)="startLiveFromGroup(assignment)"
+                                [disabled]="liveStartPending()"
+                                class="btn btn-primary !px-2 !py-1 !text-xs">
+                          Élő indítás
+                        </button>
+                      }
+                    </div>
+                  </li>
+                } @empty {
+                  <li class="flex flex-col items-center py-10 gap-3">
+                    <div class="icon-tile icon-tile-neutral">
+                      <app-icon name="academic-cap" class="w-6 h-6 block" />
+                    </div>
+                    <p class="font-semibold">Ennek a csoportnak most nincs kiadott kvíze.</p>
+                    <p class="text-sm text-text-muted">Kiadni a kvíz-szerkesztő "Kiadás csoportnak" paneljén tudsz.</p>
+                    <a routerLink="/feladatsorok/kvizek" class="btn btn-primary">Kvízeim megnyitása</a>
+                  </li>
+                }
+              </ul>
+              @if (liveStartError(); as err) {
+                <p class="text-sm text-danger mt-3">{{ err }}</p>
+              }
+            }
+          }
+
           @case ('eredmenyek') {
             <!-- UI-TT-178: az @switch/@case ág minden fülváltáskor destroy+recreate-eli ezt a
                  komponenst - az initialRangeKey/initialCustomFrom/initialCustomTo inputok nélkül
@@ -254,15 +318,23 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
-                      <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                        <th class="py-3 px-4">Diák</th>
-                        <th class="py-3 px-4">Vizsgák</th>
-                        <th class="py-3 px-4">Átlag %</th>
-                        <th class="py-3 px-4">Kvíz pontosság</th>
+                      <tr class="text-left border-b border-border-default">
+                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('name')">
+                          <app-sort-header key="name" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Diák</app-sort-header>
+                        </th>
+                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('exams')">
+                          <app-sort-header key="exams" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Vizsgák</app-sort-header>
+                        </th>
+                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('avg')">
+                          <app-sort-header key="avg" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Átlag %</app-sort-header>
+                        </th>
+                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('quiz')">
+                          <app-sort-header key="quiz" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Kvíz pontosság</app-sort-header>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      @for (student of report.groupActivity(); track student.userId) {
+                      @for (student of sortedGroupActivity(); track student.userId) {
                         <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
                           <td class="py-2.5 px-4">
                             <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
@@ -390,6 +462,7 @@ export class CsoportReszletekComponent implements OnInit {
 
   readonly tabs: { value: Tab; label: string }[] = [
     { value: 'tagok', label: 'Tagok' },
+    { value: 'kiadva', label: 'Kiadva' },
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
     { value: 'ranglista', label: 'Ranglista' },
@@ -397,6 +470,67 @@ export class CsoportReszletekComponent implements OnInit {
   ];
 
   readonly tab = signal<Tab>('tagok');
+  // ── UI-UX-T3: "Kiadva" fül állapota ──
+  private readonly teacherQuizService = inject(TeacherQuizService);
+  private readonly kahootHostService = inject(KahootHostService);
+  readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
+  readonly assignmentsLoading = signal(false);
+  readonly liveStartPending = signal(false);
+  readonly liveStartError = signal<string | null>(null);
+  readonly assignmentsError = signal<string | null>(null);
+
+  // ── UI-UX-K3: Eredmények-tábla rendezése ──
+  readonly resultsSort = signal<SortState | null>(null);
+  readonly sortedGroupActivity = computed(() =>
+    sortRows(this.report.groupActivity(), this.resultsSort(), {
+      name: (r) => r.name,
+      exams: (r) => r.completedExamsCount,
+      avg: (r) => r.averageExamScorePercent,
+      quiz: (r) => r.quizAccuracyPercent,
+    }));
+
+  ariaSort(key: string): string | null {
+    const state = this.resultsSort();
+    if (state?.key !== key) return null;
+    return state.dir === 'asc' ? 'ascending' : 'descending';
+  }
+
+  private loadAssignments(groupId: number): void {
+    this.assignmentsLoading.set(true);
+    this.teacherQuizService
+      .getGroupAssignments(groupId)
+      .pipe(take(1), finalize(() => this.assignmentsLoading.set(false)))
+      .subscribe({
+        next: (assignments) => {
+          this.assignmentsError.set(null);
+          this.groupAssignments.set(assignments);
+        },
+        error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
+      });
+  }
+
+  /** 48 órán belül lejáró határidő - vizuális sürgősség. */
+  isDueSoon(dueAt: string): boolean {
+    const remaining = new Date(dueAt).getTime() - Date.now();
+    return remaining > 0 && remaining < 48 * 3600 * 1000;
+  }
+
+  startLiveFromGroup(assignment: TeacherGroupAssignmentDto): void {
+    if (this.liveStartPending()) return;
+    this.liveStartPending.set(true);
+    this.liveStartError.set(null);
+    this.kahootHostService
+      .createRoom(assignment.quizId, this.groupId)
+      .pipe(take(1), finalize(() => this.liveStartPending.set(false)))
+      .subscribe({
+        next: (room) =>
+          void this.router.navigate([
+            '/feladatsorok', 'kvizek', assignment.quizId, 'elo', room.kahootSessionId,
+          ]),
+        error: () => this.liveStartError.set('Az élő játék indítása sikertelen.'),
+      });
+  }
+
   /** UI-UX-T1: a kivetíthető QR alapból rejtve - csak szándékos megnyitásra. */
   readonly qrVisible = signal(false);
   /** UI-UX-T4: fejléc-átnevezés állapota. */
@@ -487,6 +621,7 @@ export class CsoportReszletekComponent implements OnInit {
     // (pl. az Eredmények fülön) ottmaradt volna.
     this.store.clearError();
     if (tab === 'tagok') this.store.loadMembers(this.groupId);
+    if (tab === 'kiadva') this.loadAssignments(this.groupId);
     if (tab === 'helyek') this.seatStore.load(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);

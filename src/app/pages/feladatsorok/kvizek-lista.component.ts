@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -25,13 +25,61 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kvizek-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent, TartalomFulekComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <h1 class="page-title">Kvízeim</h1>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="page-title">Kvízeim</h1>
       <p class="text-sm text-text-muted mt-1">Saját kvízek összeállítása és kiadása csoportoknak</p>
 
+        </div>
+        <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
+          {{ createOpen() ? 'Mégse' : '+ Új kvíz' }}
+        </button>
+      </div>
+
       <app-tartalom-fulek />
+
+      @if (createOpen()) {
+        <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3 mt-4 mb-6">
+          <h2 class="font-bold">Új kvíz</h2>
+
+          <input formControlName="title" placeholder="Cím (pl. 3. heti dolgozat)" maxlength="200" class="input" />
+          @if (createForm.controls.title.hasError('blank')) {
+            <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
+          }
+          @if (createForm.controls.title.hasError('maxlength')) {
+            <p class="text-sm text-danger">A cím legfeljebb 200 karakter hosszú lehet.</p>
+          }
+
+          <textarea formControlName="description" placeholder="Leírás (nem kötelező)" rows="2" class="input"></textarea>
+
+          <label class="block">
+            <span class="text-sm text-text-muted">Mikor lássa a diák a megoldást?</span>
+            <select formControlName="feedbackMode" class="input mt-1">
+              @for (mode of feedbackModes; track mode.value) {
+                <option [value]="mode.value">{{ mode.label }}</option>
+              }
+            </select>
+          </label>
+          <p class="text-xs text-text-muted">
+            Gyakorláshoz az azonnali visszajelzés a hasznos; számonkérésnél viszont értelmetlenné
+            tenné a dolgozatot.
+          </p>
+
+          <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
+            Létrehozás
+          </button>
+        </form>
+      }
+
+      @if (visibleQuizzes().length >= 8 || search() || store.error()) {
+        <input type="search" [ngModel]="search()" (ngModelChange)="search.set($event)"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="Keresés a kvízek között…" class="input mt-4 mb-1"
+          aria-label="Keresés a kvízek között…" />
+      }
 
       @if (store.error()) {
         <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
@@ -44,7 +92,7 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
         </div>
       } @else {
         <ul class="space-y-3 mb-8">
-          @for (quiz of store.quizzes(); track quiz.id) {
+          @for (quiz of visibleQuizzes(); track quiz.id) {
             <li>
               <a
                 [routerLink]="['/feladatsorok', 'kvizek', quiz.id, 'szerkesztes']"
@@ -100,36 +148,6 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
         </ul>
       }
 
-      <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3">
-        <h2 class="font-bold">Új kvíz</h2>
-
-        <input formControlName="title" placeholder="Cím (pl. 3. heti dolgozat)" maxlength="200" class="input" />
-        @if (createForm.controls.title.hasError('blank')) {
-          <p class="text-sm text-danger">A cím nem állhat kizárólag szóközökből.</p>
-        }
-        @if (createForm.controls.title.hasError('maxlength')) {
-          <p class="text-sm text-danger">A cím legfeljebb 200 karakter hosszú lehet.</p>
-        }
-
-        <textarea formControlName="description" placeholder="Leírás (nem kötelező)" rows="2" class="input"></textarea>
-
-        <label class="block">
-          <span class="text-sm text-text-muted">Mikor lássa a diák a megoldást?</span>
-          <select formControlName="feedbackMode" class="input mt-1">
-            @for (mode of feedbackModes; track mode.value) {
-              <option [value]="mode.value">{{ mode.label }}</option>
-            }
-          </select>
-        </label>
-        <p class="text-xs text-text-muted">
-          Gyakorláshoz az azonnali visszajelzés a hasznos; számonkérésnél viszont értelmetlenné
-          tenné a dolgozatot.
-        </p>
-
-        <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
-          Létrehozás
-        </button>
-      </form>
     </div>
   `,
 })
@@ -138,6 +156,14 @@ export class KvizekListaComponent {
   private readonly router = inject(Router);
   private readonly toastService = inject(ToastService);
   readonly store = inject(TeacherQuizStore);
+
+  readonly createOpen = signal(false);
+  readonly search = signal('');
+
+  readonly visibleQuizzes = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    return this.store.quizzes().filter((q) => !term || q.title.toLowerCase().includes(term));
+  });
 
   readonly feedbackModes = (Object.keys(QUIZ_FEEDBACK_MODE_LABELS) as QuizFeedbackMode[]).map((value) => ({
     value,
@@ -188,6 +214,7 @@ export class KvizekListaComponent {
         allowLateSubmission: true,
       },
       (quiz) => {
+        this.createOpen.set(false);
         this.toastService.success('Kvíz létrehozva.');
         this.router.navigate(['/feladatsorok', 'kvizek', quiz.id, 'szerkesztes']);
       },

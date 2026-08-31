@@ -12,6 +12,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
@@ -26,7 +27,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -193,15 +194,23 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
                   <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                       <thead>
-                        <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                          <th class="py-3 px-4">Diák</th>
-                          <th class="py-3 px-4">Vizsgák</th>
-                          <th class="py-3 px-4">Átlag %</th>
-                          <th class="py-3 px-4">Sorozat</th>
+                        <tr class="text-left border-b border-border-default">
+                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('name')">
+                            <app-sort-header key="name" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Diák</app-sort-header>
+                          </th>
+                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('exams')">
+                            <app-sort-header key="exams" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Vizsgák</app-sort-header>
+                          </th>
+                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('avg')">
+                            <app-sort-header key="avg" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Átlag %</app-sort-header>
+                          </th>
+                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('streak')">
+                            <app-sort-header key="streak" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Sorozat</app-sort-header>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        @for (student of report.schoolActivity(); track student.userId) {
+                        @for (student of sortedSchoolActivity(); track student.userId) {
                           <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
                             <td class="py-2.5 px-4">
                               <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
@@ -273,6 +282,22 @@ export class IntezmenyReszletekComponent implements OnInit {
   readonly leaderboard = inject(LeaderboardStore);
 
   readonly tab = signal<Tab>('tanarok');
+
+  // ── UI-UX-K3: Áttekintés-tábla rendezése ──
+  readonly overviewSort = signal<SortState | null>(null);
+  readonly sortedSchoolActivity = computed(() =>
+    sortRows(this.report.schoolActivity(), this.overviewSort(), {
+      name: (r) => r.name,
+      exams: (r) => r.completedExamsCount,
+      avg: (r) => r.averageExamScorePercent,
+      streak: (r) => r.currentStreak,
+    }));
+
+  ariaSort(key: string): string | null {
+    const state = this.overviewSort();
+    if (state?.key !== key) return null;
+    return state.dir === 'asc' ? 'ascending' : 'descending';
+  }
   category: LeaderboardCategory = 'quiz';
   period: LeaderboardPeriod = 'weekly';
   editName = '';

@@ -44,6 +44,8 @@ describe('CsoportokListaComponent', () => {
   it('BUG UI-TT-60 javítva: whitespace-only név esetén a "Létrehozás" gomb letiltva marad, inline hibaüzenettel', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     // Előbb egy VALÓS értéket állítunk be, hogy a control érvényessége ténylegesen
@@ -65,6 +67,8 @@ describe('CsoportokListaComponent', () => {
   it('valódi név esetén a form érvényes, a gomb aktív', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     fixture.componentInstance.createForm.controls.name.setValue('11.A');
@@ -81,6 +85,8 @@ describe('CsoportokListaComponent', () => {
   it('BUG UI-TT-146 javítva: 255 karakternél hosszabb név esetén a "Létrehozás" gomb letiltva marad, inline hibaüzenettel', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     // Két lépésben állítjuk be az értéket (előbb egy VALÓS, majd a túl hosszú érték),
@@ -101,6 +107,8 @@ describe('CsoportokListaComponent', () => {
   it('pontosan 255 karakteres név esetén a form érvényes', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     fixture.componentInstance.createForm.controls.name.setValue('a'.repeat(255));
@@ -112,6 +120,8 @@ describe('CsoportokListaComponent', () => {
   it('create() whitespace-only névvel NEM hívja meg a store.create()-et', () => {
     configure();
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     fixture.componentInstance.createForm.controls.name.setValue('   ');
@@ -126,6 +136,8 @@ describe('CsoportokListaComponent', () => {
     configure();
     storeMock.loading.set(true);
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     fixture.componentInstance.createForm.controls.name.setValue('11.A');
@@ -149,6 +161,8 @@ describe('CsoportokListaComponent', () => {
     configure();
     schoolStoreMock.error.set('Az intézmények betöltése sikertelen.');
     const fixture = TestBed.createComponent(CsoportokListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
 
     // Elvárás: a felhasználó lássa, hogy az intézmény-lista betöltése sikertelen volt.

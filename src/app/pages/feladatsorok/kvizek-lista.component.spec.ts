@@ -53,6 +53,8 @@ describe('KvizekListaComponent', () => {
     });
 
     const fixture = TestBed.createComponent(KvizekListaComponent);
+    // UI-UX-T6: a létrehozó űrlap gombbal nyílik - a spec-ek a nyitott állapotot tesztelik.
+    fixture.componentInstance.createOpen.set(true);
     fixture.detectChanges();
     return fixture;
   }
