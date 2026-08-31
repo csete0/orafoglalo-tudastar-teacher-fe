@@ -15,6 +15,8 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
@@ -23,7 +25,7 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -32,7 +34,25 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
             <div class="icon-tile icon-tile-primary">
               <app-icon name="users" class="w-6 h-6 block" />
             </div>
-            <h1 class="page-title truncate">{{ group.name }}</h1>
+            @if (!renaming()) {
+              <h1 class="page-title truncate">{{ group.name }}</h1>
+              <!-- UI-UX-T4: a csoport neve eddig NEM volt szerkeszthető sehol - egy
+                   elgépelt vagy évfordulóval elavuló név ("11.A" → "12.A") csak új
+                   csoporttal lett volna "javítható", elvágva a tagságot és az
+                   eredményeket. -->
+              @if (!group.isArchived) {
+                <button type="button" (click)="startRename(group.name)"
+                  class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0" title="Átnevezés">
+                  Átnevezés
+                </button>
+              }
+            } @else {
+              <input [(ngModel)]="renameValue" maxlength="255" class="input !w-auto flex-1"
+                (keyup.enter)="saveRename(group.id)" (keyup.escape)="renaming.set(false)" />
+              <button type="button" (click)="saveRename(group.id)"
+                [disabled]="!renameValue.trim() || store.loading()" class="btn btn-primary shrink-0">Mentés</button>
+              <button type="button" (click)="renaming.set(false)" class="btn btn-ghost shrink-0">Mégse</button>
+            }
             @if (group.isArchived) {
               <span class="badge badge-neutral shrink-0">Archivált</span>
             }
@@ -208,7 +228,12 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                     <app-icon name="users" class="w-6 h-6 block" />
                   </div>
                   <p class="font-semibold">Még nincs tag a csoportban.</p>
-                  <p class="text-sm text-text-muted">Oszd meg a meghívó kódot a diákjaiddal a Meghívó fülön.</p>
+                  <p class="text-sm text-text-muted">Oszd meg a meghívó kódot a diákjaiddal.</p>
+                  <!-- UI-UX-K2: az üres állapot ne csak elmondja a következő lépést -
+                       vigyen is oda. -->
+                  <button type="button" (click)="setTab('meghivo')" class="btn btn-primary">
+                    Meghívó kód megnyitása
+                  </button>
                 </li>
               }
             </ul>
@@ -277,7 +302,14 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                   <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm">
                     <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                       [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                    <span class="flex-1 truncate">{{ entry.nickname }}</span>
+                    <!-- UI-UX-T7: a tanárnak a valódi név a beazonosítható - a becenév
+                         mellette marad, ha eltér. Diák-hívónál a realName mindig null. -->
+                    <span class="flex-1 truncate">
+                      {{ entry.realName ?? entry.nickname }}
+                      @if (entry.realName && entry.realName !== entry.nickname) {
+                        <span class="text-text-muted text-xs">({{ entry.nickname }})</span>
+                      }
+                    </span>
                     <span class="font-bold">{{ entry.score }}</span>
                   </li>
                 } @empty {
@@ -299,13 +331,26 @@ type Tab = 'tagok' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
                   <app-icon name="link" class="w-6 h-6 block" />
                 </div>
                 <p class="text-sm">Meghívó kód: <code class="font-bold">{{ group.inviteCode }}</code></p>
+                <app-copy-button [value]="group.inviteCode" label="Meghívó kód" />
                 @if (group.isJoinEnabled) {
                   <span class="badge badge-success shrink-0">Aktív</span>
                 } @else {
                   <span class="badge badge-neutral shrink-0">Jelentkezés letiltva</span>
                 }
               </div>
-              <p class="text-sm break-all">Csatlakozási link: <code>{{ joinLink(group.inviteCode) }}</code></p>
+              <p class="text-sm break-all flex items-center gap-2 flex-wrap">
+                <span>Csatlakozási link: <code>{{ joinLink(group.inviteCode) }}</code></span>
+                <app-copy-button [value]="joinLink(group.inviteCode)" label="Csatlakozási link" />
+                <button type="button" (click)="qrVisible.set(!qrVisible())" class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0">
+                  {{ qrVisible() ? 'QR elrejtése' : 'QR-kód kivetítéshez' }}
+                </button>
+              </p>
+              <!-- UI-UX-T1: kivetítve a diákok telefonnal beolvassák - nem kell gépelni. -->
+              @if (qrVisible()) {
+                <div class="flex justify-center py-2">
+                  <app-qr-code [value]="joinLink(group.inviteCode)" [size]="280" />
+                </div>
+              }
               <p class="text-xs text-text-muted">A kód nem jár le — a jelentkezést itt tudod ki- vagy bekapcsolni anélkül, hogy a kódot le kellene cserélned.</p>
               <div class="flex gap-2">
                 <button (click)="regenerateInvite(group.id)" [disabled]="store.loading()" class="btn btn-primary">
@@ -352,6 +397,11 @@ export class CsoportReszletekComponent implements OnInit {
   ];
 
   readonly tab = signal<Tab>('tagok');
+  /** UI-UX-T1: a kivetíthető QR alapból rejtve - csak szándékos megnyitásra. */
+  readonly qrVisible = signal(false);
+  /** UI-UX-T4: fejléc-átnevezés állapota. */
+  readonly renaming = signal(false);
+  renameValue = '';
   category: LeaderboardCategory = 'quiz';
   period: LeaderboardPeriod = 'weekly';
 
@@ -544,6 +594,27 @@ export class CsoportReszletekComponent implements OnInit {
       // displaySchoolId.set(schoolId)) enélkül a hibaüzenet mellett örökre a
       // soha el nem mentett választáson maradt volna.
       () => this.displaySchoolId.set(previousSchoolId),
+    );
+  }
+
+  startRename(currentName: string): void {
+    this.renameValue = currentName;
+    this.renaming.set(true);
+  }
+
+  saveRename(groupId: number): void {
+    const name = this.renameValue.trim();
+    if (!name || this.store.loading()) return;
+    // UI-UX-T4: az update ugyanaz az útvonal, mint az intézmény-kötés váltásáé - a
+    // schoolId-t a MOST LÁTOTT (displaySchoolId) értékkel küldjük, hogy a két
+    // szerkesztési út ne írhassa felül egymást.
+    this.store.update(
+      groupId,
+      { name, schoolId: this.displaySchoolId() ?? undefined },
+      () => {
+        this.renaming.set(false);
+        this.toastService.success('Csoport átnevezve.');
+      },
     );
   }
 

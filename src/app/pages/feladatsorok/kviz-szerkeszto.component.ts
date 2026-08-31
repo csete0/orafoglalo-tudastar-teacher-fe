@@ -361,7 +361,8 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
           <p class="text-sm text-text-muted mb-3">
             Tanár-vezérelt, valós idejű kvízjáték: a diákok a saját eszközükön válaszolnak,
             a pontszám a gyorsaságtól is függ. Az indítás kiadja a kvízt a csoportnak, ha
-            még nem volt kiadva.
+            még nem volt kiadva. Időkorlát nélküli kvíznél élőben kérdésenként 30 mp az
+            alapértelmezés.
           </p>
 
           @if (!quiz.isPublished) {

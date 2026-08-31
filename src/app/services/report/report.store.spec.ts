@@ -23,7 +23,7 @@ function makeSummary(overrides: Partial<StudentActivitySummaryDto> = {}): Studen
 }
 
 function makeDetail(overrides: Partial<StudentActivityDetailDto> = {}): StudentActivityDetailDto {
-  return { ...makeSummary(), recentExams: [], ...overrides };
+  return { ...makeSummary(), recentExams: [], recentQuizzes: [], groups: [], ...overrides };
 }
 
 function makeTaskSetResults(overrides: Partial<TeacherTaskSetResultsDto> = {}): TeacherTaskSetResultsDto {

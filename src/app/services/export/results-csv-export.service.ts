@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { StudentTaskSetResultRowDto, TeacherTaskSetResultsDto } from '../../models/report.model';
+import { TeacherQuizResultsDto, TeacherQuizStudentResultDto } from '../../models/teacher-quiz.model';
 
 /**
  * Magyar területi beállítású Excel a pontosvesszőt várja mezőelválasztóként —
@@ -36,6 +37,42 @@ export class ResultsCsvExportService {
     const csv = this.buildCsv(results);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     this.triggerDownload(blob, this.buildFileName(results.title));
+  }
+
+  /**
+   * UI-UX-T5: a kvíz-eredmények exportja - ugyanaz a naplózási munkafolyamat, mint a
+   * feladatsoroké (azonos elválasztó/BOM/fájlnév-konvenció). A `viewSuffix` az
+   * aktuálisan szűrt nézetet nevezi meg a fájlnévben (mind / elo / onallo / játék),
+   * hogy két export ne legyen összetéveszthető.
+   */
+  exportQuizResults(results: TeacherQuizResultsDto, viewSuffix: string): void {
+    const header = [
+      'Diák', 'Csoport', 'Kitöltések', 'Ebből élő', 'Legjobb eredmény', 'Százalék',
+      'Legjobb mód', 'Legjobb élő pontszám', 'Utolsó kitöltés', 'Késett',
+    ];
+
+    const rows = results.students.map((s) => this.buildQuizRow(s));
+    const csv = UTF8_BOM + [header, ...rows]
+      .map((cells) => cells.map((c) => this.escapeCell(c)).join(SEPARATOR))
+      .join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    this.triggerDownload(blob, this.buildFileName(`${results.title}-${viewSuffix}`));
+  }
+
+  private buildQuizRow(s: TeacherQuizStudentResultDto): string[] {
+    return [
+      s.name,
+      s.groupName,
+      String(s.attemptCount),
+      String(s.liveAttemptCount),
+      s.bestScore != null ? `${s.bestScore} / ${s.totalQuestions}` : NO_VALUE,
+      this.formatPercent(s.bestScore ?? undefined, s.totalQuestions),
+      s.bestScoreMode === 'live' ? 'élő' : s.bestScoreMode === 'solo' ? 'önálló' : NO_VALUE,
+      s.bestLivePoints != null ? String(s.bestLivePoints) : NO_VALUE,
+      s.lastCompletedAt ? new Date(s.lastCompletedAt).toLocaleString('hu-HU') : NO_VALUE,
+      s.completedLate ? 'igen' : '',
+    ];
   }
 
   /**

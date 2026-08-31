@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
 import { StudentActivityDetailDto } from '../../models/report.model';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
@@ -12,15 +13,28 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-diak-reszletek',
   standalone: true,
-  imports: [DatePipe, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
+  imports: [DatePipe, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent],
   template: `
     @if (store.studentDetail(); as detail) {
       <div class="max-w-2xl mx-auto px-4 py-10">
+        <!-- UI-UX-T9: az oldalra a csoport-eredményekből érkezik a tanár - legyen visszaút. -->
+        <button type="button" (click)="goBack()" class="text-sm text-text-muted hover:underline mb-3">
+          ← Vissza
+        </button>
         <div class="flex items-center gap-3">
           <div class="w-11 h-11 rounded-full bg-primary-subtle text-primary text-sm font-bold flex items-center justify-center shrink-0">
             {{ initials(detail.name) }}</div>
           <h1 class="page-title truncate">{{ detail.name }}</h1>
         </div>
+        @if (detail.groups.length) {
+          <p class="text-sm text-text-muted mt-2 flex items-center gap-2 flex-wrap">
+            Csoport:
+            @for (group of detail.groups; track group.groupId) {
+              <a [routerLink]="['/csoportok', group.groupId]" class="text-primary hover:underline">
+                {{ group.name }}</a>
+            }
+          </p>
+        }
         <div class="hairline"></div>
 
         <app-date-range-filter (rangeChange)="applyRange($event)" />
@@ -80,6 +94,48 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
           </table>
         </div>
         </div>
+
+        <!-- UI-UX-T9: a kvíz-kitöltésekből eddig csak két aggregált szám látszott -
+             a tanári kérdés ("mit írt, mikor, hány %-ra, élőben vagy önállóan?")
+             előzmény-szinten is megérdemli a választ. -->
+        <h2 class="font-bold mb-3 mt-8">Legutóbbi kvízek</h2>
+        <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                <th class="py-3 px-4">Kvíz / témák</th>
+                <th class="py-3 px-4">Dátum</th>
+                <th class="py-3 px-4">Eredmény</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (quiz of detail.recentQuizzes; track quiz.sessionId) {
+                <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                  <td class="py-2.5 px-4">
+                    <span class="flex items-center gap-2 flex-wrap">
+                      {{ quiz.quizTitle ?? quiz.topics.join(', ') }}
+                      @if (quiz.mode === 'live') {
+                        <span class="badge badge-primary !text-[10px] !px-1.5 !py-0.5"
+                          title="Élő, tanár-vezérelt játékban született">Élő</span>
+                      }
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-4">{{ quiz.completedAt | date: 'yyyy.MM.dd' }}</td>
+                  <td class="py-2.5 px-4">
+                    {{ quiz.correctAnswers }} / {{ quiz.totalQuestions }} ({{ quiz.successRate }}%)
+                    @if (quiz.mode === 'live' && quiz.totalPoints > 0) {
+                      <span class="text-text-muted">· ⚡ {{ quiz.totalPoints }} pont</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="3" class="py-6 px-4 text-text-muted text-center">Nincs kvíz-előzmény.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        </div>
       </div>
     } @else if (store.studentDetailLoading()) {
       <app-local-spinner />
@@ -90,7 +146,12 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
 })
 export class DiakReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly location = inject(Location);
   readonly store = inject(ReportStore);
+
+  goBack(): void {
+    this.location.back();
+  }
 
   private userId = 0;
 

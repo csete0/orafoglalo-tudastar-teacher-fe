@@ -10,7 +10,9 @@ import {
   TeacherQuizQuestionStatDto,
   TeacherQuizResultsDto,
 } from '../../models/teacher-quiz.model';
+import { FormsModule } from '@angular/forms';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
+import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 
 /**
@@ -29,15 +31,25 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-eredmenyek',
   standalone: true,
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, FormsModule],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'szerkesztes']"
          class="text-sm text-text-muted hover:underline">← Vissza a szerkesztőhöz</a>
 
       @if (results(); as r) {
-        <h1 class="page-title mt-3">{{ r.title }}</h1>
-        <p class="text-sm text-text-muted mt-1">Eredmények</p>
+        <div class="flex items-start justify-between gap-4 flex-wrap mt-3">
+          <div class="min-w-0">
+            <h1 class="page-title truncate">{{ r.title }}</h1>
+            <p class="text-sm text-text-muted mt-1">Eredmények</p>
+          </div>
+          <!-- UI-UX-T5: a feladatsor-eredmények oldala már tud CSV-t - a tanár a
+               kvíznél ugyanazt a naplózási munkát végzi. -->
+          <button type="button" (click)="exportCsv(r)" class="btn shrink-0"
+            title="Az eredmények letöltése CSV-ben, osztálynaplóba importálható formában.">
+            Exportálás CSV-be
+          </button>
+        </div>
         <div class="hairline"></div>
 
         <!-- Forrás-szűrő -->
@@ -166,10 +178,20 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
 
         <!-- Diákonként -->
         <section class="card p-5">
-          <h2 class="font-bold mb-3">Diákonként</h2>
+          <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <h2 class="font-bold">Diákonként</h2>
+            <!-- UI-UX-T5: 25+ fős osztálynál a "ki a leggyengébb" kérdésre ne
+                 szemmel-kereséssel jöjjön a válasz. -->
+            <select [ngModel]="studentSort()" (ngModelChange)="studentSort.set($event)"
+              class="input !w-auto !py-1 !text-sm" aria-label="Diák-lista rendezése">
+              <option value="name">Név szerint</option>
+              <option value="score">Legjobb eredmény szerint</option>
+              <option value="last">Utolsó kitöltés szerint</option>
+            </select>
+          </div>
 
           <ul class="space-y-2">
-            @for (s of r.students; track s.userId) {
+            @for (s of sortedStudents(r); track s.userId) {
               <li class="flex items-center gap-3 text-sm border-b border-border pb-2 last:border-0">
                 <span class="min-w-0 flex-1">
                   <span class="block font-medium truncate">{{ s.name }}</span>
@@ -234,6 +256,7 @@ export class KvizEredmenyekComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly service = inject(TeacherQuizService);
   private readonly kahootHostService = inject(KahootHostService);
+  private readonly csvExport = inject(ResultsCsvExportService);
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
 
@@ -244,7 +267,16 @@ export class KvizEredmenyekComponent {
   ];
 
   readonly mode = signal<QuizResultsMode>('all');
-  readonly selectedGameId = signal<number | null>(null);
+  // UI-UX-T10: a host-képernyő "Eredmények megnyitása" gombja query-parammal egyből
+  // az imént lejátszott menetre szűr - érvénytelen érték csendben "nincs szűrő".
+  readonly selectedGameId = signal<number | null>(
+    (() => {
+      // A spec-ek route-stubja csak paramMap-et ad - a queryParamMap hiánya
+      // (és bármi más anomália) csendben "nincs szűrő"-t jelentsen.
+      const raw = Number(this.route.snapshot.queryParamMap?.get('kahootSessionId'));
+      return Number.isFinite(raw) && raw > 0 ? raw : null;
+    })(),
+  );
 
   // catchError a switchMap-en BELÜL: enélkül egy hibás lekérés a teljes szűrő-streamet
   // lezárná, és a következő szűrő-váltás már semmit nem töltene (UI-TT-133 elve).
@@ -280,6 +312,42 @@ export class KvizEredmenyekComponent {
       (a, b) => (a.correctPercent ?? 101) - (b.correctPercent ?? 101),
     ),
   );
+
+  readonly studentSort = signal<'name' | 'score' | 'last'>('name');
+
+  /**
+   * UI-UX-T5: kliens-oldali rendezés - az adat már mind itt van. A "legjobb eredmény"
+   * arány szerint rendez (a nyers pont két eltérő kérdésszámú kvíz-változat között
+   * hazudna), a még nem próbálkozók (null) mindig a lista végére kerülnek.
+   */
+  sortedStudents(r: TeacherQuizResultsDto): TeacherQuizResultsDto['students'] {
+    const students = [...r.students];
+    switch (this.studentSort()) {
+      case 'score':
+        return students.sort((a, b) => {
+          const ratio = (x: (typeof students)[number]) =>
+            x.bestScore == null || x.totalQuestions === 0 ? -1 : x.bestScore / x.totalQuestions;
+          return ratio(b) - ratio(a) || a.name.localeCompare(b.name, 'hu');
+        });
+      case 'last':
+        return students.sort((a, b) => {
+          const time = (x: (typeof students)[number]) =>
+            x.lastCompletedAt ? new Date(x.lastCompletedAt).getTime() : 0;
+          return time(b) - time(a) || a.name.localeCompare(b.name, 'hu');
+        });
+      default:
+        return students.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    }
+  }
+
+  /** UI-UX-T5: az aktuálisan SZŰRT nézet megy a CSV-be - amit a tanár lát, azt kapja. */
+  exportCsv(r: TeacherQuizResultsDto): void {
+    const game = this.selectedGame();
+    const suffix = game
+      ? `elo-jatek-${game.kahootSessionId}`
+      : this.mode() === 'all' ? 'mind' : this.mode() === 'live' ? 'elo' : 'onallo';
+    this.csvExport.exportQuizResults(r, suffix);
+  }
 
   /** Játék-szűrésnél a mód-gombok a játékra vonatkoznak - az "Élő játék" az aktív. */
   isModeActive(mode: QuizResultsMode): boolean {
