@@ -52,6 +52,11 @@ export class TeacherQuizStore {
 
   private _detailGeneration = 0;
   private _detailQuizId: number | null = null;
+  // UI-TT-226: minden searchBankQuestions()-hívás saját, független subscribe()-ot
+  // indított, cél-generáció/id-ellenőrzés nélkül - egy lassabb, tág keresés KÉSVE
+  // érkező válasza csendben felülírhatta egy közben indított, szűkített keresés
+  // már megjelenő, helyes találatait. A _detailQuizId mintáját követve.
+  private _bankSearchRequestId = 0;
 
   readonly quizzes = computed(() => this._quizzes());
   readonly selectedDetail = computed(() => this._selectedDetail());
@@ -239,20 +244,32 @@ export class TeacherQuizStore {
     this._bankSearching.set(true);
     this._bankSearchError.set(null);
 
+    const requestId = ++this._bankSearchRequestId;
+
     this.service
       .searchBankQuestions(search, topicId, difficulty)
       .pipe(
         take(1),
-        finalize(() => this._bankSearching.set(false)),
+        finalize(() => {
+          if (requestId !== this._bankSearchRequestId) return;
+          this._bankSearching.set(false);
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (results) => this._bankResults.set(results),
-        error: (err) => this._bankSearchError.set(extractErrorMessage(err, 'A keresés sikertelen.')),
+        next: (results) => {
+          if (requestId !== this._bankSearchRequestId) return;
+          this._bankResults.set(results);
+        },
+        error: (err) => {
+          if (requestId !== this._bankSearchRequestId) return;
+          this._bankSearchError.set(extractErrorMessage(err, 'A keresés sikertelen.'));
+        },
       });
   }
 
   clearBankResults(): void {
+    this._bankSearchRequestId++;
     this._bankResults.set([]);
     this._bankSearchError.set(null);
   }
