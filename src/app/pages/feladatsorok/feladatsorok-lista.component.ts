@@ -117,7 +117,7 @@ const LEVELS = [
                   <app-icon name="clipboard-list" class="w-6 h-6 block" />
                 </div>
                 <p class="font-semibold">Még nincs feladatsorod.</p>
-                <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
+                <p class="text-sm text-text-muted">Hozd létre az elsőt a "+ Új feladatsor" gombbal.</p>
               </li>
             }
           }

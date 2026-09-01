@@ -117,7 +117,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                   <app-icon name="users" class="w-6 h-6 block" />
                 </div>
                 <p class="font-semibold">Még nincs csoportod.</p>
-                <p class="text-sm text-text-muted">Hozd létre az elsőt az alábbi űrlappal.</p>
+                <p class="text-sm text-text-muted">Hozd létre az elsőt a "+ Új csoport" gombbal.</p>
               </li>
             }
           }
