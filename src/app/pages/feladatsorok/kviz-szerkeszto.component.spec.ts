@@ -579,3 +579,109 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
     expect(fixture.nativeElement.textContent).toContain('Nincs találat');
   });
 });
+
+/**
+ * BUG UI-TT-228: a szekció-navigáció fülei korábban plain `<a [href]="'#'+id">` linkek voltak -
+ * az `index.html` `<base href="/">` + az üres-path `/dashboard`-redirect route kombinációja
+ * miatt a kattintás a TELJES szerkesztőt megsemmisítette (a `/dashboard`-ra navigálva), egy még
+ * be nem küldött kérdés-piszkozattal együtt, figyelmeztetés nélkül.
+ */
+describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
+  function configure() {
+    const storeMock = {
+      selectedDetail: signal<TeacherQuizDetailDto | null>({
+        id: 7,
+        title: 'Teszt kvíz',
+        description: null,
+        isPublished: false,
+        takedownAt: null,
+        takedownReason: null,
+        examLevel: null,
+        questionCount: 0,
+        pendingQuestionCount: 0,
+        assignedGroupCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        feedbackMode: 'after',
+        secondsPerQuestion: null,
+        maxAttempts: null,
+        shuffleQuestions: true,
+        allowLateSubmission: true,
+        questions: [],
+        assignments: [],
+      }),
+      loading: signal(false),
+      generating: signal(false),
+      error: signal(null),
+      publishResult: signal(null),
+      bankResults: signal([]),
+      bankSearching: signal(false),
+      bankSearchError: signal(null),
+      loadDetail: vi.fn(),
+      addQuestion: vi.fn(),
+      publish: vi.fn(),
+      searchBankQuestions: vi.fn(),
+      addExistingQuestion: vi.fn(),
+      clearBankResults: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [KvizSzerkesztoComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
+        { provide: TeacherQuizStore, useValue: storeMock },
+        { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
+        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(KvizSzerkesztoComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('a szekció-fülek NEM natív <a href="#..."> linkek - nincs href, ami a <base href> ellenében feloldódhatna', () => {
+    const fixture = configure();
+    const nav = fixture.nativeElement.querySelector('nav[aria-label="Szekciók"]');
+    expect(nav).toBeTruthy();
+
+    const links = nav.querySelectorAll('a[href]');
+    expect(links.length).toBe(0);
+
+    const buttons = nav.querySelectorAll('button');
+    expect(buttons.length).toBe(6);
+  });
+
+  it('egy fülre kattintva a megfelelő szekcióhoz görget, navigáció NÉLKÜL', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+    const scrollSpy = vi.fn();
+    const target = document.createElement('div');
+    target.id = 'ai';
+    target.scrollIntoView = scrollSpy;
+    vi.spyOn(document, 'getElementById').mockReturnValue(target);
+
+    component.scrollToSection('ai');
+
+    expect(document.getElementById).toHaveBeenCalledWith('ai');
+    expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+  });
+
+  it('a fülre kattintás ténylegesen a component metódusát hívja meg (nem csak a href-navigációt)', () => {
+    const fixture = configure();
+    const component = fixture.componentInstance;
+    const scrollToSectionSpy = vi.spyOn(component, 'scrollToSection').mockImplementation(() => {});
+
+    const nav = fixture.nativeElement.querySelector('nav[aria-label="Szekciók"]');
+    const buttons: HTMLButtonElement[] = Array.from(nav.querySelectorAll('button'));
+    const kerdesekButton = buttons.find((b) => b.textContent?.trim() === 'Kérdések')!;
+    expect(kerdesekButton).toBeTruthy();
+
+    kerdesekButton.click();
+
+    expect(scrollToSectionSpy).toHaveBeenCalledWith('kerdesek');
+  });
+});

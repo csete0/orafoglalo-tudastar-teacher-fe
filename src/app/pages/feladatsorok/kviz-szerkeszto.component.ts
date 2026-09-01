@@ -76,9 +76,9 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                     bg-bg-panel/95 backdrop-blur border-b border-border-default text-sm"
              aria-label="Szekciók">
           @for (anchor of sectionAnchors; track anchor.id) {
-            <a [href]="'#' + anchor.id"
-               class="px-3 py-1 rounded-lg whitespace-nowrap text-text-muted hover:text-text-primary hover:bg-bg-element">
-              {{ anchor.label }}</a>
+            <button type="button" (click)="scrollToSection(anchor.id)"
+               class="px-3 py-1 rounded-lg whitespace-nowrap text-text-muted hover:text-text-primary hover:bg-bg-element cursor-pointer">
+              {{ anchor.label }}</button>
           }
         </nav>
 
@@ -983,6 +983,20 @@ export class KvizSzerkesztoComponent {
     { id: 'elo', label: 'Élő játék' },
     { id: 'kiadas', label: 'Kiadás' },
   ];
+
+  /**
+   * BUG UI-TT-228: a fülek korábban plain `<a [href]="'#' + anchor.id">` linkek voltak - az
+   * `index.html`-ben deklarált `<base href="/">` és az üres-path `{ path: '', redirectTo:
+   * '/dashboard' }` route kombinációja miatt egy `href="#kerdesek"` kattintás NEM lapon
+   * belüli görgetést váltott ki, hanem a böngésző a fragmentet `/`-re oldotta fel, amit az
+   * üres-path route AZONNAL `/dashboard`-ra irányított - a teljes szerkesztő megsemmisült,
+   * egy még be nem küldött kérdés-piszkozattal együtt, figyelmeztetés nélkül. Kézi görgetés,
+   * navigáció nélkül - így a `<base href>` sosem kerül képbe.
+   */
+  scrollToSection(sectionId: string): void {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   private readonly expandedQuestionIds = signal<Set<number>>(new Set());
 
   isQuestionExpanded(questionId: number): boolean {
