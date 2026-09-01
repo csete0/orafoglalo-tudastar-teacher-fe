@@ -168,4 +168,20 @@ describe('CsoportokListaComponent', () => {
     // Elvárás: a felhasználó lássa, hogy az intézmény-lista betöltése sikertelen volt.
     expect(fixture.nativeElement.textContent).toContain('Az intézmények betöltése sikertelen.');
   });
+
+  // UI-TT-227: az üres-állapot szövege ("Hozd létre az elsőt az alábbi űrlappal.") egy
+  // lejjebb található űrlapra utal, de az űrlap alapállapotban (createOpen()===false,
+  // ami a legelső, még csoport nélküli tanár tényleges belépési állapota) EGYÁLTALÁN
+  // NINCS a DOM-ban - csak a "+ Új csoport" gomb megnyomása után jelenik meg, és akkor
+  // is a LISTA/üres-állapot ELÉ (fölé), nem alá kerül a template sorrendje miatt
+  // (@if (createOpen()) a 30. sorban, a lista+üres-állapot a 82-124. sorban).
+  it('BUG UI-TT-227: az üres állapot "alábbi űrlappal" szövege szerint kellene lennie egy űrlapnak a DOM-ban, de a kezdeti (createOpen()=false) állapotban nincs', () => {
+    configure();
+    const fixture = TestBed.createComponent(CsoportokListaComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Hozd létre az elsőt az alábbi űrlappal.');
+    const form: HTMLFormElement | null = fixture.nativeElement.querySelector('form');
+    expect(form).not.toBeNull();
+  });
 });
