@@ -247,6 +247,42 @@ describe('TeacherQuizStore', () => {
     expect(store.bankResults()).toEqual([{ id: 1, questionText: 'XKERES kérdés' }]);
   });
 
+  it('BUG: két egymást átfedő keresés közül a KÉSŐBB INDULÓ, de HAMARABB VÁLASZOLÓ nyer - egy lassú, korábbi keresés válasza felülírhatja egy újabb szűréssel indított, gyorsabb keresés találatait', () => {
+    // BE-QUIZAUTHORING-BANKSEARCH-STALE-RESPONSE-RACE: searchBankQuestions() minden
+    // hívása egy ÚJ, független subscribe-ot indít (nincs switchMap/generation-guard, ellentétben
+    // a mutateAndReload()-ban használt _detailQuizId cél-ellenőrzéssel). A tanár beír egy
+    // tág keresést (sok találat, lassabb backend-lekérdezés a Topic-join miatt), majd MIELŐTT
+    // az visszaérne, tovább szűkíti témakörrel/nehézséggel és újra keres (kevesebb sor, gyorabb
+    // válasz). Ha a második, gyorsabb válasz előbb érkezik, az elsőnek látszó - majd a lassabb,
+    // ELSŐ keresés válasza NÉMÁN felülírja: a felületen a szűkített szűrők mellett a tág keresés
+    // találatai maradnak, a tanár a rossz kérdéseket látja "hozzáadás"-ra kínálva.
+    configure();
+    const wideSearch$ = new Subject<unknown>();
+    const narrowSearch$ = new Subject<unknown>();
+    serviceMock.searchBankQuestions
+      .mockReturnValueOnce(wideSearch$)
+      .mockReturnValueOnce(narrowSearch$);
+
+    // 1. keresés: tág szűrő nélkül indul.
+    store.searchBankQuestions(null, null, null);
+    // 2. keresés: a tanár közben témakörre szűkít, ÚJRA keres - a régi kérés még folyamatban.
+    store.searchBankQuestions(null, 3, null);
+
+    // A GYORSABB, MÁSODIK (szűkített) keresés válasza előbb érkezik meg.
+    narrowSearch$.next([{ id: 2, questionText: 'Szűkített találat' }]);
+    narrowSearch$.complete();
+    expect(store.bankResults()).toEqual([{ id: 2, questionText: 'Szűkített találat' }]);
+
+    // Az ELSŐ (tág) keresés válasza KÉSVE érkezik meg - ez már elavult, hiszen a felület
+    // szűrői időközben megváltoztak, a tanár a szűkített találatokat várja.
+    wideSearch$.next([{ id: 1, questionText: 'Tág (elavult) találat' }]);
+    wideSearch$.complete();
+
+    // ELVÁRT: a felületen a szűrőknek megfelelő, szűkített találat maradjon. TÉNYLEGES: a
+    // késve érkező, elavult tág keresés válasza csendben felülírja.
+    expect(store.bankResults()).toEqual([{ id: 2, questionText: 'Szűkített találat' }]);
+  });
+
   it('searchBankQuestions() hibáját bankSearchError()-ban jelzi, a fő error()-t nem érinti', () => {
     configure();
     const search$ = new Subject<unknown>();
