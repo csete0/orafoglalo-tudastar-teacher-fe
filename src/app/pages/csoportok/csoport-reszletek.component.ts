@@ -72,7 +72,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           <div class="flex items-center gap-2 mt-4 text-sm">
             <label class="text-text-muted">Intézmény:</label>
             <select [ngModel]="displaySchoolId()" (ngModelChange)="changeSchool(group.id, group.name, $event)"
-              class="input !w-auto max-w-full">
+              class="input !w-auto max-w-full min-w-0">
               <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
               @for (school of schoolStore.schools(); track school.id) {
                 <option [ngValue]="school.id">{{ school.name }}</option>
