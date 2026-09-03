@@ -297,7 +297,7 @@ import {
                                        önellentmondó számpárt mutatott (pl. "csúcs 2/0"). -->
                                   · csúcs {{ day.peakSeatsInUse }}/{{ day.capacityThatDay }}
                                   @if (day.denied > 0) {
-                                    · <span class="text-danger">{{ day.denied }} kiszorult</span>
+                                    · <span class="text-danger">{{ day.denied }} sikertelen belépési kísérlet</span>
                                   }
                                   @if (day.reclaimed > 0) {
                                     · {{ day.reclaimed }} átvétel
