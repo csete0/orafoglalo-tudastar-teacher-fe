@@ -30,6 +30,13 @@ export interface TeacherQuizDto {
   assignedGroupCount: number;
   createdAt: string;
   updatedAt: string;
+
+  /**
+   * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
+   * módosította az elemet, a backend elutasítja a mentést - így nem írjuk felül
+   * némán a másik szerkesztő munkáját.
+   */
+  rowVersion?: string;
 }
 
 export interface TeacherQuizDetailDto extends TeacherQuizDto {
@@ -97,6 +104,12 @@ export interface CreateTeacherQuizRequest {
   shuffleQuestions: boolean;
   allowLateSubmission: boolean;
   examLevel?: QuizExamLevel;
+
+  /**
+   * A betöltéskor kapott konkurrencia-token. Opcionális: token nélkül a backend a
+   * korábbi módon menti (visszafelé kompatibilis).
+   */
+  rowVersion?: string;
 }
 
 export interface CreateTeacherQuizQuestionRequest {

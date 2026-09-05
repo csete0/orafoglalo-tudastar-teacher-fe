@@ -96,6 +96,7 @@ describe('KvizSzerkesztoComponent', () => {
     searchBankQuestions: ReturnType<typeof vi.fn>;
     addExistingQuestion: ReturnType<typeof vi.fn>;
     clearBankResults: ReturnType<typeof vi.fn>;
+    updateQuiz: ReturnType<typeof vi.fn>;
   };
 
   function configure(detail: TeacherQuizDetailDto | null = makeDetail(), groups: GroupDto[] = []) {
@@ -115,6 +116,7 @@ describe('KvizSzerkesztoComponent', () => {
       searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
       clearBankResults: vi.fn(),
+      updateQuiz: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -309,6 +311,23 @@ describe('KvizSzerkesztoComponent', () => {
   // startEdit() korábban feltétel nélkül patchValue-olta a formot az újonnan kattintott
   // kérdés adataival, akkor is, ha a tanár épp egy MÁSIK kérdést módosított (de nem
   // mentett) - az el nem mentett szöveg figyelmeztetés nélkül, nyomtalanul elveszett.
+  // Lost update (BE-QUIZAUTHORING-UPDATEQUIZ-LOSTUPDATE): két tanári fül, amely
+  // ugyanannak a kvíznek KÜLÖNBÖZŐ mezőit szerkeszti egy közös, elavult pillanatképből.
+  // A tokennek a mentéssel vissza kell utaznia, különben a védelem némán hatástalan.
+  it('saveSettings() visszaküldi a betöltött kvíz konkurrencia-tokenjét', () => {
+    configure(makeDetail({ rowVersion: 'AAAAAAAAB9k=' }));
+    const fixture = TestBed.createComponent(KvizSzerkesztoComponent);
+    fixture.detectChanges();
+
+    // A form a syncSettingsForm()-ból töltődik; a címet expliciten beállítjuk,
+    // hogy a required/notBlank validator ne blokkolja a mentést.
+    fixture.componentInstance.settingsForm.patchValue({ title: 'Teszt kvíz' });
+    fixture.componentInstance.saveSettings();
+
+    const request = storeMock.updateQuiz.mock.calls[0][1] as { rowVersion?: string };
+    expect(request.rowVersion).toBe('AAAAAAAAB9k=');
+  });
+
   describe('startEdit() - el nem mentett módosítás védelme (UI-TT-218)', () => {
     const q1 = makeQuestion({ id: 1, questionText: 'Első kérdés' });
     const q2 = makeQuestion({ id: 2, questionText: 'Második kérdés' });

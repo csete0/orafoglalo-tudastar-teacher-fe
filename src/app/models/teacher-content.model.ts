@@ -43,6 +43,12 @@ export interface CreateTeacherTaskRequest {
   taskOrder?: number;
   /** TaskTypes tábla (5=SQL, 6=Programozás, ...). */
   taskTypeIds?: number[];
+
+  /**
+   * A betöltéskor kapott konkurrencia-token. Opcionális: token nélkül a backend a
+   * korábbi módon menti (visszafelé kompatibilis).
+   */
+  rowVersion?: string;
 }
 
 export interface TeacherTaskDto {
@@ -54,12 +60,25 @@ export interface TeacherTaskDto {
   taskTypeIds: number[];
   solutions: TeacherSolutionDto[];
   completeSolutionSnippets: SnippetDto[];
+
+  /**
+   * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
+   * módosította az elemet, a backend elutasítja a mentést - így nem írjuk felül
+   * némán a másik szerkesztő munkáját.
+   */
+  rowVersion?: string;
 }
 
 export interface CreateTeacherSolutionRequest {
   description: string;
   points?: number;
   solutionText?: string;
+
+  /**
+   * A betöltéskor kapott konkurrencia-token. Opcionális: token nélkül a backend a
+   * korábbi módon menti (visszafelé kompatibilis).
+   */
+  rowVersion?: string;
 }
 
 export interface TeacherSolutionDto {
@@ -68,6 +87,13 @@ export interface TeacherSolutionDto {
   points?: number;
   solutionText?: string;
   snippets: SnippetDto[];
+
+  /**
+   * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
+   * módosította az elemet, a backend elutasítja a mentést - így nem írjuk felül
+   * némán a másik szerkesztő munkáját.
+   */
+  rowVersion?: string;
 }
 
 export interface SnippetDto {

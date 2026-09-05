@@ -820,6 +820,8 @@ export class KvizSzerkesztoComponent {
         shuffleQuestions: raw.shuffleQuestions,
         allowLateSubmission: raw.allowLateSubmission,
         examLevel: raw.examLevel,
+        // Konkurrencia-token a betöltött kvízből - ütközésnél a backend elutasít.
+        rowVersion: this.store.selectedDetail()?.rowVersion,
       },
       () => this.toastService.success('Beállítások mentve.'),
     );

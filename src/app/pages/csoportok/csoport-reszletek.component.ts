@@ -722,7 +722,9 @@ export class CsoportReszletekComponent implements OnInit {
     }
     this.store.update(
       groupId,
-      { name: groupName, schoolId: schoolId ?? undefined },
+      // A konkurrencia-token a MOST betöltött csoportból megy vissza: ha időközben
+      // más módosította, a backend elutasítja a mentést a néma felülírás helyett.
+      { name: groupName, schoolId: schoolId ?? undefined, rowVersion: this.store.selectedGroup()?.rowVersion },
       () => this.toastService.success('Csoport frissítve.'),
       // UI-TT-73: mentés sikertelensége esetén a select-et vissza kell állítani a
       // ténylegesen mentett (előző) értékre - az optimista beállítás (fenti
@@ -745,7 +747,7 @@ export class CsoportReszletekComponent implements OnInit {
     // szerkesztési út ne írhassa felül egymást.
     this.store.update(
       groupId,
-      { name, schoolId: this.displaySchoolId() ?? undefined },
+      { name, schoolId: this.displaySchoolId() ?? undefined, rowVersion: this.store.selectedGroup()?.rowVersion },
       () => {
         this.renaming.set(false);
         this.toastService.success('Csoport átnevezve.');

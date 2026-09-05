@@ -510,6 +510,49 @@ describe('AdminIntezmenyekComponent', () => {
     expect(component.editingLicenseId).toBeNull();
   });
 
+  // Lost update (BE-INSTITUTIONALLICENSE-UPDATE-LOSTUPDATE): a betöltéskor kapott
+  // konkurrencia-tokennek a mentéssel VISSZA kell utaznia. Enélkül a backend
+  // `EnsureNotStale` a visszafelé kompatibilis (védelem nélküli) ágon menne át, és a
+  // védelem némán hatástalan maradna - pontosan az a hiba, amit a lelet leír.
+  it('saveLicenseEdit() visszaküldi a betöltött licenc konkurrencia-tokenjét', () => {
+    configure();
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({ id: 42, rowVersion: 'AAAAAAAAB9k=' });
+    component.startEditLicense(license);
+    component.editCapacity = 40;
+    component.editValidFrom = '2026-09-01';
+    component.editValidTo = '2027-09-01';
+    component.editIdleWindowMinutes = 25;
+
+    component.saveLicenseEdit(license);
+
+    const request = licenseStoreMock.update.mock.calls[0][1] as { rowVersion?: string };
+    expect(request.rowVersion).toBe('AAAAAAAAB9k=');
+  });
+
+  // Adatvesztés elleni védelem: ütközésnél a form NEM zárhat be, különben az admin
+  // begépelt módosítása elveszne, és a "töltsd újra" tanács értelmét vesztené.
+  it('ütközésre (a store hiba-ága) a szerkesztő form nyitva marad a begépelt értékekkel', () => {
+    configure();
+    // A valódi store hiba esetén NEM hívja az onSuccess-t.
+    licenseStoreMock.update.mockImplementation(() => {});
+    const fixture = TestBed.createComponent(AdminIntezmenyekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    const license = makeLicense({ id: 42, rowVersion: 'elavult' });
+    component.startEditLicense(license);
+    component.editCapacity = 99;
+
+    component.saveLicenseEdit(license);
+
+    expect(component.editingLicenseId).toBe(42);
+    expect(component.editCapacity).toBe(99);
+  });
+
   it('saveLicenseEdit() üres számlázási megjegyzést null-ra alakít', () => {
     configure();
     const fixture = TestBed.createComponent(AdminIntezmenyekComponent);

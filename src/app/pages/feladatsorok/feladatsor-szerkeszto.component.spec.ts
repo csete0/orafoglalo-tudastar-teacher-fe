@@ -846,7 +846,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       const component = fixture.componentInstance;
       component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
       fixture.detectChanges();
       expect(component.editingSolutionId()).toBe(5);
 
@@ -863,12 +863,12 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       const component = fixture.componentInstance;
       component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
       component.setEditSolutionDescription(5, '   ');
       fixture.detectChanges();
 
       expect(component.isEditSolutionDraftDescriptionBlank(5)).toBe(true);
-      component.saveEditSolution(1, 5);
+      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
       expect(taskSetStoreMock.updateSolution).not.toHaveBeenCalled();
     });
 
@@ -881,14 +881,14 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       const component = fixture.componentInstance;
       component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
       component.setEditSolutionDescription(5, '  Frissített leírás  ');
       component.setEditSolutionPoints(5, 3);
 
-      component.saveEditSolution(1, 5);
+      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
 
       expect(taskSetStoreMock.updateSolution).toHaveBeenCalledWith(
-        1, 5, { description: 'Frissített leírás', points: 3 }, expect.any(Function),
+        1, 5, { description: 'Frissített leírás', points: 3, rowVersion: 'v-sol-1' }, expect.any(Function),
       );
       expect(component.editingSolutionId()).toBeNull();
     });
@@ -899,11 +899,11 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       const component = fixture.componentInstance;
       component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] });
+      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
       component.setEditSolutionDescription(5, 'Új leírás');
       taskSetStoreMock.loading.set(true);
 
-      component.saveEditSolution(1, 5);
+      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
 
       expect(taskSetStoreMock.updateSolution).not.toHaveBeenCalled();
     });
@@ -1369,6 +1369,21 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.isEditTaskDraftInvalid(1)).toBe(true);
       component.saveEditTask(1, task);
       expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
+    });
+
+    // Lost update (BE-TASKEDIT-LOSTUPDATE): a token a betöltött feladatból megy vissza.
+    it('saveEditTask() visszaküldi a betöltött feladat konkurrencia-tokenjét', () => {
+      configureWithTask();
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], solutions: [], rowVersion: 'AAAAAAAAB9k=' };
+      component.startEditTask(task);
+
+      component.saveEditTask(1, task);
+
+      const request = taskSetStoreMock.updateTask.mock.calls[0][2] as { rowVersion?: string };
+      expect(request.rowVersion).toBe('AAAAAAAAB9k=');
     });
 
     it('érvényes szerkesztés esetén store.updateTask()-t hívja a helyes (trimmelt cím/leírás + pont + sorrend) request-tel, siker esetén bezárja a szerkesztőt', () => {

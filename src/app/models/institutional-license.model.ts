@@ -28,6 +28,13 @@ export interface InstitutionalLicenseDto {
    * eredménye, nem a licenc tartós állapota).
    */
   skippedDueToActiveSessionCount: number;
+
+  /**
+   * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
+   * módosította az elemet, a backend elutasítja a mentést - így nem írjuk felül
+   * némán a másik szerkesztő munkáját.
+   */
+  rowVersion?: string;
 }
 
 export interface CreateInstitutionalLicenseRequest {
@@ -47,6 +54,12 @@ export interface UpdateInstitutionalLicenseRequest {
   validTo: string;
   billingNote?: string | null;
   idleWindowMinutes?: number | null;
+
+  /**
+   * A betöltéskor kapott konkurrencia-token. Opcionális: token nélkül a backend a
+   * korábbi módon menti (visszafelé kompatibilis).
+   */
+  rowVersion?: string;
 }
 
 /**

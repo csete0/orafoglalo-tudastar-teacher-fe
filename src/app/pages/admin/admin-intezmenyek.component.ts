@@ -584,6 +584,8 @@ export class AdminIntezmenyekComponent {
         validTo: this.editValidTo,
         billingNote: this.editBillingNote?.trim() || null,
         idleWindowMinutes: this.editIdleWindowMinutes,
+        // Konkurrencia-token a betöltött licencből - ütközésnél a backend elutasít.
+        rowVersion: license.rowVersion,
       },
       (updated) => {
         this.editingLicenseId = null;

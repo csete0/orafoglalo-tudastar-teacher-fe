@@ -244,7 +244,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                         [ngModelOptions]="{standalone: true}"
                                         class="input !px-2 !py-1" />
                                     </div>
-                                    <button (click)="saveEditSolution(detail.id, solution.id)"
+                                    <button (click)="saveEditSolution(detail.id, solution)"
                                       [disabled]="isEditSolutionDraftDescriptionBlank(solution.id) || store.loading()"
                                       class="btn btn-primary !px-3 !py-1.5">
                                       Mentés
@@ -878,17 +878,21 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     if (this.editSolutionDrafts[solutionId]) this.editSolutionDrafts[solutionId].points = value;
   }
 
-  saveEditSolution(taskSetId: number, solutionId: number): void {
+  // A teljes megoldás-DTO-t vesszük át (nem csak az azonosítót), mert a
+  // konkurrencia-token is kell hozzá - ugyanaz a minta, mint a saveEditTask()-nál.
+  saveEditSolution(taskSetId: number, solution: TeacherSolutionDto): void {
     // UI-TT-115/123 testvér-guard - ld. addSolution()/deleteSolution() fenti kommentje.
     if (this.store.loading()) return;
-    const draft = this.editSolutionDrafts[solutionId];
+    const draft = this.editSolutionDrafts[solution.id];
     if (!draft || !draft.description.trim()) return;
     this.store.updateSolution(
       taskSetId,
-      solutionId,
+      solution.id,
       {
         description: draft.description.trim(),
         points: draft.points,
+        // Konkurrencia-token a betöltött megoldásból - ütközésnél a backend elutasít.
+        rowVersion: solution.rowVersion,
       },
       () => {
         this.editingSolutionId.set(null);
@@ -994,6 +998,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         // EREDETI taskTypeIds-ét hagyjuk változatlanul, hogy egy meg nem érintett mező ne
         // veszíthessen el legacy adatot.
         taskTypeIds: draft.taskTypeId != null ? [draft.taskTypeId] : task.taskTypeIds,
+        // Konkurrencia-token a betöltött feladatból - ütközésnél a backend elutasít.
+        rowVersion: task.rowVersion,
       },
       () => {
         this.editingTaskId.set(null);

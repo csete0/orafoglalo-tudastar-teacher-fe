@@ -287,11 +287,45 @@ describe('CsoportReszletekComponent', () => {
 
     expect(groupStoreMock.update).toHaveBeenCalledWith(
       1,
-      { name: 'Teszt Csoport', schoolId: school.id },
+      { name: 'Teszt Csoport', schoolId: school.id, rowVersion: undefined },
       expect.any(Function),
       expect.any(Function),
     );
     expect(fixture.componentInstance.displaySchoolId()).toBe(school.id);
+  });
+
+  // Lost update (BE-GROUPEDIT-LOSTUPDATE): a token a MOST betöltött csoportból megy
+  // vissza. Enélkül a backend védelme a visszafelé kompatibilis ágon némán átengedne.
+  it('saveRename() visszaküldi a betöltött csoport konkurrencia-tokenjét', () => {
+    configure(makeGroup({ rowVersion: 'AAAAAAAAB9k=' }), []);
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startRename('Teszt Csoport');
+    component.renameValue = 'Új név';
+    component.saveRename(1);
+
+    const request = groupStoreMock.update.mock.calls[0][1] as { rowVersion?: string };
+    expect(request.rowVersion).toBe('AAAAAAAAB9k=');
+  });
+
+  // Adatvesztés elleni védelem: ütközésnél az átnevező mező nyitva marad a begépelt
+  // névvel - a "töltsd újra" tanács csak akkor értelmes, ha a munka nem veszett el.
+  it('sikertelen mentésnél az átnevező nyitva marad a begépelt névvel', () => {
+    configure(makeGroup({ rowVersion: 'elavult' }), []);
+    // A valódi store hibánál NEM hívja az onSuccess-t.
+    groupStoreMock.update.mockImplementation(() => {});
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.startRename('Teszt Csoport');
+    component.renameValue = 'Új név';
+    component.saveRename(1);
+
+    expect(component.renaming()).toBe(true);
+    expect(component.renameValue).toBe('Új név');
   });
 
   // BUG UI-TT-73: a UI-TT-4 fix (displaySchoolId + effect()) sikeres mentésnél helyes, DE
