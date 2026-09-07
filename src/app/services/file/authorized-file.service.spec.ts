@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withXhr } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { AuthorizedFileService } from './authorized-file.service';
 
@@ -12,7 +12,7 @@ describe('AuthorizedFileService', () => {
     createdObjectUrls.length = 0;
 
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(withXhr()), provideHttpClientTesting()],
     });
     service = TestBed.inject(AuthorizedFileService);
     httpMock = TestBed.inject(HttpTestingController);

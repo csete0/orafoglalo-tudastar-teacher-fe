@@ -1,11 +1,12 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
 import { AuthStore } from './services/auth/store/auth.store';
 import { HeaderDropdownCoordinatorService } from './shared/header-dropdown-coordinator.service';
 
-@Component({ standalone: true, template: '' })
+@Component({ standalone: true, changeDetection: ChangeDetectionStrategy.Eager,
+ template: '' })
 class BlankTestComponent {}
 
 describe('AppComponent', () => {
