@@ -8,8 +8,16 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Increase Node memory
-ENV NODE_OPTIONS="--max_old_space_size=8192"
+# Node heap-korlat a buildhez.
+#
+# 8192-rol csokkentve: a CT-ben OSSZESEN 8 GB van, tehat a 8 GB-os heap-plafon a
+# gyakorlatban azt jelentette, hogy a Node addig nott, amig a rendszer ki nem lotte -
+# az Angular 22-re frissites utan a build "Error: The service was stopped"-dal
+# hasalt el (az esbuild munkafolyamatat OOM-ra kilottek).
+#
+# A 4096 boven eleg: ugyanez a produkcios build helyben MEG SZUKEBB, 3584 MB-os
+# korlat alatt is atment.
+ENV NODE_OPTIONS="--max_old_space_size=4096"
 
 # Install dependencies
 RUN npm ci --force
