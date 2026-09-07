@@ -11,4 +11,12 @@ export interface PublicCategoryDto {
    * több szintet, ilyenkor sosem kérdezünk.
    */
   suggestedLevelId: number | null;
+
+  /**
+   * BE-TEACHERCONTENT-OFFICIAL-EXAM-CATEGORY: KÉNYSZER, nem tanácsadó (ellentétben a
+   * `suggestedLevelId`-vel). false = a hivatalos érettségi feladatsorok kategóriája,
+   * ide a tanár nem sorolhat be saját feladatsort — a backend el is utasítja. Az űrlap
+   * ezért ki sem ajánlja, hogy a tanár ne egy hibaüzenetből tudja meg.
+   */
+  isTeacherSelectable: boolean;
 }

@@ -226,6 +226,9 @@ describe('FeladatsorokListaComponent', () => {
       slug: c.slug ?? `kategoria-${i + 1}`,
       description: c.description ?? '',
       suggestedLevelId: c.suggestedLevelId ?? null,
+      // A default SZÁNDÉKOSAN `true`: így a meglévő tesztek változatlanul futnak, és ez
+      // tükrözi a DB DEFAULT 1-et is (minden korábbi kategória választható marad).
+      isTeacherSelectable: c.isTeacherSelectable ?? true,
     }));
   }
 
@@ -250,6 +253,58 @@ describe('FeladatsorokListaComponent', () => {
     fixture.detectChanges();
     return { fixture, askSpy };
   }
+
+  // ---------------------------------------------------------------------------
+  // BE-TEACHERCONTENT-OFFICIAL-EXAM-CATEGORY: a tantárgyi kategória legördülője a
+  // `GET /public/categories` SZŰRETLEN listájából épült, így a tanár a saját feladatsorát a
+  // "Digitális kultúra közép-/emelt szintű érettségi" kategóriákba is besorolhatta. Ezek nem
+  // gyakorlóanyagok, hanem az évente kétszer megírt HIVATALOS feladatsorok gyűjteményei.
+  //
+  // Az érdemi tiltás a backendben van (TeacherContentService) - ez a szűrés csak azért kell,
+  // hogy a tanár ne egy elutasított mentésből értesüljön a szabályról. A publikus katalógus
+  // SZÁNDÉKOSAN továbbra is visszaadja a kategóriát (a diákok böngészik), ezért nem a
+  // válasz megcsonkítása, hanem a jelző alapú szűrés a helyes megoldás.
+  // ---------------------------------------------------------------------------
+  function categoryOptionLabels(fixture: { nativeElement: HTMLElement }) {
+    return [...fixture.nativeElement.querySelectorAll<HTMLOptionElement>(
+      'select[formControlName="subjectCategoryId"] option')].map((o) => o.textContent!.trim());
+  }
+
+  it('BE-TEACHERCONTENT-OFFICIAL-EXAM-CATEGORY: a hivatalos érettségi kategóriát ki sem ajánlja ' +
+    'a legördülő, a gyakorló kategóriát viszont igen', () => {
+    const { fixture } = setupWithCategories(
+      categoriesOf(
+        { id: 2, name: 'Digitális kultúra emelt szintű érettségi', isTeacherSelectable: false },
+        { id: 3, name: 'Programozás emelt szintű érettségi felkészítő gyakorló feladatok' },
+      ),
+    );
+
+    const labels = categoryOptionLabels(fixture);
+    expect(labels).not.toContain('Digitális kultúra emelt szintű érettségi');
+    // Ellenőrző eset: a szűrés SZŰK - a nevében is érettségit ígérő GYAKORLÓ kategóriát
+    // nem szabad kiszűrnie, különben a fix névre szűrne, nem a jelzőre.
+    expect(labels).toContain('Programozás emelt szintű érettségi felkészítő gyakorló feladatok');
+  });
+
+  it('BE-TEACHERCONTENT-OFFICIAL-EXAM-CATEGORY: a szint-eltérés megerősítése a hivatalos ' +
+    'kategória kiszűrése után is a HELYES kategórianevet mutatja', async () => {
+    // A `selectableCategories()` szűrt, a `categories()` nyers - a megerősítő üzenet a
+    // nyersből keres vissza. Ha valaki a szűrtre cserélné, egy kiszűrt kategória neve
+    // eltűnne az üzenetből; ez a teszt azt köti le, hogy a visszakeresés a teljes listán megy.
+    const { fixture, askSpy } = setupWithCategories(
+      categoriesOf(
+        { id: 2, name: 'Digitális kultúra emelt szintű érettségi', isTeacherSelectable: false },
+        { id: 1010, name: 'Kezdő programozás', suggestedLevelId: 1 },
+      ),
+    );
+    askSpy.mockResolvedValue(false);
+
+    fillForm(fixture, 3, 1010);
+    await fixture.componentInstance.create();
+
+    expect(askSpy).toHaveBeenCalled();
+    expect(JSON.stringify(askSpy.mock.calls[0])).toContain('Kezdő programozás');
+  });
 
   it('BE-TASKSET-LEVEL-CATEGORY-MISMATCH: eltérő szintnél megerősítést kér, a kategória és mindkét ' +
     'szint nevével', async () => {

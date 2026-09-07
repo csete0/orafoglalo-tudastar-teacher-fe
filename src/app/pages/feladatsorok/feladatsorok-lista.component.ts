@@ -56,7 +56,7 @@ const LEVELS = [
           </select>
           <select formControlName="subjectCategoryId" class="input">
             <option [ngValue]="null">Nincs tantárgyi kategória</option>
-            @for (category of categories(); track category.id) {
+            @for (category of selectableCategories(); track category.id) {
               <option [ngValue]="category.id">{{ category.name }}</option>
             }
           </select>
@@ -151,6 +151,16 @@ export class FeladatsorokListaComponent {
   readonly categories = toSignal(
     this.categoryService.getAll().pipe(catchError(() => of([] as PublicCategoryDto[]))),
     { initialValue: [] as PublicCategoryDto[] },
+  );
+
+  // BE-TEACHERCONTENT-OFFICIAL-EXAM-CATEGORY: a hivatalos érettségi kategóriák ("Digitális
+  // kultúra közép-/emelt szintű érettségi") az évente kétszer megírt VALÓDI feladatsoroké -
+  // saját feladatsor nem kerülhet közéjük. A tényleges tiltás a backendben él, ez csak a
+  // felajánlást szűri, hogy a tanár ne egy elutasított mentésből tudja meg.
+  // A nyers `categories()` SZÁNDÉKOSAN megmarad: a szint-eltérés üzenete egy MÁR kiválasztott
+  // kategóriát keres vissza, azt nem szabad szűrt listából tenni.
+  readonly selectableCategories = computed(() =>
+    this.categories().filter((c) => c.isTeacherSelectable),
   );
 
   readonly createForm = this.fb.nonNullable.group({
