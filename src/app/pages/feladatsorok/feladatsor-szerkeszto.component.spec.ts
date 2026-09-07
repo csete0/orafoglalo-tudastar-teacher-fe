@@ -18,6 +18,9 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     levelId: 2,
     isPublished: false,
     takedownAt: null,
+    // Alapértelmezésben nincs rajta vizsga, tehát törölhető. A tiltott esetet a
+    // törlés-tesztek állítják be külön.
+    hasExamSessions: false,
     createdAt: new Date().toISOString(),
     taskCount: 0,
     tasks: [],
@@ -222,6 +225,64 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // A "create_lite.sql" felirat a fájl-feltöltő panelen mindig ott van
     // (statikus címke) — a figyelmeztető sáv jelenlétét kell ellenőrizni.
     expect(fixture.nativeElement.querySelector('.text-warning')).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // A publikálás eddig EGYIRÁNYÚ utca volt: visszavonni nem lehetett, és mivel publikált
+  // feladatsort törölni sem, a tanár a saját tartalmát sem tudta eltávolítani - a
+  // felületen ráadásul törlés-gomb sem volt, hiába létezett a végpont.
+  //
+  // A törlés két tiltó esetét ITT mutatjuk meg, nem egy elutasított kérés hibaüzenetében.
+  // ---------------------------------------------------------------------------
+  const gomb = (f: { nativeElement: HTMLElement }, azonosito: string) =>
+    f.nativeElement.querySelector(`[data-testid="${azonosito}"]`);
+
+  function renderel(detail: ReturnType<typeof makeDetail>) {
+    configure(detail);
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('publikált feladatsornál MEGJELENIK a visszavonás gomb', () => {
+    const fixture = renderel(makeDetail({ isPublished: true }));
+
+    expect(gomb(fixture, 'unpublish-button')).not.toBeNull();
+  });
+
+  it('piszkozatnál NINCS visszavonás gomb - nincs mit visszavonni', () => {
+    const fixture = renderel(makeDetail({ isPublished: false }));
+
+    expect(gomb(fixture, 'unpublish-button')).toBeNull();
+  });
+
+  it('admin-takedown alatt NINCS visszavonás gomb - azt csak admin oldhatja fel', () => {
+    // A szerver is elutasítaná; a gomb elrejtése azért kell, hogy a tanár ne egy
+    // hibaüzenetből tudja meg, hogy ez az állapot nem az övé.
+    const fixture = renderel(makeDetail({ isPublished: false, takedownAt: new Date().toISOString() }));
+
+    expect(gomb(fixture, 'unpublish-button')).toBeNull();
+  });
+
+  it('piszkozatnál, vizsga nélkül MEGJELENIK a törlés gomb', () => {
+    const fixture = renderel(makeDetail({ isPublished: false, hasExamSessions: false }));
+
+    expect(gomb(fixture, 'delete-taskset-button')).not.toBeNull();
+  });
+
+  it('publikált feladatsornál NINCS törlés gomb - előbb vissza kell vonni', () => {
+    const fixture = renderel(makeDetail({ isPublished: true, hasExamSessions: false }));
+
+    expect(gomb(fixture, 'delete-taskset-button')).toBeNull();
+  });
+
+  it('vizsga-munkamenettel NINCS törlés gomb, hanem MAGYARÁZAT - a statisztikák miatt', () => {
+    // Ez a legfontosabb eset: ilyet SOHA nem törlünk, mert a diákok eredményei és
+    // statisztikái a feladatsorhoz kötődnek. A tanárnak látnia kell, hogy MIÉRT nem.
+    const fixture = renderel(makeDetail({ isPublished: false, hasExamSessions: true }));
+
+    expect(gomb(fixture, 'delete-taskset-button')).toBeNull();
+    expect(gomb(fixture, 'delete-blocked-exam')?.textContent).toContain('Vizsga készült rajta');
   });
 
   it('publikált feladatsornál a publikálás gomb letiltva, "Publikálva" felirattal', () => {

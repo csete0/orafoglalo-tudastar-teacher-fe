@@ -14,6 +14,9 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     levelId: 1,
     isPublished: false,
     takedownAt: null,
+    // Alapértelmezésben nincs rajta vizsga, tehát törölhető. A tiltott esetet a
+    // törlés-tesztek állítják be külön.
+    hasExamSessions: false,
     createdAt: new Date().toISOString(),
     taskCount: 0,
     tasks: [],

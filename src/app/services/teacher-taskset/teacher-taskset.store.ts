@@ -150,6 +150,14 @@ export class TeacherTaskSetStore {
     });
   }
 
+  /**
+   * Visszavonas. A reszletet UJRA BETOLTJUK, nem lokalisan irjuk at: a szerver a
+   * `publishedSchoolId`-t is nullazza, es egy kezzel frissitett allapot elcsuszna tole.
+   */
+  unpublish(id: number): void {
+    this.mutateAndReload(this.service.unpublish(id), id);
+  }
+
   publish(id: number, onSuccess?: () => void): void {
     if (this._loading()) return;
 

@@ -24,6 +24,16 @@ export interface TeacherTaskSetDto {
    * nem is ismerte ezt a mezőt.
    */
   takedownAt: string | null;
+
+  /**
+   * Van-e MAR vizsga-munkamenet a feladatsoron. Ha igen, SOSEM torolheto - a diakok
+   * eredmenyei es statisztikai hozza kotodnek.
+   *
+   * Ezert nincs soft torles: a kemeny torles PONTOSAN akkor tiltott, amikor van mit
+   * megorizni. A jelzo azert kell, hogy a gomb eleve letiltott legyen a magyarazattal -
+   * a tanar ne egy elutasitott keresbol tudja meg.
+   */
+  hasExamSessions: boolean;
 }
 
 export interface TeacherTaskSetDetailDto extends TeacherTaskSetDto {

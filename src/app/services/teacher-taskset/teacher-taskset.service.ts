@@ -43,6 +43,11 @@ export class TeacherTaskSetService {
     return this.http.post<PublishResultDto>(`${this.baseUrl}/task-sets/${id}/publish`, {});
   }
 
+  /** A publikalas parja. Enelkul a publikalas egyiranyu utca volt. */
+  unpublish(id: number): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/task-sets/${id}/unpublish`, {});
+  }
+
   addTask(taskSetId: number, request: CreateTeacherTaskRequest): Observable<TeacherTaskDto> {
     return this.http.post<TeacherTaskDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks`, request);
   }

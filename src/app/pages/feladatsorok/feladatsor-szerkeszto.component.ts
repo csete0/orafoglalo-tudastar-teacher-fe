@@ -64,6 +64,30 @@ type SnippetDraft = Record<number, Record<number, string>>;
               data-testid="publish-button" class="btn btn-primary">
               {{ detail.isPublished ? 'Publikálva' : 'Publikálás' }}
             </button>
+            <!--
+              A publikálás eddig EGYIRÁNYÚ utca volt: visszavonni nem lehetett, és mivel
+              publikált feladatsort törölni sem, a tanár a saját tartalmát sem tudta
+              eltávolítani - csak adminon keresztül.
+              Admin-takedown alatt a gomb REJTVE marad: azt az állapotot csak admin oldhatja fel.
+            -->
+            @if (detail.isPublished && !detail.takedownAt) {
+              <button (click)="unpublish(detail.id)" [disabled]="store.loading()"
+                data-testid="unpublish-button" class="btn btn-ghost">Visszavonás</button>
+            }
+            <!--
+              A törlésnek KÉT tiltó esete van, és mindkettőt ITT mutatjuk, nem egy elutasított
+              kérés hibaüzenetében: publikált feladatsor (előbb vissza kell vonni), illetve ha
+              már van rajta vizsga-munkamenet - ilyet SOHA nem törlünk, mert a diákok
+              eredményei és statisztikái hozzá kötődnek.
+            -->
+            @if (detail.hasExamSessions) {
+              <span class="text-xs text-text-muted" data-testid="delete-blocked-exam">
+                Vizsga készült rajta - nem törölhető
+              </span>
+            } @else if (!detail.isPublished) {
+              <button (click)="deleteTaskSet(detail.id, detail.title)" [disabled]="store.loading()"
+                data-testid="delete-taskset-button" class="btn btn-ghost text-danger">Törlés</button>
+            }
           </div>
         </div>
 
@@ -766,6 +790,39 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   isTaskDraftMaxPointsInvalid(typeId: number): boolean {
     const maxPoints = this.newTaskDrafts[typeId]?.maxPoints;
     return maxPoints == null || maxPoints < 1 || maxPoints > 1000;
+  }
+
+  /** Visszavonás: a publikálás párja. Megerősítést kér - a diákok elvesztik a hozzáférést. */
+  async unpublish(id: number): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: 'Biztosan visszavonod a publikálást? A feladatsor ezután nem lesz elérhető a diákoknak.',
+      confirmLabel: 'Visszavonás',
+    });
+    if (!ok) return;
+    // Ugyanaz a dupla-kattintás guard, mint a törléseknél: a megerősítő dialógus alatt egy
+    // másik mutáció elindulhatott, a mögöttes mutateAndReload() pedig nem idempotens.
+    if (this.store.loading()) return;
+    this.store.unpublish(id);
+  }
+
+  /**
+   * A feladatsor törlése. A gomb CSAK akkor látszik, ha ténylegesen törölhető; ez a
+   * megerősítés a véletlen kattintás ellen véd. A cím is szerepel benne, mert a tanárnak
+   * a dialógusból kell tudnia ellenőrizni, hogy a jó feladatsorra vonatkozik.
+   */
+  async deleteTaskSet(id: number, title: string): Promise<void> {
+    const ok = await this.confirmService.ask({
+      message: `Biztosan törlöd a(z) "${title}" feladatsort a benne lévő összes feladattal és megoldással együtt? Ez nem vonható vissza.`,
+      danger: true,
+      confirmLabel: 'Törlés',
+    });
+    if (!ok) return;
+    if (this.store.loading()) return;
+    this.store.deleteTaskSet(id, () => {
+      this.toastService.success('Feladatsor törölve.');
+      // A szerkesztő-oldal egy már nem létező feladatsorra mutatna - vissza a listára.
+      this.router.navigate(['/feladatsorok']);
+    });
   }
 
   async deleteTask(taskSetId: number, taskId: number, taskTitle: string): Promise<void> {
