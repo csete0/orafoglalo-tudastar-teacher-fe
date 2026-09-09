@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { CsoportReszletekComponent } from './csoport-reszletek.component';
 import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
@@ -8,9 +9,11 @@ import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { GroupSeatStore } from '../../services/group/group-seat.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { GroupDto } from '../../models/group.model';
 import { SchoolDto } from '../../models/school.model';
 import { GroupSeatOverviewDto } from '../../models/group-seat.model';
+import { TeacherGroupTaskSetAssignmentDto } from '../../models/teacher-content.model';
 
 function makeGroup(overrides: Partial<GroupDto> = {}): GroupDto {
   return {
@@ -552,5 +555,102 @@ describe('CsoportReszletekComponent', () => {
     const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
     expect(buttons.some((b) => b.textContent?.includes('Archiválás'))).toBe(true);
     expect(buttons.some((b) => b.textContent?.includes('Visszaállítás'))).toBe(false);
+  });
+});
+
+// B4: a "Kiadva" fül feladatsor-kiadási szekciója
+describe('CsoportReszletekComponent — B4 "Kiadva" fül, feladatsor-kiadások', () => {
+  function makeAssignment(overrides: Partial<TeacherGroupTaskSetAssignmentDto> = {}): TeacherGroupTaskSetAssignmentDto {
+    return {
+      assignmentId: 1,
+      taskSetId: 10,
+      taskSetTitle: 'Algebrai alapok',
+      taskCount: 5,
+      assignedAt: new Date().toISOString(),
+      dueAt: null,
+      completedMemberCount: 0,
+      memberCount: 3,
+      ...overrides,
+    };
+  }
+
+  function configure(assignments: TeacherGroupTaskSetAssignmentDto[] = []) {
+    const groupStoreMock = {
+      selectedGroup: signal(makeGroup()),
+      groups: signal([makeGroup()]),
+      members: signal([]),
+      loading: signal(false),
+      error: signal(null),
+      loadMine: vi.fn(),
+      select: vi.fn(),
+      loadMembers: vi.fn(),
+      removeMember: vi.fn(),
+      archive: vi.fn(),
+      unarchive: vi.fn(),
+      update: vi.fn(),
+      regenerateInvite: vi.fn(),
+      setJoinEnabled: vi.fn(),
+      clearError: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [CsoportReszletekComponent],
+      providers: [
+        provideRouter([]),
+        { provide: GroupStore, useValue: groupStoreMock },
+        { provide: SchoolStore, useValue: { schools: signal([]), error: signal(null), loadMine: vi.fn() } },
+        { provide: ReportStore, useValue: { groupActivity: signal([]), error: signal(null), loadGroupActivity: vi.fn() } },
+        { provide: LeaderboardStore, useValue: { leaderboard: signal(null), error: signal(null), loadGroupLeaderboard: vi.fn() } },
+        { provide: GroupSeatStore, useValue: { overview: signal(null), lastReleaseResult: signal(null), loading: signal(false), error: signal(null), load: vi.fn(), releaseSeat: vi.fn(), releaseAll: vi.fn() } },
+        { provide: ConfirmService, useValue: { ask: vi.fn().mockResolvedValue(true) } },
+        { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn().mockReturnValue(of(assignments)), getGroupAssignments: vi.fn().mockReturnValue(of([])), assignToGroup: vi.fn(), revokeAssignment: vi.fn() } },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
+      ],
+    });
+  }
+
+  // isDueSoon() segédfüggvény: 48 órán belüli határidő vizuális sürgősséget kap
+  it('isDueSoon() igaz < 48 órán belül lejáró határidőnél', () => {
+    configure();
+    const comp = TestBed.createComponent(CsoportReszletekComponent).componentInstance;
+    const soon = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    expect(comp.isDueSoon(soon)).toBe(true);
+  });
+
+  it('isDueSoon() hamis >= 48 órán túli határidőnél', () => {
+    configure();
+    const comp = TestBed.createComponent(CsoportReszletekComponent).componentInstance;
+    const later = new Date(Date.now() + 49 * 3600 * 1000).toISOString();
+    expect(comp.isDueSoon(later)).toBe(false);
+  });
+
+  it('isDueSoon() hamis lejárt határidőnél', () => {
+    configure();
+    const comp = TestBed.createComponent(CsoportReszletekComponent).componentInstance;
+    const past = new Date(Date.now() - 3600 * 1000).toISOString();
+    expect(comp.isDueSoon(past)).toBe(false);
+  });
+
+  it('B4: a Kiadva fülön feladatsor-kiadások listája megjelenik', () => {
+    const due = new Date(Date.now() + 100 * 3600 * 1000).toISOString();
+    configure([makeAssignment({ taskSetTitle: 'Algebrai alapok', dueAt: due })]);
+
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('kiadva');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Algebrai alapok');
+  });
+
+  it('B4: üres feladatsor-kiadás listánál nincs hiba, a szekció csendben üres marad', () => {
+    configure([]);
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('kiadva');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.groupTaskSetAssignments()).toHaveLength(0);
+    expect(fixture.componentInstance.taskSetAssignmentsError()).toBeNull();
   });
 });

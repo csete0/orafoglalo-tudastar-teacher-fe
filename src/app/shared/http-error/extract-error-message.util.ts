@@ -11,7 +11,7 @@
  * majd a `GroupStore`/`SchoolStore`-ban is (255 karakteres névhossz-limit
  * túllépése) bevezetve, ide emelve, hogy ne triplázódjon.
  */
-export function extractErrorMessage(err: any, fallback: string): string {
+export function extractErrorMessage(err: any, fallback = 'Hiba történt.'): string {
   // UI-TT-109: egy nginx `client_max_body_size`-t meghaladó fájlfeltöltés HTML-testű
   // 413-at ad vissza (nem JSON-t) — a body?.errorMessage/body?.errors ellenőrzések erre
   // értelemszerűen sosem illenek rá, ezért ez korábban csendben a tartalmatlan `fallback`
