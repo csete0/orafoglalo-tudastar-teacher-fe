@@ -65,6 +65,15 @@ const ADMIN_CARDS: DashboardCard[] = [
     accent: 'accent-0',
     tile: 'icon-tile-primary',
   },
+  // B3: kuponkódok az előfizetés-vásárláshoz - szintén csak a vezérlőpultról.
+  {
+    path: '/admin/kuponok',
+    title: 'Kuponok',
+    description: 'Kedvezménykódok létrehozása és inaktiválása az előfizetés-vásárláshoz.',
+    icon: 'check',
+    accent: 'accent-2',
+    tile: 'icon-tile-success',
+  },
 ];
 
 @Component({
