@@ -3,11 +3,14 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  AssignTaskSetToGroupRequest,
   CreateTeacherSolutionRequest,
   CreateTeacherTaskRequest,
   CreateTeacherTaskSetRequest,
   PublishResultDto,
   SnippetDto,
+  TaskSetAssignmentDto,
+  TeacherGroupTaskSetAssignmentDto,
   TeacherSolutionDto,
   TeacherTaskDto,
   TeacherTaskSetDetailDto,
@@ -90,5 +93,21 @@ export class TeacherTaskSetService {
 
   deleteFile(fileId: string): Observable<unknown> {
     return this.http.delete(`${this.baseUrl}/files/${fileId}`);
+  }
+
+  getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {
+    return this.http.get<TaskSetAssignmentDto[]>(`${this.baseUrl}/task-sets/${taskSetId}/assignments`);
+  }
+
+  assignToGroup(taskSetId: number, request: AssignTaskSetToGroupRequest): Observable<TaskSetAssignmentDto> {
+    return this.http.post<TaskSetAssignmentDto>(`${this.baseUrl}/task-sets/${taskSetId}/assign`, request);
+  }
+
+  revokeAssignment(assignmentId: number): Observable<unknown> {
+    return this.http.delete(`${this.baseUrl}/task-set-assignments/${assignmentId}`);
+  }
+
+  getGroupTaskSetAssignments(groupId: number): Observable<TeacherGroupTaskSetAssignmentDto[]> {
+    return this.http.get<TeacherGroupTaskSetAssignmentDto[]>(`${this.baseUrl}/groups/${groupId}/task-set-assignments`);
   }
 }

@@ -1,19 +1,23 @@
+import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { FormsModule } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, filter, firstValueFrom, of, take } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
-import { SnippetDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
+import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { environment } from '../../../environments/environment';
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -51,7 +55,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -499,6 +503,79 @@ type SnippetDraft = Record<number, Record<number, string>>;
             }
           </div>
         </section>
+
+        <!-- ── Kiadás csoportnak ──────────────────────────────── -->
+        <section id="kiadas" aria-label="Kiadás csoportnak" class="card p-5 mt-8">
+          <h2 class="font-bold mb-3">Kiadás csoportnak</h2>
+
+          @if (assignmentsError()) {
+            <p class="text-sm text-danger mb-3">{{ assignmentsError() }}</p>
+          }
+
+          <ul class="space-y-2 mb-4">
+            @for (assignment of activeAssignments(); track assignment.id) {
+              <li class="flex items-center gap-2 text-sm">
+                <app-icon name="users" class="w-4 h-4 block text-text-muted" />
+                <span class="flex-1">
+                  {{ groupLabel(assignment.groupId, assignment.groupName) }}
+                  @if (assignment.opensAt) {
+                    <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                  }
+                  @if (assignment.dueAt) {
+                    <span class="text-text-muted">· határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                  }
+                </span>
+                <button type="button" class="btn btn-ghost text-danger" (click)="revokeAssignment(assignment.id)">
+                  Visszavonás
+                </button>
+              </li>
+            } @empty {
+              @if (!assignmentsLoading()) {
+                <li class="text-sm text-text-muted">Még nincs kiadva egyetlen csoportnak sem.</li>
+              }
+            }
+          </ul>
+
+          @if (!detail.isPublished) {
+            <p class="text-sm text-text-muted">Előbb publikáld a feladatsort, utána adhatod ki csoportoknak.</p>
+          } @else {
+            <form [formGroup]="assignForm" (ngSubmit)="assign(detail.id)" class="space-y-3 border-t border-border pt-4">
+              <label class="block">
+                <span class="text-sm text-text-muted">Csoport</span>
+                <select formControlName="groupId" class="input mt-1">
+                  @for (group of assignableGroups(); track group.id) {
+                    <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
+                  }
+                </select>
+              </label>
+
+              <label class="block">
+                <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
+                <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
+              </label>
+
+              <label class="block">
+                <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
+                <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
+              </label>
+
+              @if (assignForm.errors?.['opensAtAfterDueAt']) {
+                <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
+              }
+
+              <button
+                type="submit"
+                class="btn btn-primary"
+                [disabled]="assignForm.invalid || store.loading() || assignableGroups().length === 0"
+              >
+                Kiadás
+              </button>
+              @if (assignableGroups().length === 0 && groupStore.groups().length > 0) {
+                <p class="text-sm text-text-muted">Minden csoportod megkapta már ezt a feladatsort.</p>
+              }
+            </form>
+          }
+        </section>
       </div>
     } @else if (store.loading()) {
       <app-local-spinner />
@@ -515,6 +592,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly store = inject(TeacherTaskSetStore);
   readonly schoolStore = inject(SchoolStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
+  private readonly taskSetService = inject(TeacherTaskSetService);
+  readonly groupStore = inject(GroupStore);
+  private readonly fb = inject(FormBuilder);
   // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
   // a schools() alapján dönt a megerősítő dialógusról (UI-TT-47 load-order race).
   private readonly schoolStoreLoading$ = toObservable(this.schoolStore.loading);
@@ -559,6 +639,51 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // levezetni, nem a jelenlegi böngésző-origóból "sejteni" — utóbbi csak véletlenül
   // esett egybe a backenddel azokon a topológiákon, ahol az /api/ proxyzva van.
   readonly apiOrigin = new URL(environment.apiUrl).origin;
+
+  // ── Kiadás csoportnak ────────────────────────────────────────────
+  private readonly assignments = signal<TaskSetAssignmentDto[]>([]);
+  readonly assignmentsLoading = signal(false);
+  readonly assignmentsError = signal<string | null>(null);
+
+  readonly activeAssignments = computed(() => this.assignments().filter((a) => !a.revokedAt));
+
+  readonly assignableGroups = computed(() => {
+    const assigned = new Set(this.activeAssignments().map((a) => a.groupId));
+    return this.groupStore.groups().filter((g) => !assigned.has(g.id));
+  });
+
+  private readonly duplicateGroupNameCounts = computed(() => {
+    const counts = new Map<string, number>();
+    for (const g of this.groupStore.groups()) {
+      counts.set(g.name, (counts.get(g.name) ?? 0) + 1);
+    }
+    return counts;
+  });
+
+  groupLabel(groupId: number, groupName: string): string {
+    if ((this.duplicateGroupNameCounts().get(groupName) ?? 0) <= 1) return groupName;
+    const full = this.groupStore.groups().find((g) => g.id === groupId);
+    return full ? `${groupName} (kód: ${full.inviteCode})` : groupName;
+  }
+
+  readonly assignForm = this.fb.nonNullable.group(
+    {
+      groupId: this.fb.control<number | null>(null, Validators.required),
+      opensAt: [''],
+      dueAt: [''],
+    },
+    {
+      validators: (group) => {
+        const opensAt = group.get('opensAt')?.value;
+        const dueAt = group.get('dueAt')?.value;
+        if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
+          return { opensAtAfterDueAt: true };
+        }
+        return null;
+      },
+    },
+  );
+  // ────────────────────────────────────────────────────────────────
 
   readonly expandedTaskId = signal<number | null>(null);
   private readonly drafts = signal<SnippetDraft>({});
@@ -763,6 +888,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.store.loadDetail(id);
+    this.groupStore.loadMine();
+    this.loadAssignments(id);
   }
 
   toggleTask(taskId: number): void {
@@ -1172,6 +1299,62 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         this.toastService.success('Feladat frissítve.');
       },
     );
+  }
+
+  private loadAssignments(taskSetId: number): void {
+    this.assignmentsLoading.set(true);
+    this.assignmentsError.set(null);
+    this.taskSetService.getTaskSetAssignments(taskSetId).subscribe({
+      next: (list) => {
+        this.assignments.set(list);
+        this.assignmentsLoading.set(false);
+      },
+      error: (err) => {
+        this.assignmentsError.set(extractErrorMessage(err));
+        this.assignmentsLoading.set(false);
+      },
+    });
+  }
+
+  assign(taskSetId: number): void {
+    if (this.assignForm.invalid || this.store.loading()) return;
+
+    const raw = this.assignForm.getRawValue();
+    this.taskSetService
+      .assignToGroup(taskSetId, {
+        groupId: Number(raw.groupId),
+        opensAt: raw.opensAt ? new Date(raw.opensAt).toISOString() : null,
+        dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : null,
+      })
+      .subscribe({
+        next: (dto) => {
+          this.assignments.update((list) => [dto, ...list]);
+          this.assignForm.reset();
+          this.toastService.success('Feladatsor kiadva.');
+        },
+        error: (err) => this.toastService.danger(extractErrorMessage(err)),
+      });
+  }
+
+  async revokeAssignment(assignmentId: number): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      title: 'Kiadás visszavonása',
+      message: 'A diákok nem indíthatják többé. A már megkezdett vizsgamunkamenetek megmaradnak.',
+      confirmLabel: 'Visszavonás',
+      cancelLabel: 'Mégsem',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    this.taskSetService.revokeAssignment(assignmentId).subscribe({
+      next: () => {
+        this.assignments.update((list) =>
+          list.map((a) => (a.id === assignmentId ? { ...a, revokedAt: new Date().toISOString() } : a)),
+        );
+        this.toastService.success('Kiadás visszavonva.');
+      },
+      error: (err) => this.toastService.danger(extractErrorMessage(err)),
+    });
   }
 
   uploadFile(taskSetId: number, kind: TeacherFileKind, event: Event): void {

@@ -123,3 +123,31 @@ export interface TeacherFileDto {
   /** A jogosultság-ellenőrzött kiszolgáló endpoint URL-je. */
   url: string;
 }
+
+export interface AssignTaskSetToGroupRequest {
+  groupId: number;
+  opensAt?: string | null;
+  dueAt?: string | null;
+}
+
+export interface TaskSetAssignmentDto {
+  id: number;
+  groupId: number;
+  groupName: string;
+  assignedAt: string;
+  opensAt?: string | null;
+  dueAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface TeacherGroupTaskSetAssignmentDto {
+  assignmentId: number;
+  taskSetId: number;
+  taskSetTitle: string;
+  taskCount: number;
+  assignedAt: string;
+  opensAt?: string | null;
+  dueAt?: string | null;
+  completedMemberCount: number;
+  memberCount: number;
+}
