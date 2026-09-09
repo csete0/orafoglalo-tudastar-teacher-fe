@@ -11,6 +11,7 @@ import {
   SchoolGroupDto,
   SchoolMemberDto,
 } from '../../models/school.model';
+import { SchoolLicenseOverviewDto } from '../../models/school-license.model';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /**
@@ -27,6 +28,7 @@ export class SchoolStore {
   private readonly _selectedSchoolId = signal<number | null>(null);
   private readonly _members = signal<SchoolMemberDto[]>([]);
   private readonly _schoolGroups = signal<SchoolGroupDto[]>([]);
+  private readonly _licenseOverview = signal<SchoolLicenseOverviewDto[]>([]);
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
@@ -45,6 +47,7 @@ export class SchoolStore {
   readonly error = computed(() => this._error());
   readonly members = computed(() => this._members());
   readonly schoolGroups = computed(() => this._schoolGroups());
+  readonly licenseOverview = computed(() => this._licenseOverview());
 
   readonly selectedSchool = computed<SchoolDto | null>(
     () => this._schools().find((s) => s.id === this._selectedSchoolId()) ?? null,
@@ -61,6 +64,7 @@ export class SchoolStore {
   // független signalokba töltenek.
   private _membersGeneration = 0;
   private _schoolGroupsGeneration = 0;
+  private _licenseGeneration = 0;
 
   // UI-TT-157: a fenti generációs-számláló csak a versengő GET-eket rendezi sorba —
   // a MUTÁCIÓK (removeMember/changeMemberRole) sikeres ága viszont feltétel nélkül a
@@ -95,6 +99,7 @@ export class SchoolStore {
     this._selectedSchoolId.set(schoolId);
     this._members.set([]);
     this._schoolGroups.set([]);
+    this._licenseOverview.set([]);
     // UI-TT-157: a kiürített lista már egyik intézményé sem — amíg a loadMembers()
     // újra be nem tölti, egyetlen mutáció-válasz sem módosíthatja.
     this._membersSchoolId = null;
@@ -287,6 +292,31 @@ export class SchoolStore {
         error: (err) => {
           if (generation !== this._schoolGroupsGeneration) return;
           this._error.set(extractErrorMessage(err, 'Az intézmény csoportjainak betöltése sikertelen.'));
+        },
+      });
+  }
+
+  loadLicenseOverview(id: number): void {
+    const generation = ++this._licenseGeneration;
+    this._loading.set(true);
+    this._error.set(null);
+    this.service
+      .getLicenseOverview(id)
+      .pipe(
+        take(1),
+        finalize(() => {
+          if (generation === this._licenseGeneration) this._loading.set(false);
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (overview) => {
+          if (generation !== this._licenseGeneration) return;
+          this._licenseOverview.set(overview);
+        },
+        error: (err) => {
+          if (generation !== this._licenseGeneration) return;
+          this._error.set(extractErrorMessage(err, 'A licenc-adatok betöltése sikertelen.'));
         },
       });
   }

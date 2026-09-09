@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SchoolStore } from '../../services/school/school.store';
@@ -15,7 +16,7 @@ import { CopyButtonComponent } from '../../shared/copy-button/copy-button.compon
 import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
-type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
+type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
 /**
  * A `isSelectedAdmin` (SchoolStore, a betöltött SchoolDto.myRole mezőjéből
@@ -27,7 +28,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -65,6 +66,10 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
             <button (click)="setTab('csoportok')" class="tab-btn" [class.tab-btn-active]="tab() === 'csoportok'"
               role="tab" [attr.aria-selected]="tab() === 'csoportok'">
               Csoportok
+            </button>
+            <button (click)="setTab('licenc')" class="tab-btn" [class.tab-btn-active]="tab() === 'licenc'"
+              role="tab" [attr.aria-selected]="tab() === 'licenc'" data-testid="licenc-tab-btn">
+              Licenc
             </button>
           }
         </nav>
@@ -263,6 +268,90 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok';
               </p>
             }
           }
+
+          @case ('licenc') {
+            @if (school.isSelectedAdmin()) {
+              @for (lic of school.licenseOverview(); track lic.licenseId) {
+                <div class="card p-5 mb-6" data-testid="license-overview-card">
+                  <div class="flex flex-wrap gap-4 mb-4">
+                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
+                      <span class="text-xs text-text-muted mb-1">Tier</span>
+                      <span class="font-bold capitalize">{{ lic.tier }}</span>
+                    </div>
+                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
+                      <span class="text-xs text-text-muted mb-1">Helyek</span>
+                      <span class="font-bold">{{ lic.usedSeats }} / {{ lic.capacity }}</span>
+                    </div>
+                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
+                      <span class="text-xs text-text-muted mb-1">Érvényes</span>
+                      <span class="font-bold text-sm">{{ lic.validFrom | date:'yyyy.MM.dd' }} – {{ lic.validTo | date:'yyyy.MM.dd' }}</span>
+                    </div>
+                  </div>
+
+                  @if (lic.groups.length > 0) {
+                    <h3 class="font-semibold text-sm mb-2">Csoportok szerinti megoszlás</h3>
+                    <div class="overflow-x-auto mb-4">
+                      <table class="w-full text-sm">
+                        <thead>
+                          <tr class="text-left border-b border-border-default text-text-muted">
+                            <th class="py-2 px-3">Csoport</th>
+                            <th class="py-2 px-3">Tanár</th>
+                            <th class="py-2 px-3 text-right">Aktív helyek</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (g of lic.groups; track g.groupId) {
+                            <tr class="border-b border-border-default last:border-b-0">
+                              <td class="py-2 px-3">{{ g.groupName }}</td>
+                              <td class="py-2 px-3 text-text-muted">{{ g.teacherName }}</td>
+                              <td class="py-2 px-3 text-right font-variant-numeric tabular-nums">{{ g.activeSeatCount }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
+
+                  @if (lic.seats.length > 0) {
+                    <h3 class="font-semibold text-sm mb-2">Diákok ({{ lic.seats.length }} aktív hely)</h3>
+                    <div class="overflow-x-auto">
+                      <table class="w-full text-sm">
+                        <thead>
+                          <tr class="text-left border-b border-border-default text-text-muted">
+                            <th class="py-2 px-3">Diák</th>
+                            <th class="py-2 px-3">Csoportok</th>
+                            <th class="py-2 px-3">Utolsó aktivitás</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (seat of lic.seats; track seat.userId) {
+                            <tr class="border-b border-border-default last:border-b-0">
+                              <td class="py-2 px-3">{{ seat.studentName }}</td>
+                              <td class="py-2 px-3 text-text-muted">{{ seat.groupNames.join(', ') || '–' }}</td>
+                              <td class="py-2 px-3 text-text-muted">{{ seat.lastActivityAt | date:'yyyy.MM.dd HH:mm' }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  } @else {
+                    <p class="text-text-muted text-sm text-center py-4">Nincs aktív helyfoglalás.</p>
+                  }
+                </div>
+              } @empty {
+                <div class="flex flex-col items-center py-10 gap-3">
+                  <div class="icon-tile icon-tile-neutral">
+                    <app-icon name="document" class="w-6 h-6 block" />
+                  </div>
+                  <p class="font-semibold">Az intézményhez nincs aktív licenc.</p>
+                </div>
+              }
+            } @else {
+              <p class="text-text-muted text-center py-10" data-testid="admin-tab-lost-access">
+                Már nincs igazgatói jogosultságod ehhez az intézményhez.
+              </p>
+            }
+          }
         }
       </div>
     } @else if (school.loading()) {
@@ -338,6 +427,7 @@ export class IntezmenyReszletekComponent implements OnInit {
     if (tab === 'ranglista') this.loadLeaderboard(this.schoolId);
     if (tab === 'attekintes') this.report.loadSchoolActivity(this.schoolId, this.range().from, this.range().to);
     if (tab === 'csoportok') this.school.loadSchoolGroups(this.schoolId);
+    if (tab === 'licenc') this.school.loadLicenseOverview(this.schoolId);
   }
 
   loadLeaderboard(schoolId: number): void {

@@ -28,12 +28,14 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     schools: ReturnType<typeof signal<SchoolDto[]>>;
     members: ReturnType<typeof signal<unknown[]>>;
     schoolGroups: ReturnType<typeof signal<unknown[]>>;
+    licenseOverview: ReturnType<typeof signal<unknown[]>>;
     loading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
     select: ReturnType<typeof vi.fn>;
     loadMembers: ReturnType<typeof vi.fn>;
     loadSchoolGroups: ReturnType<typeof vi.fn>;
+    loadLicenseOverview: ReturnType<typeof vi.fn>;
     changeMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
     clearError: ReturnType<typeof vi.fn>;
@@ -59,12 +61,14 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
       schools: signal([school]),
       members: signal([]),
       schoolGroups: signal([]),
+      licenseOverview: signal([]),
       loading: signal(false),
       error: signal(null),
       loadMine: vi.fn(),
       select: vi.fn(),
       loadMembers: vi.fn(),
       loadSchoolGroups: vi.fn(),
+      loadLicenseOverview: vi.fn(),
       changeMemberRole: vi.fn(),
       removeMember: vi.fn(),
       clearError: vi.fn(),
@@ -354,6 +358,32 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="admin-tab-lost-access"]')).toBeTruthy();
   });
 
+  // A6: Igazgatói licenc-nézet
+  it('A6: sima tagnál nem jelenik meg a Licenc fül a navigációban', () => {
+    configure(makeSchool({ myRole: 'Teacher' }), false);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav').textContent;
+    expect(nav).not.toContain('Licenc');
+  });
+
+  it('A6: adminnak megjelenik a Licenc fül, és megnyitáskor loadLicenseOverview() hívódik', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelector('nav').textContent;
+    expect(nav).toContain('Licenc');
+
+    fixture.componentInstance.setTab('licenc');
+    fixture.detectChanges();
+
+    expect(schoolStoreMock.loadLicenseOverview).toHaveBeenCalledWith(1);
+  });
+
   // UI-TT-175: a "Csoportok" fülön az `isArchived` mező eddig sehol nem volt kiolvasva a
   // template-ben, szemben a tanár saját csoport-nézeteivel (`csoportok-lista.component.ts`,
   // `csoport-reszletek.component.ts`), amik jól látható "Archivált" jelvényt mutatnak rá -
@@ -388,7 +418,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(nav.getAttribute('role')).toBe('tablist');
 
     const tabs = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[];
-    expect(tabs.length).toBe(4);
+    expect(tabs.length).toBe(5);
     tabs.forEach((tab) => expect(tab.getAttribute('role')).toBe('tab'));
 
     // Alapértelmezetten a "Tanárok" fül aktív.

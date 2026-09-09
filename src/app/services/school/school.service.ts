@@ -10,6 +10,7 @@ import {
   SchoolGroupDto,
   SchoolMemberDto,
 } from '../../models/school.model';
+import { SchoolLicenseOverviewDto } from '../../models/school-license.model';
 
 @Injectable({ providedIn: 'root' })
 export class SchoolService {
@@ -58,5 +59,9 @@ export class SchoolService {
 
   getSchoolGroups(id: number): Observable<SchoolGroupDto[]> {
     return this.http.get<SchoolGroupDto[]>(`${this.baseUrl}/${id}/groups`);
+  }
+
+  getLicenseOverview(id: number): Observable<SchoolLicenseOverviewDto[]> {
+    return this.http.get<SchoolLicenseOverviewDto[]>(`${this.baseUrl}/${id}/licenses`);
   }
 }
