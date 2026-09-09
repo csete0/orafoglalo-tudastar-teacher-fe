@@ -5,4 +5,5 @@ export const environment = {
   backendUrl: 'https://www.patricks.hu',
   studentAppUrl: 'https://www.patricks.hu',
   providerUri: 'https://www.patricks.hu/auth',
+  turnstileSiteKey: '0x4AAAAAAESuQ894940KwE_5',
 };

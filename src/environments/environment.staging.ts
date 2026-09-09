@@ -7,4 +7,5 @@ export const environment = {
   backendUrl: 'https://192.168.1.77:9443',
   studentAppUrl: 'https://192.168.1.77',
   providerUri: 'https://192.168.1.77:9443/auth',
+  turnstileSiteKey: '0x4AAAAAAESuQ894940KwE_5',
 };
