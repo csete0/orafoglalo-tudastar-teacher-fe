@@ -138,8 +138,8 @@ export class TeacherTaskSetStore {
     });
   }
 
-  updateTaskSet(id: number, request: CreateTeacherTaskSetRequest): void {
-    this.mutateAndReload(this.service.update(id, request), id);
+  updateTaskSet(id: number, request: CreateTeacherTaskSetRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.update(id, request), id, onSuccess);
   }
 
   deleteTaskSet(id: number, onSuccess?: () => void): void {

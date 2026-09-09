@@ -1,17 +1,25 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { filter, firstValueFrom, take } from 'rxjs';
+import { catchError, filter, firstValueFrom, of, take } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
+import { CategoryService } from '../../services/category/category.service';
+import { PublicCategoryDto } from '../../models/category.model';
 import { SnippetDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { environment } from '../../../environments/environment';
+
+const LEVELS: { id: number; label: string }[] = [
+  { id: 1, label: 'Kezdő' },
+  { id: 2, label: 'Középhaladó' },
+  { id: 3, label: 'Haladó' },
+];
 
 const LANGUAGES: { id: number; name: string }[] = [
   { id: 2, name: 'Python' },
@@ -389,6 +397,70 @@ type SnippetDraft = Record<number, Record<number, string>>;
           }
         </section>
 
+        <!-- ── Alapadatok ──────────────────────────────────────── -->
+        @if (metadataDraft(); as draft) {
+          <section class="card p-5 mb-8">
+            <h2 class="font-bold mb-3">Alapadatok</h2>
+            <div class="space-y-3">
+              <label class="block">
+                <span class="text-sm text-text-muted">Cím</span>
+                <input
+                  [ngModel]="draft.title"
+                  (ngModelChange)="metadataDraft.update(d => d ? { ...d, title: $event } : d)"
+                  [ngModelOptions]="{ standalone: true }"
+                  maxlength="250"
+                  class="input mt-1"
+                />
+              </label>
+              <label class="block">
+                <span class="text-sm text-text-muted">Leírás</span>
+                <textarea
+                  rows="3"
+                  [ngModel]="draft.description"
+                  (ngModelChange)="metadataDraft.update(d => d ? { ...d, description: $event } : d)"
+                  [ngModelOptions]="{ standalone: true }"
+                  class="input mt-1"
+                ></textarea>
+              </label>
+              <label class="block">
+                <span class="text-sm text-text-muted">Szint</span>
+                <select
+                  [ngModel]="draft.levelId"
+                  (ngModelChange)="metadataDraft.update(d => d ? { ...d, levelId: +$event } : d)"
+                  [ngModelOptions]="{ standalone: true }"
+                  class="input mt-1"
+                >
+                  @for (level of levels; track level.id) {
+                    <option [value]="level.id">{{ level.label }}</option>
+                  }
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-sm text-text-muted">Tantárgy (elhagyható)</span>
+                <select
+                  [ngModel]="draft.subjectCategoryId"
+                  (ngModelChange)="metadataDraft.update(d => d ? { ...d, subjectCategoryId: $event ? +$event : null } : d)"
+                  [ngModelOptions]="{ standalone: true }"
+                  class="input mt-1"
+                >
+                  <option [value]="null">—</option>
+                  @for (cat of selectableCategories(); track cat.id) {
+                    <option [value]="cat.id">{{ cat.name }}</option>
+                  }
+                </select>
+              </label>
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!draft.title.trim() || !draft.description.trim() || store.loading()"
+                (click)="updateMetadata(detail.id)"
+              >
+                Mentés
+              </button>
+            </div>
+          </section>
+        }
+
         <!-- ── Fájlok ───────────────────────────────────────────── -->
         <section>
           <h2 class="font-bold mb-3">Fájlok</h2>
@@ -458,9 +530,31 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     }
   });
 
+  private readonly categoryService = inject(CategoryService);
+
+  readonly levels = LEVELS;
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
   readonly fileKinds = FILE_KINDS;
+
+  readonly selectableCategories = toSignal(
+    this.categoryService.getAll().pipe(catchError(() => of([] as PublicCategoryDto[]))),
+    { initialValue: [] as PublicCategoryDto[] },
+  );
+
+  readonly metadataDraft = signal<{ title: string; description: string; levelId: number; subjectCategoryId: number | null } | null>(null);
+
+  private readonly initMetadataDraft = effect(() => {
+    const detail = this.store.selectedDetail();
+    if (detail && this.metadataDraft() === null) {
+      this.metadataDraft.set({
+        title: detail.title,
+        description: detail.description,
+        levelId: detail.levelId,
+        subjectCategoryId: detail.subjectCategoryId ?? null,
+      });
+    }
+  });
   // UI-TT-27: az API origóját a ténylegesen konfigurált environment.apiUrl-ból kell
   // levezetni, nem a jelenlegi böngésző-origóból "sejteni" — utóbbi csak véletlenül
   // esett egybe a backenddel azokon a topológiákon, ahol az /api/ proxyzva van.
@@ -803,6 +897,21 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     // másik mutáció elindulhatott, a mögöttes mutateAndReload() pedig nem idempotens.
     if (this.store.loading()) return;
     this.store.unpublish(id);
+  }
+
+  updateMetadata(taskSetId: number): void {
+    const draft = this.metadataDraft();
+    if (!draft || !draft.title.trim() || !draft.description.trim() || this.store.loading()) return;
+    this.store.updateTaskSet(
+      taskSetId,
+      {
+        title: draft.title,
+        description: draft.description,
+        levelId: draft.levelId,
+        subjectCategoryId: draft.subjectCategoryId ?? undefined,
+      },
+      () => this.toastService.success('Mentve.'),
+    );
   }
 
   /**

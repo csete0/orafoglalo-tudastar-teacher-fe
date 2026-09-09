@@ -45,6 +45,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     deleteTask: ReturnType<typeof vi.fn>;
     deleteSolution: ReturnType<typeof vi.fn>;
     deleteFile: ReturnType<typeof vi.fn>;
+    updateTaskSet: ReturnType<typeof vi.fn>;
   };
   let schoolStoreMock: {
     schools: ReturnType<typeof signal<unknown[]>>;
@@ -78,6 +79,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       deleteTask: vi.fn(),
       deleteSolution: vi.fn(),
       deleteFile: vi.fn(),
+      updateTaskSet: vi.fn(),
     };
     schoolStoreMock = { schools: signal([]), loading: signal(false), error: signal(null), loadMine: vi.fn() };
     authorizedFileServiceMock = {
@@ -1525,6 +1527,55 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.isEditTaskDraftInvalid(1)).toBe(true);
       component.saveEditTask(1, task);
       expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── A4: feladatsor-metadata szerkesztő ───────────────────────────────────
+
+  describe('A4: feladatsor-metadata szerkesztő (updateMetadata)', () => {
+    it('form kitöltés → store.updateTaskSet() hívódik a helyes payloaddal', () => {
+      configure(makeDetail({ title: 'Eredeti cím', description: 'Eredeti leírás', levelId: 2 }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.metadataDraft.set({
+        title: 'Módosított cím',
+        description: 'Módosított leírás',
+        levelId: 3,
+        subjectCategoryId: 5,
+      });
+
+      component.updateMetadata(1);
+
+      expect(taskSetStoreMock.updateTaskSet).toHaveBeenCalledWith(
+        1,
+        {
+          title: 'Módosított cím',
+          description: 'Módosított leírás',
+          levelId: 3,
+          subjectCategoryId: 5,
+        },
+        expect.any(Function),
+      );
+    });
+
+    it('whitespace-only cím esetén updateMetadata() csendben visszatér, a store-t nem hívja meg', () => {
+      configure(makeDetail());
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.metadataDraft.set({
+        title: '   ',
+        description: 'Leírás',
+        levelId: 2,
+        subjectCategoryId: null,
+      });
+
+      component.updateMetadata(1);
+
+      expect(taskSetStoreMock.updateTaskSet).not.toHaveBeenCalled();
     });
   });
 });

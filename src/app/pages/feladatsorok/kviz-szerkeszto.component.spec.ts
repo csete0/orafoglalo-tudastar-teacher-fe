@@ -99,6 +99,8 @@ describe('KvizSzerkesztoComponent', () => {
     updateQuiz: ReturnType<typeof vi.fn>;
     setScope: ReturnType<typeof vi.fn>;
     unpublish: ReturnType<typeof vi.fn>;
+    assignToGroup: ReturnType<typeof vi.fn>;
+    deleteQuiz: ReturnType<typeof vi.fn>;
   };
 
   let groupStoreMock: { groups: ReturnType<typeof signal<GroupDto[]>>; loadMine: ReturnType<typeof vi.fn> };
@@ -127,6 +129,8 @@ describe('KvizSzerkesztoComponent', () => {
       updateQuiz: vi.fn(),
       setScope: vi.fn(),
       unpublish: vi.fn(),
+      assignToGroup: vi.fn(),
+      deleteQuiz: vi.fn(),
     };
 
     groupStoreMock = { groups: signal(groups), loadMine: vi.fn() };
@@ -522,6 +526,83 @@ describe('KvizSzerkesztoComponent', () => {
 
       expect(el.querySelector('[data-testid="unpublish-btn"]')).toBeNull();
       expect(el.querySelector('[data-testid="publish-btn"]')?.textContent).toContain('Publikálás');
+    });
+  });
+
+  // ── A4: kvíz törlése ──────────────────────────────────────────────────────
+
+  describe('A4: kvíz törlése (deleteQuiz)', () => {
+    it('törlés gomb → megerősítés után store.deleteQuiz() hívódik', async () => {
+      const fixture = configure(makeDetail({ id: 7, isPublished: false }));
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      const deletePromise = component.deleteQuiz();
+      expect(confirmService.pending()).not.toBeNull();
+      confirmService.resolve(true);
+      await deletePromise;
+
+      expect(storeMock.deleteQuiz).toHaveBeenCalledWith(7, expect.any(Function));
+    });
+
+    it('törlés elutasításnál store.deleteQuiz() NEM hívódik', async () => {
+      const fixture = configure(makeDetail({ id: 7, isPublished: false }));
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      const deletePromise = component.deleteQuiz();
+      confirmService.resolve(false);
+      await deletePromise;
+
+      expect(storeMock.deleteQuiz).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── A4: kiadás-form opensAt ──────────────────────────────────────────────
+
+  describe('A4: kiadás-form opensAt (assign)', () => {
+    it('assign() payloadban opensAt ISO-stringként szerepel', () => {
+      const group = makeGroup({ id: 2, name: 'Teszt csoport' });
+      const fixture = configure(makeDetail({ id: 7, isPublished: true }), [group]);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.assignForm.patchValue({
+        groupId: 2,
+        opensAt: '2026-09-01T10:00',
+        dueAt: '2026-09-10T10:00',
+      });
+      component.assign();
+
+      expect(storeMock.assignToGroup).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          opensAt: new Date('2026-09-01T10:00').toISOString(),
+        }),
+        expect.any(Function),
+      );
+    });
+
+    it('opensAt > dueAt esetén assignForm.errors.opensAtAfterDueAt true, a Kiadás gomb tiltott', () => {
+      const group = makeGroup({ id: 2, name: 'Teszt csoport' });
+      const fixture = configure(makeDetail({ id: 7, isPublished: true }), [group]);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      component.assignForm.patchValue({
+        groupId: 2,
+        opensAt: '2026-09-10T10:00',
+        dueAt: '2026-09-01T10:00',
+      });
+      fixture.detectChanges();
+
+      expect(component.assignForm.errors?.['opensAtAfterDueAt']).toBe(true);
+      const submitBtn: HTMLButtonElement | null = fixture.nativeElement.querySelector(
+        '#kiadas button[type="submit"]',
+      );
+      expect(submitBtn?.disabled).toBe(true);
     });
   });
 });

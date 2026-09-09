@@ -528,6 +528,9 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                 <app-icon name="users" class="w-4 h-4 block text-text-muted" />
                 <span class="flex-1">
                   {{ groupLabel(assignment.groupId, assignment.groupName) }}
+                  @if (assignment.opensAt) {
+                    <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                  }
                   @if (assignment.dueAt) {
                     <span class="text-text-muted">· határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
                   }
@@ -555,9 +558,18 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               </label>
 
               <label class="block">
+                <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
+                <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
+              </label>
+
+              <label class="block">
                 <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
                 <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
               </label>
+
+              @if (assignForm.errors?.['opensAtAfterDueAt']) {
+                <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
+              }
 
               <button
                 type="submit"
@@ -571,6 +583,17 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               }
             </form>
           }
+
+          <div class="border-t border-border mt-6 pt-4">
+            <button
+              type="button"
+              class="btn btn-ghost text-danger"
+              [disabled]="store.loading()"
+              (click)="deleteQuiz()"
+            >
+              Kvíz törlése
+            </button>
+          </div>
         </section>
         }
       } @else if (store.loading()) {
@@ -684,10 +707,23 @@ export class KvizSzerkesztoComponent {
     difficulty: this.fb.control<QuizDifficulty | null>(null),
   });
 
-  readonly assignForm = this.fb.nonNullable.group({
-    groupId: this.fb.control<number | null>(null, Validators.required),
-    dueAt: [''],
-  });
+  readonly assignForm = this.fb.nonNullable.group(
+    {
+      groupId: this.fb.control<number | null>(null, Validators.required),
+      opensAt: [''],
+      dueAt: [''],
+    },
+    {
+      validators: (group) => {
+        const opensAt = group.get('opensAt')?.value;
+        const dueAt = group.get('dueAt')?.value;
+        if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
+          return { opensAtAfterDueAt: true };
+        }
+        return null;
+      },
+    },
+  );
 
   private readonly questionTypeSignal = toSignal(this.questionForm.controls.questionType.valueChanges, {
     initialValue: this.questionForm.controls.questionType.value,
@@ -1102,6 +1138,7 @@ export class KvizSzerkesztoComponent {
         groupId: Number(raw.groupId),
         // A datetime-local érték helyi idő, időzóna-jelölés nélkül - ISO-alakra váltjuk,
         // hogy a szerver ne értelmezhesse félre.
+        opensAt: raw.opensAt ? new Date(raw.opensAt).toISOString() : null,
         dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : null,
       },
       () => {
@@ -1122,5 +1159,18 @@ export class KvizSzerkesztoComponent {
     if (!confirmed) return;
 
     this.store.revokeAssignment(this.quizId, assignmentId, () => this.toastService.success('Kiadás visszavonva.'));
+  }
+
+  async deleteQuiz(): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      title: 'Kvíz törlése',
+      message: 'A kvíz és az összes kiadása törlődik. Ez nem vonható vissza.',
+      confirmLabel: 'Törlés',
+      cancelLabel: 'Mégsem',
+      danger: true,
+    });
+    if (!confirmed) return;
+    if (this.store.loading()) return;
+    this.store.deleteQuiz(this.quizId, () => this.router.navigate(['/kvizek']));
   }
 }
