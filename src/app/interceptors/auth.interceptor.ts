@@ -87,5 +87,5 @@ function handleTokenRefresh(
 }
 
 function isPublicEndpoint(url: string): boolean {
-  return ['/auth/login', '/auth/refresh'].some((endpoint) => url.includes(endpoint));
+  return ['/auth/login', '/auth/refresh', '/institutional-inquiries'].some((endpoint) => url.includes(endpoint));
 }

@@ -174,6 +174,12 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
   },
+  {
+    // B6: Intézményi érdeklődés-űrlap — publikus, authGuard nélkül
+    path: 'iskolaknak',
+    loadComponent: () =>
+      import('./pages/iskolaknak/iskolaknak.component').then((m) => m.IskolakNakComponent),
+  },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   {
     path: '404',
