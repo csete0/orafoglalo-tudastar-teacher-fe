@@ -17,8 +17,10 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { TeacherGroupAssignmentDto } from '../../models/teacher-quiz.model';
+import { TeacherGroupTaskSetAssignmentDto } from '../../models/teacher-content.model';
 import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { finalize, take } from 'rxjs';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
@@ -248,15 +250,17 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
 
           @case ('kiadva') {
             <!-- UI-UX-T3: a tanár fejben a csoportból indul ("a 9.A-nak mi van kiadva?").
-                 Feladatsoroknak nincs kiadás-fogalma (csoporttagság-alapú a láthatóság),
-                 ezért ez a fül a kvíz-kiadásokat mutatja. -->
+                 B4: feladatsorok is kiadhatók, ezért két lista jelenik meg. -->
+
+            <!-- Kvíz-kiadások -->
+            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Kvízek</h3>
             @if (assignmentsError(); as err) {
               <p class="text-danger text-sm mb-4">{{ err }}</p>
             }
             @if (assignmentsLoading()) {
               <app-local-spinner />
             } @else {
-              <ul class="space-y-2">
+              <ul class="space-y-2 mb-6">
                 @for (assignment of groupAssignments(); track assignment.assignmentId) {
                   <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
                     <div class="min-w-0 flex-1">
@@ -289,19 +293,41 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                     </div>
                   </li>
                 } @empty {
-                  <li class="flex flex-col items-center py-10 gap-3">
-                    <div class="icon-tile icon-tile-neutral">
-                      <app-icon name="academic-cap" class="w-6 h-6 block" />
-                    </div>
-                    <p class="font-semibold">Ennek a csoportnak most nincs kiadott kvíze.</p>
-                    <p class="text-sm text-text-muted">Kiadni a kvíz-szerkesztő "Kiadás csoportnak" paneljén tudsz.</p>
-                    <a routerLink="/feladatsorok/kvizek" class="btn btn-primary">Kvízeim megnyitása</a>
-                  </li>
+                  <li class="text-sm text-text-muted py-2">Nincs kiadott kvíz.</li>
                 }
               </ul>
               @if (liveStartError(); as err) {
-                <p class="text-sm text-danger mt-3">{{ err }}</p>
+                <p class="text-sm text-danger mb-4">{{ err }}</p>
               }
+            }
+
+            <!-- Feladatsor-kiadások (B4) -->
+            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Feladatsorok</h3>
+            @if (taskSetAssignmentsError(); as err) {
+              <p class="text-danger text-sm mb-4">{{ err }}</p>
+            }
+            @if (taskSetAssignmentsLoading()) {
+              <app-local-spinner />
+            } @else {
+              <ul class="space-y-2">
+                @for (a of groupTaskSetAssignments(); track a.assignmentId) {
+                  <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+                    <div class="min-w-0 flex-1">
+                      <p class="font-medium truncate">{{ a.taskSetTitle }}</p>
+                      <p class="text-xs text-text-muted">
+                        {{ a.taskCount }} feladat
+                        · megírta: {{ a.completedMemberCount }} / {{ a.memberCount }}
+                        @if (a.dueAt) {
+                          · <span [class.text-danger]="isDueSoon(a.dueAt)">
+                            határidő: {{ a.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                        }
+                      </p>
+                    </div>
+                  </li>
+                } @empty {
+                  <li class="text-sm text-text-muted py-2">Nincs kiadott feladatsor. Kiadni a feladatsor-szerkesztőből lehet.</li>
+                }
+              </ul>
             }
           }
 
@@ -513,9 +539,13 @@ export class CsoportReszletekComponent implements OnInit {
   readonly tab = signal<Tab>('tagok');
   // ── UI-UX-T3: "Kiadva" fül állapota ──
   private readonly teacherQuizService = inject(TeacherQuizService);
+  private readonly teacherTaskSetService = inject(TeacherTaskSetService);
   private readonly kahootHostService = inject(KahootHostService);
   readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
+  readonly groupTaskSetAssignments = signal<TeacherGroupTaskSetAssignmentDto[]>([]);
   readonly assignmentsLoading = signal(false);
+  readonly taskSetAssignmentsLoading = signal(false);
+  readonly taskSetAssignmentsError = signal<string | null>(null);
   readonly liveStartPending = signal(false);
   readonly liveStartError = signal<string | null>(null);
   readonly assignmentsError = signal<string | null>(null);
@@ -547,6 +577,20 @@ export class CsoportReszletekComponent implements OnInit {
           this.groupAssignments.set(assignments);
         },
         error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
+      });
+  }
+
+  private loadTaskSetAssignments(groupId: number): void {
+    this.taskSetAssignmentsLoading.set(true);
+    this.teacherTaskSetService
+      .getGroupTaskSetAssignments(groupId)
+      .pipe(take(1), finalize(() => this.taskSetAssignmentsLoading.set(false)))
+      .subscribe({
+        next: (assignments) => {
+          this.taskSetAssignmentsError.set(null);
+          this.groupTaskSetAssignments.set(assignments);
+        },
+        error: () => this.taskSetAssignmentsError.set('A feladatsor-kiadások betöltése sikertelen.'),
       });
   }
 
@@ -676,7 +720,10 @@ export class CsoportReszletekComponent implements OnInit {
     // (pl. az Eredmények fülön) ottmaradt volna.
     this.store.clearError();
     if (tab === 'tagok') this.store.loadMembers(this.groupId);
-    if (tab === 'kiadva') this.loadAssignments(this.groupId);
+    if (tab === 'kiadva') {
+      this.loadAssignments(this.groupId);
+      this.loadTaskSetAssignments(this.groupId);
+    }
     if (tab === 'helyek') this.seatStore.load(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
