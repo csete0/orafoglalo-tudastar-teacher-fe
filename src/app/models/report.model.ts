@@ -190,8 +190,11 @@ export interface TeacherRecentQuizResultDto {
 
 export interface TeacherUpcomingDeadlineDto {
   assignmentId: number;
-  quizId: number;
-  quizTitle: string;
+  kind: 'quiz' | 'taskset';
+  quizId?: number | null;
+  quizTitle?: string | null;
+  taskSetId?: number | null;
+  taskSetTitle?: string | null;
   groupId: number;
   groupName: string;
   dueAt: string;

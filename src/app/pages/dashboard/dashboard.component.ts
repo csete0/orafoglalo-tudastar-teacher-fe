@@ -145,8 +145,13 @@ const ADMIN_CARDS: DashboardCard[] = [
               @for (deadline of d.upcomingDeadlines; track deadline.assignmentId) {
                 <li class="flex items-center justify-between gap-3 text-sm">
                   <span class="min-w-0 truncate">
-                    <a [routerLink]="['/feladatsorok/kvizek', deadline.quizId, 'eredmenyek']"
-                       class="font-semibold text-primary hover:underline">{{ deadline.quizTitle }}</a>
+                    @if (deadline.kind === 'taskset') {
+                      <a [routerLink]="['/feladatsorok', deadline.taskSetId, 'eredmenyek']"
+                         class="font-semibold text-primary hover:underline">{{ deadline.taskSetTitle }}</a>
+                    } @else {
+                      <a [routerLink]="['/feladatsorok/kvizek', deadline.quizId, 'eredmenyek']"
+                         class="font-semibold text-primary hover:underline">{{ deadline.quizTitle }}</a>
+                    }
                     · {{ deadline.groupName }}
                     · megírta: {{ deadline.completedMemberCount }} / {{ deadline.memberCount }}
                   </span>
