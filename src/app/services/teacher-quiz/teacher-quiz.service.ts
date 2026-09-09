@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { PublishResultDto } from '../../models/teacher-content.model';
+import { QuizQuestionReportListDto } from '../../models/question-report.model';
 import {
   AssignTeacherQuizRequest,
   CreateTeacherQuizQuestionRequest,
@@ -152,6 +153,16 @@ export class TeacherQuizService {
       `${this.root(scope)}/quizzes/${quizId}/questions/existing`,
       { bankQuestionId },
     );
+  }
+
+  getQuestionReports(quizId?: number, onlyOpen = true): Observable<QuizQuestionReportListDto> {
+    let params = new HttpParams().set('onlyOpen', onlyOpen).set('pageSize', 100);
+    if (quizId != null) params = params.set('quizId', quizId);
+    return this.http.get<QuizQuestionReportListDto>(`${this.baseUrl}/question-reports`, { params });
+  }
+
+  resolveQuestionReport(id: number): Observable<unknown> {
+    return this.http.post(`${this.baseUrl}/question-reports/${id}/resolve`, {});
   }
 
   assignToGroup(quizId: number, request: AssignTeacherQuizRequest): Observable<TeacherQuizAssignmentDto> {

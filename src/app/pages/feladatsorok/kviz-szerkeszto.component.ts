@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, finalize, map, of, take } from 'rxjs';
+import { catchError, finalize, forkJoin, map, of, take } from 'rxjs';
 import { GroupStore } from '../../services/group/group.store';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
@@ -168,6 +168,9 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                   @if (!question.isApproved) {
                     <span class="badge badge-warning shrink-0">Jóváhagyásra vár</span>
                   }
+                  @if (question.reportCount > 0) {
+                    <span class="badge badge-danger shrink-0">⚠ {{ question.reportCount }} jelentés</span>
+                  }
                   <app-icon name="chevron-down" class="w-4 h-4 block shrink-0 transition-transform"
                             [class.rotate-180]="isQuestionExpanded(question.id)" />
                 </button>
@@ -200,6 +203,13 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                     Törlés
                   </button>
                 </div>
+                @if (question.reportCount > 0) {
+                  <div class="mt-3 p-2 rounded bg-danger/10 border border-danger/30 text-xs text-danger flex items-center gap-2">
+                    <span class="flex-1">⚠ {{ question.reportCount }} diák jelentette ezt a kérdést.</span>
+                    <button type="button" class="btn btn-ghost !text-xs !py-1 !px-2"
+                      (click)="resolveReports(question)">Elintézve</button>
+                  </div>
+                }
                 }
               </li>
             } @empty {
@@ -1008,6 +1018,26 @@ export class KvizSzerkesztoComponent {
 
   approve(question: TeacherQuizQuestionDto): void {
     this.store.approveQuestion(this.quizId, question.id, () => this.toastService.success('Kérdés jóváhagyva.'));
+  }
+
+  resolveReports(question: TeacherQuizQuestionDto): void {
+    this.quizService.getQuestionReports(this.quizId, true).subscribe({
+      next: (data) => {
+        const openReports = data.items.filter((r) => r.questionId === question.id && !r.isReviewed);
+        if (openReports.length === 0) {
+          this.toastService.success('Nincs elintézetlen jelentés ennél a kérdésnél.');
+          return;
+        }
+        forkJoin(openReports.map((r) => this.quizService.resolveQuestionReport(r.id))).subscribe({
+          next: () => {
+            this.toastService.success('Jelentések elintézve.');
+            this.store.loadDetail(this.quizId);
+          },
+          error: () => this.toastService.danger('Hiba a jelentések elintézésekor.'),
+        });
+      },
+      error: () => this.toastService.danger('Hiba a jelentések lekérésekor.'),
+    });
   }
 
   async deleteQuestion(question: TeacherQuizQuestionDto): Promise<void> {

@@ -71,6 +71,7 @@ export interface TeacherQuizQuestionDto {
   secondsLimit?: number | null;
   isApproved: boolean;
   isAiGenerated: boolean;
+  reportCount: number;
 }
 
 /**

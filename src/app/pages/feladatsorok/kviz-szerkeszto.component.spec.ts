@@ -25,6 +25,7 @@ function makeQuestion(overrides: Partial<TeacherQuizQuestionDto> = {}): TeacherQ
     secondsLimit: null,
     isApproved: true,
     isAiGenerated: false,
+    reportCount: 0,
     ...overrides,
   };
 }
@@ -144,7 +145,14 @@ describe('KvizSzerkesztoComponent', () => {
           useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }), data: routeData } },
         },
         { provide: TeacherQuizStore, useValue: storeMock },
-        { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
+        {
+          provide: TeacherQuizService,
+          useValue: {
+            getTopics: () => of([]),
+            getQuestionReports: () => of({ items: [], totalCount: 0 }),
+            resolveQuestionReport: () => of(null),
+          },
+        },
         { provide: GroupStore, useValue: groupStoreMock },
       ],
     });
@@ -874,5 +882,78 @@ describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
     kerdesekButton.click();
 
     expect(scrollToSectionSpy).toHaveBeenCalledWith('kerdesek');
+  });
+});
+
+describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
+  let storeMock: ReturnType<typeof buildStoreMock>;
+  let quizSvcMock: { getTopics: ReturnType<typeof vi.fn>; getQuestionReports: ReturnType<typeof vi.fn>; resolveQuestionReport: ReturnType<typeof vi.fn> };
+
+  function buildStoreMock(detail: TeacherQuizDetailDto | null = makeDetail()) {
+    return {
+      selectedDetail: signal(detail),
+      loading: signal(false),
+      generating: signal(false),
+      error: signal(null),
+      publishResult: signal(null),
+      bankResults: signal([] as QuizBankQuestionDto[]),
+      bankSearching: signal(false),
+      bankSearchError: signal(null),
+      loadDetail: vi.fn(),
+      addQuestion: vi.fn(),
+      publish: vi.fn(),
+      clearPublishResult: vi.fn(),
+      searchBankQuestions: vi.fn(),
+      addExistingQuestion: vi.fn(),
+      clearBankResults: vi.fn(),
+      updateQuiz: vi.fn(),
+      setScope: vi.fn(),
+      unpublish: vi.fn(),
+      assignToGroup: vi.fn(),
+      deleteQuiz: vi.fn(),
+    };
+  }
+
+  function configure(detail: TeacherQuizDetailDto | null = makeDetail()) {
+    storeMock = buildStoreMock(detail);
+    quizSvcMock = {
+      getTopics: vi.fn().mockReturnValue(of([])),
+      getQuestionReports: vi.fn().mockReturnValue(of({ items: [], totalCount: 0 })),
+      resolveQuestionReport: vi.fn().mockReturnValue(of(null)),
+    };
+    TestBed.configureTestingModule({
+      imports: [KvizSzerkesztoComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }), data: undefined } },
+        },
+        { provide: TeacherQuizStore, useValue: storeMock },
+        { provide: TeacherQuizService, useValue: quizSvcMock },
+        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+      ],
+    });
+    return TestBed.createComponent(KvizSzerkesztoComponent);
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('reportCount > 0 esetén a badge megjelenik a kérdés fejlécén', () => {
+    const q = makeQuestion({ id: 1, reportCount: 3 });
+    const fixture = configure(makeDetail({ id: 7, questions: [q] }));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.textContent).toContain('3 jelentés');
+  });
+
+  it('reportCount === 0 esetén a badge nem jelenik meg', () => {
+    const q = makeQuestion({ id: 1, reportCount: 0 });
+    const fixture = configure(makeDetail({ id: 7, questions: [q] }));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.textContent).not.toContain('jelentés');
   });
 });

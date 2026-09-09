@@ -25,6 +25,7 @@ const ADMIN_LINKS: NavLink[] = [
   { path: '/admin/jelentkezesek', label: 'Jelentkezések', icon: 'inbox' },
   { path: '/admin/tanarok', label: 'Tanárok', icon: 'academic-cap' },
   { path: '/admin/intezmenyek', label: 'Intézmények (admin)', icon: 'shield' },
+  { path: '/admin/ellenorzes', label: 'Ellenőrzés', icon: 'check' },
 ];
 
 @Component({

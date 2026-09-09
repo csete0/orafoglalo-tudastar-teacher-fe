@@ -143,6 +143,12 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/admin/admin-intezmenyek.component').then((m) => m.AdminIntezmenyekComponent),
   },
+  {
+    path: 'admin/ellenorzes',
+    canActivate: [authGuard, roleGuard('admin')],
+    loadComponent: () =>
+      import('./pages/admin/admin-ellenorzes.component').then((m) => m.AdminEllenorzesComponent),
+  },
   // C5: platform-kvízek ("Hivatalos kvízek") - a tanári kvíz-lista és -szerkesztő
   // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap fejléc-linket
   // (6-linkes nav-korlát, ld. fent) - a belépési pont a vezérlőpult admin-kártyája.
