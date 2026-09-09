@@ -159,6 +159,19 @@ export interface TeacherScoreOverrideRequest {
 export interface TeacherDashboardDto {
   recentQuizResults: TeacherRecentQuizResultDto[];
   upcomingDeadlines: TeacherUpcomingDeadlineDto[];
+  weakTopics: TeacherWeakTopicDto[];
+}
+
+/** A2: csoport-szintű gyenge témák — névtelen aggregátum. */
+export interface TeacherWeakTopicDto {
+  topicId: number;
+  topicName: string;
+  topicColor?: string | null;
+  topicIcon?: string | null;
+  studentCount: number;
+  totalAnswered: number;
+  totalCorrect: number;
+  successRate: number;
 }
 
 export interface TeacherRecentQuizResultDto {

@@ -23,8 +23,10 @@ import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-head
 import { finalize, take } from 'rxjs';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
+import { ReportService } from '../../services/report/report.service';
+import { TeacherWeakTopicDto } from '../../models/report.model';
 
-type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo';
+type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -396,6 +398,38 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
             }
           }
 
+          @case ('gyenge-temak') {
+            <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
+            @if (weakTopicsError(); as err) {
+              <p class="text-danger text-sm mb-4">{{ err }}</p>
+            }
+            @if (weakTopicsLoading()) {
+              <app-local-spinner />
+            } @else if (weakTopics().length) {
+              <ul class="flex flex-wrap gap-2">
+                @for (topic of weakTopics(); track topic.topicId) {
+                  <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+                      [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-subtle)'"
+                      [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
+                    @if (topic.topicIcon) {
+                      <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
+                    }
+                    {{ topic.topicName }}
+                    <span class="opacity-70">{{ topic.successRate }}% · {{ topic.studentCount }} tanuló</span>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <div class="flex flex-col items-center py-10 gap-3">
+                <div class="icon-tile icon-tile-neutral">
+                  <app-icon name="check" class="w-6 h-6 block" />
+                </div>
+                <p class="font-semibold">Nincs gyenge téma.</p>
+                <p class="text-sm text-text-muted">Még nincs elég adat (legalább 3 diák, 5 válasz/téma szükséges).</p>
+              </div>
+            }
+          }
+
           @case ('meghivo') {
             <div class="card p-5 space-y-3">
               <div class="flex items-center gap-3">
@@ -459,6 +493,12 @@ export class CsoportReszletekComponent implements OnInit {
   readonly schoolStore = inject(SchoolStore);
   readonly report = inject(ReportStore);
   readonly leaderboard = inject(LeaderboardStore);
+  private readonly reportService = inject(ReportService);
+
+  // ── A2: Gyenge témák fül ──
+  readonly weakTopics = signal<TeacherWeakTopicDto[]>([]);
+  readonly weakTopicsLoading = signal(false);
+  readonly weakTopicsError = signal<string | null>(null);
 
   readonly tabs: { value: Tab; label: string }[] = [
     { value: 'tagok', label: 'Tagok' },
@@ -466,6 +506,7 @@ export class CsoportReszletekComponent implements OnInit {
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
     { value: 'ranglista', label: 'Ranglista' },
+    { value: 'gyenge-temak', label: 'Gyenge témák' },
     { value: 'meghivo', label: 'Meghívó' },
   ];
 
@@ -506,6 +547,20 @@ export class CsoportReszletekComponent implements OnInit {
           this.groupAssignments.set(assignments);
         },
         error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
+      });
+  }
+
+  private loadWeakTopics(groupId: number): void {
+    this.weakTopicsLoading.set(true);
+    this.reportService
+      .getGroupWeakTopics(groupId)
+      .pipe(take(1), finalize(() => this.weakTopicsLoading.set(false)))
+      .subscribe({
+        next: (topics) => {
+          this.weakTopicsError.set(null);
+          this.weakTopics.set(topics);
+        },
+        error: () => this.weakTopicsError.set('A gyenge témák betöltése sikertelen.'),
       });
   }
 
@@ -625,6 +680,7 @@ export class CsoportReszletekComponent implements OnInit {
     if (tab === 'helyek') this.seatStore.load(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
     if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
+    if (tab === 'gyenge-temak') this.loadWeakTopics(this.groupId);
   }
 
   /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */

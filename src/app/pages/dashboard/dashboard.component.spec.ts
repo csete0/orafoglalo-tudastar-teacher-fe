@@ -6,6 +6,8 @@ import { DashboardComponent } from './dashboard.component';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { KahootActiveRoomDto } from '../../models/kahoot-host.model';
+import { ReportService } from '../../services/report/report.service';
+import { TeacherDashboardDto, TeacherWeakTopicDto } from '../../models/report.model';
 
 /**
  * UX-audit: korábban egy éppen élő (vagy beragadt) Kahoot-szoba KIZÁRÓLAG abból a
@@ -19,12 +21,20 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
   };
   let kahootHostServiceMock: { getActiveRooms: ReturnType<typeof vi.fn> };
 
-  function configure(rooms: KahootActiveRoomDto[] | 'error', isAdmin = false) {
+  function configure(rooms: KahootActiveRoomDto[] | 'error', isAdmin = false, dashboard?: Partial<TeacherDashboardDto>) {
     authStoreMock = { currentUser: signal({ firstName: 'Anna' }), hasAdminRole: signal(isAdmin) };
     kahootHostServiceMock = {
       getActiveRooms: vi.fn().mockReturnValue(
         rooms === 'error' ? throwError(() => new Error('network')) : of(rooms),
       ),
+    };
+    const reportServiceMock = {
+      getDashboard: vi.fn().mockReturnValue(of({
+        recentQuizResults: [],
+        upcomingDeadlines: [],
+        weakTopics: [],
+        ...dashboard,
+      } as TeacherDashboardDto)),
     };
 
     TestBed.configureTestingModule({
@@ -33,6 +43,7 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
         provideRouter([]),
         { provide: AuthStore, useValue: authStoreMock },
         { provide: KahootHostService, useValue: kahootHostServiceMock },
+        { provide: ReportService, useValue: reportServiceMock },
       ],
     });
 
@@ -99,5 +110,53 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
     expect(card).not.toBeNull();
     expect(card.textContent).toContain('Platform-kvízek');
     expect(admin.nativeElement.textContent).toContain('Kvízeim');
+  });
+});
+
+describe('DashboardComponent - A2: csoportjaid gyenge témái', () => {
+  function makeWeakTopic(overrides: Partial<TeacherWeakTopicDto> = {}): TeacherWeakTopicDto {
+    return {
+      topicId: 1, topicName: 'Hálózatok', topicColor: '#FF4444', topicIcon: null,
+      studentCount: 5, totalAnswered: 50, totalCorrect: 15, successRate: 30,
+      ...overrides,
+    };
+  }
+
+  function configure(weakTopics: TeacherWeakTopicDto[]) {
+    const authStoreMock = { currentUser: signal({ firstName: 'Tanár' }), hasAdminRole: signal(false) };
+    const kahootMock = { getActiveRooms: vi.fn().mockReturnValue(of([])) };
+    const reportMock = {
+      getDashboard: vi.fn().mockReturnValue(of({
+        recentQuizResults: [], upcomingDeadlines: [], weakTopics,
+      } as TeacherDashboardDto)),
+    };
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent],
+      providers: [
+        provideRouter([]),
+        { provide: AuthStore, useValue: authStoreMock },
+        { provide: KahootHostService, useValue: kahootMock },
+        { provide: ReportService, useValue: reportMock },
+      ],
+    });
+    const fixture = TestBed.createComponent(DashboardComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('két gyenge téma esetén mindkét chip megjelenik a kártya fejléccel', () => {
+    const fixture = configure([
+      makeWeakTopic({ topicId: 1, topicName: 'Hálózatok', successRate: 30 }),
+      makeWeakTopic({ topicId: 2, topicName: 'Algoritmusok', successRate: 25 }),
+    ]);
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Csoportjaid gyenge témái');
+    expect(text).toContain('Hálózatok');
+    expect(text).toContain('Algoritmusok');
+  });
+
+  it('üres lista esetén a gyenge témák kártya nem jelenik meg', () => {
+    const fixture = configure([]);
+    expect(fixture.nativeElement.textContent).not.toContain('Csoportjaid gyenge témái');
   });
 });

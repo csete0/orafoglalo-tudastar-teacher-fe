@@ -153,6 +153,26 @@ const ADMIN_CARDS: DashboardCard[] = [
           </section>
         }
 
+        <!-- ── A2: Csoportjaid gyenge témái ── -->
+        @if (d.weakTopics?.length) {
+          <section class="card p-5 mt-6">
+            <h2 class="font-bold mb-3">Csoportjaid gyenge témái</h2>
+            <ul class="flex flex-wrap gap-2">
+              @for (topic of d.weakTopics; track topic.topicId) {
+                <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+                    [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-subtle)'"
+                    [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
+                  @if (topic.topicIcon) {
+                    <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
+                  }
+                  {{ topic.topicName }}
+                  <span class="opacity-70">{{ topic.successRate }}% · {{ topic.studentCount }} tanuló</span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
         <!-- ── UI-UX-T2: Friss kvíz-eredmények ── -->
         @if (d.recentQuizResults.length) {
           <section class="card p-5 mt-6">

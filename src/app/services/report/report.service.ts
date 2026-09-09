@@ -10,6 +10,7 @@ import {
   TeacherScoreOverrideRequest,
   TeacherTaskSetResultsDto,
   TeacherDashboardDto,
+  TeacherWeakTopicDto,
 } from '../../models/report.model';
 
 @Injectable({ providedIn: 'root' })
@@ -41,6 +42,13 @@ export class ReportService {
       `${this.baseUrl}/students/${studentUserId}/activity`,
       { params: this.dateRangeParams(from, to) },
     );
+  }
+
+  /** A2: egy csoport gyenge témái, névtelen (k-anonimitással). */
+  getGroupWeakTopics(groupId: number, threshold?: number): Observable<TeacherWeakTopicDto[]> {
+    let params = new HttpParams();
+    if (threshold !== undefined) params = params.set('threshold', threshold);
+    return this.http.get<TeacherWeakTopicDto[]>(`${this.baseUrl}/groups/${groupId}/weak-topics`, { params });
   }
 
   getTaskSetResults(taskSetId: number): Observable<TeacherTaskSetResultsDto> {
