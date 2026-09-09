@@ -13,11 +13,14 @@ import { KahootActiveRoomDto } from '../../models/kahoot-host.model';
  * játék fut" kártyája ezt oldja fel, minden saját kvíz szobáját egy helyen mutatva.
  */
 describe('DashboardComponent - "Élő játék fut" kártya', () => {
-  let authStoreMock: { currentUser: ReturnType<typeof signal<{ firstName: string } | null>> };
+  let authStoreMock: {
+    currentUser: ReturnType<typeof signal<{ firstName: string } | null>>;
+    hasAdminRole: ReturnType<typeof signal<boolean>>;
+  };
   let kahootHostServiceMock: { getActiveRooms: ReturnType<typeof vi.fn> };
 
-  function configure(rooms: KahootActiveRoomDto[] | 'error') {
-    authStoreMock = { currentUser: signal({ firstName: 'Anna' }) };
+  function configure(rooms: KahootActiveRoomDto[] | 'error', isAdmin = false) {
+    authStoreMock = { currentUser: signal({ firstName: 'Anna' }), hasAdminRole: signal(isAdmin) };
     kahootHostServiceMock = {
       getActiveRooms: vi.fn().mockReturnValue(
         rooms === 'error' ? throwError(() => new Error('network')) : of(rooms),
@@ -81,5 +84,20 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
 
     expect(fixture.componentInstance.activeRooms()).toEqual([]);
     expect(fixture.nativeElement.textContent).toContain('Feladatsoraim');
+  });
+
+  // C5: a platform-kvízek admin-oldala a 6-linkes nav-korlát miatt nem menüpont, hanem
+  // vezérlőpult-kártya - és csak platform-adminnak.
+  it('C5: a Platform-kvízek kártya csak platform-adminnak jelenik meg', () => {
+    const teacher = configure([]);
+    expect(teacher.nativeElement.querySelector('a[href="/admin/kvizek"]')).toBeNull();
+    expect(teacher.nativeElement.textContent).toContain('Kvízeim');
+    TestBed.resetTestingModule();
+
+    const admin = configure([], true);
+    const card = admin.nativeElement.querySelector('a[href="/admin/kvizek"]');
+    expect(card).not.toBeNull();
+    expect(card.textContent).toContain('Platform-kvízek');
+    expect(admin.nativeElement.textContent).toContain('Kvízeim');
   });
 });

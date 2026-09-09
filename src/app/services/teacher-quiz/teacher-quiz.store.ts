@@ -8,6 +8,7 @@ import {
   CreateTeacherQuizQuestionRequest,
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
+  QuizAuthoringScope,
   QuizBankQuestionDto,
   QuizDifficulty,
   TeacherQuizDetailDto,
@@ -29,12 +30,18 @@ import { TeacherQuizService } from './teacher-quiz.service';
  *    betöltés válasza érvényesül, és egy elhagyott kvíz mutációja nem tölthet újra egy
  *    MÁSIK kvíz nézetébe (különben a szerkesztő csendben másik kvíz adatát mutatná,
  *    miközben az URL az eredetit).
+ *
+ * C5: a store egy `scope`-ot is tart (`teacher` | `admin`), ami a service-ben a BE-gyökeret
+ * váltja. A tanári és az admin (platform-kvíz) oldalak UGYANEZT az egy root-store-t
+ * használják, ezért a scope-váltás a teljes tartalmat üríti: a tanár saját listája nem
+ * villanhat fel a platform-kvízek oldalán, és fordítva.
  */
 @Injectable({ providedIn: 'root' })
 export class TeacherQuizStore {
   private readonly destroyRef = inject(DestroyRef);
   private readonly service = inject(TeacherQuizService);
 
+  private readonly _scope = signal<QuizAuthoringScope>('teacher');
   private readonly _quizzes = signal<TeacherQuizDto[]>([]);
   private readonly _selectedDetail = signal<TeacherQuizDetailDto | null>(null);
   private readonly _publishResult = signal<PublishResultDto | null>(null);
@@ -58,6 +65,7 @@ export class TeacherQuizStore {
   // már megjelenő, helyes találatait. A _detailQuizId mintáját követve.
   private _bankSearchRequestId = 0;
 
+  readonly scope = computed(() => this._scope());
   readonly quizzes = computed(() => this._quizzes());
   readonly selectedDetail = computed(() => this._selectedDetail());
   readonly publishResult = computed(() => this._publishResult());
@@ -70,12 +78,33 @@ export class TeacherQuizStore {
   readonly bankSearching = computed(() => this._bankSearching());
   readonly bankSearchError = computed(() => this._bankSearchError());
 
+  /**
+   * C5: a szerkesztő-oldalak minden belépéskor beállítják, hogy tanári vagy admin
+   * (platform-kvíz) nézetben járunk. Váltáskor minden betöltött tartalom kiürül, és a
+   * folyamatban lévő betöltések válasza érvénytelenné válik (generáció-léptetés) - az
+   * előző scope adata így sosem érkezhet meg az újba.
+   */
+  setScope(scope: QuizAuthoringScope): void {
+    if (this._scope() === scope) return;
+
+    this._scope.set(scope);
+    this._detailGeneration++;
+    this._detailQuizId = null;
+    this._quizzes.set([]);
+    this._selectedDetail.set(null);
+    this._publishResult.set(null);
+    this._error.set(null);
+    this._loading.set(false);
+    this._mineLoading.set(false);
+    this.clearBankResults();
+  }
+
   loadMine(): void {
     this._mineLoading.set(true);
     this._error.set(null);
 
     this.service
-      .getMine()
+      .getMine(this._scope())
       .pipe(
         take(1),
         finalize(() => this._mineLoading.set(false)),
@@ -101,7 +130,7 @@ export class TeacherQuizStore {
     this._error.set(null);
 
     this.service
-      .getDetail(id)
+      .getDetail(id, this._scope())
       .pipe(
         take(1),
         finalize(() => {
@@ -126,18 +155,18 @@ export class TeacherQuizStore {
   }
 
   create(request: CreateTeacherQuizRequest, onSuccess?: (quiz: TeacherQuizDto) => void): void {
-    this.mutate(this.service.create(request), (quiz) => {
+    this.mutate(this.service.create(request, this._scope()), (quiz) => {
       this._quizzes.update((list) => [quiz, ...list]);
       if (onSuccess) onSuccess(quiz);
     });
   }
 
   updateQuiz(id: number, request: CreateTeacherQuizRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.update(id, request), id, onSuccess);
+    this.mutateAndReload(this.service.update(id, request, this._scope()), id, onSuccess);
   }
 
   deleteQuiz(id: number, onSuccess?: () => void): void {
-    this.mutate(this.service.delete(id), () => {
+    this.mutate(this.service.delete(id, this._scope()), () => {
       this._quizzes.update((list) => list.filter((q) => q.id !== id));
       this._selectedDetail.set(null);
       if (onSuccess) onSuccess();
@@ -151,7 +180,7 @@ export class TeacherQuizStore {
     this._error.set(null);
 
     this.service
-      .publish(id)
+      .publish(id, this._scope())
       .pipe(take(1), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
@@ -178,10 +207,18 @@ export class TeacherQuizStore {
       });
   }
 
+  /**
+   * C5: platform-kvíz visszavonása a diákok elől. A BE csak admin-scope-ban engedi; a
+   * tanári nézet ezt nem is kínálja.
+   */
+  unpublish(id: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.unpublish(id, this._scope()), id, onSuccess);
+  }
+
   // ── Kérdések ────────────────────────────────────────────────
 
   addQuestion(quizId: number, request: CreateTeacherQuizQuestionRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addQuestion(quizId, request), quizId, onSuccess);
+    this.mutateAndReload(this.service.addQuestion(quizId, request, this._scope()), quizId, onSuccess);
   }
 
   updateQuestion(
@@ -190,11 +227,11 @@ export class TeacherQuizStore {
     request: CreateTeacherQuizQuestionRequest,
     onSuccess?: () => void,
   ): void {
-    this.mutateAndReload(this.service.updateQuestion(questionId, request), quizId, onSuccess);
+    this.mutateAndReload(this.service.updateQuestion(questionId, request, this._scope()), quizId, onSuccess);
   }
 
   deleteQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteQuestion(questionId), quizId, onSuccess);
+    this.mutateAndReload(this.service.deleteQuestion(questionId, this._scope()), quizId, onSuccess);
   }
 
   /**
@@ -203,11 +240,12 @@ export class TeacherQuizStore {
    * a második lépése hálózati/átmeneti hibával duplikált DisplayOrder-t hagyhatott hátra.
    */
   reorderQuestion(quizId: number, questionId: number, neighbourQuestionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.reorderQuestion(questionId, neighbourQuestionId), quizId, onSuccess);
+    this.mutateAndReload(
+      this.service.reorderQuestion(questionId, neighbourQuestionId, this._scope()), quizId, onSuccess);
   }
 
   approveQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.approveQuestion(questionId), quizId, onSuccess);
+    this.mutateAndReload(this.service.approveQuestion(questionId, this._scope()), quizId, onSuccess);
   }
 
   generateQuestions(
@@ -221,7 +259,7 @@ export class TeacherQuizStore {
     this._error.set(null);
 
     this.service
-      .generateQuestions(quizId, request)
+      .generateQuestions(quizId, request, this._scope())
       .pipe(
         take(1),
         finalize(() => this._generating.set(false)),
@@ -247,7 +285,7 @@ export class TeacherQuizStore {
     const requestId = ++this._bankSearchRequestId;
 
     this.service
-      .searchBankQuestions(search, topicId, difficulty)
+      .searchBankQuestions(search, topicId, difficulty, this._scope())
       .pipe(
         take(1),
         finalize(() => {
@@ -276,7 +314,8 @@ export class TeacherQuizStore {
 
   /** A kiválasztott bank-kérdés MÁSOLATÁNAK felvétele a kvízbe. */
   addExistingQuestion(quizId: number, bankQuestionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addExistingQuestion(quizId, bankQuestionId), quizId, onSuccess);
+    this.mutateAndReload(
+      this.service.addExistingQuestion(quizId, bankQuestionId, this._scope()), quizId, onSuccess);
   }
 
   // ── Kiadás ──────────────────────────────────────────────────

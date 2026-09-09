@@ -143,6 +143,23 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/admin/admin-intezmenyek.component').then((m) => m.AdminIntezmenyekComponent),
   },
+  // C5: platform-kvízek ("Hivatalos kvízek") - a tanári kvíz-lista és -szerkesztő
+  // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap fejléc-linket
+  // (6-linkes nav-korlát, ld. fent) - a belépési pont a vezérlőpult admin-kártyája.
+  {
+    path: 'admin/kvizek',
+    canActivate: [authGuard, roleGuard('admin')],
+    data: { scope: 'admin' },
+    loadComponent: () =>
+      import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
+  },
+  {
+    path: 'admin/kvizek/:id/szerkesztes',
+    canActivate: [authGuard, roleGuard('admin')],
+    data: { scope: 'admin' },
+    loadComponent: () =>
+      import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
+  },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   {
     path: '404',

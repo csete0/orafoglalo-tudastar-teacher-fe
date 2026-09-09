@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { ToastService } from '../../shared/toast/toast.service';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import {
   QUIZ_FEEDBACK_MODE_LABELS,
+  QuizAuthoringScope,
   QuizFeedbackMode,
   TeacherQuizDto,
 } from '../../models/teacher-quiz.model';
@@ -20,6 +21,11 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
  * tartalom-dobozban), egy 7. link visszanyitná a UI-TT-181/192/177 alatt javított
  * túlcsordulási hibát. Ugyanez a megfontolás vitte a licenc-kezelést is az Intézmények
  * oldalra.
+ *
+ * C5: ugyanez a komponens szolgálja ki az admin "Platform-kvízek" oldalt is
+ * (`/admin/kvizek`, route `data: { scope: 'admin' }`) - a lista, az űrlap és a jelvények
+ * azonosak, csak a BE-gyökér (a store scope-ja), a címek és a szerkesztő-útvonal más. A
+ * 6-linkes nav-korlát miatt az admin belépési pont a vezérlőpult kártyája, nem menüpont.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,8 +36,12 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
     <div class="max-w-2xl mx-auto px-4 py-10">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <h1 class="page-title">Kvízeim</h1>
-      <p class="text-sm text-text-muted mt-1">Saját kvízek összeállítása és kiadása csoportoknak</p>
+          <h1 class="page-title">{{ isAdmin ? 'Platform-kvízek' : 'Kvízeim' }}</h1>
+          <p class="text-sm text-text-muted mt-1">
+            {{ isAdmin
+              ? 'Hivatalos kvízek minden előfizető diáknak - a diák az érettségi szintje szerint látja őket'
+              : 'Saját kvízek összeállítása és kiadása csoportoknak' }}
+          </p>
 
         </div>
         <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
@@ -39,7 +49,9 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
         </button>
       </div>
 
-      <app-tartalom-fulek />
+      @if (!isAdmin) {
+        <app-tartalom-fulek />
+      }
 
       @if (createOpen()) {
         <form [formGroup]="createForm" (ngSubmit)="create()" class="card p-5 space-y-3 mt-4 mb-6">
@@ -95,7 +107,7 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
           @for (quiz of visibleQuizzes(); track quiz.id) {
             <li>
               <a
-                [routerLink]="['/feladatsorok', 'kvizek', quiz.id, 'szerkesztes']"
+                [routerLink]="editorLink(quiz.id)"
                 class="card-link block group"
                 [class]="'accent-' + (quiz.id % 4)"
               >
@@ -140,7 +152,7 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
                 <div class="icon-tile icon-tile-neutral">
                   <app-icon name="academic-cap" class="w-6 h-6 block" />
                 </div>
-                <p class="font-semibold">Még nincs kvízed.</p>
+                <p class="font-semibold">{{ isAdmin ? 'Még nincs platform-kvíz.' : 'Még nincs kvízed.' }}</p>
                 <p class="text-sm text-text-muted">Hozd létre az elsőt a "+ Új kvíz" gombbal.</p>
               </li>
             }
@@ -154,8 +166,18 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
 export class KvizekListaComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly toastService = inject(ToastService);
   readonly store = inject(TeacherQuizStore);
+
+  /** C5: a route `data.scope`-ja dönti el, tanári vagy admin (platform-kvíz) nézet-e. */
+  readonly scope: QuizAuthoringScope = this.route.snapshot?.data?.['scope'] ?? 'teacher';
+  readonly isAdmin = this.scope === 'admin';
+  private readonly editorBase: string[] = this.isAdmin ? ['/admin', 'kvizek'] : ['/feladatsorok', 'kvizek'];
+
+  editorLink(quizId: number): (string | number)[] {
+    return [...this.editorBase, quizId, 'szerkesztes'];
+  }
 
   readonly createOpen = signal(false);
   readonly search = signal('');
@@ -178,12 +200,15 @@ export class KvizekListaComponent {
   });
 
   constructor() {
+    this.store.setScope(this.scope);
     this.store.loadMine();
   }
 
   questionSummary(quiz: TeacherQuizDto): string {
     const parts = [`${quiz.questionCount} kérdés`];
     if (quiz.assignedGroupCount > 0) parts.push(`${quiz.assignedGroupCount} csoportnak kiadva`);
+    // Platform-kvíznél nincs csoport - helyette a diák-oldali láthatóságot eldöntő szint.
+    if (this.isAdmin) parts.push(quiz.examLevel === 'emelt' ? 'csak emelt szint' : quiz.examLevel === 'kozep' ? 'középszint' : 'nem érettségi anyag');
     return parts.join(' · ');
   }
 
@@ -216,7 +241,7 @@ export class KvizekListaComponent {
       (quiz) => {
         this.createOpen.set(false);
         this.toastService.success('Kvíz létrehozva.');
-        this.router.navigate(['/feladatsorok', 'kvizek', quiz.id, 'szerkesztes']);
+        this.router.navigate(this.editorLink(quiz.id));
       },
     );
   }

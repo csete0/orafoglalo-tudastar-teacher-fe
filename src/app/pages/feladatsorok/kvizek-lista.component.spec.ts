@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { TeacherQuizDto } from '../../models/teacher-quiz.model';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -31,9 +31,10 @@ describe('KvizekListaComponent', () => {
     error: ReturnType<typeof signal<string | null>>;
     loadMine: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
+    setScope: ReturnType<typeof vi.fn>;
   };
 
-  function configure(quizzes: TeacherQuizDto[]) {
+  function configure(quizzes: TeacherQuizDto[], routeData: Record<string, unknown> | undefined = undefined) {
     storeMock = {
       quizzes: signal(quizzes),
       mineLoading: signal(false),
@@ -41,12 +42,14 @@ describe('KvizekListaComponent', () => {
       error: signal(null),
       loadMine: vi.fn(),
       create: vi.fn(),
+      setScope: vi.fn(),
     };
 
     TestBed.configureTestingModule({
       imports: [KvizekListaComponent],
       providers: [
         provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { data: routeData } } },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: ToastService, useValue: { success: vi.fn() } },
       ],
@@ -96,5 +99,36 @@ describe('KvizekListaComponent', () => {
     const titleSpan = fixture.nativeElement.querySelector('.font-bold.block.truncate') as HTMLElement;
     const titleContainer = titleSpan.closest('.flex-1.min-w-0') as HTMLElement | null;
     expect(titleContainer).not.toBeNull();
+  });
+
+  // ── C5: platform-kvízek (admin-scope) ──────────────────────────────────
+
+  it('C5: tanári nézetben teacher scope, Kvízeim cím, tartalom-fülek, tanári szerkesztő-link', () => {
+    const fixture = configure([makeQuiz({ id: 3 })]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(storeMock.setScope).toHaveBeenCalledWith('teacher');
+    expect(storeMock.loadMine).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('h1')?.textContent).toContain('Kvízeim');
+    expect(el.querySelector('app-tartalom-fulek')).not.toBeNull();
+    expect(el.querySelector('a.card-link')?.getAttribute('href')).toBe('/feladatsorok/kvizek/3/szerkesztes');
+  });
+
+  it('C5: admin nézetben (route data.scope = admin) admin scope, Platform-kvízek cím, nincs tartalom-fül, admin szerkesztő-link', () => {
+    const fixture = configure([makeQuiz({ id: 3, examLevel: 'emelt' })], { scope: 'admin' });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(storeMock.setScope).toHaveBeenCalledWith('admin');
+    expect(storeMock.loadMine).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('h1')?.textContent).toContain('Platform-kvízek');
+    expect(el.querySelector('app-tartalom-fulek')).toBeNull();
+    expect(el.querySelector('a.card-link')?.getAttribute('href')).toBe('/admin/kvizek/3/szerkesztes');
+    expect(el.textContent).toContain('csak emelt szint');
+  });
+
+  it('C5: admin nézetben az üres állapot a platform-kvízről szól', () => {
+    const fixture = configure([], { scope: 'admin' });
+    expect(fixture.nativeElement.textContent).toContain('Még nincs platform-kvíz.');
+    expect(fixture.nativeElement.textContent).not.toContain('Még nincs kvízed.');
   });
 });

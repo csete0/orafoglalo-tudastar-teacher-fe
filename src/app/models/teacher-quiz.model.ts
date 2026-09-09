@@ -16,6 +16,13 @@ export type QuizExamLevel = 'kozep' | 'emelt' | null;
 
 export type QuizDifficulty = 'Easy' | 'Medium' | 'Hard';
 
+/**
+ * C5 - kinek a nevében szerkesztünk kvízt. A `teacher` a saját (tanári) kvízek
+ * (`api/teacher/…`), az `admin` a tulajdonos nélküli platform-kvízek (`api/admin/…`) -
+ * ugyanaz a felület és DTO-készlet, csak a BE-útvonal (és vele a jogosultsági kapu) más.
+ */
+export type QuizAuthoringScope = 'teacher' | 'admin';
+
 export interface TeacherQuizDto {
   id: number;
   title: string;

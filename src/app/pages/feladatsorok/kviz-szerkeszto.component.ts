@@ -13,6 +13,7 @@ import {
   QUIZ_DIFFICULTY_LABELS,
   QUIZ_FEEDBACK_MODE_LABELS,
   QUIZ_QUESTION_TYPE_LABELS,
+  QuizAuthoringScope,
   QuizBankQuestionDto,
   QuizDifficulty,
   QuizFeedbackMode,
@@ -36,6 +37,12 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
  * "helyes válasz" különben olyan kérdést hozna létre, amit a diák sosem tudna eltalálni
  * (a kiértékelés szöveg-egyezésen alapul) - a backend ezt vissza is utasítja, de jobb, ha
  * a felület eleve nem engedi.
+ *
+ * C5: admin-scope-ban (`/admin/kvizek/:id/szerkesztes`, route `data: { scope: 'admin' }`)
+ * ugyanez a szerkesztő a platform-kvízeket kezeli. A különbség csak annyi, aminek a
+ * platform-kvíznél nincs értelme: nincs csoport, tehát nincs Kiadás és Élő játék szekció
+ * (és a csoport-lista betöltése sem indul), nincs Eredmények-link; a publikálás mellett
+ * viszont van Visszavonás (a diákok elől). A tanári nézet DOM-ja bitre változatlan.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,9 +52,11 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <div class="flex items-center gap-4">
-        <a routerLink="/feladatsorok/kvizek" class="text-sm text-text-muted hover:underline">← Kvízeim</a>
-        <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'eredmenyek']"
-           class="text-sm text-text-muted hover:underline ml-auto">Eredmények →</a>
+        <a [routerLink]="listLink" class="text-sm text-text-muted hover:underline">{{ isAdmin ? '← Platform-kvízek' : '← Kvízeim' }}</a>
+        @if (!isAdmin) {
+          <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'eredmenyek']"
+             class="text-sm text-text-muted hover:underline ml-auto">Eredmények →</a>
+        }
       </div>
 
       @if (store.error()) {
@@ -122,10 +131,13 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               Kérdések keverése
             </label>
 
-            <label class="flex items-center gap-2 text-sm">
-              <input formControlName="allowLateSubmission" type="checkbox" />
-              Határidő után is beadható
-            </label>
+            <!-- Platform-kvíznek nincs határideje - a kapcsoló ott értelmetlen lenne. -->
+            @if (!isAdmin) {
+              <label class="flex items-center gap-2 text-sm">
+                <input formControlName="allowLateSubmission" type="checkbox" />
+                Határidő után is beadható
+              </label>
+            }
 
             <button type="submit" class="btn btn-primary" [disabled]="settingsForm.invalid || store.loading()">
               Mentés
@@ -426,7 +438,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         <section id="publikalas" aria-label="Publikálás" class="card p-5 mb-6 scroll-mt-24">
           <div class="flex items-center gap-3">
             <div class="flex-1">
-              <h2 class="font-bold">Kiadásra kész?</h2>
+              <h2 class="font-bold">{{ isAdmin ? 'Mehet a diákoknak?' : 'Kiadásra kész?' }}</h2>
               <p class="text-sm text-text-muted">
                 {{ quiz.questionCount }} kérdés
                 @if (quiz.pendingQuestionCount > 0) {
@@ -443,7 +455,20 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
             >
               {{ quiz.isPublished ? 'Újrapublikálás' : 'Publikálás' }}
             </button>
+            @if (isAdmin && quiz.isPublished) {
+              <button type="button" class="btn btn-ghost text-danger" [disabled]="store.loading()"
+                      (click)="unpublish()" data-testid="unpublish-btn">
+                Visszavonás
+              </button>
+            }
           </div>
+          @if (isAdmin) {
+            <p class="text-sm text-text-muted mt-2">
+              A publikált platform-kvízt minden előfizető diák látja a „Hivatalos kvízek” között -
+              a vizsgaszint dönti el, kinek: a középszintű mindenkinek, a csak emelt szintű csak az
+              emelt szintre készülőknek.
+            </p>
+          }
 
           @if (store.publishResult(); as result) {
             @if (!result.success) {
@@ -456,6 +481,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
           }
         </section>
 
+        @if (!isAdmin) {
         <!-- ── Élő játék (Kahoot-mód) ─────────────────────────── -->
         <section id="elo" aria-label="Élő játék" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-1">Élő játék</h2>
@@ -546,6 +572,7 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
             </form>
           }
         </section>
+        }
       } @else if (store.loading()) {
         <div class="space-y-2 mt-6">
           <div class="skeleton h-24"></div>
@@ -565,6 +592,10 @@ export class KvizSzerkesztoComponent {
   readonly store = inject(TeacherQuizStore);
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
+  /** C5: a route `data.scope`-ja dönti el, tanári vagy admin (platform-kvíz) nézet-e. */
+  readonly scope: QuizAuthoringScope = this.route.snapshot.data?.['scope'] ?? 'teacher';
+  readonly isAdmin = this.scope === 'admin';
+  readonly listLink = this.isAdmin ? '/admin/kvizek' : '/feladatsorok/kvizek';
   readonly detail = computed(() => {
     const detail = this.store.selectedDetail();
     // A store `providedIn: 'root'`: navigáció után átmenetileg még az ELŐZŐ kvíz adata
@@ -741,8 +772,11 @@ export class KvizSzerkesztoComponent {
   });
 
   constructor() {
+    this.store.setScope(this.scope);
     this.store.loadDetail(this.quizId, () => this.syncSettingsForm());
-    this.groupStore.loadMine();
+    // Platform-kvíznek nincs csoportja - a /api/groups tanári végpont, admin-only fióknál
+    // csak egy fölösleges (és hibázó) hívás lenne.
+    if (!this.isAdmin) this.groupStore.loadMine();
   }
 
   private syncSettingsForm(): void {
@@ -830,6 +864,21 @@ export class KvizSzerkesztoComponent {
   publish(): void {
     this.store.clearPublishResult();
     this.store.publish(this.quizId, () => this.toastService.success('Kvíz publikálva.'));
+  }
+
+  /** C5: platform-kvíz visszavonása a diákok elől - a már megírt eredmények megmaradnak. */
+  async unpublish(): Promise<void> {
+    const confirmed = await this.confirmService.ask({
+      title: 'Kvíz visszavonása',
+      message: 'A diákok nem látják és nem indíthatják többé. A már megírt eredmények megmaradnak, és a kvíz bármikor újra publikálható.',
+      confirmLabel: 'Visszavonás',
+      cancelLabel: 'Mégsem',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    this.store.clearPublishResult();
+    this.store.unpublish(this.quizId, () => this.toastService.success('Kvíz visszavonva.'));
   }
 
   /**
@@ -976,14 +1025,16 @@ export class KvizSzerkesztoComponent {
   private readonly kahootHostService = inject(KahootHostService);
   private readonly router = inject(Router);
 
-  // ── UI-UX-T8 ──
+  // ── UI-UX-T8 ── (C5: admin-scope-ban a csoport-függő Élő játék/Kiadás szekció nincs)
   readonly sectionAnchors = [
     { id: 'beallitasok', label: 'Beállítások' },
     { id: 'kerdesek', label: 'Kérdések' },
     { id: 'ai', label: 'AI' },
     { id: 'publikalas', label: 'Publikálás' },
-    { id: 'elo', label: 'Élő játék' },
-    { id: 'kiadas', label: 'Kiadás' },
+    ...(this.isAdmin ? [] : [
+      { id: 'elo', label: 'Élő játék' },
+      { id: 'kiadas', label: 'Kiadás' },
+    ]),
   ];
 
   /**

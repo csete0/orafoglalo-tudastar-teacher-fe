@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
@@ -54,6 +54,19 @@ const CARDS: DashboardCard[] = [
   },
 ];
 
+// C5: a platform-kvízek admin-oldala ugyanazon 6-linkes nav-korlát miatt nem kap
+// menüpontot, mint a Kvízeim - a vezérlőpult kártyája a belépési pont, csak platform-adminnak.
+const ADMIN_CARDS: DashboardCard[] = [
+  {
+    path: '/admin/kvizek',
+    title: 'Platform-kvízek',
+    description: 'Hivatalos kvízek minden előfizető diáknak, érettségi szint szerint.',
+    icon: 'shield',
+    accent: 'accent-0',
+    tile: 'icon-tile-primary',
+  },
+];
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-dashboard',
@@ -96,7 +109,7 @@ const CARDS: DashboardCard[] = [
       }
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        @for (card of cards; track card.path) {
+        @for (card of cards(); track card.path) {
           <a [routerLink]="card.path" class="card-link block group" [class]="card.accent">
             <div class="accent-bar"></div>
             <div class="p-5">
@@ -173,7 +186,7 @@ const CARDS: DashboardCard[] = [
 export class DashboardComponent implements OnInit {
   readonly authStore = inject(AuthStore);
   private readonly kahootHostService = inject(KahootHostService);
-  readonly cards = CARDS;
+  readonly cards = computed(() => (this.authStore.hasAdminRole() ? [...CARDS, ...ADMIN_CARDS] : CARDS));
   readonly activeRooms = signal<KahootActiveRoomDto[]>([]);
   private readonly reportService = inject(ReportService);
   readonly dashboard = signal<TeacherDashboardDto | null>(null);

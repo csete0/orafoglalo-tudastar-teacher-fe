@@ -97,9 +97,17 @@ describe('KvizSzerkesztoComponent', () => {
     addExistingQuestion: ReturnType<typeof vi.fn>;
     clearBankResults: ReturnType<typeof vi.fn>;
     updateQuiz: ReturnType<typeof vi.fn>;
+    setScope: ReturnType<typeof vi.fn>;
+    unpublish: ReturnType<typeof vi.fn>;
   };
 
-  function configure(detail: TeacherQuizDetailDto | null = makeDetail(), groups: GroupDto[] = []) {
+  let groupStoreMock: { groups: ReturnType<typeof signal<GroupDto[]>>; loadMine: ReturnType<typeof vi.fn> };
+
+  function configure(
+    detail: TeacherQuizDetailDto | null = makeDetail(),
+    groups: GroupDto[] = [],
+    routeData: Record<string, unknown> | undefined = undefined,
+  ) {
     storeMock = {
       selectedDetail: signal(detail),
       loading: signal(false),
@@ -117,16 +125,23 @@ describe('KvizSzerkesztoComponent', () => {
       addExistingQuestion: vi.fn(),
       clearBankResults: vi.fn(),
       updateQuiz: vi.fn(),
+      setScope: vi.fn(),
+      unpublish: vi.fn(),
     };
+
+    groupStoreMock = { groups: signal(groups), loadMine: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [KvizSzerkesztoComponent],
       providers: [
         provideRouter([]),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }), data: routeData } },
+        },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
-        { provide: GroupStore, useValue: { groups: signal(groups), loadMine: vi.fn() } },
+        { provide: GroupStore, useValue: groupStoreMock },
       ],
     });
 
@@ -436,6 +451,79 @@ describe('KvizSzerkesztoComponent', () => {
       expect(component.groupLabel(1, 'Egyedi csoport')).toBe('Egyedi csoport');
     });
   });
+
+  // ── C5: platform-kvízek (admin-scope) ──────────────────────────────────
+
+  describe('C5 admin-scope (route data.scope = admin)', () => {
+    it('a store-t admin scope-ba állítja, a csoportokat NEM tölti, és a csoport-függő szekciók hiányoznak', () => {
+      const fixture = configure(makeDetail(), [], { scope: 'admin' });
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(storeMock.setScope).toHaveBeenCalledWith('admin');
+      expect(storeMock.loadDetail).toHaveBeenCalledWith(7, expect.any(Function));
+      expect(groupStoreMock.loadMine).not.toHaveBeenCalled();
+
+      expect(el.querySelector('section#kiadas')).toBeNull();
+      expect(el.querySelector('section#elo')).toBeNull();
+      expect(el.querySelector('section#publikalas')).not.toBeNull();
+      expect(el.querySelector('section#kerdesek')).not.toBeNull();
+
+      const nav = el.querySelector('nav[aria-label="Szekciók"]')!;
+      expect(nav.querySelectorAll('button').length).toBe(4);
+      expect(nav.textContent).not.toContain('Kiadás');
+      expect(nav.textContent).not.toContain('Élő játék');
+
+      expect(el.textContent).not.toContain('Eredmények →');
+      expect(el.textContent).not.toContain('Határidő után is beadható');
+      const back = el.querySelector('a[href="/admin/kvizek"]');
+      expect(back?.textContent).toContain('Platform-kvízek');
+    });
+
+    it('tanári scope-ban (data nélkül) a DOM változatlan: 6 fül, Kiadás az utolsó szekció, teacher scope', () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(storeMock.setScope).toHaveBeenCalledWith('teacher');
+      expect(groupStoreMock.loadMine).toHaveBeenCalledTimes(1);
+      expect(el.querySelector('nav[aria-label="Szekciók"]')!.querySelectorAll('button').length).toBe(6);
+      expect(el.querySelector('section:last-of-type')?.id).toBe('kiadas');
+      expect(el.querySelector('a[href="/feladatsorok/kvizek"]')?.textContent).toContain('Kvízeim');
+      expect(el.querySelector('[data-testid="unpublish-btn"]')).toBeNull();
+    });
+
+    it('publikált platform-kvíznél Visszavonás gomb - megerősítés után store.unpublish(), elutasításnál nem', async () => {
+      const fixture = configure(makeDetail({ isPublished: true, questionCount: 3 }), [], { scope: 'admin' });
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const confirmService = TestBed.inject(ConfirmService);
+
+      const button = fixture.nativeElement.querySelector('[data-testid="unpublish-btn"]') as HTMLButtonElement;
+      expect(button).toBeTruthy();
+      expect(button.textContent).toContain('Visszavonás');
+
+      const declined = component.unpublish();
+      expect(confirmService.pending()).not.toBeNull();
+      confirmService.resolve(false);
+      await declined;
+      expect(storeMock.unpublish).not.toHaveBeenCalled();
+
+      const accepted = component.unpublish();
+      confirmService.resolve(true);
+      await accepted;
+      expect(storeMock.unpublish).toHaveBeenCalledWith(7, expect.any(Function));
+    });
+
+    it('piszkozat platform-kvíznél nincs Visszavonás gomb, csak Publikálás', () => {
+      const fixture = configure(makeDetail({ isPublished: false }), [], { scope: 'admin' });
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="unpublish-btn"]')).toBeNull();
+      expect(el.querySelector('[data-testid="publish-btn"]')?.textContent).toContain('Publikálás');
+    });
+  });
 });
 
 /**
@@ -497,6 +585,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
     searchBankQuestions: ReturnType<typeof vi.fn>;
     addExistingQuestion: ReturnType<typeof vi.fn>;
     clearBankResults: ReturnType<typeof vi.fn>;
+    setScope: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -515,6 +604,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
       searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
       clearBankResults: vi.fn(),
+      setScope: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -642,6 +732,7 @@ describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
       searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
       clearBankResults: vi.fn(),
+      setScope: vi.fn(),
     };
 
     TestBed.configureTestingModule({

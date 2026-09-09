@@ -39,6 +39,7 @@ describe('TeacherQuizStore', () => {
     reorderQuestion: ReturnType<typeof vi.fn>;
     searchBankQuestions: ReturnType<typeof vi.fn>;
     addExistingQuestion: ReturnType<typeof vi.fn>;
+    unpublish?: ReturnType<typeof vi.fn>;
   };
   let store: TeacherQuizStore;
 
@@ -201,7 +202,7 @@ describe('TeacherQuizStore', () => {
     serviceMock.reorderQuestion.mockReturnValue(reorder$);
 
     store.reorderQuestion(1, 10, 20);
-    expect(serviceMock.reorderQuestion).toHaveBeenCalledWith(10, 20);
+    expect(serviceMock.reorderQuestion).toHaveBeenCalledWith(10, 20, 'teacher');
 
     serviceMock.getDetail.mockClear();
     serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 1, title: 'Cserélt sorrend' })));
@@ -234,7 +235,7 @@ describe('TeacherQuizStore', () => {
 
     store.searchBankQuestions('XKERES', 3, 'Hard');
 
-    expect(serviceMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard');
+    expect(serviceMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard', 'teacher');
     expect(store.bankSearching()).toBe(true);
     // A keresés NEM a fő loading()-ot állítja - a szerkesztő többi része eközben
     // is használható marad.
@@ -303,13 +304,78 @@ describe('TeacherQuizStore', () => {
     const onSuccess = vi.fn();
 
     store.addExistingQuestion(1, 99, onSuccess);
-    expect(serviceMock.addExistingQuestion).toHaveBeenCalledWith(1, 99);
+    expect(serviceMock.addExistingQuestion).toHaveBeenCalledWith(1, 99, 'teacher');
 
     add$.next({ id: 5 });
     add$.complete();
 
-    expect(serviceMock.getDetail).toHaveBeenCalledWith(1);
+    expect(serviceMock.getDetail).toHaveBeenCalledWith(1, 'teacher');
     expect(store.selectedDetail()?.title).toBe('Bővített kvíz');
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  // ── C5: platform-kvízek (admin-scope) ──────────────────────────────────
+
+  it('C5: setScope() után minden service-hívás az admin gyökérrel megy, és a váltás üríti a tartalmat', () => {
+    configure();
+    serviceMock.getMine.mockReturnValue(of([makeDetail({ id: 1, title: 'Tanári' })]));
+    serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 1, title: 'Tanári' })));
+    serviceMock.addExistingQuestion.mockReturnValue(of({ id: 5 }));
+
+    store.loadMine();
+    store.loadDetail(1);
+    expect(store.quizzes().length).toBe(1);
+    expect(store.selectedDetail()?.title).toBe('Tanári');
+
+    store.setScope('admin');
+    expect(store.scope()).toBe('admin');
+    // Az előző scope tartalma nem látszhat az admin oldalon.
+    expect(store.quizzes()).toEqual([]);
+    expect(store.selectedDetail()).toBeNull();
+
+    store.loadMine();
+    store.loadDetail(1);
+    store.addExistingQuestion(1, 99);
+    expect(serviceMock.getMine).toHaveBeenLastCalledWith('admin');
+    expect(serviceMock.getDetail).toHaveBeenLastCalledWith(1, 'admin');
+    expect(serviceMock.addExistingQuestion).toHaveBeenCalledWith(1, 99, 'admin');
+
+    // Vissza tanári nézetbe: ugyanaz a store, ismét teacher gyökér.
+    store.setScope('teacher');
+    store.loadMine();
+    expect(serviceMock.getMine).toHaveBeenLastCalledWith('teacher');
+  });
+
+  it('C5: scope-váltás után egy még futó, előző scope-beli betöltés válasza nem érkezik meg', () => {
+    configure();
+    const teacherDetail$ = new Subject<TeacherQuizDetailDto>();
+    serviceMock.getDetail.mockReturnValue(teacherDetail$);
+
+    store.loadDetail(1);
+    expect(store.loading()).toBe(true);
+
+    store.setScope('admin');
+    expect(store.loading()).toBe(false);
+
+    teacherDetail$.next(makeDetail({ id: 1, title: 'Tanári, késve' }));
+    teacherDetail$.complete();
+
+    expect(store.selectedDetail()).toBeNull();
+    expect(store.loading()).toBe(false);
+  });
+
+  it('C5: unpublish() siker esetén újratölti a részletet az aktuális scope-pal', () => {
+    configure();
+    serviceMock.unpublish = vi.fn().mockReturnValue(of(null));
+    serviceMock.getDetail.mockReturnValue(of(makeDetail({ id: 3, isPublished: false })));
+    const onSuccess = vi.fn();
+
+    store.setScope('admin');
+    store.unpublish(3, onSuccess);
+
+    expect(serviceMock.unpublish).toHaveBeenCalledWith(3, 'admin');
+    expect(serviceMock.getDetail).toHaveBeenCalledWith(3, 'admin');
+    expect(store.selectedDetail()?.isPublished).toBe(false);
     expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 });
