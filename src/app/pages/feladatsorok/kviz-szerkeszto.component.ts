@@ -1170,9 +1170,10 @@ export class KvizSzerkesztoComponent {
   }
 
   cloneQuiz(): void {
-    this.store.cloneQuiz(this.quizId, (newId) =>
-      void this.router.navigate(['/feladatsorok', 'kvizek', newId, 'szerkesztes']),
-    );
+    this.store.cloneQuiz(this.quizId, (newId) => {
+      // router.navigate újrahasználná a komponens-példányt (stale readonly quizId) — full reload kell.
+      window.location.href = `/feladatsorok/kvizek/${newId}/szerkesztes`;
+    });
   }
 
   // ── Élő játék (Kahoot-mód) ────────────────────────────────
