@@ -3,18 +3,20 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminQuestionReportService } from '../../services/admin/admin-question-report.service';
 import { AdminInstitutionalInquiryService } from '../../services/admin/admin-institutional-inquiry.service';
+import { AdminPaymentReviewService, NeedsReviewPaymentDto } from '../../services/admin/admin-payment-review.service';
 import { QuizQuestionReportDto } from '../../models/question-report.model';
 import { InstitutionalInquiryDto } from '../../models/institutional-inquiry.model';
+import { CurrencyPipe } from '@angular/common';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { ToastService } from '../../shared/toast/toast.service';
 
-type Tab = 'reports' | 'inquiries';
+type Tab = 'reports' | 'inquiries' | 'payments';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-admin-ellenorzes',
   standalone: true,
-  imports: [DatePipe, FormsModule, LocalSpinnerComponent],
+  imports: [DatePipe, CurrencyPipe, FormsModule, LocalSpinnerComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <h1 class="page-title">Ellenőrzés</h1>
@@ -37,6 +39,14 @@ type Tab = 'reports' | 'inquiries';
           [class.border-transparent]="activeTab() !== 'inquiries'"
           [class.text-text-muted]="activeTab() !== 'inquiries'">
           Érdeklődések
+        </button>
+        <button (click)="setTab('payments')"
+          class="px-4 py-2 font-semibold transition-colors -mb-px border-b-2"
+          [class.border-primary]="activeTab() === 'payments'"
+          [class.text-primary]="activeTab() === 'payments'"
+          [class.border-transparent]="activeTab() !== 'payments'"
+          [class.text-text-muted]="activeTab() !== 'payments'">
+          Fizetések
         </button>
       </div>
 
@@ -202,12 +212,50 @@ type Tab = 'reports' | 'inquiries';
           }
         }
       }
+
+      <!-- Fizetések fül -->
+      @if (activeTab() === 'payments') {
+        @if (paymentsError()) {
+          <p class="text-danger text-sm mb-4">{{ paymentsError() }}</p>
+        }
+        @if (paymentsLoading()) {
+          <app-local-spinner />
+        }
+        @if (!paymentsLoading()) {
+          <ul class="space-y-3">
+            @for (p of payments(); track p.id) {
+              <li class="card p-4">
+                <div class="flex justify-between items-start gap-3 mb-1">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-sm">{{ p.userEmail }}</p>
+                    <p class="text-xs text-text-muted mt-0.5">
+                      {{ p.amount | currency: 'HUF' : 'symbol' : '1.0-0' : 'hu' }}
+                      · <span class="font-mono">{{ p.stripePaymentIntentId }}</span>
+                    </p>
+                  </div>
+                  <span class="text-xs text-text-muted shrink-0">{{ p.createdAt | date: 'yyyy.MM.dd HH:mm' }}</span>
+                </div>
+                @if (p.reviewNote) {
+                  <p class="text-sm mb-2 break-words border-l-2 border-border-default pl-2 text-text-muted italic">„{{ p.reviewNote }}"</p>
+                }
+                <button (click)="markPaymentReviewDone(p)" [disabled]="pending()"
+                  class="btn btn-primary !px-3 !py-1.5 !text-xs mt-2">
+                  Felülvizsgálva
+                </button>
+              </li>
+            } @empty {
+              <li class="text-text-muted text-sm py-6 text-center">Nincs manuális felülvizsgálatot igénylő fizetés.</li>
+            }
+          </ul>
+        }
+      }
     </div>
   `,
 })
 export class AdminEllenorzesComponent implements OnInit {
   private readonly svc = inject(AdminQuestionReportService);
   private readonly inquirySvc = inject(AdminInstitutionalInquiryService);
+  private readonly paymentSvc = inject(AdminPaymentReviewService);
   private readonly toast = inject(ToastService);
 
   readonly activeTab = signal<Tab>('reports');
@@ -233,6 +281,11 @@ export class AdminEllenorzesComponent implements OnInit {
   readonly inquiriesTotalPages = () => Math.max(1, Math.ceil(this.inquiriesTotalCount() / this.pageSize));
   readonly handledNotes: Record<number, string> = {};
 
+  // ── Fizetések ─────────────────────────────────
+  readonly payments = signal<NeedsReviewPaymentDto[]>([]);
+  readonly paymentsLoading = signal(false);
+  readonly paymentsError = signal<string | null>(null);
+
   readonly filterOptions = [
     { value: true, label: 'Csak nyitottak' },
     { value: false, label: 'Összes' },
@@ -246,6 +299,9 @@ export class AdminEllenorzesComponent implements OnInit {
     this.activeTab.set(tab);
     if (tab === 'inquiries' && this.inquiries().length === 0 && !this.inquiriesLoading()) {
       this.loadInquiries();
+    }
+    if (tab === 'payments' && this.payments().length === 0 && !this.paymentsLoading()) {
+      this.loadPayments();
     }
   }
 
@@ -340,6 +396,29 @@ export class AdminEllenorzesComponent implements OnInit {
         this.inquiriesError.set('Az érdeklődések betöltése sikertelen.');
         this.inquiriesLoading.set(false);
       },
+    });
+  }
+
+  // ── Fizetések ─────────────────────────────────
+
+  private loadPayments(): void {
+    this.paymentsLoading.set(true);
+    this.paymentsError.set(null);
+    this.paymentSvc.getNeedsReview().subscribe({
+      next: (data) => { this.payments.set(data); this.paymentsLoading.set(false); },
+      error: () => { this.paymentsError.set('A fizetések betöltése sikertelen.'); this.paymentsLoading.set(false); },
+    });
+  }
+
+  markPaymentReviewDone(p: NeedsReviewPaymentDto): void {
+    this.pending.set(true);
+    this.paymentSvc.markReviewDone(p.id).subscribe({
+      next: () => {
+        this.pending.set(false);
+        this.payments.update(list => list.filter(x => x.id !== p.id));
+        this.toast.success('Felülvizsgálat kész jelölve.');
+      },
+      error: () => { this.pending.set(false); this.toast.danger('Hiba történt.'); },
     });
   }
 
