@@ -590,6 +590,68 @@ describe('FeladatsorEredmenyekComponent', () => {
   // "néma no-op". A textarea mostantól [disabled]="!canEditScore(r)", és egy
   // magyarázó szöveg jelzi, miért nem szerkeszthető - a tanár nem tud olyan
   // szöveget beírni, amit aztán ne tudna elmenteni.
+  // ── C7: szűrősáv + PDF-export ──────────────────────────────────────────────
+
+  it('C7: csoport-szűrő változásra loadTaskSetResults-t hív a groupId-vel', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    reportStoreMock.loadTaskSetResults.mockClear();
+
+    fixture.componentInstance.onGroupChange(5);
+
+    expect(reportStoreMock.loadTaskSetResults).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ groupId: 5 }),
+    );
+  });
+
+  it('C7: státusz-szűrő változásra loadTaskSetResults-t hív a státusszal', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    reportStoreMock.loadTaskSetResults.mockClear();
+
+    fixture.componentInstance.onStatusChange('completed');
+
+    expect(reportStoreMock.loadTaskSetResults).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ status: 'completed' }),
+    );
+  });
+
+  it('C7: dátum-szűrő változásra loadTaskSetResults-t hív a from/to-val', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    reportStoreMock.loadTaskSetResults.mockClear();
+
+    const from = new Date('2026-01-01T00:00:00Z');
+    const to = new Date('2026-12-31T23:59:59Z');
+    fixture.componentInstance.onRangeChange({ key: 'custom', range: { from, to } });
+
+    expect(reportStoreMock.loadTaskSetResults).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ from, to }),
+    );
+  });
+
+  it('C7: Nyomtatás / PDF gomb meghívja a window.print()-et', () => {
+    configure(makeResults());
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const printButton = [...fixture.nativeElement.querySelectorAll('button')].find((b) =>
+      (b as HTMLElement).textContent?.includes('Nyomtatás'),
+    ) as HTMLButtonElement;
+    expect(printButton).toBeTruthy();
+    printButton.click();
+
+    expect(printSpy).toHaveBeenCalledOnce();
+    printSpy.mockRestore();
+  });
+
   it('kiértékeletlen beadásnál a szöveges értékelés mező le van tiltva, mert nincs mód a mentésére (Mentés gomb hiányzik)', () => {
     configure(makeResults());
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
