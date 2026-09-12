@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 import {
   StudentActivityDetailDto,
   StudentActivitySummaryDto,
+  TaskSetResultsFilter,
   TeacherAttemptReviewDto,
   TeacherScoreOverrideRequest,
   TeacherTaskSetResultsDto,
@@ -51,8 +52,16 @@ export class ReportService {
     return this.http.get<TeacherWeakTopicDto[]>(`${this.baseUrl}/groups/${groupId}/weak-topics`, { params });
   }
 
-  getTaskSetResults(taskSetId: number): Observable<TeacherTaskSetResultsDto> {
-    return this.http.get<TeacherTaskSetResultsDto>(`${this.baseUrl}/task-sets/${taskSetId}/results`);
+  getTaskSetResults(taskSetId: number, filter?: TaskSetResultsFilter): Observable<TeacherTaskSetResultsDto> {
+    let params = new HttpParams();
+    if (filter?.groupId != null) params = params.set('groupId', filter.groupId);
+    if (filter?.from) params = params.set('from', filter.from.toISOString());
+    if (filter?.to) params = params.set('to', filter.to.toISOString());
+    if (filter?.status) params = params.set('status', filter.status);
+    return this.http.get<TeacherTaskSetResultsDto>(
+      `${this.baseUrl}/task-sets/${taskSetId}/results`,
+      { params },
+    );
   }
 
   getAttemptReview(attemptId: number): Observable<TeacherAttemptReviewDto> {

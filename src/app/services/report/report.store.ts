@@ -7,6 +7,7 @@ import { extractErrorMessage } from '../../shared/http-error/extract-error-messa
 import {
   StudentActivityDetailDto,
   StudentActivitySummaryDto,
+  TaskSetResultsFilter,
   TeacherAttemptReviewDto,
   TeacherScoreOverrideRequest,
   TeacherTaskSetResultsDto,
@@ -58,6 +59,10 @@ export class ReportStore {
   // (és az URL szerint is helyes) B mátrixot. Ez a mező tartja nyilván a loader aktuális
   // célpontját.
   private _taskSetResultsId: number | null = null;
+  // C7: a legutolsó szűrő megmarad, hogy a pontszám-mentés utáni automatikus
+  // mátrix-reload ugyanazokat a szűrési feltételeket alkalmazza, amelyeket a tanár
+  // éppen lát — különben a szűrt nézet mentés után mindig szűretlen eredményre váltana.
+  private _taskSetResultsFilter: TaskSetResultsFilter | undefined;
   // Ugyanaz az indok, mint a fenti négynél: a tanár egy cella panelját bezárva egy
   // MÁSIK cellára kattinthat, mielőtt az első válasza megérkezne — generáció nélkül
   // a lassabb, korábbi válasz felülírná a már megjelenített újat.
@@ -183,9 +188,10 @@ export class ReportStore {
       });
   }
 
-  loadTaskSetResults(taskSetId: number): void {
+  loadTaskSetResults(taskSetId: number, filter?: TaskSetResultsFilter): void {
     const generation = ++this._taskSetResultsGeneration;
     this._taskSetResultsId = taskSetId;
+    this._taskSetResultsFilter = filter;
     this._taskSetResultsLoading.set(true);
     this._error.set(null);
 
@@ -200,7 +206,7 @@ export class ReportStore {
     }
 
     this.service
-      .getTaskSetResults(taskSetId)
+      .getTaskSetResults(taskSetId, filter)
       .pipe(
         take(1),
         finalize(() => {
@@ -329,7 +335,7 @@ export class ReportStore {
           // kap — a loading állapot ekkor már ANNAK
           // a frissebb betöltésnek a tulajdona, ami a célpontot átállította.
           if (this._taskSetResultsId === taskSetId) {
-            this.loadTaskSetResults(taskSetId);
+            this.loadTaskSetResults(taskSetId, this._taskSetResultsFilter);
           }
           if (onSuccess) onSuccess();
         },

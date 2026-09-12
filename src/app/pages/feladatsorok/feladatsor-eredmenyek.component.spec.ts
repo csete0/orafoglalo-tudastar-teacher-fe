@@ -3,6 +3,7 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { FeladatsorEredmenyekComponent } from './feladatsor-eredmenyek.component';
 import { ReportStore } from '../../services/report/report.store';
+import { GroupStore } from '../../services/group/group.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
@@ -112,6 +113,7 @@ describe('FeladatsorEredmenyekComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ReportStore, useValue: reportStoreMock },
+        { provide: GroupStore, useValue: { groups: signal([]), loading: signal(false), loadMine: vi.fn() } },
         { provide: ToastService, useValue: toastMock },
         { provide: ConfirmService, useValue: confirmMock },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
@@ -133,7 +135,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
     fixture.detectChanges();
 
-    expect(reportStoreMock.loadTaskSetResults).toHaveBeenCalledWith(1);
+    expect(reportStoreMock.loadTaskSetResults).toHaveBeenCalledWith(1, expect.any(Object));
   });
 
   it('a feladat-oszlopok és diák-sorok helyesen jelennek meg', () => {
