@@ -67,6 +67,10 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
         <div class="flex items-start gap-3 mt-3">
           <h1 class="page-title flex-1">{{ quiz.title }}</h1>
           <span class="badge shrink-0" [class]="badgeClass()">{{ badgeLabel() }}</span>
+          <button type="button" class="btn btn-ghost text-sm shrink-0" [disabled]="store.loading()"
+                  (click)="cloneQuiz()" title="Kvíz másolása piszkozatként">
+            ⧉ Klónozás
+          </button>
         </div>
 
         @if (quiz.takedownAt) {
@@ -199,6 +203,8 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
                     <button type="button" class="btn btn-ghost" (click)="approve(question)">Jóváhagyom</button>
                   }
                   <button type="button" class="btn btn-ghost" (click)="startEdit(question)">Szerkesztés</button>
+                  <button type="button" class="btn btn-ghost" (click)="duplicateQuestion(question)"
+                          title="Kérdés másolása a kvíz végére">⊕ Másolás</button>
                   <button type="button" class="btn btn-ghost text-danger" (click)="deleteQuestion(question)">
                     Törlés
                   </button>
@@ -319,6 +325,25 @@ import { notBlankValidator } from '../../shared/validators/not-blank.validator';
               </span>
               <input formControlName="secondsLimit" type="number" min="1" class="input mt-1" />
             </label>
+
+            <!-- ── C6: kvízkép-feltöltés ──────────────────────────── -->
+            <div class="border border-dashed border-border rounded-lg p-3 space-y-2">
+              <span class="text-sm text-text-muted">Kép a kérdéshez (jpg/png/webp, max 2 MB, opcionális)</span>
+              @if (questionImagePreview()) {
+                <img [src]="questionImagePreview()" alt="Kérdéskép előnézet" class="max-h-32 rounded" />
+                <button type="button" class="btn btn-ghost text-sm text-danger" (click)="removeQuestionImage()">
+                  Kép eltávolítása
+                </button>
+              }
+              <input #imageInput type="file" accept="image/jpeg,image/png,image/webp"
+                     class="hidden" (change)="onImageSelected($event)" />
+              <button type="button" class="btn btn-ghost text-sm" (click)="imageInput.click()">
+                {{ questionImagePreview() ? 'Kép cseréje' : 'Kép kiválasztása…' }}
+              </button>
+              @if (imageUploadError()) {
+                <p class="text-xs text-danger">{{ imageUploadError() }}</p>
+              }
+            </div>
 
             @if (formWarning(); as warning) {
               <p class="text-sm text-danger">{{ warning }}</p>
@@ -674,6 +699,11 @@ export class KvizSzerkesztoComponent {
   readonly editingId = signal<number | null>(null);
   private readonly selectedCorrect = signal<string[]>([]);
 
+  // ── C6: kvízkép-állapot ──────────────────────────────────────
+  readonly questionImagePreview = signal<string | null>(null);
+  readonly imageUploadError = signal<string | null>(null);
+  private readonly pendingImageFileId = signal<string | null>(null);
+
   readonly settingsForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, notBlankValidator(), Validators.maxLength(200)]],
     description: [''],
@@ -958,12 +988,18 @@ export class KvizSzerkesztoComponent {
       secondsLimit: question.secondsLimit ?? null,
     });
     this.selectedCorrect.set(question.questionType === 'cloze' ? [] : [...question.correctAnswers]);
+    this.questionImagePreview.set(question.imageUrl ?? null);
+    this.pendingImageFileId.set(question.imageFileId ?? null);
+    this.imageUploadError.set(null);
   }
 
   cancelEdit(): void {
     this.editingId.set(null);
     this.questionForm.reset({ questionType: 'single', difficulty: 'Medium' });
     this.selectedCorrect.set([]);
+    this.questionImagePreview.set(null);
+    this.pendingImageFileId.set(null);
+    this.imageUploadError.set(null);
   }
 
   saveQuestion(): void {
@@ -981,6 +1017,7 @@ export class KvizSzerkesztoComponent {
       explanation: raw.explanation || null,
       difficulty: raw.difficulty,
       secondsLimit: raw.secondsLimit || null,
+      imageFileId: this.pendingImageFileId(),
     };
 
     const editingId = this.editingId();
@@ -1083,6 +1120,58 @@ export class KvizSzerkesztoComponent {
       this.quizId,
       bankQuestion.id,
       () => this.toastService.success('Kérdés hozzáadva a kvízhez.'),
+    );
+  }
+
+  // ── C6: kvízkép-feltöltés, kérdés-duplikálás, kvíz-klónozás ──
+
+  onImageSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.imageUploadError.set(null);
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      this.imageUploadError.set('Csak jpg, png vagy webp fájl engedélyezett.');
+      input.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      this.imageUploadError.set('A fájl mérete nem haladhatja meg a 2 MB-ot.');
+      input.value = '';
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    this.questionImagePreview.set(preview);
+
+    this.quizService.uploadQuizImage(this.quizId, file).pipe(take(1)).subscribe({
+      next: (res) => this.pendingImageFileId.set(res.id),
+      error: (err) => {
+        this.imageUploadError.set(extractErrorMessage(err, 'A kép feltöltése sikertelen.'));
+        this.questionImagePreview.set(null);
+        input.value = '';
+      },
+    });
+  }
+
+  removeQuestionImage(): void {
+    this.questionImagePreview.set(null);
+    this.pendingImageFileId.set(null);
+    this.imageUploadError.set(null);
+  }
+
+  duplicateQuestion(question: TeacherQuizQuestionDto): void {
+    this.store.duplicateQuestion(this.quizId, question.id, () =>
+      this.toastService.success('Kérdés másolva.'),
+    );
+  }
+
+  cloneQuiz(): void {
+    this.store.cloneQuiz(this.quizId, (newId) =>
+      void this.router.navigate(['/feladatsorok', 'kvizek', newId, 'szerkesztes']),
     );
   }
 

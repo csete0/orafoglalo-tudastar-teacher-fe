@@ -202,4 +202,18 @@ export class TeacherQuizService {
   getTopics(): Observable<QuizTopicGroupDto[]> {
     return this.http.get<QuizTopicGroupDto[]>(`${environment.apiUrl}/quiz/topics`);
   }
+
+  uploadQuizImage(quizId: number, file: File): Observable<{ id: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ id: string }>(`${this.baseUrl}/quizzes/${quizId}/images`, form);
+  }
+
+  duplicateQuestion(questionId: number): Observable<TeacherQuizQuestionDto> {
+    return this.http.post<TeacherQuizQuestionDto>(`${this.baseUrl}/quiz-questions/${questionId}/duplicate`, {});
+  }
+
+  cloneQuiz(quizId: number): Observable<TeacherQuizDto> {
+    return this.http.post<TeacherQuizDto>(`${this.baseUrl}/quizzes/${quizId}/clone`, {});
+  }
 }
