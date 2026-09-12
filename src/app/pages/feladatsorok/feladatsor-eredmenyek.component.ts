@@ -4,6 +4,8 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
 import {
   TaskResultCellDto,
+  TaskSetResultsFilter,
+  TaskSetResultsStatus,
   TeacherAttemptReviewDto,
   TeacherTaskSetResultsDto,
 } from '../../models/report.model';
@@ -12,6 +14,15 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { weakestTasks, WEAK_THRESHOLD_PERCENT } from '../../shared/task-analysis/task-weakness';
+import { GroupStore } from '../../services/group/group.store';
+import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
+import {
+  DEFAULT_RANGE_KEY,
+  ReportDateRange,
+  ReportRangeKey,
+  toDateInputValue,
+  toDateInputValueExclusiveEnd,
+} from '../../shared/date-range/report-date-range';
 
 /** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
 const MAX_FEEDBACK_LENGTH = 2000;
@@ -21,7 +32,12 @@ const MAX_FEEDBACK_LENGTH = 2000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-eredmenyek',
   standalone: true,
-  imports: [RouterLink, FormsModule, LocalSpinnerComponent],
+  imports: [RouterLink, FormsModule, LocalSpinnerComponent, DateRangeFilterComponent],
+  styles: [`
+    @media print {
+      tr { break-inside: avoid; }
+    }
+  `],
   template: `
     @if (report.taskSetResults(); as results) {
       <div class="max-w-5xl mx-auto px-4 py-10">
@@ -30,12 +46,51 @@ const MAX_FEEDBACK_LENGTH = 2000;
             <h1 class="page-title truncate">{{ results.title }} — eredmények</h1>
             <p class="text-sm text-text-muted mt-1">Tagonkénti eredmény-mátrix (diákok × feladatok)</p>
           </div>
-          <button type="button" (click)="exportCsv(results)" class="btn shrink-0"
-            title="Az eredmények letöltése CSV-ben, osztálynaplóba importálható formában.">
-            Exportálás CSV-be
-          </button>
+          <div class="flex gap-2 print:hidden">
+            <button type="button" (click)="exportCsv(results)" class="btn shrink-0"
+              title="Az eredmények letöltése CSV-ben, osztálynaplóba importálható formában.">
+              Exportálás CSV-be
+            </button>
+            <button type="button" (click)="print()" class="btn shrink-0"
+              title="Cél: Mentés PDF-ként">
+              Nyomtatás / PDF
+            </button>
+          </div>
         </div>
         <div class="hairline"></div>
+
+        <!-- C7: szűrősáv — a nyomtatott nézeten nem jelenik meg -->
+        <div class="flex flex-wrap items-end gap-4 mb-6 print:hidden">
+          <div>
+            <label class="text-xs text-text-muted block mb-1" for="filter-group">Csoport</label>
+            <select id="filter-group"
+              [ngModel]="selectedGroupId()" (ngModelChange)="onGroupChange($event)"
+              [ngModelOptions]="{ standalone: true }"
+              class="input !w-auto">
+              <option [ngValue]="null">Minden csoport</option>
+              @for (g of activeGroups(); track g.id) {
+                <option [ngValue]="g.id">{{ g.name }}</option>
+              }
+            </select>
+          </div>
+          <app-date-range-filter
+            [initialRangeKey]="filterRangeKey()"
+            [initialCustomFrom]="filterCustomFrom()"
+            [initialCustomTo]="filterCustomTo()"
+            (rangeChange)="onRangeChange($event)" />
+          <div>
+            <label class="text-xs text-text-muted block mb-1" for="filter-status">Státusz</label>
+            <select id="filter-status"
+              [ngModel]="filterStatus()" (ngModelChange)="onStatusChange($event)"
+              [ngModelOptions]="{ standalone: true }"
+              class="input !w-auto">
+              <option value="all">Összes</option>
+              <option value="completed">Befejezett</option>
+              <option value="inProgress">Folyamatban</option>
+              <option value="notStarted">Nem kezdte el</option>
+            </select>
+          </div>
+        </div>
 
         <!-- ── Leggyengébben teljesített feladatok ──
              A mátrix megmutatja az adatot, de nem MONDJA MEG, mit kell újratanítani.
@@ -339,7 +394,19 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
   private readonly csvExport = inject(ResultsCsvExportService);
+  private readonly groupStore = inject(GroupStore);
   readonly report = inject(ReportStore);
+
+  /** C7: szűrő-állapot */
+  readonly selectedGroupId = signal<number | null>(null);
+  readonly filterStatus = signal<TaskSetResultsStatus>('all');
+  readonly filterRange = signal<ReportDateRange>({});
+  readonly filterRangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
+
+  readonly filterCustomFrom = computed(() => toDateInputValue(this.filterRange().from));
+  readonly filterCustomTo = computed(() => toDateInputValueExclusiveEnd(this.filterRange().to));
+
+  readonly activeGroups = computed(() => this.groupStore.groups().filter((g) => !g.isArchived));
 
   /** A backend ugyanezt a korlátot kényszeríti ki (TeacherAttemptReviewService). */
   readonly maxFeedbackLength = MAX_FEEDBACK_LENGTH;
@@ -412,7 +479,39 @@ export class FeladatsorEredmenyekComponent implements OnInit {
 
   ngOnInit(): void {
     this.taskSetId = Number(this.route.snapshot.paramMap.get('id'));
-    this.report.loadTaskSetResults(this.taskSetId);
+    this.groupStore.loadMine();
+    this.applyFilter();
+  }
+
+  onGroupChange(groupId: number | null): void {
+    this.selectedGroupId.set(groupId);
+    this.applyFilter();
+  }
+
+  onStatusChange(status: TaskSetResultsStatus): void {
+    this.filterStatus.set(status);
+    this.applyFilter();
+  }
+
+  onRangeChange(event: { key: ReportRangeKey; range: ReportDateRange }): void {
+    this.filterRangeKey.set(event.key);
+    this.filterRange.set(event.range);
+    this.applyFilter();
+  }
+
+  private applyFilter(): void {
+    const range = this.filterRange();
+    const filter: TaskSetResultsFilter = {
+      groupId: this.selectedGroupId(),
+      from: range.from,
+      to: range.to,
+      status: this.filterStatus(),
+    };
+    this.report.loadTaskSetResults(this.taskSetId, filter);
+  }
+
+  print(): void {
+    window.print();
   }
 
   /** A panel-sor a megnyitott cellát TARTALMAZÓ diák sora alá kerül. */

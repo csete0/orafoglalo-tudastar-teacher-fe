@@ -43,7 +43,7 @@ const ADMIN_LINKS: NavLink[] = [
   ],
   template: `
     <header (document:click)="onDocumentClick($event)"
-      class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm">
+      class="sticky top-0 z-30 relative border-b border-border-default bg-bg-panel shadow-sm print:hidden">
       <!-- UI-TT-181: flex-wrap hozzáadva - a korábbi, tördelés nélküli flex sor
            a viewport-alapú (media-query) mobil-hamburger töréspont ALATT (pl.
            1280px asztali szélességnél) is túlcsordult, ha a tartalom szöveg-

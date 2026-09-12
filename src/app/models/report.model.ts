@@ -139,6 +139,16 @@ export interface TeacherAttemptReviewDto {
   failedRunCount: number;
 }
 
+/** C7: feladatsor-eredmény szűrő — a BE `TaskSetResultsFilter` párja. */
+export type TaskSetResultsStatus = 'all' | 'completed' | 'inProgress' | 'notStarted';
+
+export interface TaskSetResultsFilter {
+  groupId?: number | null;
+  from?: Date;
+  to?: Date;
+  status: TaskSetResultsStatus;
+}
+
 /** Tanári pont-felülbírálás kérése. Legalább az egyik mező kötelező. */
 export interface TeacherScoreOverrideRequest {
   /** null = a pontszám marad, csak szöveges értékelés érkezik. */
