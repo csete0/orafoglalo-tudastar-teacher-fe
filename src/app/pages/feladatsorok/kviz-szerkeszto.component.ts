@@ -27,6 +27,8 @@ import { extractErrorMessage } from '../../shared/http-error/extract-error-messa
 import { IconComponent } from '../../shared/icon/icon.component';
 import { ToastService } from '../../shared/toast/toast.service';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
+import { AuthorizedFileService } from '../../services/file/authorized-file.service';
+import { environment } from '../../../environments/environment';
 
 /**
  * Tanári kvíz-szerkesztő: beállítások, kérdések (típusonként eltérő űrlappal),
@@ -647,7 +649,9 @@ export class KvizSzerkesztoComponent {
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
   private readonly groupStore = inject(GroupStore);
+  private readonly authorizedFileService = inject(AuthorizedFileService);
   readonly store = inject(TeacherQuizStore);
+  readonly apiOrigin = new URL(environment.apiUrl).origin;
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
   /** C5: a route `data.scope`-ja dönti el, tanári vagy admin (platform-kvíz) nézet-e. */
@@ -703,6 +707,7 @@ export class KvizSzerkesztoComponent {
   readonly questionImagePreview = signal<string | null>(null);
   readonly imageUploadError = signal<string | null>(null);
   private readonly pendingImageFileId = signal<string | null>(null);
+  private resolvedImageBlobUrl: string | null = null;
 
   readonly settingsForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, notBlankValidator(), Validators.maxLength(200)]],
@@ -988,7 +993,17 @@ export class KvizSzerkesztoComponent {
       secondsLimit: question.secondsLimit ?? null,
     });
     this.selectedCorrect.set(question.questionType === 'cloze' ? [] : [...question.correctAnswers]);
-    this.questionImagePreview.set(question.imageUrl ?? null);
+    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
+    this.resolvedImageBlobUrl = null;
+    this.questionImagePreview.set(null);
+    if (question.imageUrl) {
+      this.authorizedFileService.resolveUrl(this.apiOrigin + question.imageUrl)
+        .pipe(take(1))
+        .subscribe(url => {
+          this.resolvedImageBlobUrl = url;
+          this.questionImagePreview.set(url);
+        });
+    }
     this.pendingImageFileId.set(question.imageFileId ?? null);
     this.imageUploadError.set(null);
   }
@@ -997,6 +1012,8 @@ export class KvizSzerkesztoComponent {
     this.editingId.set(null);
     this.questionForm.reset({ questionType: 'single', difficulty: 'Medium' });
     this.selectedCorrect.set([]);
+    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
+    this.resolvedImageBlobUrl = null;
     this.questionImagePreview.set(null);
     this.pendingImageFileId.set(null);
     this.imageUploadError.set(null);
@@ -1158,6 +1175,8 @@ export class KvizSzerkesztoComponent {
   }
 
   removeQuestionImage(): void {
+    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
+    this.resolvedImageBlobUrl = null;
     this.questionImagePreview.set(null);
     this.pendingImageFileId.set(null);
     this.imageUploadError.set(null);
