@@ -248,6 +248,26 @@ export class TeacherQuizStore {
     this.mutateAndReload(this.service.approveQuestion(questionId, this._scope()), quizId, onSuccess);
   }
 
+  duplicateQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.duplicateQuestion(questionId), quizId, onSuccess);
+  }
+
+  cloneQuiz(quizId: number, onSuccess?: (newQuizId: number) => void): void {
+    this._loading.set(true);
+    this._error.set(null);
+
+    this.service.cloneQuiz(quizId).pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (newQuiz) => {
+        this._loading.set(false);
+        onSuccess?.(newQuiz.id);
+      },
+      error: (err) => {
+        this._error.set(extractErrorMessage(err, 'A klónozás sikertelen.'));
+        this._loading.set(false);
+      },
+    });
+  }
+
   generateQuestions(
     quizId: number,
     request: GenerateTeacherQuizQuestionsRequest,

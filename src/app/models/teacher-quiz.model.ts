@@ -72,6 +72,10 @@ export interface TeacherQuizQuestionDto {
   isApproved: boolean;
   isAiGenerated: boolean;
   reportCount: number;
+  /** C6: csatolt kvízkép GUID-ja, vagy null ha nincs kép. */
+  imageFileId?: string | null;
+  /** C6: /api/teacher-files/{id} URL, vagy null ha nincs kép. */
+  imageUrl?: string | null;
 }
 
 /**
@@ -130,6 +134,8 @@ export interface CreateTeacherQuizQuestionRequest {
   difficulty: QuizDifficulty;
   secondsLimit?: number | null;
   displayOrder?: number | null;
+  /** C6: csatolt kép TeacherFile GUID-ja. Feltöltés után kapjuk, itt küldjük el mentéskor. */
+  imageFileId?: string | null;
 }
 
 export interface AssignTeacherQuizRequest {
