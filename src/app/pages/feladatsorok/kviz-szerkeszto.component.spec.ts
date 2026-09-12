@@ -956,4 +956,31 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
     const el: HTMLElement = fixture.nativeElement;
     expect(el.textContent).not.toContain('jelentés');
   });
+
+  // C6: feltöltés → imageFileId a mentett payloadban
+  it('C6: kép feltöltése után a saveQuestion az imageFileId-t is elküldi', () => {
+    const fixture = configure(makeDetail({ id: 7, questions: [] }));
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Szimulált feltöltés eredménye (a quizService.uploadQuizImage subscribe után fut)
+    (component as any).pendingImageFileId.set('b1a2c3d4-e5f6-7890-abcd-ef1234567890');
+
+    component.questionForm.patchValue({
+      questionType: 'single',
+      questionText: 'Melyik helyes?',
+      topicId: 1,
+      difficulty: 'Medium',
+      optionsText: 'A\nB',
+    });
+    (component as any).selectedCorrect.set(['A']);
+
+    component.saveQuestion();
+
+    expect(storeMock.addQuestion).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ imageFileId: 'b1a2c3d4-e5f6-7890-abcd-ef1234567890' }),
+      expect.any(Function),
+    );
+  });
 });
