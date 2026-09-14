@@ -118,8 +118,10 @@ export class LoginComponent {
 
   constructor() {
     this.route.queryParams.pipe(takeUntilDestroyed()).subscribe((params) => {
-      if (params['returnUrl']) {
-        this.returnUrl = params['returnUrl'];
+      const url = params['returnUrl'];
+      // SEC-310: csak saját relatív URL — open-redirect megakadályozása
+      if (url && url.startsWith('/') && !url.startsWith('//')) {
+        this.returnUrl = url;
       }
     });
   }

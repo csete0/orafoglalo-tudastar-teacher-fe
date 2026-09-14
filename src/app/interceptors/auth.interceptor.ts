@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { catchError, defer, from, Observable, switchMap, throwError } from 'rxjs';
 import { AuthStore } from '../services/auth/store/auth.store';
 import { ToastService } from '../shared/toast/toast.service';
+import { environment } from '../../environments/environment';
 
 /**
  * Token-csatolás + 401-re refresh-és-újrapróbálkozás, plusz globális
@@ -14,6 +15,11 @@ import { ToastService } from '../shared/toast/toast.service';
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authStore = inject(AuthStore);
   const toastService = inject(ToastService);
+
+  // SEC-310: Bearer csak a saját API-ra megy — külső szolgáltatásokra nem
+  if (!req.url.startsWith(environment.apiUrl)) {
+    return next(req);
+  }
 
   if (isPublicEndpoint(req.url)) {
     return next(req);
