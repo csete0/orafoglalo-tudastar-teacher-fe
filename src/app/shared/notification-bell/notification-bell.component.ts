@@ -315,7 +315,8 @@ export class NotificationBellComponent implements OnInit {
       this.store.markAsRead(n.userNotificationId);
     }
     this.close();
-    if (n.actionUrl) {
+    // SEC-422: csak belső route-ok (/...) engedélyezettek — javascript: URL-ek blokkolva
+    if (n.actionUrl && n.actionUrl.startsWith('/')) {
       this.router.navigateByUrl(n.actionUrl);
     } else {
       // UI-TT-188: actionUrl nélküli elemnél nincs elnavigálás, ami a
