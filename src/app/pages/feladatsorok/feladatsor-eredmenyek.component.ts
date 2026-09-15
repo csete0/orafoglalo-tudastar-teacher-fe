@@ -271,7 +271,11 @@ const MAX_FEEDBACK_LENGTH = 2000;
                                a hosszú szünet gondolkodás vagy egy megzavaró tanterem.
                                Az adatot mutatjuk, a következtetés a tanáré. -->
                           <div class="mt-4">
-                            <h3 class="text-xs uppercase tracking-wide text-text-muted mb-1">Munkafolyamat</h3>
+                            <!-- SEC-411: a munkafolyamat-adatok diák által jelentett értékek,
+                                 nem szerver-oldali tények — ezt a felirat jelzi a tanárnak -->
+                            <h3 class="text-xs uppercase tracking-wide text-text-muted mb-1">
+                              Munkafolyamat <span class="normal-case font-normal">(diák által jelentett)</span>
+                            </h3>
                             <div class="flex gap-5 flex-wrap text-sm">
                               <span>Eltöltött idő: <strong>{{ formatDuration(r.timeSpentSeconds) }}</strong></span>
                               <span>Megnyitások: <strong>{{ r.visitCount }}</strong></span>
