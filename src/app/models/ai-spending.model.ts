@@ -113,6 +113,7 @@ export interface QuizMaintenanceRunDto {
   dryRun: boolean;
   candidatesReviewed: number;
   estimatedCostUsd: number | null;
+  errorMessage: string | null;
 }
 
 export interface QuizMaintenanceRunPageDto {

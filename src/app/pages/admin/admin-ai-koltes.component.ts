@@ -363,6 +363,8 @@ const CHART_PAD_BOTTOM = 24;
                     }
                     @if (!run.completedAt) {
                       <span class="badge badge-primary">folyamatban…</span>
+                    } @else if (run.errorMessage) {
+                      <span class="badge badge-danger">hiba</span>
                     }
                   </div>
                   <p class="text-xs text-text-muted mt-1 tabular-nums">
@@ -374,6 +376,12 @@ const CHART_PAD_BOTTOM = 24;
                       @if (run.estimatedCostUsd !== null) { · {{ fmtUsd(run.estimatedCostUsd) }} }
                     }
                   </p>
+                  <!-- UI-TT-236: korábban egy futás-közbeni hiba a sort örökre
+                       "folyamatban…" állapotban hagyta, admin-jelzés nélkül -
+                       most a tényleges hibaüzenet is látszik. -->
+                  @if (run.errorMessage) {
+                    <p class="text-xs text-danger mt-1">{{ run.errorMessage }}</p>
+                  }
                 </div>
                 <button type="button" class="btn btn-ghost !border !border-border-default !px-3 !py-1.5 !text-xs shrink-0"
                   (click)="openRunDecisions(run.id)">
