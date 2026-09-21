@@ -26,6 +26,13 @@ const ADMIN_LINKS: NavLink[] = [
   { path: '/admin/tanarok', label: 'Tanárok', icon: 'academic-cap' },
   { path: '/admin/intezmenyek', label: 'Intézmények (admin)', icon: 'shield' },
   { path: '/admin/ellenorzes', label: 'Ellenőrzés', icon: 'check' },
+  // AI-KOLTES-PULT: a user kifejezetten kérte, hogy legyen a menüben (ne csak
+  // a vezérlőpult admin-kártyája legyen a belépési pont, mint kuponoknál/
+  // platform-kvízeknél). Ld. az UI-TT-192 kommentjét lent (min-[1200px]
+  // töréspont) - egy 8. nav-elem hozzáadása ÚJRA szélesítheti a szükséges
+  // helyet, a töréspontot óvatosan, mérés nélkül feljebb toltam
+  // (min-[1400px]) - élő ellenőrzést igényel, hogy nem szükséges-e finomhangolás.
+  { path: '/admin/ai-koltes', label: 'AI-költés', icon: 'chart' },
 ];
 
 @Component({
@@ -90,7 +97,7 @@ const ADMIN_LINKS: NavLink[] = [
                helyette (ugyanazokkal a linkekkel/haranggal/kijelentkezéssel), tehát
                ez nem új fallback, csak a meglévő kettő közötti váltásküszöb admin
                esetén szélesebbre húzva. -->
-          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex flex-wrap items-center gap-1 text-sm' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
+          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1400px]:flex flex-wrap items-center gap-1 text-sm' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
             @if (authStore.hasTeacherRole()) {
               @for (link of teacherLinks; track link.path) {
                 <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
@@ -113,7 +120,7 @@ const ADMIN_LINKS: NavLink[] = [
           </nav>
 
           <!-- Profil-chip + kijelentkezés (desktop) -->
-          <div [class]="authStore.hasAdminRole() ? 'hidden min-[1200px]:flex items-center gap-2 shrink-0' : 'hidden md:flex items-center gap-2 shrink-0'">
+          <div [class]="authStore.hasAdminRole() ? 'hidden min-[1400px]:flex items-center gap-2 shrink-0' : 'hidden md:flex items-center gap-2 shrink-0'">
             <app-notification-bell />
             <div class="flex items-center gap-2" [title]="userEmail()">
               <div class="w-8 h-8 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center"
@@ -127,7 +134,7 @@ const ADMIN_LINKS: NavLink[] = [
           </div>
 
           <!-- Harang + hamburger (mobil) -->
-          <div [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden flex items-center gap-1' : 'md:hidden flex items-center gap-1'">
+          <div [class]="authStore.hasAdminRole() ? 'min-[1400px]:hidden flex items-center gap-1' : 'md:hidden flex items-center gap-1'">
             <app-notification-bell />
             <button #menuBtn (click)="menuOpen.set(!menuOpen())" aria-label="Menü"
               class="btn btn-ghost !px-2">
@@ -156,7 +163,7 @@ const ADMIN_LINKS: NavLink[] = [
              kiváltott document.body-kattintást is) helyesen bezárja. -->
         <div class="fixed inset-0 z-30" (click)="menuOpen.set(false)"></div>
         <div #panel (document:keydown.escape)="menuOpen.set(false)"
-          [class]="authStore.hasAdminRole() ? 'min-[1200px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
+          [class]="authStore.hasAdminRole() ? 'min-[1400px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
           @if (authStore.hasTeacherRole()) {
             @for (link of teacherLinks; track link.path) {
               <a [routerLink]="link.path" (click)="menuOpen.set(false)"
