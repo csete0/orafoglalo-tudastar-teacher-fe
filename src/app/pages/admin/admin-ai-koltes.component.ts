@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminAiSpendingService } from '../../services/admin/admin-ai-spending.service';
@@ -361,13 +361,18 @@ const CHART_PAD_BOTTOM = 24;
                     @if (run.dryRun) {
                       <span class="badge badge-warning">próbafuttatás</span>
                     }
+                    @if (!run.completedAt) {
+                      <span class="badge badge-primary">folyamatban…</span>
+                    }
                   </div>
                   <p class="text-xs text-text-muted mt-1 tabular-nums">
                     {{ run.startedAt | date: 'yyyy.MM.dd. HH:mm' }}
                     @if (run.triggeredByName) { · {{ run.triggeredByName }} }
                     · tartomány: {{ run.rangeStartId ? run.rangeStartId + '–' + run.rangeEndId : 'alapértelmezett' }}
-                    · {{ run.candidatesReviewed }} kérdés vizsgálva
-                    @if (run.estimatedCostUsd !== null) { · {{ fmtUsd(run.estimatedCostUsd) }} }
+                    @if (run.completedAt) {
+                      · {{ run.candidatesReviewed }} kérdés vizsgálva
+                      @if (run.estimatedCostUsd !== null) { · {{ fmtUsd(run.estimatedCostUsd) }} }
+                    }
                   </p>
                 </div>
                 <button type="button" class="btn btn-ghost !border !border-border-default !px-3 !py-1.5 !text-xs shrink-0"
@@ -555,7 +560,7 @@ const CHART_PAD_BOTTOM = 24;
     }
   `,
 })
-export class AdminAiKoltesComponent implements OnInit {
+export class AdminAiKoltesComponent implements OnInit, OnDestroy {
   private readonly svc = inject(AdminAiSpendingService);
   private readonly toast = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
@@ -681,6 +686,10 @@ export class AdminAiKoltesComponent implements OnInit {
   readonly running = signal(false);
   readonly runs = signal<QuizMaintenanceRunDto[]>([]);
   readonly runsLoading = signal(false);
+  // UI-TT-235: a futtatás a háttérben zajlik (ld. runMaintenance() doksi-
+  // kommentje) - ez a timer csak addig figyeli a futás státuszát, amíg a
+  // konkrét indított runId be nem fejeződik (vagy le nem jár a türelmi idő).
+  private pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // ── Eredmények kezelése ──────────────────────────────────────────
   readonly selectedRunId = signal<string | null>(null);
@@ -718,6 +727,10 @@ export class AdminAiKoltesComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadOverview();
+  }
+
+  ngOnDestroy(): void {
+    if (this.pollTimeoutId !== null) clearTimeout(this.pollTimeoutId);
   }
 
   private logLoadedOnce = false;
@@ -841,7 +854,14 @@ export class AdminAiKoltesComponent implements OnInit {
     });
     if (!ok) return;
 
+    // UI-TT-235: a backend a tényleges (percekig tartó) AI-átvizsgálást egy
+    // háttérfeladatba teszi - ez a hívás csak a futás-sort hozza létre és
+    // AZONNAL visszatér, a `candidatesReviewed` még 0/ismeretlen. A tényleges
+    // eredményt a Futtatási előzmények listában lehet nyomon követni - itt
+    // egy rövid, korlátozott ideig tartó pollozással automatikusan frissítjük
+    // is, hogy az admin ne kelljen kézzel újratöltenie az oldalt.
     this.running.set(true);
+    if (this.pollTimeoutId !== null) clearTimeout(this.pollTimeoutId);
     this.svc
       .runMaintenance({
         rangeStartId: this.maintenanceForm.rangeStartId,
@@ -852,14 +872,40 @@ export class AdminAiKoltesComponent implements OnInit {
       .subscribe({
         next: (result) => {
           this.running.set(false);
-          this.toast.success(`Futtatás kész: ${result.candidatesReviewed} kérdés átnézve.`);
+          this.toast.success('Futtatás elindítva a háttérben - az eredmény a Futtatási előzményekben jelenik meg.');
           this.loadRuns();
+          this.pollRunCompletion(result.runId);
         },
         error: (err) => {
           this.running.set(false);
           this.toast.danger(extractErrorMessage(err, 'A futtatás indítása sikertelen.'));
         },
       });
+  }
+
+  /**
+   * UI-TT-235: legfeljebb ~3 percig (20 × 8mp), a runId befejeződéséig
+   * (completedAt kitöltéséig) újratölti a Futtatási előzmények listát, és egy
+   * záró toast-tal jelzi, ha kész. Ha a türelmi idő lejár, csendben leáll -
+   * az admin ekkor is látja a listában, hogy a futás még folyamatban van, csak
+   * kézzel kell frissítenie (nincs hibaállapot, a futás a szerveren tovább fut).
+   */
+  private pollRunCompletion(runId: string, attemptsLeft = 20): void {
+    if (attemptsLeft <= 0) return;
+    this.pollTimeoutId = setTimeout(() => {
+      this.svc.getMaintenanceRuns(1, 20).subscribe({
+        next: (page) => {
+          this.runs.set(page.items);
+          const run = page.items.find((r) => r.id === runId);
+          if (run?.completedAt) {
+            this.toast.success(`Futtatás kész: ${run.candidatesReviewed} kérdés átnézve.`);
+            return;
+          }
+          this.pollRunCompletion(runId, attemptsLeft - 1);
+        },
+        error: () => this.pollRunCompletion(runId, attemptsLeft - 1),
+      });
+    }, 8000);
   }
 
   private loadRuns(): void {
