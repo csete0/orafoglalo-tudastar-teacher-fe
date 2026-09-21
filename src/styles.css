@@ -42,6 +42,20 @@
   --color-border-strong: #AFB8C1;
 }
 
+/* AI-KOLTES-PULT: kategorikus adat-sorok (AI-hívás forrásonként a Kérésnapló/
+   napi-költés diagramon) - nem @theme-ben, mert a --series-* prefix nem
+   Tailwind-felismert szín-prefix (nem generálna utility-t), csak közvetlen
+   var(--series-...) hivatkozásként kellenek. */
+:root {
+  --series-chat: #2a78d6;
+  --series-grading: #eb6834;
+  --series-error: #1baf7a;
+  --series-studyplan: #eda100;
+  --series-quizgen: #e87ba4;
+  --series-maint: #008300;
+  --series-dailychallenge: #5b5fc7;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --color-bg-base: #0D1117;
@@ -68,6 +82,14 @@
 
     --color-border-default: #30363D;
     --color-border-strong: #6E7681;
+
+    --series-chat: #3987e5;
+    --series-grading: #d95926;
+    --series-error: #199e70;
+    --series-studyplan: #c98500;
+    --series-quizgen: #d55181;
+    --series-maint: #00b300;
+    --series-dailychallenge: #7b7fe0;
   }
 }
 

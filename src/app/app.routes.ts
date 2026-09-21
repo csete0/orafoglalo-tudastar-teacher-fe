@@ -167,6 +167,15 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
   },
+  // AI-KOLTES-PULT: kérésenkénti AI-költés, kvíz-karbantartás kézi indítása,
+  // automatizmusok - az admin-nav 6-linkes korlátja miatt nem kap fejléc-linket,
+  // a belépési pont a vezérlőpult admin-kártyája (mint a kuponoknál/kvízeknél).
+  {
+    path: 'admin/ai-koltes',
+    canActivate: [authGuard, roleGuard('admin')],
+    loadComponent: () =>
+      import('./pages/admin/admin-ai-koltes.component').then((m) => m.AdminAiKoltesComponent),
+  },
   {
     path: 'admin/kvizek/:id/szerkesztes',
     canActivate: [authGuard, roleGuard('admin')],

@@ -74,6 +74,16 @@ const ADMIN_CARDS: DashboardCard[] = [
     accent: 'accent-2',
     tile: 'icon-tile-success',
   },
+  // AI-KOLTES-PULT: kérésenkénti OpenRouter-költés, kvíz-karbantartás kézi
+  // indítása, egyéb automatizmusok - szintén csak a vezérlőpultról.
+  {
+    path: '/admin/ai-koltes',
+    title: 'AI-költés',
+    description: 'Kérésenkénti AI-költés, kvíz-karbantartás kézi indítása, automatizmusok.',
+    icon: 'chart',
+    accent: 'accent-1',
+    tile: 'icon-tile-secondary',
+  },
 ];
 
 @Component({
