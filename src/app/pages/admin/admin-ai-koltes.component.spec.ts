@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AdminAiKoltesComponent } from './admin-ai-koltes.component';
 import { AdminAiSpendingService } from '../../services/admin/admin-ai-spending.service';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -48,6 +48,7 @@ describe('AdminAiKoltesComponent - AI-KOLTES-PULT', () => {
     svcMock = {
       getOverview: vi.fn().mockReturnValue(of(makeOverview())),
       getTopSpenders: vi.fn().mockReturnValue(of([{ userId: 1, userName: 'Teszt Elek', requestCount: 5, totalUsd: 1.2 }])),
+      getCredits: vi.fn().mockReturnValue(of({ totalCredits: 100, totalUsage: 23.5, remainingCredits: 76.5 })),
       getRequestLog: vi.fn().mockReturnValue(of({ items: [], totalCount: 0 })),
       getMaintenanceRuns: vi.fn().mockReturnValue(of({ items: [], totalCount: 0 })),
       getAutomationStatus: vi.fn().mockReturnValue(of([])),
@@ -87,6 +88,36 @@ describe('AdminAiKoltesComponent - AI-KOLTES-PULT', () => {
     expect(svcMock['getTopSpenders']).toHaveBeenCalledWith(30, 10);
     expect(component.overview()?.monthTotalUsd).toBe(15.7);
     expect(component.topSpenders().length).toBe(1);
+  });
+
+  it('induláskor betölti az OpenRouter kredit-egyenleget is', () => {
+    configure();
+    const fixture = createFixture();
+    const component = fixture.componentInstance;
+
+    expect(svcMock['getCredits']).toHaveBeenCalled();
+    expect(component.credits()?.remainingCredits).toBe(76.5);
+    expect(component.creditsError()).toBe(false);
+  });
+
+  it('ha az OpenRouter kredit-lekérdezés elhasal, a hibaállapot jelzi, de a többi csempe nem sérül', () => {
+    configure();
+    svcMock['getCredits'] = vi.fn().mockReturnValue(throwError(() => new Error('OpenRouter unreachable')));
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [AdminAiKoltesComponent],
+      providers: [
+        { provide: AdminAiSpendingService, useValue: svcMock },
+        { provide: ToastService, useValue: toastMock },
+        { provide: ConfirmService, useValue: confirmMock },
+      ],
+    });
+    const fixture = createFixture();
+    const component = fixture.componentInstance;
+
+    expect(component.creditsError()).toBe(true);
+    expect(component.credits()).toBeNull();
+    expect(component.overview()).not.toBeNull();
   });
 
   it('a Kérésnapló fülre váltás betölti a kérésnaplót (lustán, csak első alkalommal)', () => {

@@ -97,7 +97,15 @@ const ADMIN_LINKS: NavLink[] = [
                helyette (ugyanazokkal a linkekkel/haranggal/kijelentkezéssel), tehát
                ez nem új fallback, csak a meglévő kettő közötti váltásküszöb admin
                esetén szélesebbre húzva. -->
-          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1400px]:flex flex-wrap items-center gap-1 text-sm' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
+          <!-- AI-KOLTES-PULT: admin usernél 8 nav-link (3 tanári + 5 admin, elválasztóval)
+               a régi flex-wrap mellett 2 sorra tördelt konkrét élő ablak-szélességeknél,
+               annak ellenére, hogy a min-[1400px] küszöb egyáltalán megjelenítette a
+               desktop-nav-ot - a pontos pixel-küszöb ismételt, méretezés nélküli
+               találgatása helyett (ld. UI-TT-177/UI-TT-192 története) a sor mostantól
+               SOSEM törik 2 sorra: flex-nowrap + overflow-x-auto - ha mégsem fér ki
+               teljesen egy adott szélességnél, a NAV SAJÁT sora vízszintesen görgethető
+               lesz, ahelyett hogy a fejléc egésze eltorzulna/tördelődne. -->
+          <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1400px]:flex flex-nowrap items-center gap-1 text-sm overflow-x-auto' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
             @if (authStore.hasTeacherRole()) {
               @for (link of teacherLinks; track link.path) {
                 <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"

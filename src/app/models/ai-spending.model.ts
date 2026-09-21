@@ -39,6 +39,13 @@ export interface AiSpendingOverviewDto {
   automationMonthUsd: number;
 }
 
+/** Az OpenRouter fiók TELJES (nem forrásonkénti) fennmaradó kredit-egyenlege. */
+export interface OpenRouterCreditsDto {
+  totalCredits: number;
+  totalUsage: number;
+  remainingCredits: number;
+}
+
 export interface AiSpendingTopSpenderDto {
   userId: number;
   userName: string;

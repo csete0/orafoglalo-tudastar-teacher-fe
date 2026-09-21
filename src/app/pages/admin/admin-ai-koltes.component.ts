@@ -11,6 +11,7 @@ import {
   AutomationStatusDto,
   MAINTENANCE_ACTION_BADGES,
   MAINTENANCE_ACTION_LABELS,
+  OpenRouterCreditsDto,
   QuizMaintenanceDecisionDto,
   QuizMaintenanceRunDto,
   sourceColor,
@@ -86,7 +87,7 @@ const CHART_PAD_BOTTOM = 24;
         @if (overviewLoading()) {
           <app-local-spinner />
         } @else if (overview(); as ov) {
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
             <div class="card p-4">
               <p class="text-xs text-text-muted font-semibold">Ma összesen</p>
               <p class="text-2xl font-extrabold mt-1">{{ fmtUsd(ov.todayTotalUsd) }}</p>
@@ -102,6 +103,17 @@ const CHART_PAD_BOTTOM = 24;
             <div class="card p-4">
               <p class="text-xs text-text-muted font-semibold">Automatizmusok (e hónap)</p>
               <p class="text-2xl font-extrabold mt-1">{{ fmtUsd(ov.automationMonthUsd) }}</p>
+            </div>
+            <div class="card p-4">
+              <p class="text-xs text-text-muted font-semibold">OpenRouter egyenleg</p>
+              @if (creditsError()) {
+                <p class="text-xs text-danger mt-1">Nem sikerült lekérni.</p>
+              } @else if (credits(); as c) {
+                <p class="text-2xl font-extrabold mt-1">{{ fmtUsd(c.remainingCredits) }}</p>
+                <p class="text-xs text-text-muted mt-0.5">/ {{ fmtUsd(c.totalCredits) }} feltöltve</p>
+              } @else {
+                <p class="text-2xl font-extrabold mt-1 text-text-muted">...</p>
+              }
             </div>
           </div>
 
@@ -570,6 +582,11 @@ export class AdminAiKoltesComponent implements OnInit {
   // ── Áttekintés ─────────────────────────────────────────────────────
   readonly overview = signal<AiSpendingOverviewDto | null>(null);
   readonly topSpenders = signal<AiSpendingTopSpenderDto[]>([]);
+  // Külön a többi áttekintés-adattól: élő, közvetlen OpenRouter API-hívás,
+  // a saját hibaállapota nem akadályozhatja a többi (DB-ből jövő) csempe
+  // megjelenítését, ha az OpenRouter épp nem elérhető.
+  readonly credits = signal<OpenRouterCreditsDto | null>(null);
+  readonly creditsError = signal(false);
   readonly overviewLoading = signal(false);
   readonly overviewError = signal<string | null>(null);
   readonly chartRangeDays = signal<7 | 30>(30);
@@ -751,6 +768,13 @@ export class AdminAiKoltesComponent implements OnInit {
       },
     });
     this.svc.getTopSpenders(30, 10).subscribe({ next: (data) => this.topSpenders.set(data), error: () => this.topSpenders.set([]) });
+    this.svc.getCredits().subscribe({
+      next: (data) => {
+        this.credits.set(data);
+        this.creditsError.set(false);
+      },
+      error: () => this.creditsError.set(true),
+    });
   }
 
   // ── Kérésnapló ─────────────────────────────────────────────────────

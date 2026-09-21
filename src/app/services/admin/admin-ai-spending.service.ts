@@ -8,6 +8,7 @@ import {
   AiSpendingOverviewDto,
   AiSpendingTopSpenderDto,
   AutomationStatusDto,
+  OpenRouterCreditsDto,
   QuizMaintenanceDecisionDto,
   QuizMaintenanceEstimateDto,
   QuizMaintenanceEstimateRequest,
@@ -29,6 +30,10 @@ export class AdminAiSpendingService {
     return this.http.get<AiSpendingOverviewDto>(`${this.base}/ai-spending/overview`, {
       params: new HttpParams().set('days', days),
     });
+  }
+
+  getCredits(): Observable<OpenRouterCreditsDto> {
+    return this.http.get<OpenRouterCreditsDto>(`${this.base}/ai-spending/credits`);
   }
 
   getTopSpenders(days = 30, limit = 10): Observable<AiSpendingTopSpenderDto[]> {
