@@ -21,19 +21,11 @@ const TEACHER_LINKS: NavLink[] = [
   { path: '/feladatsorok', label: 'Feladatsorok', icon: 'clipboard-list' },
 ];
 
-const ADMIN_LINKS: NavLink[] = [
-  { path: '/admin/jelentkezesek', label: 'Jelentkezések', icon: 'inbox' },
-  { path: '/admin/tanarok', label: 'Tanárok', icon: 'academic-cap' },
-  { path: '/admin/intezmenyek', label: 'Intézmények (admin)', icon: 'shield' },
-  { path: '/admin/ellenorzes', label: 'Ellenőrzés', icon: 'check' },
-  // AI-KOLTES-PULT: a user kifejezetten kérte, hogy legyen a menüben (ne csak
-  // a vezérlőpult admin-kártyája legyen a belépési pont, mint kuponoknál/
-  // platform-kvízeknél). Ld. az UI-TT-192 kommentjét lent (min-[1200px]
-  // töréspont) - egy 8. nav-elem hozzáadása ÚJRA szélesítheti a szükséges
-  // helyet, a töréspontot óvatosan, mérés nélkül feljebb toltam
-  // (min-[1400px]) - élő ellenőrzést igényel, hogy nem szükséges-e finomhangolás.
-  { path: '/admin/ai-koltes', label: 'AI-költés', icon: 'chart' },
-];
+// §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a platform-admin nav-linkek
+// (jelentkezések/tanárok/intézmények/ellenőrzés/AI-költés) mind admin-fe-be
+// költöztek - ez az app innentől csak a admin/kvizek dashboard-kártyát tartja meg
+// (ld. dashboard.component.ts), ami nem kap nav-linket. Ha a jövőben mégis
+// szükség lenne platform-admin nav-linkre EBBEN az appban, itt kezdje újra.
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -115,16 +107,6 @@ const ADMIN_LINKS: NavLink[] = [
                 </a>
               }
             }
-            @if (authStore.hasAdminRole()) {
-              <div class="h-4 w-px bg-border-default mx-1"></div>
-              @for (link of adminLinks; track link.path) {
-                <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
-                  class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-text-muted hover:text-text-primary transition-colors">
-                  <app-icon [name]="link.icon" class="w-4 h-4 block" />
-                  {{ link.label }}
-                </a>
-              }
-            }
           </nav>
 
           <!-- Profil-chip + kijelentkezés (desktop) -->
@@ -182,17 +164,6 @@ const ADMIN_LINKS: NavLink[] = [
               </a>
             }
           }
-          @if (authStore.hasAdminRole()) {
-            <div class="h-px bg-border-default my-2"></div>
-            @for (link of adminLinks; track link.path) {
-              <a [routerLink]="link.path" (click)="menuOpen.set(false)"
-                routerLinkActive="text-primary font-semibold bg-primary-subtle"
-                class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-muted">
-                <app-icon [name]="link.icon" class="w-4 h-4 block" />
-                {{ link.label }}
-              </a>
-            }
-          }
           <div class="h-px bg-border-default my-2"></div>
           <div class="flex items-center justify-between px-3 py-2">
             <div class="flex items-center gap-2 min-w-0">
@@ -224,7 +195,6 @@ export class AppComponent {
   readonly authStore = inject(AuthStore);
 
   readonly teacherLinks = TEACHER_LINKS;
-  readonly adminLinks = ADMIN_LINKS;
   readonly menuOpen = signal(false);
 
   private readonly menuBtn = viewChild<ElementRef<HTMLElement>>('menuBtn');

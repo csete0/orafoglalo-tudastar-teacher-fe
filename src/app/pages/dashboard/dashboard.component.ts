@@ -56,6 +56,11 @@ const CARDS: DashboardCard[] = [
 
 // C5: a platform-kvízek admin-oldala ugyanazon 6-linkes nav-korlát miatt nem kap
 // menüpontot, mint a Kvízeim - a vezérlőpult kártyája a belépési pont, csak platform-adminnak.
+// §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a kuponok/AI-költés admin-fe-be
+// költöztek - ez a kártya SZÁNDÉKOSAN maradt itt, mert az AdminQuizController (a mögötte
+// álló backend) egyelőre a publikus API-ban maradt (ld. AdminQuizController doc-kommentje
+// a backend repóban - a valódi AI-hívás miatt aránytalanul nagy DI-gráfot vonna be az
+// Admin.API-ba).
 const ADMIN_CARDS: DashboardCard[] = [
   {
     path: '/admin/kvizek',
@@ -64,25 +69,6 @@ const ADMIN_CARDS: DashboardCard[] = [
     icon: 'shield',
     accent: 'accent-0',
     tile: 'icon-tile-primary',
-  },
-  // B3: kuponkódok az előfizetés-vásárláshoz - szintén csak a vezérlőpultról.
-  {
-    path: '/admin/kuponok',
-    title: 'Kuponok',
-    description: 'Kedvezménykódok létrehozása és inaktiválása az előfizetés-vásárláshoz.',
-    icon: 'check',
-    accent: 'accent-2',
-    tile: 'icon-tile-success',
-  },
-  // AI-KOLTES-PULT: kérésenkénti OpenRouter-költés, kvíz-karbantartás kézi
-  // indítása, egyéb automatizmusok - szintén csak a vezérlőpultról.
-  {
-    path: '/admin/ai-koltes',
-    title: 'AI-költés',
-    description: 'Kérésenkénti AI-költés, kvíz-karbantartás kézi indítása, automatizmusok.',
-    icon: 'chart',
-    accent: 'accent-1',
-    tile: 'icon-tile-secondary',
   },
 ];
 

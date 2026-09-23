@@ -69,14 +69,17 @@ describe('AppComponent', () => {
     expect(nav.textContent).not.toContain('Jelentkezések');
   });
 
-  it('platform-admin usernek megjelenik a "Jelentkezések" link', () => {
+  // §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a "Jelentkezések" platform-admin
+  // nav-link admin-fe-be költözött - ez az app innentől platform-adminnak SEM ad extra
+  // nav-linket (csak a saját tanári linkjeit látja, ha van teacher role-ja is).
+  it('platform-admin usernek nem jelenik meg "Jelentkezések" link (admin-fe-be költözött)', () => {
     authStoreMock.isAuthenticated.mockReturnValue(true);
     authStoreMock.hasAdminRole.mockReturnValue(true);
 
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('nav').textContent).toContain('Jelentkezések');
+    expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Jelentkezések');
   });
 
   // UI-TT-15: teacher role NÉLKÜLI (pl. elbírálás alatt álló) bejelentkezett usernek

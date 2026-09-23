@@ -125,38 +125,13 @@ export const routes: Routes = [
     canActivate: [authGuard, roleGuard('teacher')],
     loadComponent: () => import('./pages/diakok/diak-reszletek.component').then((m) => m.DiakReszletekComponent),
   },
-  {
-    path: 'admin/jelentkezesek',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-jelentkezesek.component').then((m) => m.AdminJelentkezesekComponent),
-  },
-  {
-    path: 'admin/tanarok',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-tanarok.component').then((m) => m.AdminTanarokComponent),
-  },
-  {
-    path: 'admin/intezmenyek',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-intezmenyek.component').then((m) => m.AdminIntezmenyekComponent),
-  },
-  {
-    path: 'admin/ellenorzes',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-ellenorzes.component').then((m) => m.AdminEllenorzesComponent),
-  },
-  // B3: kuponkódok - az admin-nav 6-linkes korlátja miatt nem kap fejléc-linket, a
-  // belépési pont a vezérlőpult admin-kártyája (mint a platform-kvízeknél).
-  {
-    path: 'admin/kuponok',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-kuponok.component').then((m) => m.AdminKuponokComponent),
-  },
+  // §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a jelentkezések/tanárok/
+  // intézmények(admin)/ellenőrzés/kuponok/AI-költés oldalak admin-fe-be költöztek.
+  // A `admin/kvizek` + `admin/kvizek/:id/szerkesztes` SZÁNDÉKOSAN maradt itt - a
+  // mögöttes AdminQuizController egyelőre a publikus API-ban maradt (a valódi
+  // AI-hívás miatti aránytalanul nagy DI-gráf, ld. AdminQuizController doc-kommentje
+  // a backend repóban), és ez a route ugyanazokat a tanári kvíz-lista/-szerkesztő
+  // komponenseket használja admin-scope-ban, nem saját admin/*.ts oldalt.
   // C5: platform-kvízek ("Hivatalos kvízek") - a tanári kvíz-lista és -szerkesztő
   // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap fejléc-linket
   // (6-linkes nav-korlát, ld. fent) - a belépési pont a vezérlőpult admin-kártyája.
@@ -166,15 +141,6 @@ export const routes: Routes = [
     data: { scope: 'admin' },
     loadComponent: () =>
       import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
-  },
-  // AI-KOLTES-PULT: kérésenkénti AI-költés, kvíz-karbantartás kézi indítása,
-  // automatizmusok - az admin-nav 6-linkes korlátja miatt nem kap fejléc-linket,
-  // a belépési pont a vezérlőpult admin-kártyája (mint a kuponoknál/kvízeknél).
-  {
-    path: 'admin/ai-koltes',
-    canActivate: [authGuard, roleGuard('admin')],
-    loadComponent: () =>
-      import('./pages/admin/admin-ai-koltes.component').then((m) => m.AdminAiKoltesComponent),
   },
   {
     path: 'admin/kvizek/:id/szerkesztes',
