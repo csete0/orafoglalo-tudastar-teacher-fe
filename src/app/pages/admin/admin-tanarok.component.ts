@@ -50,6 +50,16 @@ const BYTES_PER_MB = 1048576;
                   {{ mb(teacher.storageUsedBytes) }}@if (teacher.maxStorageBytes !== null) { / {{ mb(teacher.maxStorageBytes) }}} MB tárhely ·
                   tag {{ teacher.createdAt | date: 'yyyy.MM.dd' }} óta
                 </p>
+                <!-- A7: "jóváhagyott, de soha semmit nem csináló tanár" felismerése -
+                     iskolai megkeresés indulásakor ez az ELSŐ dolog, amit tudni akarunk. -->
+                <p class="text-xs mt-0.5 text-text-muted">
+                  {{ teacher.invitedStudentCount }} behívott diák ·
+                  @if (teacher.lastActivityAt) {
+                    utolsó aktivitás {{ teacher.lastActivityAt | date: 'yyyy.MM.dd' }}
+                  } @else {
+                    <span class="text-danger">még nem volt aktivitás</span>
+                  }
+                </p>
               </div>
               <div class="flex flex-col gap-2 items-end shrink-0">
                 @if (teacher.isActive) {

@@ -12,6 +12,11 @@ export interface TeacherProfileAdminDto {
   /** Kvóta: null = korlátlan. Használat alatti érték csak az új létrehozást blokkolja. */
   maxTaskSets: number | null;
   maxStorageBytes: number | null;
+  /** A7: a tanár csoportjaiba behívott, AKTÍV (nem kilépett) diákok száma. */
+  invitedStudentCount: number;
+  /** A7: a tanár feladatsorainak/csoportjainak/behívott diákjainak legfrissebb
+   * létrehozási/csatlakozási dátuma - null, ha a tanár még semmit sem csinált. */
+  lastActivityAt: string | null;
 }
 
 export interface AdminTaskSetDto {

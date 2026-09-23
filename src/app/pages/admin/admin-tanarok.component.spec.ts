@@ -19,6 +19,8 @@ function makeTeacher(overrides: Partial<TeacherProfileAdminDto> = {}): TeacherPr
     storageUsedBytes: 0,
     maxTaskSets: null,
     maxStorageBytes: null,
+    invitedStudentCount: 0,
+    lastActivityAt: null,
     ...overrides,
   };
 }
