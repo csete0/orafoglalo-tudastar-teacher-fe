@@ -4,6 +4,10 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { authInterceptor } from './auth.interceptor';
 import { AuthStore } from '../services/auth/store/auth.store';
 import { ToastService } from '../shared/toast/toast.service';
+import { environment } from '../../environments/environment';
+
+// SEC-310 óta a Bearer csak az environment.apiUrl-re menő kérésekre kerül - a tesztek is azt hívják.
+const API = environment.apiUrl;
 
 describe('authInterceptor', () => {
   let httpClient: HttpClient;
@@ -32,10 +36,23 @@ describe('authInterceptor', () => {
 
   it('publikus végpontnál (login) nem kér tokent', async () => {
     const promise = new Promise<void>((resolve) => {
-      httpClient.post('/api/auth/login', {}).subscribe(() => resolve());
+      httpClient.post(`${API}/auth/login`, {}).subscribe(() => resolve());
     });
 
-    const req = httpMock.expectOne('/api/auth/login');
+    const req = httpMock.expectOne(`${API}/auth/login`);
+    expect(authStoreMock.getValidAccessToken).not.toHaveBeenCalled();
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({});
+
+    await promise;
+  });
+
+  it('SEC-310: külső (nem saját API) címre nem tesz Bearer fejlécet és tokent sem kér', async () => {
+    const promise = new Promise<void>((resolve) => {
+      httpClient.get('https://example.com/data.json').subscribe(() => resolve());
+    });
+
+    const req = httpMock.expectOne('https://example.com/data.json');
     expect(authStoreMock.getValidAccessToken).not.toHaveBeenCalled();
     expect(req.request.headers.has('Authorization')).toBe(false);
     req.flush({});
@@ -45,13 +62,13 @@ describe('authInterceptor', () => {
 
   it('védett végpontnál Bearer fejlécet tesz rá', async () => {
     const promise = new Promise<void>((resolve) => {
-      httpClient.get('/api/schools').subscribe(() => resolve());
+      httpClient.get(`${API}/schools`).subscribe(() => resolve());
     });
 
     await Promise.resolve();
     await Promise.resolve();
 
-    const req = httpMock.expectOne('/api/schools');
+    const req = httpMock.expectOne(`${API}/schools`);
     expect(req.request.headers.get('Authorization')).toBe('Bearer valid-token');
     req.flush({});
 
@@ -63,7 +80,7 @@ describe('authInterceptor', () => {
 
     let result: unknown;
     const promise = new Promise<void>((resolve) => {
-      httpClient.get('/api/schools').subscribe((r) => {
+      httpClient.get(`${API}/schools`).subscribe((r) => {
         result = r;
         resolve();
       });
@@ -71,14 +88,14 @@ describe('authInterceptor', () => {
 
     await Promise.resolve();
     await Promise.resolve();
-    const firstReq = httpMock.expectOne('/api/schools');
+    const firstReq = httpMock.expectOne(`${API}/schools`);
     firstReq.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
-    const retryReq = httpMock.expectOne('/api/schools');
+    const retryReq = httpMock.expectOne(`${API}/schools`);
     expect(retryReq.request.headers.get('Authorization')).toBe('Bearer refreshed-token');
     retryReq.flush({ ok: true });
 
@@ -97,12 +114,12 @@ describe('authInterceptor', () => {
     authStoreMock.refreshToken.mockResolvedValue('refreshed-token');
 
     const promise = new Promise<void>((resolve) => {
-      httpClient.get('/api/schools').subscribe({ next: () => resolve(), error: () => resolve() });
+      httpClient.get(`${API}/schools`).subscribe({ next: () => resolve(), error: () => resolve() });
     });
 
     await Promise.resolve();
     await Promise.resolve();
-    const firstReq = httpMock.expectOne('/api/schools');
+    const firstReq = httpMock.expectOne(`${API}/schools`);
     firstReq.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     await Promise.resolve();
@@ -117,7 +134,7 @@ describe('authInterceptor', () => {
     // fájl KÖVETKEZŐ tesztjeit is magával rántotta (TestBed-teardown
     // csatolt hiba) - ez a sorrend attól függetlenül tiszta maradást
     // biztosít, hogy a lenti assert bukik-e vagy sem.
-    const retryReq = httpMock.expectOne('/api/schools');
+    const retryReq = httpMock.expectOne(`${API}/schools`);
     retryReq.flush({ ok: true });
     await promise;
 
@@ -129,7 +146,7 @@ describe('authInterceptor', () => {
 
     let error: unknown;
     const promise = new Promise<void>((resolve) => {
-      httpClient.get('/api/schools').subscribe({
+      httpClient.get(`${API}/schools`).subscribe({
         error: (err) => {
           error = err;
           resolve();
@@ -139,7 +156,7 @@ describe('authInterceptor', () => {
 
     await Promise.resolve();
     await Promise.resolve();
-    const req = httpMock.expectOne('/api/schools');
+    const req = httpMock.expectOne(`${API}/schools`);
     req.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     await promise;
@@ -151,12 +168,12 @@ describe('authInterceptor', () => {
     const dangerSpy = vi.spyOn(toastService, 'danger');
 
     const promise = new Promise<void>((resolve) => {
-      httpClient.post('/api/schools', {}).subscribe({ error: () => resolve() });
+      httpClient.post(`${API}/schools`, {}).subscribe({ error: () => resolve() });
     });
 
     await Promise.resolve();
     await Promise.resolve();
-    const req = httpMock.expectOne('/api/schools');
+    const req = httpMock.expectOne(`${API}/schools`);
     req.flush({ error: 'Az intézmény nem található.' }, { status: 400, statusText: 'Bad Request' });
 
     await promise;
@@ -168,12 +185,12 @@ describe('authInterceptor', () => {
     const dangerSpy = vi.spyOn(toastService, 'danger');
 
     const promise = new Promise<void>((resolve) => {
-      httpClient.get('/api/schools').subscribe({ error: () => resolve() });
+      httpClient.get(`${API}/schools`).subscribe({ error: () => resolve() });
     });
 
     await Promise.resolve();
     await Promise.resolve();
-    const req = httpMock.expectOne('/api/schools');
+    const req = httpMock.expectOne(`${API}/schools`);
     req.flush({ error: 'Nem található.' }, { status: 404, statusText: 'Not Found' });
 
     await promise;
@@ -191,7 +208,7 @@ describe('authInterceptor', () => {
 
     let error: unknown;
     const promise = new Promise<void>((resolve) => {
-      httpClient.post('/api/groups/9401/archive', {}).subscribe({
+      httpClient.post(`${API}/groups/9401/archive`, {}).subscribe({
         error: (err) => {
           error = err;
           resolve();
@@ -201,14 +218,14 @@ describe('authInterceptor', () => {
 
     await Promise.resolve();
     await Promise.resolve();
-    const firstReq = httpMock.expectOne('/api/groups/9401/archive');
+    const firstReq = httpMock.expectOne(`${API}/groups/9401/archive`);
     firstReq.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
-    const retryReq = httpMock.expectOne('/api/groups/9401/archive');
+    const retryReq = httpMock.expectOne(`${API}/groups/9401/archive`);
     expect(retryReq.request.headers.get('Authorization')).toBe('Bearer refreshed-token');
     retryReq.flush(
       { error: 'A csoport már archiválva van.' },
@@ -228,7 +245,7 @@ describe('authInterceptor', () => {
 
     let error: unknown;
     const promise = new Promise<void>((resolve) => {
-      httpClient.post('/api/groups/9401/archive', {}).subscribe({
+      httpClient.post(`${API}/groups/9401/archive`, {}).subscribe({
         error: (err) => {
           error = err;
           resolve();
@@ -238,7 +255,7 @@ describe('authInterceptor', () => {
 
     await Promise.resolve();
     await Promise.resolve();
-    const req = httpMock.expectOne('/api/groups/9401/archive');
+    const req = httpMock.expectOne(`${API}/groups/9401/archive`);
     req.flush({ error: 'unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     await promise;
