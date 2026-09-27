@@ -77,7 +77,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
           </div>
           <div class="card p-4 col-span-2">
             <p class="text-xs text-text-muted uppercase tracking-wide mb-2">Jegyeloszlás (40 / 55 / 70 / 85%)</p>
-            <div class="flex items-end gap-2 h-14" role="img" [attr.aria-label]="distributionLabel(o)">
+            <div class="flex items-end gap-2 h-20" role="img" [attr.aria-label]="distributionLabel(o)">
               @for (g of grades; track g) {
                 <div class="flex-1 flex flex-col items-center gap-1">
                   <span class="text-xs tabular-nums">{{ o.stats.gradeDistribution[g] ?? 0 }}</span>
@@ -104,9 +104,9 @@ const LIVE_TAIL_MS = 15 * 60_000;
                   <th class="py-3 px-4">Állapot</th>
                   <th class="py-3 px-4">Összesen</th>
                   @for (task of o.tasks; track task.taskId; let i = $index) {
-                    <th class="py-3 px-4 whitespace-nowrap">{{ i + 1 }}. {{ task.title }} <span class="normal-case">({{ task.maxPoints }})</span></th>
+                    <th class="py-3 px-4 min-w-[6rem] max-w-[12rem] align-bottom" [title]="task.title">{{ i + 1 }}. {{ task.title }} <span class="normal-case">({{ task.maxPoints }})</span></th>
                   }
-                  <th class="py-3 px-4 whitespace-nowrap">Fül-elhagyás / beillesztés</th>
+                  <th class="py-3 px-4 min-w-[7rem] max-w-[9rem] align-bottom">Fül-elhagyás / beillesztés</th>
                 </tr>
               </thead>
               <tbody>
