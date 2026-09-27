@@ -42,6 +42,7 @@ There are **two distinct "admin" concepts — don't conflate them:**
 | Vizsga-szimulátor gyakorlósorai | „Feladatsor” | „Feladatsor” (a kategória-oldal feladatsorokat listáz) | teszt |
 | Diák statisztika-oldalai | „Statisztikák” | „Statisztikáim” (vizsga + kvíz) | riport (az a tanári oldal szava) |
 | Csoportba lépés kódja | „Meghívó kód” | „Meghívó kód” | invite, belépőkód |
+| Ajánlóprogram kódja (diák → diák) | – | „Ajánlókód” | meghívó kód (az a csoporté) |
 
 
 ## Test infra
