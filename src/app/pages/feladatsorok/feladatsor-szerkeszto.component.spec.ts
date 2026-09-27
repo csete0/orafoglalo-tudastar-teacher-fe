@@ -113,7 +113,10 @@ describe('FeladatsorSzerkesztoComponent', () => {
     form.patchValue({ isTest: true });
     expect(form.errors?.['testWindowRequired']).toBe(true);
 
-    form.patchValue({ opensAt: '2026-10-05T10:00', dueAt: '2026-10-05T10:30' });
+    form.patchValue({ opensAt: '2020-10-05T10:00', dueAt: '2020-10-05T11:00' });
+    expect(form.errors?.['testDueInPast']).toBe(true); // múltbeli határidőt a szerver is elutasítaná
+
+    form.patchValue({ opensAt: '2099-10-05T10:00', dueAt: '2099-10-05T10:30' });
     expect(form.errors?.['testWindowTooShort']).toBe(true);
 
     form.patchValue({ timeLimitMinutes: 300 });

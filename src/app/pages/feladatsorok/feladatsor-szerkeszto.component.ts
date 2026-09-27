@@ -591,6 +591,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
               @if (assignForm.errors?.['testWindowRequired']) {
                 <p class="text-sm text-text-muted">Dolgozatnál add meg, mettől meddig írható meg.</p>
               }
+              @if (assignForm.errors?.['testDueInPast']) {
+                <p class="text-sm text-danger">A dolgozat határideje már elmúlt - adj meg egy jövőbeli időpontot.</p>
+              }
               @if (assignForm.errors?.['testTimeLimit']) {
                 <p class="text-sm text-danger">Az időkorlát 5 és 240 perc között lehet.</p>
               }
@@ -720,6 +723,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         if (group.get('isTest')?.value) {
           const minutes = Number(group.get('timeLimitMinutes')?.value);
           if (!opensAt || !dueAt) return { testWindowRequired: true };
+          if (new Date(dueAt).getTime() <= Date.now()) return { testDueInPast: true };
           if (!(minutes >= 5 && minutes <= 240)) return { testTimeLimit: true };
           if ((new Date(dueAt).getTime() - new Date(opensAt).getTime()) / 60000 < minutes) return { testWindowTooShort: true };
         }
