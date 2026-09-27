@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
 import { FeladatsorEredmenyekComponent } from './feladatsor-eredmenyek.component';
@@ -8,6 +9,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherAttemptReviewDto, TeacherTaskSetResultsDto } from '../../models/report.model';
+import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
 
 function makeResults(): TeacherTaskSetResultsDto {
   return {
@@ -126,8 +128,14 @@ describe('FeladatsorEredmenyekComponent', () => {
                          review = makeReview()) {
     const cellButton = fixture.nativeElement.querySelectorAll('tbody button')[0] as HTMLButtonElement;
     cellButton.click();
+    fixture.detectChanges(); // a panel megjelenik, és betölti a beadást
     reportStoreMock.attemptReview.set(review);
     fixture.detectChanges();
+  }
+
+  /** A megnyitott értékelő panel példánya (AttemptReviewPanelComponent). */
+  function panel(fixture: ReturnType<typeof TestBed.createComponent<FeladatsorEredmenyekComponent>>): AttemptReviewPanelComponent {
+    return fixture.debugElement.query(By.directive(AttemptReviewPanelComponent)).componentInstance;
   }
 
   it('betöltéskor meghívja a loadTaskSetResults-t a route id-vel', () => {
@@ -172,6 +180,7 @@ describe('FeladatsorEredmenyekComponent', () => {
 
     const cellButton = fixture.nativeElement.querySelectorAll('tbody button')[0] as HTMLButtonElement;
     cellButton.click();
+    fixture.detectChanges();
 
     expect(reportStoreMock.loadAttemptReview).toHaveBeenCalledWith(101);
   });
@@ -253,7 +262,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = 11; // maxPoints = 10
     component.save(makeReview());
 
@@ -267,7 +276,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = -1;
     component.save(makeReview());
 
@@ -281,7 +290,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = 8;
     component.draftFeedback = 'Szép munka.';
     component.feedbackTouched = true;
@@ -301,7 +310,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = null;
     component.draftFeedback = 'Egyetértek az AI pontjával, de figyelj a névválasztásra.';
     component.feedbackTouched = true;
@@ -326,7 +335,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = 9;
     // component.draftFeedback marad a betöltéskori érték - a tanár nem szerkesztette,
     // ezért component.feedbackTouched is false marad (nincs (input) esemény szimulálva).
@@ -347,7 +356,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     openFirstCell(fixture);
     fixture.detectChanges();
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     expect(component.feedbackTouched).toBe(false);
 
     const textarea: HTMLTextAreaElement | null = fixture.nativeElement.querySelector('textarea');
@@ -364,7 +373,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     component.draftPoints = null;
     component.draftFeedback = '   ';
     component.save(makeReview());
@@ -380,7 +389,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true }));
 
-    await fixture.componentInstance.revert(makeReview({ isOverridden: true }));
+    await panel(fixture).revert(makeReview({ isOverridden: true }));
 
     expect(confirmMock.ask).toHaveBeenCalled();
     expect(reportStoreMock.revertOverride).not.toHaveBeenCalled();
@@ -392,7 +401,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true }));
 
-    await fixture.componentInstance.revert(makeReview({ isOverridden: true }));
+    await panel(fixture).revert(makeReview({ isOverridden: true }));
 
     expect(reportStoreMock.revertOverride).toHaveBeenCalledWith(1, 101, expect.any(Function));
   });
@@ -421,7 +430,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const reviewNeverAiScored = makeReview({ isOverridden: true, aiEarnedPoints: null, earnedPoints: 4 });
     openFirstCell(fixture, reviewNeverAiScored);
 
-    await fixture.componentInstance.revert(reviewNeverAiScored);
+    await panel(fixture).revert(reviewNeverAiScored);
 
     expect(confirmMock.ask).toHaveBeenCalled();
     const confirmArgs = confirmMock.ask.mock.calls[0][0] as { title: string; message: string };
@@ -447,7 +456,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true, teacherFeedback: 'Régi értékelés' }));
 
-    const component = fixture.componentInstance;
+    const component = panel(fixture);
     // A tanár hozzáért az értékelés-mezőhöz, majd meggondolta magát és visszaállított.
     component.feedbackTouched = true;
 
@@ -487,10 +496,11 @@ describe('FeladatsorEredmenyekComponent', () => {
     // A 2. cellát nyitjuk meg (attemptId 102), de a store-ba a RÉGI (101) válasz érkezik.
     const buttons = fixture.nativeElement.querySelectorAll('tbody button');
     (buttons[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
     reportStoreMock.attemptReview.set(makeReview({ attemptId: 101, taskTitle: 'Első feladat' }));
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.review()).toBeNull();
+    expect(panel(fixture).review()).toBeNull();
   });
 
   it('a CSV-export gomb a betöltött mátrixot adja át az export-szolgáltatásnak', () => {

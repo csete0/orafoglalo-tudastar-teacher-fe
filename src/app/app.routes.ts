@@ -74,6 +74,13 @@ export const routes: Routes = [
     ],
   },
   {
+    // Dolgozat mód: a kiadott dolgozat élő áttekintője (a csoport "Kiadva" füléről / a feladatsor-szerkesztőből).
+    path: 'dolgozatok/:assignmentId',
+    canActivate: [authGuard, roleGuard('teacher')],
+    loadComponent: () =>
+      import('./pages/dolgozatok/dolgozat-attekintes.component').then((m) => m.DolgozatAttekintesComponent),
+  },
+  {
     path: 'feladatsorok',
     canActivate: [authGuard, roleGuard('teacher')],
     children: [
