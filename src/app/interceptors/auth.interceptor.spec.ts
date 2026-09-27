@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClient, provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { authInterceptor } from './auth.interceptor';
+import { authInterceptor, mutationErrorMessage } from './auth.interceptor';
+import { HttpErrorResponse } from '@angular/common/http';
 import { AuthStore } from '../services/auth/store/auth.store';
 import { ToastService } from '../shared/toast/toast.service';
 import { environment } from '../../environments/environment';
@@ -262,5 +263,18 @@ describe('authInterceptor', () => {
 
     expect((error as { status: number }).status).toBe(401);
     expect(dangerSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('mutationErrorMessage', () => {
+  const err = (error: unknown) => new HttpErrorResponse({ status: 400, error });
+
+  it('ASP.NET modell-validációnál érthető magyar szöveg, nem az általános „A művelet sikertelen.”', () => {
+    expect(mutationErrorMessage(err({ errors: { Title: ["The field Title must be a string with a maximum length of '200'."] } })))
+      .toBe('A megadott szöveg túl hosszú - kérjük, rövidítsd le, és próbáld újra.');
+    expect(mutationErrorMessage(err({ errors: { Email: ['The Email field is required.'] } })))
+      .toBe('A megadott adatok nem megfelelők - kérjük, ellenőrizd a kitöltést, és próbáld újra.');
+    expect(mutationErrorMessage(err({ errorMessage: 'Üzleti hiba.' }))).toBe('Üzleti hiba.');
+    expect(mutationErrorMessage(err(null))).toBe('A művelet sikertelen.');
   });
 });

@@ -64,8 +64,18 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-function mutationErrorMessage(error: HttpErrorResponse): string {
-  return error.error?.error ?? error.error?.errorMessage ?? 'A művelet sikertelen.';
+export function mutationErrorMessage(error: HttpErrorResponse): string {
+  const body = error.error;
+  if (body?.error ?? body?.errorMessage) return body.error ?? body.errorMessage;
+  // ASP.NET modell-validáció: { title, errors: { Mező: ["angol üzenet"] } } - az angol, fejlesztői
+  // szöveg helyett érthető magyar (ugyanaz, mint a diák-app interceptorában).
+  if (body?.errors && typeof body.errors === 'object') {
+    const messages = Object.values(body.errors).flat().map(String);
+    return messages.some((m) => /maximum length|too long/i.test(m))
+      ? 'A megadott szöveg túl hosszú - kérjük, rövidítsd le, és próbáld újra.'
+      : 'A megadott adatok nem megfelelők - kérjük, ellenőrizd a kitöltést, és próbáld újra.';
+  }
+  return 'A művelet sikertelen.';
 }
 
 function handleTokenRefresh(
