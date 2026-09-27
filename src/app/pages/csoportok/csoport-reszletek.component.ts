@@ -313,16 +313,29 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                 @for (a of groupTaskSetAssignments(); track a.assignmentId) {
                   <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
                     <div class="min-w-0 flex-1">
-                      <p class="font-medium truncate">{{ a.taskSetTitle }}</p>
+                      <p class="font-medium truncate">
+                        {{ a.taskSetTitle }}
+                        @if (a.isTest) {
+                          <span class="badge badge-warning ml-1">Dolgozat · {{ (a.timeLimitSeconds ?? 0) / 60 }} perc</span>
+                        }
+                      </p>
                       <p class="text-xs text-text-muted">
                         {{ a.taskCount }} feladat
                         · megírta: {{ a.completedMemberCount }} / {{ a.memberCount }}
-                        @if (a.dueAt) {
+                        @if (a.isTest && a.opensAt && a.dueAt) {
+                          · megírható: {{ a.opensAt | date: 'MM.dd. HH:mm' }}–{{ a.dueAt | date: 'HH:mm' }}
+                          @if (a.resultsPublishedAt) {
+                            · <span class="text-success font-semibold">eredmény közzétéve</span>
+                          }
+                        } @else if (a.dueAt) {
                           · <span [class.text-danger]="isDueSoon(a.dueAt)">
                             határidő: {{ a.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
                         }
                       </p>
                     </div>
+                    @if (a.isTest) {
+                      <a [routerLink]="['/dolgozatok', a.assignmentId]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Áttekintés</a>
+                    }
                   </li>
                 } @empty {
                   <li class="text-sm text-text-muted py-2">Nincs kiadott feladatsor. Kiadni a feladatsor-szerkesztőből lehet.</li>

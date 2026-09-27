@@ -103,6 +103,26 @@ describe('FeladatsorSzerkesztoComponent', () => {
     });
   }
 
+  it('dolgozatként kiadva kötelező az időablak, 5–240 perc, és az ablak legalább az időkorlát', () => {
+    configure(null);
+    const form = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance.assignForm;
+
+    form.setValue({ groupId: 3, opensAt: '', dueAt: '', isTest: false, timeLimitMinutes: 45 });
+    expect(form.valid).toBe(true); // sima kiadásnál az ablak nem kötelező
+
+    form.patchValue({ isTest: true });
+    expect(form.errors?.['testWindowRequired']).toBe(true);
+
+    form.patchValue({ opensAt: '2026-10-05T10:00', dueAt: '2026-10-05T10:30' });
+    expect(form.errors?.['testWindowTooShort']).toBe(true);
+
+    form.patchValue({ timeLimitMinutes: 300 });
+    expect(form.errors?.['testTimeLimit']).toBe(true);
+
+    form.patchValue({ timeLimitMinutes: 30 });
+    expect(form.valid).toBe(true);
+  });
+
   it('SQL kódrészlet esetén create.sql/create_lite.sql nélkül figyelmeztetést mutat', () => {
     configure(
       makeDetail({

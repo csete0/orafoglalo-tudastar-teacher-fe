@@ -128,6 +128,10 @@ export interface AssignTaskSetToGroupRequest {
   groupId: number;
   opensAt?: string | null;
   dueAt?: string | null;
+  /** Dolgozat mód: egy próbálkozás, szerver által mért idő, szünet nélkül. */
+  isTest?: boolean;
+  /** Dolgozatnál kötelező (5–240). */
+  timeLimitMinutes?: number | null;
 }
 
 export interface TaskSetAssignmentDto {
@@ -138,6 +142,9 @@ export interface TaskSetAssignmentDto {
   opensAt?: string | null;
   dueAt?: string | null;
   revokedAt?: string | null;
+  isTest?: boolean;
+  timeLimitSeconds?: number | null;
+  resultsPublishedAt?: string | null;
 }
 
 export interface TeacherGroupTaskSetAssignmentDto {
@@ -150,4 +157,7 @@ export interface TeacherGroupTaskSetAssignmentDto {
   dueAt?: string | null;
   completedMemberCount: number;
   memberCount: number;
+  isTest?: boolean;
+  timeLimitSeconds?: number | null;
+  resultsPublishedAt?: string | null;
 }

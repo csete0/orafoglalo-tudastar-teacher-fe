@@ -518,6 +518,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 <app-icon name="users" class="w-4 h-4 block text-text-muted" />
                 <span class="flex-1">
                   {{ groupLabel(assignment.groupId, assignment.groupName) }}
+                  @if (assignment.isTest) {
+                    <span class="badge badge-warning">Dolgozat · {{ (assignment.timeLimitSeconds ?? 0) / 60 }} perc</span>
+                    <a class="text-primary font-semibold" [routerLink]="['/dolgozatok', assignment.id]">Áttekintés</a>
+                  }
                   @if (assignment.opensAt) {
                     <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
                   }
@@ -549,18 +553,49 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 </select>
               </label>
 
+              <label class="flex items-start gap-2">
+                <input formControlName="isTest" type="checkbox" class="mt-1" />
+                <span>
+                  <span class="font-semibold">Dolgozatként adom ki</span>
+                  <span class="block text-sm text-text-muted">
+                    Egyszer írható meg, szünet nélkül, a megadott időkorláttal. A feladatok a kezdésig rejtve maradnak,
+                    a rendszer automatikusan pontoz, az eredményt te teszed közzé. Csak a programozási és SQL-feladatok kerülnek bele.
+                  </span>
+                </span>
+              </label>
+
+              @if (assignForm.controls.isTest.value) {
+                <label class="block">
+                  <span class="text-sm text-text-muted">Időkorlát (perc)</span>
+                  <input formControlName="timeLimitMinutes" type="number" min="5" max="240" class="input mt-1" />
+                </label>
+              }
+
               <label class="block">
-                <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
+                <span class="text-sm text-text-muted">
+                  {{ assignForm.controls.isTest.value ? 'Megírható ettől' : 'Nyitás dátuma (nem kötelező)' }}
+                </span>
                 <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
               </label>
 
               <label class="block">
-                <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
+                <span class="text-sm text-text-muted">
+                  {{ assignForm.controls.isTest.value ? 'Megírható eddig (utána a rendszer beadja)' : 'Határidő (nem kötelező)' }}
+                </span>
                 <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
               </label>
 
               @if (assignForm.errors?.['opensAtAfterDueAt']) {
                 <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
+              }
+              @if (assignForm.errors?.['testWindowRequired']) {
+                <p class="text-sm text-text-muted">Dolgozatnál add meg, mettől meddig írható meg.</p>
+              }
+              @if (assignForm.errors?.['testTimeLimit']) {
+                <p class="text-sm text-danger">Az időkorlát 5 és 240 perc között lehet.</p>
+              }
+              @if (assignForm.errors?.['testWindowTooShort']) {
+                <p class="text-sm text-danger">A megírható időszak legyen legalább olyan hosszú, mint az időkorlát.</p>
               }
 
               <button
@@ -671,6 +706,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       groupId: this.fb.control<number | null>(null, Validators.required),
       opensAt: [''],
       dueAt: [''],
+      // Dolgozat mód: időkorlát + kötelező időablak (a szerver is ellenőrzi).
+      isTest: [false],
+      timeLimitMinutes: [45],
     },
     {
       validators: (group) => {
@@ -678,6 +716,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         const dueAt = group.get('dueAt')?.value;
         if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
           return { opensAtAfterDueAt: true };
+        }
+        if (group.get('isTest')?.value) {
+          const minutes = Number(group.get('timeLimitMinutes')?.value);
+          if (!opensAt || !dueAt) return { testWindowRequired: true };
+          if (!(minutes >= 5 && minutes <= 240)) return { testTimeLimit: true };
+          if ((new Date(dueAt).getTime() - new Date(opensAt).getTime()) / 60000 < minutes) return { testWindowTooShort: true };
         }
         return null;
       },
@@ -1325,12 +1369,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         groupId: Number(raw.groupId),
         opensAt: raw.opensAt ? new Date(raw.opensAt).toISOString() : null,
         dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : null,
+        isTest: raw.isTest,
+        timeLimitMinutes: raw.isTest ? Number(raw.timeLimitMinutes) : null,
       })
       .subscribe({
         next: (dto) => {
           this.assignments.update((list) => [dto, ...list]);
           this.assignForm.reset();
-          this.toastService.success('Feladatsor kiadva.');
+          this.toastService.success(dto.isTest ? 'Dolgozat kiadva.' : 'Feladatsor kiadva.');
         },
         error: (err) => this.toastService.danger(extractErrorMessage(err)),
       });
