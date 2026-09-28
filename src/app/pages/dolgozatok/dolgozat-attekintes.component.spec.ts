@@ -86,6 +86,16 @@ describe('DolgozatAttekintesComponent', () => {
     expect(el.textContent).not.toMatch(/gyanú|csalás/i);
   });
 
+  it('kézi pontozásra váró beadott sornál nem 0 pont, hanem „– / max” áll', () => {
+    const base = makeOverview();
+    const { el } = setup(makeOverview({
+      students: [{ ...base.students[0], earnedPoints: null, needsManualGrading: true }],
+    }));
+    expect(el.textContent).toContain('– / 20');
+    expect(el.textContent).toContain('kézi pontozás');
+    expect(el.textContent).not.toContain('0 / 20');
+  });
+
   it('közzététel megerősítéssel; a határidő előtt a gomb tiltott', async () => {
     const { component, classTests, confirm, toast } = setup();
     await component.publish(component.overview()!);

@@ -126,9 +126,11 @@ const LIVE_TAIL_MS = 15 * 60_000;
                       }
                     </td>
                     <td class="py-2.5 px-4 whitespace-nowrap tabular-nums">
-                      @if (row.status === 'submitted') {
+                      @if (row.status === 'submitted' && row.earnedPoints !== null) {
                         <strong>{{ row.earnedPoints }} / {{ row.maxPoints }}</strong>
                         <span class="text-text-muted"> ({{ percent(row) }}%)</span>
+                      } @else if (row.status === 'submitted') {
+                        <span class="text-text-muted">– / {{ row.maxPoints }}</span>
                       } @else { – }
                     </td>
                     @for (cell of row.tasks; track cell.taskId) {
