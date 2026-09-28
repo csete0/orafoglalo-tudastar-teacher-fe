@@ -154,7 +154,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
 
-    const warning = fixture.nativeElement.querySelector('.text-warning');
+    const warning = fixture.nativeElement.querySelector('[data-testid="sql-files-warning"]');
     expect(warning).not.toBeNull();
     expect(warning.textContent).toContain('kötelező');
   });
@@ -190,7 +190,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
 
-    const warning = fixture.nativeElement.querySelector('.text-warning');
+    const warning = fixture.nativeElement.querySelector('[data-testid="sql-files-warning"]');
     expect(warning).not.toBeNull();
     expect(warning.textContent).toContain('kötelező');
   });
@@ -249,7 +249,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     // A "create_lite.sql" felirat a fájl-feltöltő panelen mindig ott van
     // (statikus címke) — a figyelmeztető sáv jelenlétét kell ellenőrizni.
-    expect(fixture.nativeElement.querySelector('.text-warning')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-files-warning"]')).toBeNull();
   });
 
   // ---------------------------------------------------------------------------
@@ -268,6 +268,23 @@ describe('FeladatsorSzerkesztoComponent', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  // 2026-09-28 dolgozat E2E: a szerkesztő „10 pont”-ot mutatott, a dolgozat-áttekintő 5-öt - beadáskor a
+  // részfeladatok pontösszege számít, a feladat maxPoints-ja csak felső korlát.
+  it('a feladat sorában a ténylegesen kiosztott (részfeladat) pontot mutatja, és jelzi a pontozhatatlan feladatot', () => {
+    const task = (id: number, solutions: { id: number; points?: number }[]) => ({
+      id, title: `F${id}`, description: 'd', maxPoints: 10, taskOrder: id, taskTypeIds: [], completeSolutionSnippets: [],
+      solutions: solutions.map((s) => ({ ...s, description: 'd', snippets: [] })),
+    });
+    configure(makeDetail({ tasks: [task(1, [{ id: 1, points: 5 }]), task(2, []), task(3, [{ id: 2, points: 4 }, { id: 3, points: 6 }])], files: [] }));
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const lines = [...fixture.nativeElement.querySelectorAll('[data-testid="task-points-summary"]')].map((e: Element) => e.textContent!.trim());
+    expect(lines[0]).toContain('5 / 10 pont kiosztva');
+    expect(lines[1]).toContain('nincs részfeladat - beadáskor nem pontozható');
+    expect(lines[2]).toBe('10 pont · 2 részfeladat');
+  });
 
   it('publikált feladatsornál MEGJELENIK a visszavonás gomb', () => {
     const fixture = renderel(makeDetail({ isPublished: true }));
