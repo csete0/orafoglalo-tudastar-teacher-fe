@@ -56,6 +56,8 @@ export interface ClassTestOverview {
   timeLimitSeconds: number;
   resultsPublishedAt: string | null;
   serverNow: string;
+  /** A határidő + a beadási türelmi idő: ettől tehető közzé (addig a rendszer még beadhat dolgozatot). */
+  publishableAt: string;
   canPublish: boolean;
   tasks: ClassTestTask[];
   students: ClassTestStudentRow[];
