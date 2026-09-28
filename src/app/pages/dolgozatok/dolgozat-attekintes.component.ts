@@ -50,8 +50,8 @@ const LIVE_TAIL_MS = 15 * 60_000;
               <span class="badge badge-success">Közzétéve: {{ o.resultsPublishedAt | date: 'MM.dd. HH:mm' }}</span>
             } @else {
               <button type="button" class="btn btn-primary" [disabled]="!o.canPublish || publishing()" (click)="publish(o)"
-                      [title]="o.canPublish ? '' : 'A megírási idő lejárta után tehető közzé'">
-                Eredmények közzététele
+                      [title]="o.canPublish ? '' : 'Amikor már minden dolgozat be van adva, közzéteheted'">
+                {{ publishing() ? 'Közzététel…' : 'Eredmények közzététele' }}
               </button>
             }
           </div>
@@ -59,7 +59,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
 
         @if (!o.resultsPublishedAt && !o.canPublish) {
           <p class="text-sm text-text-muted mb-4">
-            Az eredményt a megírási idő lejárta után ({{ o.dueAt | date: 'HH:mm' }}) teheted közzé - addig a diákok csak annyit látnak: „Beadva”.
+            Az eredményt {{ o.publishableAt | date: 'HH:mm' }}-tól teheted közzé, amikor a rendszer már a határidőkor még író diákok dolgozatát is beadta - addig a diákok csak annyit látnak: „Beadva”.
           </p>
         }
 

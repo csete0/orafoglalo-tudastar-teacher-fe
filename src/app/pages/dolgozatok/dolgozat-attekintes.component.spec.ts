@@ -14,7 +14,7 @@ function makeOverview(overrides: Partial<ClassTestOverview> = {}): ClassTestOver
   return {
     assignmentId: 7, taskSetId: 44, taskSetTitle: 'Tömbök', groupId: 3, groupName: '11.B',
     opensAt: '2026-10-05T08:00:00Z', dueAt: '2026-10-05T08:50:00Z', timeLimitSeconds: 2700,
-    resultsPublishedAt: null, serverNow: '2026-10-05T09:30:00Z', canPublish: true,
+    resultsPublishedAt: null, serverNow: '2026-10-05T09:30:00Z', publishableAt: '2026-10-05T08:55:00Z', canPublish: true,
     tasks: [{ taskId: 1, title: 'Prog', maxPoints: 10 }, { taskId: 2, title: 'SQL', maxPoints: 10 }],
     students: [
       {
@@ -107,7 +107,7 @@ describe('DolgozatAttekintesComponent', () => {
     const early = setup(makeOverview({ canPublish: false }));
     const button = [...early.el.querySelectorAll('button')].find((b) => b.textContent?.includes('Eredmények közzététele')) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(early.el.textContent).toContain('a megírási idő lejárta után');
+    expect(early.el.textContent).toContain('-tól teheted közzé');
   });
 
   it('közzététel után a gomb helyett "Közzétéve" jelvény', () => {
