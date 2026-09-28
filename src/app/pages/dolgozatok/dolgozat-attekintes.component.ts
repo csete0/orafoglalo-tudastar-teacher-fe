@@ -59,7 +59,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
 
         @if (!o.resultsPublishedAt && !o.canPublish) {
           <p class="text-sm text-text-muted mb-4">
-            Az eredményt {{ o.publishableAt | date: 'HH:mm' }}-tól teheted közzé, amikor a rendszer már a határidőkor még író diákok dolgozatát is beadta - addig a diákok csak annyit látnak: „Beadva”.
+            Az eredményt {{ o.publishableAt | date: 'HH:mm' }}-tól teheted közzé (addig a még író diákok gépe beküldheti a munkájukat; a közzététel a még nyitott dolgozatokat automatikusan beadja) - addig a diákok csak annyit látnak: „Beadva”.
           </p>
         }
 
