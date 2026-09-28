@@ -119,7 +119,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
                         <span class="tabular-nums text-text-muted">· {{ remaining(row) }}</span>
                       }
                       @if (row.timeLimitReached) {
-                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" title="Az idő lejártakor adódott be">időre</span>
+                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" title="Az idő lejártakor automatikusan adódott be (a mentett munkájából)">lejárt az idő</span>
                       }
                       @if (row.needsManualGrading) {
                         <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Az AI nem pontozta (elfogyott a havi keret) - pontozd kézzel">kézi pontozás</span>

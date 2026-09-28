@@ -136,7 +136,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         }
 
         @if (!sqlFilesPaired()) {
-          <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 mb-6 text-sm text-warning flex items-start gap-2">
+          <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 mb-6 text-sm text-warning flex items-start gap-2" data-testid="sql-files-warning">
             <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
             <span>SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
             SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.</span>
@@ -242,7 +242,15 @@ type SnippetDraft = Record<number, Record<number, string>>;
                               [class.-rotate-90]="expandedTaskId() !== task.id" />
                             <span class="min-w-0 flex-1">
                               <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
-                              <p class="text-sm text-text-muted">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
+                              <!-- Beadáskor a részfeladatok pontösszege a feladat pontszáma; a maxPoints csak felső korlát. -->
+                              @if (task.solutions.length === 0) {
+                                <p class="text-sm text-warning" data-testid="task-points-summary">{{ task.maxPoints }} pont · nincs részfeladat - beadáskor nem pontozható</p>
+                              } @else if (allocatedPoints(task) !== task.maxPoints) {
+                                <p class="text-sm text-warning" data-testid="task-points-summary"
+                                   title="Beadáskor a részfeladatok pontösszege számít">{{ allocatedPoints(task) }} / {{ task.maxPoints }} pont kiosztva · {{ task.solutions.length }} részfeladat</p>
+                              } @else {
+                                <p class="text-sm text-text-muted" data-testid="task-points-summary">{{ task.maxPoints }} pont · {{ task.solutions.length }} részfeladat</p>
+                              }
                             </span>
                           </button>
                           <div class="flex items-center gap-3 shrink-0">
@@ -1130,6 +1138,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** Lazy-létrehozott, task.id-vel kulcsolt draft — így a "Új részfeladat szövege" mező
    *  sosem "szivárog át" egy másik feladatra task-váltáskor (UI-TT-66). */
+  allocatedPoints(task: TeacherTaskDto): number {
+    return task.solutions.reduce((sum, s) => sum + (s.points ?? 0), 0);
+  }
+
   newSolutionDraft(taskId: number): { description: string; points: number } {
     return (this.newSolutionDrafts[taskId] ??= { description: '', points: 5 });
   }
