@@ -25,6 +25,7 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     taskCount: 0,
     tasks: [],
     files: [],
+    requiredSkillIds: [],
     ...overrides,
   };
 }
@@ -1574,16 +1575,18 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
   describe('A4: feladatsor-metadata szerkesztő (updateMetadata)', () => {
     it('form kitöltés → store.updateTaskSet() hívódik a helyes payloaddal (a betöltött konkurencia-tokennel)', () => {
-      configure(makeDetail({ title: 'Eredeti cím', description: 'Eredeti leírás', levelId: 2, rowVersion: 'AQAAAA==' }));
+      configure(makeDetail({ title: 'Eredeti cím', description: 'Eredeti leírás', levelId: 2, rowVersion: 'AQAAAA==', requiredSkillIds: [4] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const component = fixture.componentInstance;
+      expect(component.metadataDraft()?.requiredSkillIds).toEqual([4]);
 
       component.metadataDraft.set({
         title: 'Módosított cím',
         description: 'Módosított leírás',
         levelId: 3,
         subjectCategoryId: 5,
+        requiredSkillIds: [4, 7],
       });
 
       component.updateMetadata(1);
@@ -1595,6 +1598,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
           description: 'Módosított leírás',
           levelId: 3,
           subjectCategoryId: 5,
+          requiredSkillIds: [4, 7],
           rowVersion: 'AQAAAA==',
         },
         expect.any(Function),
@@ -1612,6 +1616,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
         description: 'Leírás',
         levelId: 2,
         subjectCategoryId: null,
+        requiredSkillIds: [],
       });
 
       component.updateMetadata(1);

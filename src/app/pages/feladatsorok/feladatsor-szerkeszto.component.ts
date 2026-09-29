@@ -6,12 +6,13 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, filter, firstValueFrom, of, take } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { SkillPickerComponent } from '../../shared/skill-picker/skill-picker.component';
 import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
-import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
+import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherSolutionDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
@@ -55,7 +56,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -461,6 +462,13 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   }
                 </select>
               </label>
+              @if (skills().length) {
+                <app-skill-picker
+                  [skills]="skills()"
+                  [selected]="draft.requiredSkillIds"
+                  (selectedChange)="metadataDraft.update(d => d ? { ...d, requiredSkillIds: $event } : d)"
+                />
+              }
               <button
                 type="button"
                 class="btn btn-primary"
@@ -668,7 +676,19 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     { initialValue: [] as PublicCategoryDto[] },
   );
 
-  readonly metadataDraft = signal<{ title: string; description: string; levelId: number; subjectCategoryId: number | null } | null>(null);
+  /** Az „Ajánlott előtte” témaválasztó listája - hiba esetén a választó egyszerűen nem jelenik meg. */
+  readonly skills = toSignal(
+    this.taskSetService.getSkills().pipe(catchError(() => of([] as TeacherSkillDto[]))),
+    { initialValue: [] as TeacherSkillDto[] },
+  );
+
+  readonly metadataDraft = signal<{
+    title: string;
+    description: string;
+    levelId: number;
+    subjectCategoryId: number | null;
+    requiredSkillIds: number[];
+  } | null>(null);
 
   private readonly initMetadataDraft = effect(() => {
     const detail = this.store.selectedDetail();
@@ -678,6 +698,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         description: detail.description,
         levelId: detail.levelId,
         subjectCategoryId: detail.subjectCategoryId ?? null,
+        requiredSkillIds: detail.requiredSkillIds ?? [],
       });
     }
   });
@@ -1092,6 +1113,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         description: draft.description,
         levelId: draft.levelId,
         subjectCategoryId: draft.subjectCategoryId ?? undefined,
+        requiredSkillIds: draft.requiredSkillIds,
         // BE-TEACHERCONTENT-UPDATETASKSET-LOSTUPDATE: egy másik fülön közben elmentett változást ne írjuk felül némán.
         rowVersion: this.store.selectedDetail()?.rowVersion,
       },

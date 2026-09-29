@@ -21,6 +21,7 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     taskCount: 0,
     tasks: [],
     files: [],
+    requiredSkillIds: [],
     ...overrides,
   };
 }

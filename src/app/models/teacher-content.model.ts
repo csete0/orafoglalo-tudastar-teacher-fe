@@ -6,7 +6,21 @@ export interface CreateTeacherTaskSetRequest {
   subjectCategoryId?: number;
   /** Optimista konkurrencia-token a betöltött részletből - elavult tokennel a mentés ütközés-hibát ad. */
   rowVersion?: string;
+  /** „Ajánlott előtte” témák (a diák ezekhez kap gyakorló-ajánlást). Elhagyva mentéskor változatlan; [] = nincs. */
+  requiredSkillIds?: number[];
 }
+
+/** A témaválasztó egy eleme (GET /teacher/skills). */
+export interface TeacherSkillDto {
+  id: number;
+  name: string;
+  /** programozas | adatbazis */
+  area: string;
+  description?: string | null;
+}
+
+/** A backend CreateTeacherTaskSetRequest.MaxRequiredSkills értéke. */
+export const MAX_REQUIRED_SKILLS = 12;
 
 export interface TeacherTaskSetDto {
   id: number;
@@ -44,6 +58,7 @@ export interface TeacherTaskSetDto {
 export interface TeacherTaskSetDetailDto extends TeacherTaskSetDto {
   tasks: TeacherTaskDto[];
   files: TeacherFileDto[];
+  requiredSkillIds: number[];
 }
 
 export interface PublishResultDto {

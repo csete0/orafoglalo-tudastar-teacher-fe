@@ -11,6 +11,9 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TartalomFulekComponent } from './tartalom-fulek.component';
+import { SkillPickerComponent } from '../../shared/skill-picker/skill-picker.component';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { TeacherSkillDto } from '../../models/teacher-content.model';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -22,7 +25,7 @@ const LEVELS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsorok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent, SkillPickerComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
       <div class="flex items-start justify-between gap-3">
@@ -60,6 +63,9 @@ const LEVELS = [
               <option [ngValue]="category.id">{{ category.name }}</option>
             }
           </select>
+          @if (skills().length) {
+            <app-skill-picker [skills]="skills()" [(selected)]="createSkillIds" />
+          }
 
           <button type="submit" [disabled]="createForm.invalid || store.loading()" class="btn btn-primary">
             Létrehozás
@@ -134,6 +140,14 @@ export class FeladatsorokListaComponent {
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
   readonly store = inject(TeacherTaskSetStore);
+  private readonly taskSetService = inject(TeacherTaskSetService);
+
+  /** Az „Ajánlott előtte” témaválasztó listája - hiba esetén a választó egyszerűen nem jelenik meg. */
+  readonly skills = toSignal(
+    this.taskSetService.getSkills().pipe(catchError(() => of([] as TeacherSkillDto[]))),
+    { initialValue: [] as TeacherSkillDto[] },
+  );
+  readonly createSkillIds = signal<number[]>([]);
 
   readonly createOpen = signal(false);
   readonly search = signal('');
@@ -250,9 +264,11 @@ export class FeladatsorokListaComponent {
         description: raw.description,
         levelId,
         subjectCategoryId: raw.subjectCategoryId ?? undefined,
+        requiredSkillIds: this.createSkillIds(),
       },
       (taskSet) => {
         this.createOpen.set(false);
+        this.createSkillIds.set([]);
         this.toastService.success('Feladatsor létrehozva.');
         this.router.navigate(['/feladatsorok', taskSet.id, 'szerkesztes']);
       },
