@@ -105,6 +105,9 @@ async function startBackend(): Promise<void> {
       ...process.env,
       ASPNETCORE_ENVIRONMENT: 'Development',
       ConnectionStrings__PostgresConnection: DB_CONNECTION_STRING,
+      // Csak az E2E-hez: a JWT-kulcs Development módban sincs a repóban (SEC-fix), User Secrets pedig a CT-n nincs -
+      // enélkül minden bejelentkezés 500-at adott („JWT SecretKey nincs konfigurálva”).
+      Authentication__SecretKey: 'e2e-only-jwt-secret-key-not-for-any-real-environment-0123456789',
       TeacherFiles__RootPath: TEACHER_FILES_ROOT,
       // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
       // versenyezne a teszt-forgalommal az eldobható E2E DB-konténerért —
