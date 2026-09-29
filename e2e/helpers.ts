@@ -4,7 +4,7 @@ import {
   BACKEND_URL,
   DB_CONTAINER_NAME,
   DB_NAME,
-  DB_SA_PASSWORD,
+  DB_USER,
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD,
   STUDENT_FE_URL,
@@ -26,21 +26,12 @@ function runSql(sql: string): void {
     'docker',
     [
       'exec', DB_CONTAINER_NAME,
-      '/opt/mssql-tools18/bin/sqlcmd',
-      // -I: SET QUOTED_IDENTIFIER ON. A `dbo.Users` táblán SZŰRT indexek vannak
-      // (UQ_Users_DiscordId, UQ_Users_Nickname), és SQL Server minden ilyen táblán
-      // végzett DML-hez megköveteli ezt a beállítást - a sqlcmd viszont alapból
-      // OFF-fal csatlakozik. A `confirmEmail` UPDATE-je emiatt csendben elhasalt
-      // ("Msg 1934 ... QUOTED_IDENTIFIER"), a diák e-mailje sosem lett megerősítve,
-      // és a rákövetkező bejelentkezés "Email cím nincs megerősítve"-vel bukott.
-      //
-      // -b: SQL-hiba esetén NEM nulla kilépési kód. Enélkül a sqlcmd sikert jelez
-      // hibás utasításra is, az execFileSync nem dob, és a hiba láthatatlan marad -
-      // pontosan ezért maradt ez a hiba észrevétlen (a `stdio: 'ignore'` pedig az
-      // üzenetet is elrejtette).
-      '-I', '-b',
-      '-S', 'localhost', '-U', 'sa', '-P', DB_SA_PASSWORD, '-C', '-d', DB_NAME,
-      '-Q', sql,
+      'psql',
+      // ON_ERROR_STOP: SQL-hiba esetén nem nulla kilépési kód - enélkül egy elhasaló UPDATE (pl. a `confirmEmail`)
+      // láthatatlan maradna, és a rákövetkező bejelentkezés „Email cím nincs megerősítve”-vel bukna.
+      '-v', 'ON_ERROR_STOP=1',
+      '-U', DB_USER, '-d', DB_NAME,
+      '-c', sql,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
   );
@@ -48,7 +39,7 @@ function runSql(sql: string): void {
 
 
 export function confirmEmail(email: string): void {
-  runSql(`UPDATE dbo.Users SET EmailConfirmed = 1 WHERE Email = N'${email.replace(/'/g, "''")}';`);
+  runSql(`UPDATE dbo."Users" SET "EmailConfirmed" = true WHERE "Email" = '${email.replace(/'/g, "''")}';`);
 }
 
 /**

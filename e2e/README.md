@@ -1,15 +1,15 @@
 # Playwright E2E — tanári platform
 
-Teljes, valós stacken futó E2E suite: eldobható Docker SQL Server konténer + a
-séma tényleges DACPAC-deploya + a backend (`orafoglalo-tudastar-be`) és mindkét
+Teljes, valós stacken futó E2E suite: eldobható Docker PostgreSQL 17 konténer + a
+séma tényleges felépítése (EF-alapmigrációk + `sql-postgres/*.sql`, pontosan mint élesben) + a backend (`orafoglalo-tudastar-be`) és mindkét
 frontend (`orafoglalo-tudastar-fe`, ez a repó) valódi `dotnet run` / `ng serve`
 folyamatai. Nincs mockolás — a flow JWT role-claimeken, multipart uploadon és
 szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
 
 ## Előfeltételek
 
-- Docker Desktop fut (a teszt egy eldobható SQL Server 2022 konténert indít a
-  `14330`-as hoszt-porton).
+- Docker fut (a teszt egy eldobható PostgreSQL 17 konténert indít a
+  `127.0.0.1:15433`-as hoszt-porton, 1 GB memórialimittel).
 - A `.NET 10` SDK telepítve (a backend és az `E2ESeed` konzol-eszköz ezt
   igényli).
 - Testvér-mappa elrendezés: mindhárom repó ugyanazon szülő könyvtár alatt van:
@@ -48,7 +48,7 @@ visszajátszáshoz.
 | `E2E_STUDENT_FE_REPO_PATH`  | `../orafoglalo-tudastar-fe`                   | Diák-fe repó útja |
 | `E2E_TEACHER_FILES_ROOT`    | OS temp / `tudastar-e2e-teacher-files`        | Tanári feltöltött fájlok fizikai gyökere |
 
-A DB-konténer neve/portja (`tudastar-e2e-db` / `14330`) és az admin teszt-fiók
+A DB-konténer neve/portja (`tudastar-e2e-db` / `15433`) és az admin teszt-fiók
 (`e2e-admin@example.com` / `E2eAdmin123!`) az `e2e/constants.ts`-ben van
 fixen — ezek nem ütköznek semmilyen valódi/dev erőforrással, mert saját,
 dedikált konténerben/DB-ben élnek.
@@ -61,9 +61,9 @@ A Playwright `webServer` plugin-jai **KORÁBBAN** indulnak, mint a user
 ELŐTT próbálná felhúzni, és összeomlana). Helyette:
 
 1. `e2e/global-setup.ts` maga indítja/állítja le a Docker konténert,
-   deployolja a sémát + seedeli az adatokat (`DigitalCulture.E2ESeed`
-   konzol-eszköz — az `xUnit` teszt-harness DACPAC-deploy mintáját
-   újrahasznosítja, önállóan futtatható).
+   felépíti a sémát + seedeli az adatokat (`DigitalCulture.E2ESeed`
+   konzol-eszköz — ugyanazt a sémaépítést futtatja, mint az `xUnit`
+   teszt-harness, önállóan futtatható).
 2. Ezután a `global-setup.ts` maga `spawn()`-olja a backendet (`dotnet run`),
    és pollozza az `/api/roles` végpontot, amíg fel nem áll.
 3. Csak EZUTÁN futnak a `playwright.config.ts` `webServer` bejegyzései (a két

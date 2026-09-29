@@ -20,16 +20,15 @@ export const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 export const STUDENT_FE_URL = `http://localhost:${STUDENT_FE_PORT}`;
 export const TEACHER_FE_URL = `http://localhost:${TEACHER_FE_PORT}`;
 
+// Eldobható PostgreSQL 17 (a Patricks 2026-09 óta csak Postgresen fut; az SQL Server-út megszűnt).
 export const DB_CONTAINER_NAME = 'tudastar-e2e-db';
-export const DB_HOST_PORT = 14330;
+export const DB_HOST_PORT = 15433;
 export const DB_NAME = 'tudastar_e2e';
-export const DB_SA_PASSWORD = 'E2eSaPassw0rd!';
+export const DB_USER = 'postgres';
+export const DB_PASSWORD = 'E2ePgPassw0rd!';
 
-export const DB_SERVER_CONNECTION_STRING =
-  `Server=localhost,${DB_HOST_PORT};User Id=sa;Password=${DB_SA_PASSWORD};` +
-  `TrustServerCertificate=True;Connection Timeout=60;`;
-
-export const DB_CONNECTION_STRING = `${DB_SERVER_CONNECTION_STRING}Initial Catalog=${DB_NAME};`;
+export const DB_CONNECTION_STRING =
+  `Host=127.0.0.1;Port=${DB_HOST_PORT};Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=60;`;
 
 export const E2E_ADMIN_EMAIL = 'e2e-admin@example.com';
 export const E2E_ADMIN_PASSWORD = 'E2eAdmin123!';

@@ -11,8 +11,9 @@ import {
   DB_CONNECTION_STRING,
   DB_CONTAINER_NAME,
   DB_HOST_PORT,
-  DB_SA_PASSWORD,
-  DB_SERVER_CONNECTION_STRING,
+  DB_NAME,
+  DB_PASSWORD,
+  DB_USER,
   TEACHER_FILES_ROOT,
 } from './constants';
 
@@ -34,22 +35,26 @@ export default async function globalSetup(): Promise<void> {
   console.log('[global-setup] Régi E2E DB-konténer eltávolítása (ha volt)...');
   runDocker(['rm', '-f', DB_CONTAINER_NAME], { allowFailure: true });
 
-  console.log(`[global-setup] SQL Server 2022 konténer indítása (port ${DB_HOST_PORT})...`);
+  console.log(`[global-setup] PostgreSQL 17 konténer indítása (port ${DB_HOST_PORT})...`);
   runDocker([
     'run', '-d',
     '--name', DB_CONTAINER_NAME,
-    '-p', `${DB_HOST_PORT}:1433`,
-    '-e', 'ACCEPT_EULA=Y',
-    '-e', `MSSQL_SA_PASSWORD=${DB_SA_PASSWORD}`,
-    'mcr.microsoft.com/mssql/server:2022-latest',
+    '--memory', '1g',
+    '-p', `127.0.0.1:${DB_HOST_PORT}:5432`,
+    '-e', `POSTGRES_USER=${DB_USER}`,
+    '-e', `POSTGRES_PASSWORD=${DB_PASSWORD}`,
+    '-e', `POSTGRES_DB=${DB_NAME}`,
+    // UTF-8 + C.UTF-8: a magyar ékezetek és az ICU-collationök (ci_ai, hu-HU-x-icu) így viselkednek, mint élesben.
+    '-e', 'POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C.UTF-8',
+    'postgres:17',
   ]);
 
-  await waitForSqlServerReady();
+  await waitForPostgresReady();
 
-  console.log('[global-setup] Séma deploy + seed (DigitalCulture.E2ESeed)...');
+  console.log('[global-setup] Séma (EF-alapmigrációk + sql-postgres scriptek) + seed (DigitalCulture.E2ESeed)...');
   execFileSync(
     'dotnet',
-    ['run', '--project', 'DigitalCulture.E2ESeed', '--', DB_SERVER_CONNECTION_STRING],
+    ['run', '--project', 'DigitalCulture.E2ESeed', '--', DB_CONNECTION_STRING],
     { cwd: BACKEND_REPO_PATH, stdio: 'inherit' },
   );
 
@@ -99,7 +104,7 @@ async function startBackend(): Promise<void> {
     env: {
       ...process.env,
       ASPNETCORE_ENVIRONMENT: 'Development',
-      ConnectionStrings__DefaultConnection: DB_CONNECTION_STRING,
+      ConnectionStrings__PostgresConnection: DB_CONNECTION_STRING,
       TeacherFiles__RootPath: TEACHER_FILES_ROOT,
       // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
       // versenyezne a teszt-forgalommal az eldobható E2E DB-konténerért —
@@ -165,42 +170,34 @@ function runDocker(args: string[], opts: { allowFailure?: boolean } = {}): void 
   }
 }
 
-async function waitForSqlServerReady(): Promise<void> {
+async function waitForPostgresReady(): Promise<void> {
   const maxAttempts = 45;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      execFileSync(
-        'docker',
-        [
-          'exec', DB_CONTAINER_NAME,
-          '/opt/mssql-tools18/bin/sqlcmd',
-          '-S', 'localhost', '-U', 'sa', '-P', DB_SA_PASSWORD, '-C',
-          '-Q', 'SELECT 1',
-        ],
-        { stdio: 'ignore' },
-      );
-      console.log(`[global-setup] SQL Server (konténeren belül) kész (${attempt}. próbálkozásra).`);
+      // A pg_isready a TCP-socketen kérdez (-h 127.0.0.1): az initdb alatti ideiglenes, csak unix-socketes szerver
+      // még nem számít késznek - különben a seed épp az újraindulás pillanatában kapcsolódna.
+      execFileSync('docker', ['exec', DB_CONTAINER_NAME, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', DB_NAME], { stdio: 'ignore' });
+      console.log(`[global-setup] PostgreSQL (konténeren belül) kész (${attempt}. próbálkozásra).`);
       break;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       if (attempt === maxAttempts) {
-        throw new Error('[global-setup] SQL Server nem állt készen a megadott időn belül (konténeren belüli teszt).');
+        throw new Error('[global-setup] A PostgreSQL nem állt készen a megadott időn belül (konténeren belüli teszt).');
       }
     }
   }
 
-  // A konténeren BELÜLI készenlét nem garantálja, hogy a HOST felől (a
-  // backend nézőpontjából) a portmappelés is azonnal elérhető — ezt egy
-  // valódi host-oldali TCP-kapcsolattal ellenőrizzük külön.
+  // A konténeren BELÜLI készenlét nem garantálja, hogy a HOST felől (a backend nézőpontjából) a portmappelés is
+  // azonnal elérhető — ezt egy valódi host-oldali TCP-kapcsolattal ellenőrizzük külön.
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const reachable = await canConnectTcp('127.0.0.1', DB_HOST_PORT);
     if (reachable) {
-      console.log(`[global-setup] SQL Server host-oldalról (127.0.0.1:${DB_HOST_PORT}) is elérhető (${attempt}. próbálkozásra).`);
+      console.log(`[global-setup] PostgreSQL host-oldalról (127.0.0.1:${DB_HOST_PORT}) is elérhető (${attempt}. próbálkozásra).`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new Error(`[global-setup] SQL Server host-oldalról nem érhető el 127.0.0.1:${DB_HOST_PORT} címen a megadott időn belül.`);
+  throw new Error(`[global-setup] A PostgreSQL host-oldalról nem érhető el 127.0.0.1:${DB_HOST_PORT} címen a megadott időn belül.`);
 }
 
 function canConnectTcp(host: string, port: number): Promise<boolean> {
