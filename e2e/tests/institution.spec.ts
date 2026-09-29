@@ -34,8 +34,8 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await principalPage.goto(`${TEACHER_FE_URL}/intezmenyek`);
   await principalPage.locator('[formcontrolname="name"]').fill(institutionName);
   await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
-  await expect(principalPage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
-  await principalPage.getByText(institutionName).click();
+  await expect(principalPage.getByText(institutionName, { exact: true })).toBeVisible({ timeout: 15000 });
+  await principalPage.getByText(institutionName, { exact: true }).click();
   await expect(principalPage.getByTestId('my-role-badge')).toHaveText(/Igazgató/, { timeout: 15000 });
 
   const teacherInviteCode = (await principalPage.locator('code').first().textContent())?.trim();
@@ -49,7 +49,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await colleaguePage.locator('[formcontrolname="code"]').fill(teacherInviteCode!);
   await colleaguePage.getByRole('button', { name: 'Csatlakozás' }).click();
   await acceptConfirmDialog(colleaguePage);
-  await expect(colleaguePage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
+  await expect(colleaguePage.getByText(institutionName, { exact: true })).toBeVisible({ timeout: 15000 });
 
   // ── Az igazgató igazgatóvá lépteti elő a kollégát ──
   // A BE-GROUPSCHOOLBIND-NOADMINROLE-GATE fix óta csoportot intézményhez kötni
@@ -71,6 +71,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   // ── Kolléga csoportot hoz létre, az intézményhez kötve ──
   const groupName = `institution-group-${Date.now()}`;
   await colleaguePage.goto(`${TEACHER_FE_URL}/csoportok`);
+  await colleaguePage.getByRole('button', { name: '+ Új csoport' }).click();
   await colleaguePage.locator('[formcontrolname="name"]').fill(groupName);
   await colleaguePage.locator('[formcontrolname="schoolId"]').selectOption({ label: institutionName });
   await colleaguePage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -100,6 +101,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   // ── Igazgató feladatsort ír és publikál (intézményi megosztás confirm) ──
   const taskSetTitle = `E2E Igazgató feladatsor ${Date.now()}`;
   await principalPage.goto(`${TEACHER_FE_URL}/feladatsorok`);
+  await principalPage.getByRole('button', { name: '+ Új feladatsor' }).click();
   await principalPage.locator('[formcontrolname="title"]').fill(taskSetTitle);
   await principalPage.locator('[formcontrolname="description"]').fill('Igazgatói feladatsor E2E teszthez.');
   await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -149,13 +151,13 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
 
   // ── Igazgató Áttekintés füle látja a diákot ──
   await principalPage.goto(`${TEACHER_FE_URL}/intezmenyek`);
-  await principalPage.getByText(institutionName).click();
+  await principalPage.getByText(institutionName, { exact: true }).click();
   await principalPage.getByRole('tab', { name: 'Áttekintés' }).click();
   await expect(principalPage.getByText('Teszt').first()).toBeVisible({ timeout: 15000 });
 
   // ── A kolléga (sima tag) NEM lát Áttekintés/Csoportok fület ──
   await colleaguePage.goto(`${TEACHER_FE_URL}/intezmenyek`);
-  await colleaguePage.getByText(institutionName).click();
+  await colleaguePage.getByText(institutionName, { exact: true }).click();
   await expect(colleaguePage.getByTestId('my-role-badge')).toHaveText(/Tanár/, { timeout: 15000 });
   await expect(colleaguePage.getByRole('tab', { name: 'Áttekintés' })).toHaveCount(0);
   await expect(colleaguePage.getByRole('tab', { name: 'Csoportok' })).toHaveCount(0);

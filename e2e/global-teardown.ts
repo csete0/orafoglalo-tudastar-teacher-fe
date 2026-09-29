@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import { BACKEND_PID_FILE, DB_CONTAINER_NAME } from './constants';
+import { ADMIN_API_PID_FILE, BACKEND_PID_FILE, DB_CONTAINER_NAME } from './constants';
 
 export default async function globalTeardown(): Promise<void> {
-  console.log('[global-teardown] Backend-folyamat leállítása (global-setup.ts manuálisan indította)...');
-  stopBackend();
+  console.log('[global-teardown] Backend + Admin API leállítása (global-setup.ts manuálisan indította)...');
+  stopProcessTree(BACKEND_PID_FILE);
+  stopProcessTree(ADMIN_API_PID_FILE);
 
   console.log('[global-teardown] E2E DB-konténer eltávolítása...');
   try {
@@ -18,27 +19,23 @@ export default async function globalTeardown(): Promise<void> {
   }
 }
 
-function stopBackend(): void {
-  if (!fs.existsSync(BACKEND_PID_FILE)) return;
+function stopProcessTree(pidFile: string): void {
+  if (!fs.existsSync(pidFile)) return;
 
-  const pid = fs.readFileSync(BACKEND_PID_FILE, 'utf-8').trim();
-  fs.rmSync(BACKEND_PID_FILE, { force: true });
+  const pid = fs.readFileSync(pidFile, 'utf-8').trim();
+  fs.rmSync(pidFile, { force: true });
   if (!pid) return;
 
-  // A `dotnet run` egy KÜLÖN gyerekfolyamatként indítja a tényleges
-  // DigitalCulture.API-t. Csak a wrappert megölve a gyerek elárvul (PPID=1) és
-  // tovább figyel a backend porton - a KÖVETKEZŐ futás pedig csendben ehhez a
-  // régi binárishoz fog beszélni. Ezért a teljes folyamatfát kell lezárni.
+  // A `dotnet run` egy KÜLÖN gyerekfolyamatként indítja a tényleges API-t. Csak a wrappert megölve a gyerek
+  // elárvul (PPID=1) és tovább figyel a porton - a KÖVETKEZŐ futás pedig csendben ehhez a régi binárishoz
+  // beszélne. Ezért előbb a gyerekeket, aztán magát a wrappert állítjuk le.
   try {
-    execFileSync('pkill', ['-TERM', '-P', String(pid)], { stdio: 'ignore' });
+    execFileSync('pkill', ['-TERM', '-P', pid], { stdio: 'ignore' });
   } catch {
-    // Nincs gyerek, vagy a pkill hiányzik - a lenti kill(pid) még megy.
+    // Nincs gyerek - nem hiba.
   }
-
   try {
-    // /T: a teljes folyamatfát leállítja — a `dotnet run` maga is spawnol
-    // egy tényleges DigitalCulture.API.exe gyermek-folyamatot.
-    execFileSync('taskkill', ['/F', '/T', '/PID', pid], { stdio: 'ignore' });
+    process.kill(Number(pid), 'SIGTERM');
   } catch {
     // A folyamat esetleg már nem fut — nem hiba.
   }

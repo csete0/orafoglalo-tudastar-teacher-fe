@@ -4,6 +4,8 @@ export interface CreateTeacherTaskSetRequest {
   /** 1=beginner, 2=advanced, 3=expert (Levels tábla). */
   levelId: number;
   subjectCategoryId?: number;
+  /** Optimista konkurrencia-token a betöltött részletből - elavult tokennel a mentés ütközés-hibát ad. */
+  rowVersion?: string;
 }
 
 export interface TeacherTaskSetDto {
@@ -34,6 +36,9 @@ export interface TeacherTaskSetDto {
    * a tanar ne egy elutasitott keresbol tudja meg.
    */
   hasExamSessions: boolean;
+
+  /** Optimista konkurrencia-token (a részlet és a mentés válasza tölti ki; a lista nem). */
+  rowVersion?: string;
 }
 
 export interface TeacherTaskSetDetailDto extends TeacherTaskSetDto {

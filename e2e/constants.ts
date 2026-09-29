@@ -16,20 +16,28 @@ export const BACKEND_PORT = 7083;
 export const STUDENT_FE_PORT = 4200;
 export const TEACHER_FE_PORT = 4300;
 
+// 2026-09-23 óta a platform-admin oldalak a külön admin-fe-ben vannak, ami a külön Admin API-t hívja.
+// Az Admin API-n nincs CORS: az admin-fe relatív `/api/admin` címet használ (production env), a dev-szerver
+// proxyja (e2e/admin-proxy.json - a portot ott is módosítsd) továbbítja, mint stagingen/élesen az nginx.
+// Saját portok (nem 4400/7090), mert a staging CT-n azokon a staging admin-fe/Admin API fut.
+export const ADMIN_API_PORT = 17090;
+export const ADMIN_FE_PORT = 14400;
+
 export const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+export const ADMIN_API_URL = `http://localhost:${ADMIN_API_PORT}`;
 export const STUDENT_FE_URL = `http://localhost:${STUDENT_FE_PORT}`;
 export const TEACHER_FE_URL = `http://localhost:${TEACHER_FE_PORT}`;
+export const ADMIN_FE_URL = `http://localhost:${ADMIN_FE_PORT}`;
 
+// Eldobható PostgreSQL 17 (a Patricks 2026-09 óta csak Postgresen fut; az SQL Server-út megszűnt).
 export const DB_CONTAINER_NAME = 'tudastar-e2e-db';
-export const DB_HOST_PORT = 14330;
+export const DB_HOST_PORT = 15433;
 export const DB_NAME = 'tudastar_e2e';
-export const DB_SA_PASSWORD = 'E2eSaPassw0rd!';
+export const DB_USER = 'postgres';
+export const DB_PASSWORD = 'E2ePgPassw0rd!';
 
-export const DB_SERVER_CONNECTION_STRING =
-  `Server=localhost,${DB_HOST_PORT};User Id=sa;Password=${DB_SA_PASSWORD};` +
-  `TrustServerCertificate=True;Connection Timeout=60;`;
-
-export const DB_CONNECTION_STRING = `${DB_SERVER_CONNECTION_STRING}Initial Catalog=${DB_NAME};`;
+export const DB_CONNECTION_STRING =
+  `Host=127.0.0.1;Port=${DB_HOST_PORT};Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=60;`;
 
 export const E2E_ADMIN_EMAIL = 'e2e-admin@example.com';
 export const E2E_ADMIN_PASSWORD = 'E2eAdmin123!';
@@ -45,6 +53,9 @@ export const BACKEND_REPO_PATH =
 export const STUDENT_FE_REPO_PATH =
   process.env['E2E_STUDENT_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-fe');
 
+export const ADMIN_FE_REPO_PATH =
+  process.env['E2E_ADMIN_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-admin-fe');
+
 export const TEACHER_FILES_ROOT =
   process.env['E2E_TEACHER_FILES_ROOT'] ?? path.resolve(os.tmpdir(), 'tudastar-e2e-teacher-files');
 
@@ -58,3 +69,5 @@ export const TEACHER_FILES_ROOT =
  */
 export const BACKEND_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.pid');
 export const BACKEND_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.log');
+export const ADMIN_API_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.pid');
+export const ADMIN_API_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.log');

@@ -1,0 +1,6 @@
+{
+  "/api/admin": {
+    "target": "http://localhost:17090",
+    "secure": false
+  }
+}
