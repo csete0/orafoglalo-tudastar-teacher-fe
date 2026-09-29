@@ -11,6 +11,7 @@ import {
   SnippetDto,
   TaskSetAssignmentDto,
   TeacherGroupTaskSetAssignmentDto,
+  TeacherSkillDto,
   TeacherSolutionDto,
   TeacherTaskDto,
   TeacherTaskSetDetailDto,
@@ -24,6 +25,10 @@ export class TeacherTaskSetService {
 
   getMine(): Observable<TeacherTaskSetDto[]> {
     return this.http.get<TeacherTaskSetDto[]>(`${this.baseUrl}/task-sets`);
+  }
+
+  getSkills(): Observable<TeacherSkillDto[]> {
+    return this.http.get<TeacherSkillDto[]>(`${this.baseUrl}/skills`);
   }
 
   getDetail(id: number): Observable<TeacherTaskSetDetailDto> {
