@@ -108,6 +108,8 @@ async function startBackend(): Promise<void> {
       // Csak az E2E-hez: a JWT-kulcs Development módban sincs a repóban (SEC-fix), User Secrets pedig a CT-n nincs -
       // enélkül minden bejelentkezés 500-at adott („JWT SecretKey nincs konfigurálva”).
       Authentication__SecretKey: 'e2e-only-jwt-secret-key-not-for-any-real-environment-0123456789',
+      Authentication__RefreshSecretKey: 'e2e-only-jwt-refresh-secret-not-for-any-real-env-9876543210',
+      ContactForm__RecipientEmail: 'e2e-contact@example.com',
       TeacherFiles__RootPath: TEACHER_FILES_ROOT,
       // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
       // versenyezne a teszt-forgalommal az eldobható E2E DB-konténerért —
