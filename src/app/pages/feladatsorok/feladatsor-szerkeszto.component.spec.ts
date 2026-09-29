@@ -1573,8 +1573,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
   // ── A4: feladatsor-metadata szerkesztő ───────────────────────────────────
 
   describe('A4: feladatsor-metadata szerkesztő (updateMetadata)', () => {
-    it('form kitöltés → store.updateTaskSet() hívódik a helyes payloaddal', () => {
-      configure(makeDetail({ title: 'Eredeti cím', description: 'Eredeti leírás', levelId: 2 }));
+    it('form kitöltés → store.updateTaskSet() hívódik a helyes payloaddal (a betöltött konkurencia-tokennel)', () => {
+      configure(makeDetail({ title: 'Eredeti cím', description: 'Eredeti leírás', levelId: 2, rowVersion: 'AQAAAA==' }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const component = fixture.componentInstance;
@@ -1595,6 +1595,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
           description: 'Módosított leírás',
           levelId: 3,
           subjectCategoryId: 5,
+          rowVersion: 'AQAAAA==',
         },
         expect.any(Function),
       );

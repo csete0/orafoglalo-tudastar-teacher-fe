@@ -1092,6 +1092,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         description: draft.description,
         levelId: draft.levelId,
         subjectCategoryId: draft.subjectCategoryId ?? undefined,
+        // BE-TEACHERCONTENT-UPDATETASKSET-LOSTUPDATE: egy másik fülön közben elmentett változást ne írjuk felül némán.
+        rowVersion: this.store.selectedDetail()?.rowVersion,
       },
       () => this.toastService.success('Mentve.'),
     );
