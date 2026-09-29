@@ -1,5 +1,9 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import {
+  ADMIN_FE_PORT,
+  ADMIN_FE_REPO_PATH,
+  ADMIN_FE_URL,
   STUDENT_FE_PORT,
   STUDENT_FE_REPO_PATH,
   STUDENT_FE_URL,
@@ -54,6 +58,14 @@ export default defineConfig({
       cwd: __dirname,
       url: TEACHER_FE_URL,
       timeout: 120_000,
+      reuseExistingServer: false,
+    },
+    {
+      // production env = relatív `/api/admin`; a proxy az Admin API-hoz visz (azon nincs CORS, ld. constants.ts).
+      command: `npx ng serve --configuration production --port ${ADMIN_FE_PORT} --proxy-config ${path.join(__dirname, 'e2e', 'admin-proxy.json')}`,
+      cwd: ADMIN_FE_REPO_PATH,
+      url: ADMIN_FE_URL,
+      timeout: 180_000,
       reuseExistingServer: false,
     },
   ],

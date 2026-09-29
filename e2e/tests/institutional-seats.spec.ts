@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
+import { ADMIN_FE_URL, STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import {
   acceptConfirmDialog,
   createLoggedInStudent,
@@ -44,10 +44,11 @@ test('intézményi licenc: diák megkapja, tanár látja és az óra végén fel
     await principalPage.goto(`${TEACHER_FE_URL}/intezmenyek`);
     await principalPage.locator('[formcontrolname="name"]').fill(institutionName);
     await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
-    await expect(principalPage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
+    await expect(principalPage.getByText(institutionName, { exact: true })).toBeVisible({ timeout: 15000 });
 
     const groupName = `seat-group-${Date.now()}`;
     await principalPage.goto(`${TEACHER_FE_URL}/csoportok`);
+    await principalPage.getByRole('button', { name: '+ Új csoport' }).click();
     await principalPage.locator('[formcontrolname="name"]').fill(groupName);
     await principalPage.locator('[formcontrolname="schoolId"]').selectOption({ label: institutionName });
     await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -58,7 +59,7 @@ test('intézményi licenc: diák megkapja, tanár látja és az óra végén fel
     expect(inviteCode).toBeTruthy();
 
     // ── Admin prémium licencet ad az intézménynek, EGY hellyel ──
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/intezmenyek`);
+    await adminPage.goto(`${ADMIN_FE_URL}/intezmenyek`);
     const schoolRow = adminPage.locator('li', { hasText: institutionName });
     await expect(schoolRow).toBeVisible({ timeout: 15000 });
     await schoolRow.getByRole('button', { name: '+ Új licenc' }).click();
@@ -83,7 +84,7 @@ test('intézményi licenc: diák megkapja, tanár látja és az óra végén fel
     // funkciói lennének úgy, hogy a profilja "free"-t mutat.
     await studentARelogin.goto(`${STUDENT_FE_URL}/profile`);
     await expect(studentARelogin.getByText(/Iskolai licenc/)).toBeVisible({ timeout: 15000 });
-    await expect(studentARelogin.getByText(institutionName)).toBeVisible({ timeout: 15000 });
+    await expect(studentARelogin.getByText(institutionName, { exact: true })).toBeVisible({ timeout: 15000 });
 
     // ── "B" diák ugyanígy, de a hely már elfogyott ──
     const studentBPage = await studentBContext.newPage();

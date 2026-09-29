@@ -3,6 +3,10 @@ import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as http from 'node:http';
 import {
+  ADMIN_API_LOG_FILE,
+  ADMIN_API_PID_FILE,
+  ADMIN_API_PORT,
+  ADMIN_API_URL,
   BACKEND_LOG_FILE,
   BACKEND_PORT,
   BACKEND_PID_FILE,
@@ -60,11 +64,42 @@ export default async function globalSetup(): Promise<void> {
 
   fs.mkdirSync(TEACHER_FILES_ROOT, { recursive: true });
 
-  console.log('[global-setup] Backend indítása (a séma+seed már kész)...');
-  assertBackendPortFree();
-  await startBackend();
+  console.log('[global-setup] Backend + Admin API indítása (a séma+seed már kész)...');
+  assertPortFree(BACKEND_PORT);
+  assertPortFree(ADMIN_API_PORT);
+  // Egymás után: két párhuzamos `dotnet run` ugyanazokat a közös projekteket fordítaná egyszerre (obj/-zár ütközés).
+  await startDotnetService({
+    name: 'Backend',
+    project: 'DigitalCulture.API',
+    readyUrl: `${BACKEND_URL}/api/roles`,
+    pidFile: BACKEND_PID_FILE,
+    logFile: BACKEND_LOG_FILE,
+    env: {
+      ContactForm__RecipientEmail: 'e2e-contact@example.com',
+      TeacherFiles__RootPath: TEACHER_FILES_ROOT,
+      // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
+      // versenyezne a teszt-forgalommal az eldobható E2E DB-konténerért —
+      // háttérjobokra itt nincs szükség (ld. Program.cs Hangfire:DisableServer).
+      Hangfire__DisableServer: 'true',
+      // A teljes suite sok tucat bejelentkezést indít percek alatt, mind
+      // localhost-ról — a produkciós login/IP rate-limiter (5/15perc) ezt
+      // 429-cel (és hiányzó CORS header miatt a böngészőben "status 0"
+      // hálózati hibaként megjelenő) elutasítaná (ld. Program.cs RateLimiting:Disabled).
+      RateLimiting__Disabled: 'true',
+    },
+  });
+  // A platform-admin felület (jelentkezések elbírálása, tanár-felfüggesztés, intézményi licencek) 2026-09-23 óta
+  // az admin-fe + Admin API párosé - a tanári app /admin/* útvonalai megszűntek.
+  await startDotnetService({
+    name: 'Admin API',
+    project: 'DigitalCulture.Admin.API',
+    readyUrl: `${ADMIN_API_URL}/api/admin/health`,
+    pidFile: ADMIN_API_PID_FILE,
+    logFile: ADMIN_API_LOG_FILE,
+    env: { Kestrel__Port: String(ADMIN_API_PORT) },
+  });
 
-  console.log('[global-setup] Kész — a webServer-ek (diák-fe/tanári-fe) indulhatnak, a backend már fut.');
+  console.log('[global-setup] Kész — a webServer-ek (diák-fe/tanári-fe/admin-fe) indulhatnak, a backendek már futnak.');
 }
 
 /**
@@ -78,14 +113,14 @@ export default async function globalSetup(): Promise<void> {
  * A jelenség valós: egy elárvult (PPID=1) `dotnet run` gyerekfolyamat órákon át
  * kiszolgálta a suite-ot, mert a teardown csak a wrappert ölte meg.
  */
-function assertBackendPortFree(): void {
+function assertPortFree(port: number): void {
   try {
     execFileSync('ss', ['-tlnp'], { encoding: 'utf-8' })
       .split('\n')
-      .filter((line) => line.includes(`:${BACKEND_PORT} `))
+      .filter((line) => line.includes(`:${port} `))
       .forEach((line) => {
         throw new Error(
-          `[global-setup] A ${BACKEND_PORT}-as porton MÁR figyel egy folyamat:\n  ${line.trim()}\n` +
+          `[global-setup] A ${port}-as porton MÁR figyel egy folyamat:\n  ${line.trim()}\n` +
           'Ez jellemzően egy korábbi futásból ottmaradt backend. Állítsd le, mielőtt újra futtatnád — ' +
           'különben a tesztek egy elavult binárist ellenőriznének.',
         );
@@ -97,9 +132,18 @@ function assertBackendPortFree(): void {
   }
 }
 
-async function startBackend(): Promise<void> {
-  const logStream = fs.createWriteStream(BACKEND_LOG_FILE, { flags: 'w' });
-  const child = spawn('dotnet', ['run', '--project', 'DigitalCulture.API'], {
+interface DotnetService {
+  name: string;
+  project: string;
+  readyUrl: string;
+  pidFile: string;
+  logFile: string;
+  env: Record<string, string>;
+}
+
+async function startDotnetService(svc: DotnetService): Promise<void> {
+  const logStream = fs.createWriteStream(svc.logFile, { flags: 'w' });
+  const child = spawn('dotnet', ['run', '--project', svc.project], {
     cwd: BACKEND_REPO_PATH,
     env: {
       ...process.env,
@@ -109,26 +153,16 @@ async function startBackend(): Promise<void> {
       // enélkül minden bejelentkezés 500-at adott („JWT SecretKey nincs konfigurálva”).
       Authentication__SecretKey: 'e2e-only-jwt-secret-key-not-for-any-real-environment-0123456789',
       Authentication__RefreshSecretKey: 'e2e-only-jwt-refresh-secret-not-for-any-real-env-9876543210',
-      ContactForm__RecipientEmail: 'e2e-contact@example.com',
-      TeacherFiles__RootPath: TEACHER_FILES_ROOT,
-      // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
-      // versenyezne a teszt-forgalommal az eldobható E2E DB-konténerért —
-      // háttérjobokra itt nincs szükség (ld. Program.cs Hangfire:DisableServer).
-      Hangfire__DisableServer: 'true',
-      // A teljes suite sok tucat bejelentkezést indít percek alatt, mind
-      // localhost-ról — a produkciós login/IP rate-limiter (5/15perc) ezt
-      // 429-cel (és hiányzó CORS header miatt a böngészőben "status 0"
-      // hálózati hibaként megjelenő) elutasítaná (ld. Program.cs RateLimiting:Disabled).
-      RateLimiting__Disabled: 'true',
+      ...svc.env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.pipe(logStream);
   child.stderr.pipe(logStream);
   if (!child.pid) {
-    throw new Error('[global-setup] Nem sikerült elindítani a backend folyamatot.');
+    throw new Error(`[global-setup] Nem sikerült elindítani: ${svc.name}.`);
   }
-  fs.writeFileSync(BACKEND_PID_FILE, String(child.pid));
+  fs.writeFileSync(svc.pidFile, String(child.pid));
 
   let exited: { code: number | null } | null = null;
   child.once('exit', (code) => {
@@ -139,18 +173,16 @@ async function startBackend(): Promise<void> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (exited) {
       throw new Error(
-        `[global-setup] A backend folyamat idő előtt kilépett (kód: ${exited.code}). Log: ${BACKEND_LOG_FILE}`,
+        `[global-setup] ${svc.name}: a folyamat idő előtt kilépett (kód: ${exited.code}). Log: ${svc.logFile}`,
       );
     }
-    if (await isHttpAvailable(`${BACKEND_URL}/api/roles`)) {
-      console.log(`[global-setup] Backend elérhető (${attempt}. próbálkozásra, log: ${BACKEND_LOG_FILE}).`);
+    if (await isHttpAvailable(svc.readyUrl)) {
+      console.log(`[global-setup] ${svc.name} elérhető (${attempt}. próbálkozásra, log: ${svc.logFile}).`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new Error(
-    `[global-setup] A backend nem állt készen a megadott időn belül. Log: ${BACKEND_LOG_FILE}`,
-  );
+  throw new Error(`[global-setup] ${svc.name} nem állt készen a megadott időn belül. Log: ${svc.logFile}`);
 }
 
 function isHttpAvailable(url: string): Promise<boolean> {

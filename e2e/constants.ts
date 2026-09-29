@@ -16,9 +16,18 @@ export const BACKEND_PORT = 7083;
 export const STUDENT_FE_PORT = 4200;
 export const TEACHER_FE_PORT = 4300;
 
+// 2026-09-23 óta a platform-admin oldalak a külön admin-fe-ben vannak, ami a külön Admin API-t hívja.
+// Az Admin API-n nincs CORS: az admin-fe relatív `/api/admin` címet használ (production env), a dev-szerver
+// proxyja (e2e/admin-proxy.json - a portot ott is módosítsd) továbbítja, mint stagingen/élesen az nginx.
+// Saját portok (nem 4400/7090), mert a staging CT-n azokon a staging admin-fe/Admin API fut.
+export const ADMIN_API_PORT = 17090;
+export const ADMIN_FE_PORT = 14400;
+
 export const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+export const ADMIN_API_URL = `http://localhost:${ADMIN_API_PORT}`;
 export const STUDENT_FE_URL = `http://localhost:${STUDENT_FE_PORT}`;
 export const TEACHER_FE_URL = `http://localhost:${TEACHER_FE_PORT}`;
+export const ADMIN_FE_URL = `http://localhost:${ADMIN_FE_PORT}`;
 
 // Eldobható PostgreSQL 17 (a Patricks 2026-09 óta csak Postgresen fut; az SQL Server-út megszűnt).
 export const DB_CONTAINER_NAME = 'tudastar-e2e-db';
@@ -44,6 +53,9 @@ export const BACKEND_REPO_PATH =
 export const STUDENT_FE_REPO_PATH =
   process.env['E2E_STUDENT_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-fe');
 
+export const ADMIN_FE_REPO_PATH =
+  process.env['E2E_ADMIN_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-admin-fe');
+
 export const TEACHER_FILES_ROOT =
   process.env['E2E_TEACHER_FILES_ROOT'] ?? path.resolve(os.tmpdir(), 'tudastar-e2e-teacher-files');
 
@@ -57,3 +69,5 @@ export const TEACHER_FILES_ROOT =
  */
 export const BACKEND_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.pid');
 export const BACKEND_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.log');
+export const ADMIN_API_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.pid');
+export const ADMIN_API_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.log');

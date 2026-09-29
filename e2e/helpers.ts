@@ -1,6 +1,7 @@
 import { Page, APIRequestContext, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import {
+  ADMIN_FE_URL,
   BACKEND_URL,
   DB_CONTAINER_NAME,
   DB_NAME,
@@ -74,6 +75,8 @@ export async function registerStudent(
   await page.locator('#email').fill(opts.email);
   await page.locator('#password').fill(TEST_PASSWORD);
   await page.locator('#confirmPassword').fill(TEST_PASSWORD);
+  // SEC-303 (2026-09-15) óta kötelező a születési év; felnőtt évvel nem kér gondviselői e-mailt.
+  await page.locator('#birthYear').fill('2000');
   await page.locator('#terms').check();
 
   // UI-TS-374 (2026-08-17) óta a regisztrációs form Cloudflare Turnstile mögött van, és
@@ -120,8 +123,13 @@ export async function loginOnTeacherApp(page: Page, email: string, password = TE
   await page.waitForURL(/\/(dashboard|jelentkezes)/, { timeout: 15000 });
 }
 
+/** Belépés a külön admin-fe-be (2026-09-23 óta ott vannak a platform-admin oldalak). */
 export async function loginAsE2EAdmin(page: Page): Promise<void> {
-  await loginOnTeacherApp(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+  await page.goto(`${ADMIN_FE_URL}/login`);
+  await page.locator('input[name="email"]').fill(E2E_ADMIN_EMAIL);
+  await page.locator('input[name="password"]').fill(E2E_ADMIN_PASSWORD);
+  await page.getByRole('button', { name: 'Belépés', exact: true }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
 }
 
 /**
@@ -148,7 +156,7 @@ export async function onboardApprovedTeacher(
   await teacherPage.getByRole('button', { name: 'Jelentkezés beküldése' }).click();
   await expect(teacherPage.getByText('Jelentkezésed elbírálás alatt.')).toBeVisible({ timeout: 15000 });
 
-  await adminPage.goto(`${TEACHER_FE_URL}/admin/jelentkezesek`);
+  await adminPage.goto(`${ADMIN_FE_URL}/jelentkezesek`);
   const row = adminPage.locator('li', { hasText: email });
   await expect(row).toBeVisible({ timeout: 15000 });
   await row.getByRole('button', { name: 'Elfogadás' }).click();

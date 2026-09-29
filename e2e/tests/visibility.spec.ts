@@ -34,6 +34,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   // ── Minimális (nem-SQL) publikált feladatsor egy privát csoporttal ──
   const taskSetTitle = `E2E láthatóság feladatsor ${Date.now()}`;
   await teacherPage.goto(`${TEACHER_FE_URL}/feladatsorok`);
+  await teacherPage.getByRole('button', { name: '+ Új feladatsor' }).click();
   await teacherPage.locator('[formcontrolname="title"]').fill(taskSetTitle);
   await teacherPage.locator('[formcontrolname="description"]').fill('Láthatóság-teszt feladatsor.');
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -67,6 +68,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   // ── Két privát csoport: A (a tartalom tanáráé), B (másik, független) ──
   const groupAName = `visibility-a-${Date.now()}`;
   await teacherPage.goto(`${TEACHER_FE_URL}/csoportok`);
+  await teacherPage.getByRole('button', { name: '+ Új csoport' }).click();
   await teacherPage.locator('[formcontrolname="name"]').fill(groupAName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupAName).click();
@@ -78,6 +80,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
 
   const groupBName = `visibility-b-${Date.now()}`;
   await otherTeacherPage.goto(`${TEACHER_FE_URL}/csoportok`);
+  await otherTeacherPage.getByRole('button', { name: '+ Új csoport' }).click();
   await otherTeacherPage.locator('[formcontrolname="name"]').fill(groupBName);
   await otherTeacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await otherTeacherPage.getByText(groupBName).click();

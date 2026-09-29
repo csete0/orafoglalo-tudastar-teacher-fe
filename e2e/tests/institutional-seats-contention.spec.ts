@@ -1,5 +1,5 @@
 import { test, expect, Browser, Page } from '@playwright/test';
-import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
+import { ADMIN_FE_URL, STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
 import {
   acceptConfirmDialog,
   createLoggedInStudent,
@@ -56,10 +56,11 @@ async function setUpInstitutionWithLicence(
   await principalPage.goto(`${TEACHER_FE_URL}/intezmenyek`);
   await principalPage.locator('[formcontrolname="name"]').fill(institutionName);
   await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
-  await expect(principalPage.getByText(institutionName)).toBeVisible({ timeout: 15000 });
+  await expect(principalPage.getByText(institutionName, { exact: true })).toBeVisible({ timeout: 15000 });
 
   const groupName = `cont-group-${Date.now()}`;
   await principalPage.goto(`${TEACHER_FE_URL}/csoportok`);
+  await principalPage.getByRole('button', { name: '+ Új csoport' }).click();
   await principalPage.locator('[formcontrolname="name"]').fill(groupName);
   await principalPage.locator('[formcontrolname="schoolId"]').selectOption({ label: institutionName });
   await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -69,7 +70,7 @@ async function setUpInstitutionWithLicence(
   const inviteCode = (await principalPage.locator('code').first().textContent())?.trim() ?? '';
   expect(inviteCode).toBeTruthy();
 
-  await adminPage.goto(`${TEACHER_FE_URL}/admin/intezmenyek`);
+  await adminPage.goto(`${ADMIN_FE_URL}/intezmenyek`);
   const schoolRow = adminPage.locator('li', { hasText: institutionName });
   await expect(schoolRow).toBeVisible({ timeout: 15000 });
   await schoolRow.getByRole('button', { name: '+ Új licenc' }).click();
@@ -117,7 +118,7 @@ test('egyidejű bejelentkezés: pontosan a kapacitásnyi diák kap helyet, a tö
     expect(winners, `pontosan ${CAPACITY} diáknak kell helyet kapnia`).toBe(CAPACITY);
 
     // ── A kimutatás ugyanezt mutatja az adminnak ──
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/intezmenyek`);
+    await adminPage.goto(`${ADMIN_FE_URL}/intezmenyek`);
     const schoolRow = adminPage.locator('li', { hasText: institutionName });
     await expect(schoolRow.getByText(new RegExp(`${CAPACITY}/${CAPACITY} hely használatban`)))
       .toBeVisible({ timeout: 15000 });
@@ -161,7 +162,7 @@ test('admin felszabadít egy helyet, majd visszavonja a licencet', async ({ brow
     expect(waitingBefore.hasSeat, 'egy hely van, a második diák nem kaphat').toBe(false);
 
     // ── Admin kézzel felszabadítja a helyet ──
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/intezmenyek`);
+    await adminPage.goto(`${ADMIN_FE_URL}/intezmenyek`);
     const schoolRow = adminPage.locator('li', { hasText: institutionName });
     await schoolRow.getByRole('button', { name: 'Helyek megtekintése' }).click();
     await schoolRow.getByRole('button', { name: 'Felszabadítás' }).first().click();
@@ -174,7 +175,7 @@ test('admin felszabadít egy helyet, majd visszavonja a licencet', async ({ brow
     expect(waitingAfter.hasSeat, 'a felszabadult helyet a következő igénylő megkapja').toBe(true);
 
     // ── Licenc visszavonása: a hozzáférés azonnal megszűnik ──
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/intezmenyek`);
+    await adminPage.goto(`${ADMIN_FE_URL}/intezmenyek`);
     const rowAgain = adminPage.locator('li', { hasText: institutionName });
     await rowAgain.getByRole('button', { name: 'Visszavonás' }).click();
     await acceptConfirmDialog(adminPage);

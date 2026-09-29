@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TEACHER_FE_URL } from '../constants';
+import { ADMIN_FE_URL, TEACHER_FE_URL } from '../constants';
 import { loginAsE2EAdmin, loginOnTeacherApp, onboardApprovedTeacher, registerStudent, uniqueEmail } from '../helpers';
 
 /**
@@ -55,7 +55,7 @@ test('elutasított jelentkezés után a diák újra jelentkezhet indoklás megje
     await teacherPage.getByRole('button', { name: 'Jelentkezés beküldése' }).click();
     await expect(teacherPage.getByText('Jelentkezésed elbírálás alatt.')).toBeVisible({ timeout: 15000 });
 
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/jelentkezesek`);
+    await adminPage.goto(`${ADMIN_FE_URL}/jelentkezesek`);
     const row = adminPage.locator('li', { hasText: email });
     await expect(row).toBeVisible({ timeout: 15000 });
     await row.getByRole('button', { name: 'Elutasítás' }).click();

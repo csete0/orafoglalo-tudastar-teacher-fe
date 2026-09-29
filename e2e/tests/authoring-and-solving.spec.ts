@@ -36,6 +36,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   // ── Feladatsor létrehozása ──
   const taskSetTitle = `E2E SQL feladatsor ${Date.now()}`;
   await teacherPage.goto(`${TEACHER_FE_URL}/feladatsorok`);
+  await teacherPage.getByRole('button', { name: '+ Új feladatsor' }).click();
   await teacherPage.locator('[formcontrolname="title"]').fill(taskSetTitle);
   await teacherPage.locator('[formcontrolname="description"]').fill('E2E teszt SQL feladatsor.');
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -111,6 +112,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   // ── Csoport létrehozása + meghívó kód ──
   const groupName = `authoring-${Date.now()}`;
   await teacherPage.goto(`${TEACHER_FE_URL}/csoportok`);
+  await teacherPage.getByRole('button', { name: '+ Új csoport' }).click();
   await teacherPage.locator('[formcontrolname="name"]').fill(groupName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupName).click();

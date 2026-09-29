@@ -1,9 +1,9 @@
 # Playwright E2E — tanári platform
 
 Teljes, valós stacken futó E2E suite: eldobható Docker PostgreSQL 17 konténer + a
-séma tényleges felépítése (EF-alapmigrációk + `sql-postgres/*.sql`, pontosan mint élesben) + a backend (`orafoglalo-tudastar-be`) és mindkét
-frontend (`orafoglalo-tudastar-fe`, ez a repó) valódi `dotnet run` / `ng serve`
-folyamatai. Nincs mockolás — a flow JWT role-claimeken, multipart uploadon és
+séma tényleges felépítése (EF-alapmigrációk + `sql-postgres/*.sql`, pontosan mint élesben) + a backend és az
+Admin API (`orafoglalo-tudastar-be`), valamint a három frontend (diák: `orafoglalo-tudastar-fe`, tanári: ez a repó,
+admin: `orafoglalo-tudastar-admin-fe`) valódi `dotnet run` / `ng serve` folyamatai. Nincs mockolás — a flow JWT role-claimeken, multipart uploadon és
 szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
 
 ## Előfeltételek
@@ -17,11 +17,18 @@ szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
   E:\Repos\orafoglalo-tudastar-be
   E:\Repos\orafoglalo-tudastar-fe
   E:\Repos\orafoglalo-tudastar-teacher-fe   <- ez a repó, innen futtatunk
+  E:\Repos\orafoglalo-tudastar-admin-fe     <- platform-admin felület (2026-09-23 óta)
   ```
   Ha máshol vannak, ld. alább az env var felülbírálást.
 - A `7083` (backend), `4200` (diák-fe) és `4300` (tanár-fe) portok szabadok —
   a suite a NORMÁL dev portokat használja, ezért **E2E közben ne fusson
   párhuzamosan egy normál dev session** (állítsd le előtte, ha fut).
+  Az Admin API (`17090`) és az admin-fe (`14400`) saját portot kap, mert a staging CT-n a 7090/4400-on a
+  staging példányok futnak. Az admin-fe production-konfiggal (relatív `/api/admin`) és az `e2e/admin-proxy.json`
+  proxyval indul - az Admin API-n nincs CORS, stagingen/élesen is az nginx teszi egy originre.
+- **Memória:** 3 Angular dev szerver + 2 .NET API + Postgres + Chromium együtt ~6 GB-ot is elér. 5 GB-os
+  keret alatt a Chromium futás közben meghal („Target page, context or browser has been closed”) - a staging
+  CT-n `MEMRUN_MAX=8G memrun npx playwright test`, ehhez a CT memóriáját ideiglenesen emelni kell.
 
 ## Futtatás
 
@@ -33,8 +40,8 @@ npx playwright test --ui          # interaktív UI mód
 npx playwright test teacher-onboarding.spec.ts   # egy fájl
 ```
 
-A teljes kör (Docker indítás → séma deploy → seed → backend indítás → 2
-frontend indítás → 8 teszt → teardown) kb. **3.5–4 perc**.
+A teljes kör (Docker indítás → séma deploy → seed → backend + Admin API indítás → 3
+frontend indítás → 12 teszt → teardown) kb. **4 perc**.
 
 Hiba esetén a Playwright HTML-riport és a trace.zip a `test-results/`-ban
 landol; `npx playwright show-trace test-results/<mappa>/trace.zip` a vizuális
@@ -46,6 +53,7 @@ visszajátszáshoz.
 |-----------------------------|----------------------------------------------|-----------|
 | `E2E_BACKEND_REPO_PATH`     | `../orafoglalo-tudastar-be`                   | Backend repó útja |
 | `E2E_STUDENT_FE_REPO_PATH`  | `../orafoglalo-tudastar-fe`                   | Diák-fe repó útja |
+| `E2E_ADMIN_FE_REPO_PATH`    | `../orafoglalo-tudastar-admin-fe`             | Admin-fe repó útja |
 | `E2E_TEACHER_FILES_ROOT`    | OS temp / `tudastar-e2e-teacher-files`        | Tanári feltöltött fájlok fizikai gyökere |
 
 A DB-konténer neve/portja (`tudastar-e2e-db` / `15433`) és az admin teszt-fiók

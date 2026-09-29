@@ -24,6 +24,7 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     // ── Csoport létrehozása (intézmény nélkül — magántanár eset) ──
     const groupName = uniqueEmail('csoport').split('@')[0];
     await teacherPage.goto(`${TEACHER_FE_URL}/csoportok`);
+    await teacherPage.getByRole('button', { name: '+ Új csoport' }).click();
     await teacherPage.locator('[formcontrolname="name"]').fill(groupName);
     await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
 

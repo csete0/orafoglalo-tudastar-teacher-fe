@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TEACHER_FE_URL } from '../constants';
+import { ADMIN_FE_URL, TEACHER_FE_URL } from '../constants';
 import { loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 /**
@@ -21,6 +21,7 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     // ── Tanár publikál egy minimális feladatsort ──
     const taskSetTitle = `E2E moderációs feladatsor ${Date.now()}`;
     await teacherPage.goto(`${TEACHER_FE_URL}/feladatsorok`);
+    await teacherPage.getByRole('button', { name: '+ Új feladatsor' }).click();
     await teacherPage.locator('[formcontrolname="title"]').fill(taskSetTitle);
     await teacherPage.locator('[formcontrolname="description"]').fill('Moderációs E2E teszt feladatsor.');
     await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
@@ -50,7 +51,7 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     // ── Admin: /admin/tanarok — a tanár sorát az email alapján találjuk meg
     // (onboardApprovedTeacher visszaadja), a "Feladatsorai" kinyitás után a
     // publikálás visszavonás gombra explicit meg is várjuk a betöltést. ──
-    await adminPage.goto(`${TEACHER_FE_URL}/admin/tanarok`);
+    await adminPage.goto(`${ADMIN_FE_URL}/tanarok`);
     const item = adminPage.locator('li', { hasText: teacherEmail });
     await expect(item).toBeVisible({ timeout: 15000 });
 
