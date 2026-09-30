@@ -47,6 +47,8 @@ export class GroupStore {
   private _membersGroupId: number | null = null;
 
   readonly groups = computed(() => this._groups());
+  /** UI-TT-237: a kiadás/élő játék választóiba csak nem archivált csoport kerülhet - a backend az archiváltat elutasítja. */
+  readonly activeGroups = computed(() => this._groups().filter((g) => !g.isArchived));
   readonly loading = computed(() => this._loading());
   readonly error = computed(() => this._error());
   readonly members = computed(() => this._members());

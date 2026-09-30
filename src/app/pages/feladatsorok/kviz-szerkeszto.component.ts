@@ -615,7 +615,7 @@ import { environment } from '../../../environments/environment';
               >
                 Kiadás
               </button>
-              @if (assignableGroups().length === 0) {
+              @if (assignableGroups().length === 0 && groupStore.activeGroups().length > 0) {
                 <p class="text-sm text-text-muted">Minden csoportod megkapta már ezt a kvízt.</p>
               }
             </form>
@@ -648,7 +648,7 @@ export class KvizSzerkesztoComponent {
   private readonly quizService = inject(TeacherQuizService);
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
-  private readonly groupStore = inject(GroupStore);
+  protected readonly groupStore = inject(GroupStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
   readonly store = inject(TeacherQuizStore);
   readonly apiOrigin = new URL(environment.apiUrl).origin;
@@ -801,7 +801,7 @@ export class KvizSzerkesztoComponent {
   /** Csak azok a csoportok, amelyek MÉG NEM kapták meg — a backend is elutasítaná a duplát. */
   readonly assignableGroups = computed(() => {
     const assigned = new Set(this.activeAssignments().map((a) => a.groupId));
-    return this.groupStore.groups().filter((g) => !assigned.has(g.id));
+    return this.groupStore.activeGroups().filter((g) => !assigned.has(g.id));
   });
 
   /**
@@ -1244,9 +1244,9 @@ export class KvizSzerkesztoComponent {
   readonly livePending = signal(false);
   readonly liveError = signal<string | null>(null);
 
-  /** Élő játékhoz BÁRMELY saját csoport választható - a szoba-nyitás kiadást
+  /** Élő játékhoz bármely saját, NEM archivált csoport választható - a szoba-nyitás kiadást
    *  is létrehoz, ha még nincs (a jogosultság azon öröklődik a diákokra). */
-  readonly groupOptions = computed(() => this.groupStore.groups());
+  readonly groupOptions = computed(() => this.groupStore.activeGroups());
 
   startLive(): void {
     const groupId = this.liveGroupId();
