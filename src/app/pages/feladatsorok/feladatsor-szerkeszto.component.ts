@@ -624,7 +624,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
               >
                 Kiadás
               </button>
-              @if (assignableGroups().length === 0 && groupStore.groups().length > 0) {
+              @if (assignableGroups().length === 0 && groupStore.activeGroups().length > 0) {
                 <p class="text-sm text-text-muted">Minden csoportod megkapta már ezt a feladatsort.</p>
               }
             </form>
@@ -716,7 +716,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   readonly assignableGroups = computed(() => {
     const assigned = new Set(this.activeAssignments().map((a) => a.groupId));
-    return this.groupStore.groups().filter((g) => !assigned.has(g.id));
+    return this.groupStore.activeGroups().filter((g) => !assigned.has(g.id));
   });
 
   private readonly duplicateGroupNameCounts = computed(() => {

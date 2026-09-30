@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
@@ -104,7 +104,11 @@ describe('KvizSzerkesztoComponent', () => {
     deleteQuiz: ReturnType<typeof vi.fn>;
   };
 
-  let groupStoreMock: { groups: ReturnType<typeof signal<GroupDto[]>>; loadMine: ReturnType<typeof vi.fn> };
+  let groupStoreMock: {
+    groups: ReturnType<typeof signal<GroupDto[]>>;
+    activeGroups: () => GroupDto[];
+    loadMine: ReturnType<typeof vi.fn>;
+  };
 
   function configure(
     detail: TeacherQuizDetailDto | null = makeDetail(),
@@ -134,7 +138,12 @@ describe('KvizSzerkesztoComponent', () => {
       deleteQuiz: vi.fn(),
     };
 
-    groupStoreMock = { groups: signal(groups), loadMine: vi.fn() };
+    const groupsSignal = signal(groups);
+    groupStoreMock = {
+      groups: groupsSignal,
+      activeGroups: computed(() => groupsSignal().filter((g) => !g.isArchived)),
+      loadMine: vi.fn(),
+    };
 
     TestBed.configureTestingModule({
       imports: [KvizSzerkesztoComponent],
@@ -168,6 +177,13 @@ describe('KvizSzerkesztoComponent', () => {
    * tartalmát mutatná, miközben az URL az általunk megnyitottat - és minden mentés a
    * megjelenített (rossz) kvízre menne.
    */
+  it('UI-TT-237: archivált csoport sem az Élő játék, sem a Kiadás választóban nem jelenik meg', () => {
+    configure(makeDetail(), [makeGroup({ id: 1, name: 'Aktív' }), makeGroup({ id: 2, name: 'Régi', isArchived: true })]);
+    const c = TestBed.createComponent(KvizSzerkesztoComponent).componentInstance;
+    expect(c.groupOptions().map((g) => g.id)).toEqual([1]);
+    expect(c.assignableGroups().map((g) => g.id)).toEqual([1]);
+  });
+
   it('csak a SAJÁT id-jéhez tartozó kvízt jeleníti meg', () => {
     const fixture = configure(makeDetail({ id: 99, title: 'Másik kvíz' }));
     fixture.detectChanges();
@@ -703,7 +719,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
-        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+        { provide: GroupStore, useValue: { groups: signal([]), activeGroups: signal([]), loadMine: vi.fn() } },
       ],
     });
 
@@ -831,7 +847,7 @@ describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
-        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+        { provide: GroupStore, useValue: { groups: signal([]), activeGroups: signal([]), loadMine: vi.fn() } },
       ],
     });
 
@@ -931,7 +947,7 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
         },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: TeacherQuizService, useValue: quizSvcMock },
-        { provide: GroupStore, useValue: { groups: signal([]), loadMine: vi.fn() } },
+        { provide: GroupStore, useValue: { groups: signal([]), activeGroups: signal([]), loadMine: vi.fn() } },
       ],
     });
     return TestBed.createComponent(KvizSzerkesztoComponent);
