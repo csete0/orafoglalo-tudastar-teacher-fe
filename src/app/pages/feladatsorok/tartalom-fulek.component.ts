@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 /**
- * Fülsáv a tanári tartalom két fajtája között.
+ * Fülsáv a tanári tartalom fajtái között (feladatsorok, kvízek, Projektműhely-projektek).
  *
  * Ez a komponens a fejléc-navigáció mérethatárának a következménye: a nav pontosan 6
  * linkre van méretezve (UI-TT-181/192/177), egy 7. "Kvízek" link visszanyitná a mért
@@ -28,6 +28,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
         Feladatsorok
       </a>
       <a routerLink="/feladatsorok/kvizek" routerLinkActive="tab-active" class="tab-link"> Kvízek </a>
+      <a routerLink="/feladatsorok/projektek" routerLinkActive="tab-active" class="tab-link"> Projektek </a>
     </nav>
   `,
   styles: [

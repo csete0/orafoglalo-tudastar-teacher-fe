@@ -1,3 +1,4 @@
+import { parseUtc } from '../../shared/utc-date.util';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   KahootAnswerReceivedDto,
@@ -296,16 +297,6 @@ export class KahootHostStore {
     this.serverOffsetMs = 0;
     this.handlersRegistered = false;
   }
-}
-
-/**
- * A .NET DATETIME2-ből visszaolvasott UTC időbélyeg zóna-jelölő nélkül is
- * érkezhet (DateTimeKind.Unspecified) - azt a böngésző HELYI időként
- * értelmezné. Ha nincs explicit zóna, UTC-ként értelmezzük.
- */
-function parseUtc(timestamp: string): number {
-  const hasTimezone = /Z$|[+-]\d\d:\d\d$/.test(timestamp);
-  return Date.parse(hasTimezone ? timestamp : timestamp + 'Z');
 }
 
 /** A HubException a szerver OrafoglaloException-üzenetét hozza, SignalR-kerettel. */

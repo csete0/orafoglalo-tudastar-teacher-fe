@@ -21,6 +21,9 @@ import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-ta
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { TeacherGroupAssignmentDto } from '../../models/teacher-quiz.model';
 import { TeacherGroupTaskSetAssignmentDto } from '../../models/teacher-content.model';
+import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
+import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../models/teacher-project.model';
+import { parseUtc } from '../../shared/utc-date.util';
 import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { finalize, take } from 'rxjs';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
@@ -342,6 +345,29 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                 }
               </ul>
             }
+
+            <!-- Projektműhely-kiadások (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G) -->
+            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-6">Projektek</h3>
+            @if (projectAssignmentsError(); as err) {
+              <p class="text-danger text-sm mb-4">{{ err }}</p>
+            }
+            <ul class="space-y-2" data-testid="group-project-assignments">
+              @for (p of projectAssignments(); track p.id) {
+                <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-semibold">{{ p.projectTitle }}</p>
+                    <p class="text-xs text-text-muted">
+                      {{ p.startedCount }}/{{ p.memberCount }} elkezdte · {{ p.completedCount }} kész
+                      @if (p.runtime) { · csak {{ projectRuntimeLabels[p.runtime] }} }
+                      @if (p.dueAt) { · <span [class.text-danger]="isDueSoon(p.dueAt)">határidő: {{ utc(p.dueAt) | date: 'yyyy.MM.dd. HH:mm' }}</span> }
+                    </p>
+                  </div>
+                  <a [routerLink]="['/feladatsorok/projektek/kiadas', p.id]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Osztály-nézet</a>
+                </li>
+              } @empty {
+                <li class="text-sm text-text-muted py-2">Nincs kiadott projekt. Kiadni a Feladatsorok → Projektek fülön lehet.</li>
+              }
+            </ul>
           }
 
           @case ('eredmenyek') {
@@ -557,6 +583,11 @@ export class CsoportReszletekComponent implements OnInit {
   readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
   readonly groupTaskSetAssignments = signal<TeacherGroupTaskSetAssignmentDto[]>([]);
   readonly assignmentsLoading = signal(false);
+  readonly projectAssignments = signal<ProjectAssignmentDto[]>([]);
+  readonly projectAssignmentsError = signal<string | null>(null);
+  readonly projectRuntimeLabels = RUNTIME_LABELS;
+  readonly utc = parseUtc;
+  private readonly teacherProjectService = inject(TeacherProjectService);
   readonly taskSetAssignmentsLoading = signal(false);
   readonly taskSetAssignmentsError = signal<string | null>(null);
   readonly liveStartPending = signal(false);
@@ -591,6 +622,16 @@ export class CsoportReszletekComponent implements OnInit {
         },
         error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
       });
+  }
+
+  private loadProjectAssignments(groupId: number): void {
+    this.teacherProjectService.forGroup(groupId).pipe(take(1)).subscribe({
+      next: (assignments) => {
+        this.projectAssignmentsError.set(null);
+        this.projectAssignments.set(assignments);
+      },
+      error: () => this.projectAssignmentsError.set('A projekt-kiadások betöltése sikertelen.'),
+    });
   }
 
   private loadTaskSetAssignments(groupId: number): void {
@@ -736,6 +777,7 @@ export class CsoportReszletekComponent implements OnInit {
     if (tab === 'kiadva') {
       this.loadAssignments(this.groupId);
       this.loadTaskSetAssignments(this.groupId);
+      this.loadProjectAssignments(this.groupId);
     }
     if (tab === 'helyek') this.seatStore.load(this.groupId);
     if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
