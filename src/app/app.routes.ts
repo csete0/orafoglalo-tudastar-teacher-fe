@@ -98,6 +98,17 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
       },
+      // Projektműhely (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G): ugyanazért a fülsávban, mint a kvízek.
+      {
+        path: 'projektek',
+        loadComponent: () =>
+          import('./pages/feladatsorok/projektek-lista.component').then((m) => m.ProjektekListaComponent),
+      },
+      {
+        path: 'projektek/kiadas/:id',
+        loadComponent: () =>
+          import('./pages/feladatsorok/projekt-kiadas.component').then((m) => m.ProjektKiadasComponent),
+      },
       {
         path: 'kvizek/:id/szerkesztes',
         loadComponent: () =>
