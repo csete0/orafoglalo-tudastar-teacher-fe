@@ -4,13 +4,14 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AssignProjectRequest,
+  CodeCommentThreadDto,
   ProjectAssignmentDto,
   ProjectAssignmentStudentsDto,
   StudentProjectCodeDto,
   TeacherProjectDto,
 } from '../../models/teacher-project.model';
 
-/** Projektműhely a tanári oldalon: katalógus, kiadás, osztály-nézet, a diák kódja (csak olvasás). */
+/** Projektműhely a tanári oldalon: katalógus, kiadás, osztály-nézet, a diák kódja (csak olvasás) és a kódmegjegyzések. */
 @Injectable({ providedIn: 'root' })
 export class TeacherProjectService {
   private readonly http = inject(HttpClient);
@@ -38,5 +39,21 @@ export class TeacherProjectService {
 
   studentCode(assignmentId: number, userId: number): Observable<StudentProjectCodeDto> {
     return this.http.get<StudentProjectCodeDto>(`${this.baseUrl}/project-assignments/${assignmentId}/students/${userId}/workspace`);
+  }
+
+  comments(assignmentId: number, userId: number): Observable<CodeCommentThreadDto[]> {
+    return this.http.get<CodeCommentThreadDto[]>(this.commentsUrl(assignmentId, userId));
+  }
+
+  createComment(assignmentId: number, userId: number, path: string, line: number, body: string): Observable<CodeCommentThreadDto> {
+    return this.http.post<CodeCommentThreadDto>(this.commentsUrl(assignmentId, userId), { path, line, body });
+  }
+
+  replyComment(assignmentId: number, userId: number, commentId: number, body: string): Observable<CodeCommentThreadDto> {
+    return this.http.post<CodeCommentThreadDto>(`${this.commentsUrl(assignmentId, userId)}/${commentId}/replies`, { body });
+  }
+
+  private commentsUrl(assignmentId: number, userId: number): string {
+    return `${this.baseUrl}/project-assignments/${assignmentId}/students/${userId}/comments`;
   }
 }

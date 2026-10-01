@@ -106,3 +106,21 @@ export interface StudentProjectCodeDto {
   readOnlyPaths: string[];
   createdAt: string;
 }
+
+/** Sorhoz kötött kódmegjegyzés (BE: ProjectCodeComment.cs) - a tanár nyitja, a diák válaszol és megoldottnak jelöli. */
+export interface CodeCommentDto {
+  id: number;
+  body: string;
+  authorName: string;
+  authorIsTeacher: boolean;
+  createdAt: string;
+}
+
+export interface CodeCommentThreadDto extends CodeCommentDto {
+  path: string;
+  line: number;
+  /** A sor szövege a megjegyzés idején - ha azóta más, a megjegyzés „elavult”. */
+  lineText: string;
+  resolvedAt: string | null;
+  replies: CodeCommentDto[];
+}

@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { finalize, take } from 'rxjs';
+import { Observable, finalize, take } from 'rxjs';
 import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import {
+  CodeCommentThreadDto,
   INDEPENDENCE_LABELS,
   ProjectAssignmentStepDto,
   ProjectAssignmentStudentDto,
@@ -21,7 +22,8 @@ type CellState = 'onallo' | 'kis-segitseggel' | 'segitseggel' | 'folyamatban' | 
 /**
  * Egy projekt-kiadás osztály-nézete (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G fázis): diák × lépés mátrix az önállósággal
  * (önállóan / kis segítséggel / segítséggel / folyamatban / még nincs), lépésenkénti összesítő a legnagyobb
- * lemorzsolódással, és diákra kattintva a kódja csak olvasva.
+ * lemorzsolódással, és diákra kattintva a kódja csak olvasva. A kódban sorszámra kattintva megjegyzés írható (H fázis): a diák
+ * válaszolhat és megoldottnak jelölheti; ha a sor azóta megváltozott, a megjegyzés „elavult”.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -107,7 +109,8 @@ type CellState = 'onallo' | 'kis-segitseggel' | 'segitseggel' | 'folyamatban' | 
         @if (codeFor(); as s) {
           <section class="card p-4 mt-6" aria-labelledby="code-title" data-testid="student-code">
             <div class="flex items-center justify-between gap-3">
-              <h2 id="code-title" class="font-bold">{{ s.name }} kódja <span class="text-xs font-normal text-text-muted">(csak olvasás)</span></h2>
+              <h2 id="code-title" class="font-bold">{{ s.name }} kódja
+                <span class="text-xs font-normal text-text-muted">(csak olvasás – sorszámra kattintva megjegyzést írhatsz)</span></h2>
               <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="codeFor.set(null)">Bezárás</button>
             </div>
             @if (codeLoading()) {
@@ -116,12 +119,51 @@ type CellState = 'onallo' | 'kis-segitseggel' | 'segitseggel' | 'folyamatban' | 
               <div class="grid gap-3 mt-3 md:grid-cols-[14rem_minmax(0,1fr)]">
                 <ul class="space-y-0.5 text-xs font-mono">
                   @for (path of codePaths(); track path) {
-                    <li><button type="button" class="w-full text-left px-2 py-1 rounded" [class.bg-bg-element]="activePath() === path" (click)="activePath.set(path)">
-                      {{ path }}{{ c.readOnlyPaths.includes(path) ? ' (keret)' : '' }}</button></li>
+                    <li><button type="button" class="w-full text-left px-2 py-1 rounded" [class.bg-bg-element]="activePath() === path" (click)="selectFile(path)">
+                      {{ path }}{{ c.readOnlyPaths.includes(path) ? ' (keret)' : '' }}
+                      @if (openCountFor(path); as n) { <span class="comment-count" [attr.aria-label]="n + ' nyitott megjegyzés'">{{ n }}</span> }
+                    </button></li>
                   }
                 </ul>
-                <pre class="code-pre" tabindex="0">{{ activePath() ? c.files[activePath()!] : '' }}</pre>
+                <div class="code-view" tabindex="0" data-testid="code-view">
+                  @for (text of lines(); track $index; let i = $index) {
+                    <div class="code-line" [class.code-line--commented]="threadsAt(i + 1).length">
+                      <button type="button" class="code-ln" [attr.aria-label]="'Megjegyzés a(z) ' + (i + 1) + '. sorhoz'"
+                              (click)="startComment(i + 1)">{{ i + 1 }}</button>
+                      <span class="code-text">{{ text }}</span>
+                    </div>
+                    @for (t of threadsAt(i + 1); track t.id) {
+                      <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
+                        <p class="text-xs text-text-muted">
+                          <strong class="text-text-default">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
+                          @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
+                          @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
+                        </p>
+                        <p class="thread-body">{{ t.body }}</p>
+                        @for (r of t.replies; track r.id) {
+                          <p class="thread-reply"><strong>{{ r.authorName }}</strong>{{ r.authorIsTeacher ? '' : ' (diák)' }}: {{ r.body }}</p>
+                        }
+                        <form class="flex gap-2 mt-2" (submit)="$event.preventDefault(); reply(t, replyBox)">
+                          <input #replyBox class="form-input !py-1 !text-xs flex-1" maxlength="2000" placeholder="Válasz…" aria-label="Válasz a megjegyzésre" />
+                          <button type="submit" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="commentBusy()">Válasz</button>
+                        </form>
+                      </div>
+                    }
+                    @if (newCommentLine() === i + 1) {
+                      <form class="thread" data-testid="new-comment" (submit)="$event.preventDefault(); createComment(newBox)">
+                        <label class="text-xs font-semibold" for="new-comment-box">Megjegyzés a(z) {{ i + 1 }}. sorhoz</label>
+                        <textarea #newBox id="new-comment-box" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
+                                  placeholder="Pl.: Itt mi történik, ha üres a rendelés?"></textarea>
+                        <div class="flex gap-2 mt-2">
+                          <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="commentBusy()">Megjegyzés küldése</button>
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="newCommentLine.set(null)">Mégse</button>
+                        </div>
+                      </form>
+                    }
+                  }
+                </div>
               </div>
+              @if (commentError(); as err) { <p class="text-danger text-sm mt-2" role="alert">{{ err }}</p> }
             } @else if (codeError(); as err) {
               <p class="text-danger text-sm mt-2">{{ err }}</p>
             }
@@ -138,8 +180,19 @@ type CellState = 'onallo' | 'kis-segitseggel' | 'segitseggel' | 'folyamatban' | 
     .cell--folyamatban { border-color: var(--color-text-muted, #6b7280); }
     .cell--nincs { background: var(--color-bg-element, #eaeef2); }
     .drop-col { background: var(--color-warning-subtle, rgba(154, 103, 0, 0.1)); }
-    .code-pre { margin: 0; max-height: 60vh; overflow: auto; padding: 0.75rem; border-radius: 0.5rem; background: var(--color-bg-element);
-      font-size: 0.75rem; line-height: 1.5; white-space: pre; }
+    .code-view { max-height: 60vh; overflow: auto; padding: 0.5rem 0; border-radius: 0.5rem; background: var(--color-bg-element);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; line-height: 1.5; }
+    .code-line { display: flex; }
+    .code-line--commented { background: var(--color-warning-subtle, rgba(154, 103, 0, 0.1)); }
+    .code-ln { flex: none; width: 3rem; padding-right: 0.75rem; text-align: right; color: var(--color-text-muted); user-select: none; }
+    .code-ln:hover, .code-ln:focus-visible { color: var(--color-primary); text-decoration: underline; }
+    .code-text { white-space: pre; padding-right: 0.75rem; }
+    .thread { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: var(--color-bg-surface, #fff);
+      border: 1px solid var(--color-border-default); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
+    .thread--resolved { opacity: 0.7; }
+    .thread-body { margin-top: 0.25rem; font-size: 0.8125rem; white-space: pre-wrap; }
+    .thread-reply { margin-top: 0.25rem; padding-left: 0.75rem; border-left: 2px solid var(--color-border-default); font-size: 0.75rem; white-space: pre-wrap; }
+    .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
   `],
 })
 export class ProjektKiadasComponent implements OnInit {
@@ -166,6 +219,26 @@ export class ProjektKiadasComponent implements OnInit {
   readonly codeLoading = signal(false);
   readonly codeError = signal<string | null>(null);
   readonly activePath = signal<string | null>(null);
+  readonly comments = signal<CodeCommentThreadDto[]>([]);
+  readonly newCommentLine = signal<number | null>(null);
+  readonly commentBusy = signal(false);
+  readonly commentError = signal<string | null>(null);
+
+  readonly lines = computed(() => {
+    const path = this.activePath();
+    return path ? (this.code()?.files[path] ?? '').split('\n').map((l) => l.replace(/\r$/, '')) : [];
+  });
+
+  /** Az aktív fájl szálai soronként; a fájl végén túli (azóta törölt) sorok az utolsó soron jelennek meg. */
+  private readonly threadsByLine = computed(() => {
+    const map = new Map<number, CodeCommentThreadDto[]>();
+    const last = this.lines().length;
+    for (const t of this.comments().filter((c) => c.path === this.activePath())) {
+      const line = Math.min(t.line, last);
+      map.set(line, [...(map.get(line) ?? []), t]);
+    }
+    return map;
+  });
 
   readonly passedCounts = computed(() => {
     const v = this.view();
@@ -227,10 +300,58 @@ export class ProjektKiadasComponent implements OnInit {
     return this.view()?.milestones.find((m) => m.orderNo === orderNo)?.title ?? '';
   }
 
+  threadsAt(line: number): CodeCommentThreadDto[] {
+    return this.threadsByLine().get(line) ?? [];
+  }
+
+  openCountFor(path: string): number {
+    return this.comments().filter((c) => c.path === path && !c.resolvedAt).length;
+  }
+
+  selectFile(path: string): void {
+    this.activePath.set(path);
+    this.newCommentLine.set(null);
+  }
+
+  startComment(line: number): void {
+    this.commentError.set(null);
+    this.newCommentLine.set(line);
+  }
+
+  createComment(box: HTMLTextAreaElement): void {
+    const s = this.codeFor();
+    const path = this.activePath();
+    const line = this.newCommentLine();
+    if (!s || !path || !line || !box.value.trim()) return;
+    this.saveComment(this.api.createComment(+this.id(), s.userId, path, line, box.value.trim()), () => this.newCommentLine.set(null));
+  }
+
+  reply(t: CodeCommentThreadDto, box: HTMLInputElement): void {
+    const s = this.codeFor();
+    if (!s || !box.value.trim()) return;
+    this.saveComment(this.api.replyComment(+this.id(), s.userId, t.id, box.value.trim()), () => (box.value = ''));
+  }
+
+  private saveComment(call: Observable<CodeCommentThreadDto>, done: () => void): void {
+    this.commentBusy.set(true);
+    this.commentError.set(null);
+    call.pipe(take(1), finalize(() => this.commentBusy.set(false))).subscribe({
+      next: (t) => {
+        this.comments.update((list) => (list.some((c) => c.id === t.id) ? list.map((c) => (c.id === t.id ? t : c)) : [...list, t]));
+        done();
+      },
+      error: (e) => this.commentError.set(extractErrorMessage(e, 'A megjegyzés mentése sikertelen.')),
+    });
+  }
+
   openCode(s: ProjectAssignmentStudentDto): void {
     this.codeFor.set(s);
     this.code.set(null);
     this.codeError.set(null);
+    this.comments.set([]);
+    this.newCommentLine.set(null);
+    this.commentError.set(null);
+    this.api.comments(+this.id(), s.userId).pipe(take(1)).subscribe({ next: (c) => this.comments.set(c), error: () => this.comments.set([]) });
     this.codeLoading.set(true);
     this.api.studentCode(+this.id(), s.userId).pipe(take(1), finalize(() => this.codeLoading.set(false))).subscribe({
       next: (c) => {
