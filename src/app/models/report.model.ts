@@ -137,6 +137,41 @@ export interface TeacherAttemptReviewDto {
   runCount: number;
   successfulRunCount: number;
   failedRunCount: number;
+
+  // ── Irodai/weblap beadás (teljes vizsga, H5) ──────────────────────────────
+  /** A diák feltöltött fájljai (letölthetők) - MI-értékelés nélkül is. */
+  submissionFiles?: SubmittedFileDto[];
+  /** Az MI szempontonkénti értékelése, ha volt. */
+  rubricGrade?: AttemptRubricGradeDto | null;
+}
+
+export interface SubmittedFileDto {
+  id: string;
+  name: string;
+  sizeBytes: number;
+}
+
+/** Egy szempont MI-értékelése: kritériumnál pont, állításnál igaz/hamis, küszöbnél a rendszer számolja. */
+export interface RubricGradeItemDto {
+  itemId: number;
+  order: number;
+  section: string | null;
+  text: string;
+  kind: 'criterion' | 'statement' | 'threshold';
+  maxPoints: number;
+  points: number;
+  ok: boolean | null;
+  reason: string | null;
+  groupNo: number | null;
+}
+
+export interface AttemptRubricGradeDto {
+  gradeId: number;
+  draftRubric: boolean;
+  rawPoints: number | null;
+  rawTotal: number | null;
+  items: RubricGradeItemDto[];
+  files: string[];
 }
 
 /** C7: feladatsor-eredmény szűrő — a BE `TaskSetResultsFilter` párja. */

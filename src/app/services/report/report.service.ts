@@ -68,6 +68,11 @@ export class ReportService {
     return this.http.get<TeacherAttemptReviewDto>(`${this.baseUrl}/exam-attempts/${attemptId}/review`);
   }
 
+  /** Az irodai beadás egy fájlja (teljes vizsga, H5). */
+  downloadAttemptFile(attemptId: number, fileId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/exam-attempts/${attemptId}/files/${fileId}`, { responseType: 'blob' });
+  }
+
   /** A válasz a FRISSÍTETT értékelő nézet — a hívónak nem kell külön újratöltenie a panelt. */
   overrideScore(attemptId: number, request: TeacherScoreOverrideRequest): Observable<TeacherAttemptReviewDto> {
     return this.http.put<TeacherAttemptReviewDto>(
