@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { TeacherTaskSetService } from './teacher-taskset.service';
 import {
-  CreateTeacherSolutionRequest,
+  CreateTeacherSubTaskRequest,
   CreateTeacherTaskRequest,
   CreateTeacherTaskSetRequest,
   PublishResultDto,
@@ -218,24 +218,24 @@ export class TeacherTaskSetStore {
     this.mutateAndReload(this.service.deleteTask(taskId), taskSetId, onSuccess);
   }
 
-  addSolution(taskSetId: number, taskId: number, request: CreateTeacherSolutionRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addSolution(taskId, request), taskSetId, onSuccess);
+  addSubTask(taskSetId: number, taskId: number, request: CreateTeacherSubTaskRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.addSubTask(taskId, request), taskSetId, onSuccess);
   }
 
-  updateSolution(taskSetId: number, solutionId: number, request: CreateTeacherSolutionRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.updateSolution(solutionId, request), taskSetId, onSuccess);
+  updateSubTask(taskSetId: number, solutionId: number, request: CreateTeacherSubTaskRequest, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.updateSubTask(solutionId, request), taskSetId, onSuccess);
   }
 
-  deleteSolution(taskSetId: number, solutionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteSolution(solutionId), taskSetId, onSuccess);
+  deleteSubTask(taskSetId: number, solutionId: number, onSuccess?: () => void): void {
+    this.mutateAndReload(this.service.deleteSubTask(solutionId), taskSetId, onSuccess);
   }
 
-  upsertSolutionSnippets(taskSetId: number, solutionId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
+  upsertSubTaskSnippets(taskSetId: number, solutionId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
     if (this._loading()) return;
-    this.mutateAndReload(this.service.upsertSolutionSnippets(solutionId, snippets), taskSetId, onSuccess);
+    this.mutateAndReload(this.service.upsertSubTaskSnippets(solutionId, snippets), taskSetId, onSuccess);
   }
 
-  // UI-TT-121 testvér-eset: ez a metódus - a fenti upsertSolutionSnippets()-szel
+  // UI-TT-121 testvér-eset: ez a metódus - a fenti upsertSubTaskSnippets()-szel
   // ellentétben - eddig NEM kapta meg a "már folyamatban van egy kérés" guardot.
   // A guard szándékosan ITT, a mutateAndReload()-hívás ELŐTT fut (nem magába
   // mutateAndReload()-ba központosítva) - a `this.service...(...)` hívás a

@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AssignTaskSetToGroupRequest,
-  CreateTeacherSolutionRequest,
+  CreateTeacherSubTaskRequest,
   CreateTeacherTaskRequest,
   CreateTeacherTaskSetRequest,
   PublishResultDto,
@@ -12,7 +12,7 @@ import {
   TaskSetAssignmentDto,
   TeacherGroupTaskSetAssignmentDto,
   TeacherSkillDto,
-  TeacherSolutionDto,
+  TeacherSubTaskDto,
   TeacherTaskDto,
   TeacherTaskSetDetailDto,
   TeacherTaskSetDto,
@@ -68,20 +68,20 @@ export class TeacherTaskSetService {
     return this.http.delete(`${this.baseUrl}/tasks/${taskId}`);
   }
 
-  addSolution(taskId: number, request: CreateTeacherSolutionRequest): Observable<TeacherSolutionDto> {
-    return this.http.post<TeacherSolutionDto>(`${this.baseUrl}/tasks/${taskId}/solutions`, request);
+  addSubTask(taskId: number, request: CreateTeacherSubTaskRequest): Observable<TeacherSubTaskDto> {
+    return this.http.post<TeacherSubTaskDto>(`${this.baseUrl}/tasks/${taskId}/subtasks`, request);
   }
 
-  updateSolution(solutionId: number, request: CreateTeacherSolutionRequest): Observable<TeacherSolutionDto> {
-    return this.http.put<TeacherSolutionDto>(`${this.baseUrl}/solutions/${solutionId}`, request);
+  updateSubTask(solutionId: number, request: CreateTeacherSubTaskRequest): Observable<TeacherSubTaskDto> {
+    return this.http.put<TeacherSubTaskDto>(`${this.baseUrl}/subtasks/${solutionId}`, request);
   }
 
-  deleteSolution(solutionId: number): Observable<unknown> {
-    return this.http.delete(`${this.baseUrl}/solutions/${solutionId}`);
+  deleteSubTask(solutionId: number): Observable<unknown> {
+    return this.http.delete(`${this.baseUrl}/subtasks/${solutionId}`);
   }
 
-  upsertSolutionSnippets(solutionId: number, snippets: SnippetDto[]): Observable<TeacherSolutionDto> {
-    return this.http.put<TeacherSolutionDto>(`${this.baseUrl}/solutions/${solutionId}/snippets`, snippets);
+  upsertSubTaskSnippets(solutionId: number, snippets: SnippetDto[]): Observable<TeacherSubTaskDto> {
+    return this.http.put<TeacherSubTaskDto>(`${this.baseUrl}/subtasks/${solutionId}/snippets`, snippets);
   }
 
   upsertCompleteSolutionSnippets(taskId: number, snippets: SnippetDto[]): Observable<SnippetDto[]> {

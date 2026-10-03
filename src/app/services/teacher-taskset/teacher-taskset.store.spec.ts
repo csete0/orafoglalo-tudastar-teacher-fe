@@ -33,7 +33,7 @@ describe('TeacherTaskSetStore', () => {
     getMine: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
-    upsertSolutionSnippets: ReturnType<typeof vi.fn>;
+    upsertSubTaskSnippets: ReturnType<typeof vi.fn>;
     upsertCompleteSolutionSnippets: ReturnType<typeof vi.fn>;
   };
   let store: TeacherTaskSetStore;
@@ -45,7 +45,7 @@ describe('TeacherTaskSetStore', () => {
       getMine: vi.fn(),
       publish: vi.fn(),
       uploadFile: vi.fn(),
-      upsertSolutionSnippets: vi.fn(),
+      upsertSubTaskSnippets: vi.fn(),
       upsertCompleteSolutionSnippets: vi.fn(),
     };
 
@@ -435,41 +435,41 @@ describe('TeacherTaskSetStore', () => {
   });
 
   // UI-TT-121: a "Kódrészletek mentése" gomb (feladatsor-szerkeszto.component.ts:154,
-  // saveSnippets() -> store.upsertSolutionSnippets()) - a UI-TT-115-ben javított
-  // addTask()/addSolution()-nal ellentétben - SEMMILYEN védelmet nem kapott dupla-
+  // saveSnippets() -> store.upsertSubTaskSnippets()) - a UI-TT-115-ben javított
+  // addTask()/addSubTask()-nal ellentétben - SEMMILYEN védelmet nem kapott dupla-
   // kattintás ellen: a gombnak nincs `[disabled]` bindingja, a `saveSnippets()`
   // komponens-metódus nem ellenőrzi induláskor a `store.loading()`-ot, és maga a
-  // `TeacherTaskSetStore.upsertSolutionSnippets()` (a közös `mutateAndReload()`-on
+  // `TeacherTaskSetStore.upsertSubTaskSnippets()` (a közös `mutateAndReload()`-on
   // át) sem tartalmaz semmilyen "már folyamatban van egy kérés" guardot. Egy gyors
   // dupla-kattintás KÉT külön valódi PUT/POST kérést indít ugyanarra a solution-re
   // (a testvér `upsertCompleteSolutionSnippets()`/`uploadFile()` metódusok - amik
   // szintén a mutateAndReload()-on mennek át - ugyanettől a hiánytól szenvednek,
   // ugyanaz a gyökérok).
-  it('BUG UI-TT-121 javítva: upsertSolutionSnippets()-nél egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', () => {
+  it('BUG UI-TT-121 javítva: upsertSubTaskSnippets()-nél egy átfedő második hívás (dupla-kattintás) NEM indít második HTTP-kérést, a "loading" guard megfogja', () => {
     configure();
     const snippetsSubject = new Subject<unknown>();
-    serviceMock.upsertSolutionSnippets.mockReturnValue(snippetsSubject.asObservable());
+    serviceMock.upsertSubTaskSnippets.mockReturnValue(snippetsSubject.asObservable());
     serviceMock.getDetail.mockReturnValue(of(makeDetail()));
 
     // Első kattintás a "Kódrészletek mentése" gombon.
-    store.upsertSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
-    expect(serviceMock.upsertSolutionSnippets).toHaveBeenCalledTimes(1);
+    store.upsertSubTaskSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+    expect(serviceMock.upsertSubTaskSnippets).toHaveBeenCalledTimes(1);
 
     // Dupla-kattintás, amíg az első kérés még folyamatban van (nincs válasz) -
     // ugyanabban a JS-tickben, await nélkül.
-    store.upsertSolutionSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
+    store.upsertSubTaskSnippets(1, 10, [{ programmingLanguageId: 2, code: 'print(1)' }]);
 
     // A helyes viselkedés az lenne, hogy a második, átfedő hívás NEM indít
     // újabb kérést, amíg az első válasza meg nem érkezik - ez itt MEGBUKIK,
     // mert nincs ilyen guard.
-    expect(serviceMock.upsertSolutionSnippets).toHaveBeenCalledTimes(1);
+    expect(serviceMock.upsertSubTaskSnippets).toHaveBeenCalledTimes(1);
 
     snippetsSubject.next({});
     snippetsSubject.complete();
   });
 
   // UI-TT-121 testvér-eset: a "Kódrészletek mentése" fixje idáig KIZÁRÓLAG
-  // upsertSolutionSnippets()-et védte (egy saját, duplikált guarddal) - a
+  // upsertSubTaskSnippets()-et védte (egy saját, duplikált guarddal) - a
   // közös mutateAndReload()-on átmenő upsertCompleteSolutionSnippets()
   // ("Összevont megoldás mentése" gomb) ugyanettől a hiánytól szenvedett,
   // sosem lett önállóan bizonyítva/javítva. A fix a guardot magába
