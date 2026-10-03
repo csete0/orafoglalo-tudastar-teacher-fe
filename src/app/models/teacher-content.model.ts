@@ -88,7 +88,7 @@ export interface TeacherTaskDto {
   maxPoints: number;
   taskOrder: number;
   taskTypeIds: number[];
-  solutions: TeacherSolutionDto[];
+  subTasks: TeacherSubTaskDto[];
   completeSolutionSnippets: SnippetDto[];
 
   /**
@@ -99,10 +99,10 @@ export interface TeacherTaskDto {
   rowVersion?: string;
 }
 
-export interface CreateTeacherSolutionRequest {
+export interface CreateTeacherSubTaskRequest {
   description: string;
   points?: number;
-  solutionText?: string;
+  label?: string;
 
   /**
    * A betöltéskor kapott konkurrencia-token. Opcionális: token nélkül a backend a
@@ -111,11 +111,11 @@ export interface CreateTeacherSolutionRequest {
   rowVersion?: string;
 }
 
-export interface TeacherSolutionDto {
+export interface TeacherSubTaskDto {
   id: number;
   description?: string;
   points?: number;
-  solutionText?: string;
+  label?: string;
   snippets: SnippetDto[];
 
   /**
