@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ReportStore } from '../../services/report/report.store';
-import { TeacherAttemptReviewDto } from '../../models/report.model';
+import { RubricGradeItemDto, SubmittedFileDto, TeacherAttemptReviewDto } from '../../models/report.model';
+import { ReportService } from '../../services/report/report.service';
 import { ConfirmService } from '../confirm/confirm.service';
 import { ToastService } from '../toast/toast.service';
 import { LocalSpinnerComponent } from '../local-spinner/local-spinner.component';
@@ -120,8 +121,41 @@ const MAX_FEEDBACK_LENGTH = 2000;
           </div>
         </div>
 
-        <!-- ── A diák megoldása ── -->
-        @if (r.studentCode) {
+        <!-- ── Irodai/weblap beadás: fájlok + az MI szempontjai (teljes vizsga, H5) ── -->
+        @if (r.submissionFiles?.length) {
+          <div class="mt-4" data-testid="attempt-files">
+            <h3 class="text-xs uppercase tracking-wide text-text-muted mb-1">Beadott fájlok</h3>
+            <div class="flex flex-wrap gap-2">
+              @for (f of r.submissionFiles!; track f.id) {
+                <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="downloadFile(r, f)">
+                  Letöltés: {{ f.name }} ({{ kb(f.sizeBytes) }} KB)
+                </button>
+              }
+            </div>
+          </div>
+        }
+        @if (r.rubricGrade; as g) {
+          <details class="mt-4 text-sm" data-testid="attempt-rubric">
+            <summary class="cursor-pointer">
+              <span class="text-xs uppercase tracking-wide text-text-muted">Szempontonként (MI)</span>
+              <strong class="ml-2">{{ g.rawPoints }}/{{ g.rawTotal }} nyers pont</strong>
+              @if (g.draftRubric) { <span class="text-xs text-warning ml-1">vázlat-útmutató</span> }
+              <span class="text-xs text-text-muted ml-1">– {{ lost(g.items).length }} szempontnál veszett pont</span>
+            </summary>
+            <ul class="mt-2 space-y-1">
+              @for (item of g.items; track item.itemId) {
+                <li [class.text-text-muted]="!isLost(item)">
+                  <span class="font-semibold tabular-nums">{{ item.kind === 'statement' ? (item.ok ? '✓' : '✗') : item.points + '/' + item.maxPoints }}</span>
+                  {{ item.text }}
+                  @if (item.reason && isLost(item)) { <span class="text-text-muted">– {{ item.reason }}</span> }
+                </li>
+              }
+            </ul>
+          </details>
+        }
+
+        <!-- ── A diák megoldása (irodai beadásnál a fenti fájlok helyettesítik) ── -->
+        @if (r.studentCode && !r.submissionFiles?.length) {
           <div class="mt-4">
             <h3 class="text-xs uppercase tracking-wide text-text-muted mb-1">A diák megoldása</h3>
             <pre class="text-xs bg-bg-element rounded p-3 overflow-x-auto max-h-64">{{ r.studentCode }}</pre>
@@ -214,6 +248,7 @@ export class AttemptReviewPanelComponent {
   readonly report = inject(ReportStore);
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
+  private readonly reportService = inject(ReportService);
 
   readonly attemptId = input.required<number>();
   readonly taskSetId = input.required<number>();
@@ -374,6 +409,33 @@ export class AttemptReviewPanelComponent {
     });
   }
 
+
+  /** Pontot vesztett szempont: állításnál hamis, egyébként a maximumnál kevesebb pont. */
+  isLost(item: RubricGradeItemDto): boolean {
+    return item.kind === 'statement' ? item.ok === false : item.points < item.maxPoints;
+  }
+
+  lost(items: RubricGradeItemDto[]): RubricGradeItemDto[] {
+    return items.filter((i) => this.isLost(i));
+  }
+
+  kb(bytes: number): number {
+    return Math.max(1, Math.round(bytes / 1024));
+  }
+
+  downloadFile(r: TeacherAttemptReviewDto, f: SubmittedFileDto): void {
+    this.reportService.downloadAttemptFile(r.attemptId, f.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = f.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.toastService.danger('A fájl nem tölthető le.'),
+    });
+  }
 
   formatDuration(totalSeconds: number): string {
     const hours = Math.floor(totalSeconds / 3600);

@@ -10,6 +10,8 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherAttemptReviewDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
+import { ReportService } from '../../services/report/report.service';
+import { of } from 'rxjs';
 
 function makeResults(): TeacherTaskSetResultsDto {
   return {
@@ -119,9 +121,15 @@ describe('FeladatsorEredmenyekComponent', () => {
         { provide: ToastService, useValue: toastMock },
         { provide: ConfirmService, useValue: confirmMock },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
+        { provide: ReportService, useValue: reportServiceMock },
       ],
     });
   }
+
+  let reportServiceMock: { downloadAttemptFile: ReturnType<typeof vi.fn> };
+  beforeEach(() => {
+    reportServiceMock = { downloadAttemptFile: vi.fn(() => of(new Blob(['x']))) };
+  });
 
   /** Megnyitja az első diák első cellájának panelját, és beállítja a nézetét. */
   function openFirstCell(fixture: ReturnType<typeof TestBed.createComponent<FeladatsorEredmenyekComponent>>,
@@ -137,6 +145,34 @@ describe('FeladatsorEredmenyekComponent', () => {
   function panel(fixture: ReturnType<typeof TestBed.createComponent<FeladatsorEredmenyekComponent>>): AttemptReviewPanelComponent {
     return fixture.debugElement.query(By.directive(AttemptReviewPanelComponent)).componentInstance;
   }
+
+  // Teljes vizsga (H5): irodai beadásnál a tanár a fájlokat (letölthetők) és az MI szempontjait látja, a kód-blokk helyett.
+  it('irodai beadásnál a fájlok letölthetők, a szempontok közül a pontot vesztettek indokkal látszanak', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({
+      studentCode: 'Beadott fájlok:\n- level.docx (81 KB)',
+      submissionFiles: [{ id: 'f1', name: 'level.docx', sizeBytes: 83007 }],
+      rubricGrade: {
+        gradeId: 9, draftRubric: true, rawPoints: 1, rawTotal: 3, files: ['level.docx'],
+        items: [
+          { itemId: 1, order: 1, section: null, text: 'A margó 2 cm', kind: 'criterion', maxPoints: 2, points: 1, ok: null, reason: '1,5 cm', groupNo: null },
+          { itemId: 2, order: 2, section: null, text: 'A cím középen', kind: 'statement', maxPoints: 0, points: 0, ok: true, reason: 'igazítás: center', groupNo: 1 },
+        ],
+      },
+    }));
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="attempt-files"]')?.textContent).toContain('level.docx (81 KB)');
+    const rubric = el.querySelector('[data-testid="attempt-rubric"]')!.textContent!;
+    expect(rubric).toContain('1 szempontnál veszett pont');
+    expect(rubric).toContain('1,5 cm');
+    expect(rubric).not.toContain('igazítás: center'); // a teljesült szempont indoka nem kell
+    expect(el.textContent).not.toContain('A diák megoldása');
+
+    (el.querySelector('[data-testid="attempt-files"] button') as HTMLButtonElement).click();
+    expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
+  });
 
   it('betöltéskor meghívja a loadTaskSetResults-t a route id-vel', () => {
     configure(null);
