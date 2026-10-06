@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { AuthStore } from './services/auth/store/auth.store';
+import { MockExamService } from './services/mock-exam/mock-exam.service';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
 import { HeaderDropdownCoordinatorService } from './shared/header-dropdown-coordinator.service';
 import { IconComponent, IconName } from './shared/icon/icon.component';
@@ -99,7 +100,7 @@ const TEACHER_LINKS: NavLink[] = [
                lesz, ahelyett hogy a fejléc egésze eltorzulna/tördelődne. -->
           <nav [class]="authStore.hasAdminRole() ? 'hidden min-[1400px]:flex flex-nowrap items-center gap-1 text-sm overflow-x-auto' : 'hidden md:flex flex-wrap items-center gap-1 text-sm'">
             @if (authStore.hasTeacherRole()) {
-              @for (link of teacherLinks; track link.path) {
+              @for (link of teacherLinks(); track link.path) {
                 <a [routerLink]="link.path" routerLinkActive="text-primary font-semibold bg-primary-subtle"
                   class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-text-muted hover:text-text-primary transition-colors">
                   <app-icon [name]="link.icon" class="w-4 h-4 block" />
@@ -155,7 +156,7 @@ const TEACHER_LINKS: NavLink[] = [
         <div #panel (document:keydown.escape)="menuOpen.set(false)"
           [class]="authStore.hasAdminRole() ? 'min-[1400px]:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1' : 'md:hidden absolute top-full inset-x-0 bg-bg-panel border-b border-border-default shadow-lg z-40 px-4 py-3 space-y-1'">
           @if (authStore.hasTeacherRole()) {
-            @for (link of teacherLinks; track link.path) {
+            @for (link of teacherLinks(); track link.path) {
               <a [routerLink]="link.path" (click)="menuOpen.set(false)"
                 routerLinkActive="text-primary font-semibold bg-primary-subtle"
                 class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-muted">
@@ -194,7 +195,11 @@ export class AppComponent {
   private readonly dropdownCoordinator = inject(HeaderDropdownCoordinatorService);
   readonly authStore = inject(AuthStore);
 
-  readonly teacherLinks = TEACHER_LINKS;
+  private readonly mockExams = inject(MockExamService);
+  /** Van közzétett próbaérettségi - csak akkor kap menüpontot. */
+  private readonly mockExamActive = signal(false);
+  readonly teacherLinks = computed<NavLink[]>(() =>
+    this.mockExamActive() ? [...TEACHER_LINKS, { path: '/probaerettsegi', label: 'Próbaérettségi', icon: 'academic-cap' }] : TEACHER_LINKS);
   readonly menuOpen = signal(false);
 
   private readonly menuBtn = viewChild<ElementRef<HTMLElement>>('menuBtn');
@@ -213,6 +218,15 @@ export class AppComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() => this.menuOpen.set(false));
+
+    // Próbaérettségi-menüpont: tanárnál egyszer lekérjük, van-e közzétett esemény (hiba = nincs menüpont).
+    effect(() => {
+      if (!this.authStore.hasTeacherRole() || this.mockExamActive()) return;
+      this.mockExams.getCurrent().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: (current) => this.mockExamActive.set(current != null),
+        error: () => this.mockExamActive.set(false),
+      });
+    });
 
     // UI-TT-101: kölcsönös kizárás a harang-dropdownnal - ha a harang megnyílik,
     // ez a menü záródjon be (és fordítva, ld. NotificationBellComponent), hogy

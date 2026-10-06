@@ -74,6 +74,13 @@ export const routes: Routes = [
     ],
   },
   {
+    // Próbaérettségi: a saját csoportok jelentkeztetése és áttekintése (a menüpont csak közzétett eseménynél látszik).
+    path: 'probaerettsegi',
+    canActivate: [authGuard, roleGuard('teacher')],
+    loadComponent: () =>
+      import('./pages/probaerettsegi/probaerettsegi-page.component').then((m) => m.ProbaerettsegiPageComponent),
+  },
+  {
     // Dolgozat mód: a kiadott dolgozat élő áttekintője (a csoport "Kiadva" füléről / a feladatsor-szerkesztőből).
     path: 'dolgozatok/:assignmentId',
     canActivate: [authGuard, roleGuard('teacher')],

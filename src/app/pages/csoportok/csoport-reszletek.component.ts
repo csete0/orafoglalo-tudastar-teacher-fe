@@ -25,7 +25,8 @@ import { TeacherProjectService } from '../../services/teacher-project/teacher-pr
 import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../models/teacher-project.model';
 import { parseUtc } from '../../shared/utc-date.util';
 import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
-import { finalize, take } from 'rxjs';
+import { finalize, of, switchMap, take } from 'rxjs';
+import { MockExamService } from '../../services/mock-exam/mock-exam.service';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 import { ReportService } from '../../services/report/report.service';
@@ -48,6 +49,10 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
             </div>
             @if (!renaming()) {
               <h1 class="page-title truncate">{{ group.name }}</h1>
+              @if (mockExamRegistered()) {
+                <a routerLink="/probaerettsegi" class="badge badge-warning shrink-0" data-testid="group-mock-exam-badge"
+                   title="A csoport jelentkeztetve van a próbaérettségire">Próbaérettségi</a>
+              }
               <!-- UI-UX-T4: a csoport neve eddig NEM volt szerkeszthető sehol - egy
                    elgépelt vagy évfordulóval elavuló név ("11.A" → "12.A") csak új
                    csoporttal lett volna "javítható", elvágva a tagságot és az
@@ -550,6 +555,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
 })
 export class CsoportReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly mockExamService = inject(MockExamService);
   private readonly router = inject(Router);
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
@@ -706,8 +712,22 @@ export class CsoportReszletekComponent implements OnInit {
     this.displaySchoolId.set(group?.schoolId ?? null);
   });
 
+  /** A csoport jelentkeztetve van az aktuális próbaérettségire (a fejléc jelvényéhez). */
+  readonly mockExamRegistered = signal(false);
+
+  private loadMockExamBadge(groupId: number): void {
+    this.mockExamService.getCurrent().pipe(
+      switchMap((current) => (current ? this.mockExamService.get(current.slug) : of(null))),
+      take(1),
+    ).subscribe({
+      next: (ev) => this.mockExamRegistered.set(!!ev?.groups.find((g) => g.groupId === groupId)?.registered),
+      error: () => this.mockExamRegistered.set(false),
+    });
+  }
+
   ngOnInit(): void {
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
+    this.loadMockExamBadge(this.groupId);
     if (this.store.groups().length === 0) {
       this.store.loadMine();
     }
