@@ -1,7 +1,7 @@
 import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Observable } from 'rxjs';
-import { finalize, take } from 'rxjs/operators';
+import { concat, Observable } from 'rxjs';
+import { finalize, take, toArray } from 'rxjs/operators';
 import { TeacherTaskSetService } from './teacher-taskset.service';
 import {
   CreateTeacherSubTaskRequest,
@@ -254,6 +254,17 @@ export class TeacherTaskSetStore {
 
   uploadFile(taskSetId: number, kind: string, file: File, taskId?: number, onSuccess?: () => void): void {
     this.mutateAndReload(this.service.uploadFile(taskSetId, kind, file, taskId), taskSetId, onSuccess);
+  }
+
+  /**
+   * Több fájl egy feladathoz (irodai forrásfájlok): egymás UTÁN töltjük fel, és csak a
+   * végén töltjük újra a feladatsort - párhuzamos feltöltéseknél minden válasz külön
+   * újratöltést indítana. Az első hibánál megáll; a már feltöltött fájlok megmaradnak.
+   */
+  uploadFiles(taskSetId: number, kind: string, files: File[], taskId?: number, onSuccess?: () => void): void {
+    if (this._loading() || files.length === 0) return;
+    const uploads = concat(...files.map((file) => this.service.uploadFile(taskSetId, kind, file, taskId)));
+    this.mutateAndReload(uploads.pipe(toArray()), taskSetId, onSuccess);
   }
 
   deleteFile(taskSetId: number, fileId: string, onSuccess?: () => void): void {

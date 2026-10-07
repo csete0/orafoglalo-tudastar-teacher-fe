@@ -39,10 +39,22 @@ const LANGUAGES: { id: number; name: string }[] = [
 ];
 const SQL_LANGUAGE_ID = 6;
 
-const TASK_TYPES: { id: number; label: string }[] = [
-  { id: 6, label: 'Programozás' },
-  { id: 5, label: 'SQL' },
+/** A tanár által létrehozható feladattípusok (TaskTypes tábla). Az irodai típusokat a gépi
+ *  javítás a beadott fájlból ellenőrzi (szempontlista gépi szabályaival), nem futtatással. */
+const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
+  { id: 6, label: 'Programozás', icon: 'code' },
+  { id: 5, label: 'SQL', icon: 'database' },
+  { id: 1, label: 'Szövegszerkesztés', icon: 'document' },
+  { id: 2, label: 'Táblázatkezelés', icon: 'chart' },
+  { id: 3, label: 'Prezentáció', icon: 'academic-cap' },
+  { id: 4, label: 'Grafika', icon: 'eye' },
+  { id: 7, label: 'Weblap', icon: 'link' },
 ];
+const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
+
+/** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
+const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
+const OFFICE_FILE_MAX_BYTES = 20 * 1024 * 1024;
 
 const FILE_KINDS: { kind: TeacherFileKind; label: string; accept: string }[] = [
   { kind: 'InputTxt', label: 'Bemeneti fájl (.txt)', accept: '.txt' },
@@ -50,6 +62,13 @@ const FILE_KINDS: { kind: TeacherFileKind; label: string; accept: string }[] = [
   { kind: 'CreateLiteSql', label: 'create_lite.sql (SQLite)', accept: '.sql' },
   { kind: 'SolutionPdf', label: 'Megoldás PDF', accept: '.pdf' },
 ];
+
+/** Csak a fájllistában megjelenő címkék (ezekhez nincs feladatsor-szintű feltöltő kártya). */
+const OTHER_FILE_KIND_LABELS: Partial<Record<TeacherFileKind, string>> = {
+  OfficeSource: 'Forrásfájl',
+  OfficeSolution: 'Megoldásod',
+  Image: 'Kép',
+};
 
 /** {solutionId vagy taskId (complete-solution-höz negatív előjellel)}: {languageId: code} */
 type SnippetDraft = Record<number, Record<number, string>>;
@@ -156,7 +175,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 class="w-full flex items-center justify-between gap-2 p-4 text-left group">
                 <span class="flex items-center gap-3 min-w-0">
                   <div class="icon-tile shrink-0"
-                    [class]="section.isOther ? 'icon-tile-neutral' : (section.id === 6 ? 'icon-tile-primary' : 'icon-tile-secondary')">
+                    [class]="section.isOther ? 'icon-tile-neutral' : (isOfficeType(section.id) ? 'icon-tile-secondary' : 'icon-tile-primary')">
                     <app-icon [name]="section.icon" class="w-5 h-5 block" />
                   </div>
                   <span class="font-bold group-hover:text-primary transition-colors truncate">{{ section.label }}</span>
@@ -199,7 +218,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                vissza változatlanul. -->
                           <div>
                             <label class="text-xs text-text-muted block mb-1">Kategória</label>
-                            <div class="flex gap-3">
+                            <div class="flex flex-wrap gap-x-3 gap-y-1">
                               @for (type of taskTypes; track type.id) {
                                 <label class="flex items-center gap-1 text-sm cursor-pointer">
                                   <input type="radio" [name]="'editTaskCategory-' + task.id"
@@ -315,28 +334,31 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                 <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
                               }
 
-                              <div class="grid grid-cols-2 gap-2">
-                                @for (lang of languages; track lang.id) {
-                                  <div>
-                                    <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                                    <textarea rows="3"
-                                      [ngModel]="draftCode(solution.id, lang.id)"
-                                      (ngModelChange)="setDraftCode(solution.id, lang.id, $event)"
-                                      class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
-                                  </div>
-                                }
-                              </div>
-                              <!-- UI-TT-141: a store upsertSubTaskSnippets()-je a MINDEN mutáló
-                                   metódus által megosztott loading-jelzőn korai-return-nel véd.
-                                   E kötés nélkül egy MÁSIK feladat/megoldás törlése közben ide
-                                   kattintva a mentés teljesen láthatatlanul no-op maradt: nincs
-                                   hálózati hívás, nincs toast, és a gomb sem tűnt letiltottnak —
-                                   a tanár azt hihette, mentett. -->
-                              <button (click)="saveSnippets(detail.id, solution)"
-                                [disabled]="store.loading()"
-                                class="btn btn-primary mt-2 !px-3 !py-1">
-                                Kódrészletek mentése
-                              </button>
+                              <!-- Irodai feladatnál nincs kódrészlet: a referencia a feltöltött megoldásfájl. -->
+                              @if (!isOfficeTask(task)) {
+                                <div class="grid grid-cols-2 gap-2">
+                                  @for (lang of languages; track lang.id) {
+                                    <div>
+                                      <label class="text-xs text-text-muted">{{ lang.name }}</label>
+                                      <textarea rows="3"
+                                        [ngModel]="draftCode(solution.id, lang.id)"
+                                        (ngModelChange)="setDraftCode(solution.id, lang.id, $event)"
+                                        class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
+                                    </div>
+                                  }
+                                </div>
+                                <!-- UI-TT-141: a store upsertSubTaskSnippets()-je a MINDEN mutáló
+                                     metódus által megosztott loading-jelzőn korai-return-nel véd.
+                                     E kötés nélkül egy MÁSIK feladat/megoldás törlése közben ide
+                                     kattintva a mentés teljesen láthatatlanul no-op maradt: nincs
+                                     hálózati hívás, nincs toast, és a gomb sem tűnt letiltottnak —
+                                     a tanár azt hihette, mentett. -->
+                                <button (click)="saveSnippets(detail.id, solution)"
+                                  [disabled]="store.loading()"
+                                  class="btn btn-primary mt-2 !px-3 !py-1">
+                                  Kódrészletek mentése
+                                </button>
+                              }
                             </div>
                           }
 
@@ -359,29 +381,35 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             </button>
                           </form>
 
-                          <!-- Összevont megoldás -->
-                          <div class="bg-bg-panel rounded-xl p-3">
-                            <p class="text-sm font-medium mb-2">Összevont megoldás</p>
-                            <div class="grid grid-cols-2 gap-2">
-                              @for (lang of languages; track lang.id) {
-                                <div>
-                                  <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                                  <textarea rows="3"
-                                    [ngModel]="draftCode(completeSolutionKey(task.id), lang.id)"
-                                    (ngModelChange)="setDraftCode(completeSolutionKey(task.id), lang.id, $event)"
-                                    class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
-                                </div>
-                              }
+                          @if (isOfficeTask(task)) {
+                            <p class="text-sm text-text-muted" data-testid="office-files-hint">
+                              A feladat forrásfájljait és a saját megoldásodat a lenti „Fájlok” részen töltheted fel.
+                            </p>
+                          } @else {
+                            <!-- Összevont megoldás -->
+                            <div class="bg-bg-panel rounded-xl p-3">
+                              <p class="text-sm font-medium mb-2">Összevont megoldás</p>
+                              <div class="grid grid-cols-2 gap-2">
+                                @for (lang of languages; track lang.id) {
+                                  <div>
+                                    <label class="text-xs text-text-muted">{{ lang.name }}</label>
+                                    <textarea rows="3"
+                                      [ngModel]="draftCode(completeSolutionKey(task.id), lang.id)"
+                                      (ngModelChange)="setDraftCode(completeSolutionKey(task.id), lang.id, $event)"
+                                      class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
+                                  </div>
+                                }
+                              </div>
+                              <!-- UI-TT-141 testvér-esete, ld. a "Kódrészletek mentése" gomb
+                                   kommentjét: ugyanaz a láthatatlan no-op a megosztott
+                                   loading-guardon. -->
+                              <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
+                                [disabled]="store.loading()"
+                                class="btn btn-primary mt-2 !px-3 !py-1">
+                                Összevont megoldás mentése
+                              </button>
                             </div>
-                            <!-- UI-TT-141 testvér-esete, ld. a "Kódrészletek mentése" gomb
-                                 kommentjét: ugyanaz a láthatatlan no-op a megosztott
-                                 loading-guardon. -->
-                            <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
-                              [disabled]="store.loading()"
-                              class="btn btn-primary mt-2 !px-3 !py-1">
-                              Összevont megoldás mentése
-                            </button>
-                          </div>
+                          }
                         </div>
                       }
                     </div>
@@ -490,7 +518,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         <section>
           <h2 class="font-bold mb-3">Fájlok</h2>
           <ul class="space-y-2 mb-4">
-            @for (file of detail.files; track file.id) {
+            @for (file of taskSetFiles(); track file.id) {
               <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
                 <span class="flex items-center gap-2 min-w-0">
                   <app-icon name="document" class="w-4 h-4 block text-text-muted shrink-0" />
@@ -523,6 +551,52 @@ type SnippetDraft = Record<number, Record<number, string>>;
               </div>
             }
           </div>
+
+          <!--
+            Irodai feladatonként: forrásfájlok (amit a diák megkap) és a tanár saját megoldása.
+            A megoldásból készül a szempontlista, és a kapu ezen ellenőrzi a gépi szabályokat.
+          -->
+          @if (officeTasks().length > 0) {
+            <div class="mt-6 space-y-3" data-testid="office-task-files">
+              <h3 class="font-semibold">Irodai feladatok fájljai</h3>
+              <p class="text-xs text-text-muted">
+                Elfogadott fájlok: {{ officeFileAcceptLabel }} · legfeljebb 20 MB / fájl.
+              </p>
+              @for (task of officeTasks(); track task.id) {
+                <div class="card !rounded-xl p-3 space-y-3" [attr.data-testid]="'office-files-' + task.id">
+                  <p class="font-medium text-sm">{{ task.taskOrder }}. {{ task.title }}</p>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    @for (slot of officeFileSlots; track slot.kind) {
+                      <div class="min-w-0" [attr.data-testid]="'office-slot-' + slot.kind">
+                        <label class="text-sm font-medium block">{{ slot.label }}</label>
+                        <p class="text-xs text-text-muted mb-2">{{ slot.help }}</p>
+                        <ul class="space-y-1 mb-2">
+                          @for (file of taskFiles(task.id, slot.kind); track file.id) {
+                            <li class="flex justify-between items-center gap-2 text-sm bg-bg-element rounded-lg px-2 py-1">
+                              <span class="truncate min-w-0">{{ file.originalFileName }}</span>
+                              <span class="flex items-center gap-3 shrink-0">
+                                <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
+                                <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
+                              </span>
+                            </li>
+                          }
+                        </ul>
+                        <input type="file" multiple [accept]="officeFileAccept" [disabled]="store.loading()"
+                          (change)="uploadOfficeFiles(detail.id, task.id, slot.kind, $event)"
+                          class="w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
+                      </div>
+                    }
+                  </div>
+                  @if (taskFiles(task.id, 'OfficeSolution').length === 0) {
+                    <p class="text-sm text-warning flex items-start gap-2" data-testid="office-solution-missing">
+                      <app-icon name="warning-triangle" class="w-4 h-4 block mt-0.5 shrink-0" />
+                      <span>Töltsd fel a saját megoldásodat – ebből készül a szempontlista.</span>
+                    </p>
+                  }
+                </div>
+              }
+            </div>
+          }
         </section>
 
         <!-- ── Kiadás csoportnak ──────────────────────────────── -->
@@ -676,6 +750,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly languages = LANGUAGES;
   readonly taskTypes = TASK_TYPES;
   readonly fileKinds = FILE_KINDS;
+  readonly officeFileAccept = OFFICE_FILE_ACCEPT;
+  readonly officeFileAcceptLabel = OFFICE_FILE_ACCEPT.split(',').join(', ');
+  readonly officeFileSlots: { kind: TeacherFileKind; label: string; help: string }[] = [
+    { kind: 'OfficeSource', label: 'Forrásfájlok', help: 'Amit a diák a feladathoz megkap (pl. nyers szöveg, adatfájl, képek).' },
+    { kind: 'OfficeSolution', label: 'Megoldásod', help: 'A kész, hibátlan megoldásod – a diákok nem látják, ehhez méri a rendszer a beadásokat.' },
+  ];
 
   readonly selectableCategories = toSignal(
     this.categoryService.getAll().pipe(catchError(() => of([] as PublicCategoryDto[]))),
@@ -793,9 +873,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     TASK_TYPES.map((t) => [t.id, { title: '', description: '', maxPoints: 10 }]),
   );
 
-  /** Alapból mind kinyitva — a tanár azonnal lássa a meglévő feladatait, ne kelljen
-   *  minden megnyitáskor kattintania. */
-  readonly expandedSections = signal<Set<number>>(new Set([...TASK_TYPES.map((t) => t.id), 0]));
+  /** A tanár által kézzel nyitott/zárt típus-blokkok. Alapból nyitva (a tanár azonnal lássa a
+   *  meglévő feladatait, ne kelljen minden megnyitáskor kattintania) - kivéve az ÜRES irodai
+   *  blokkokat: hét nyitott „Új feladat” űrlap egymás alatt áttekinthetetlen lenne. */
+  private readonly sectionToggles = signal<Record<number, boolean>>({});
 
   /** Feladatonként (task.id) külön "Új részfeladat" űrlap-draft — enélkül a mentetlen
    *  szöveg/pont a task-váltáskor csendben átkerülne az újonnan kiválasztott feladathoz
@@ -839,7 +920,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     const sections = this.taskTypes.map((type) => ({
       id: type.id,
       label: type.label,
-      icon: (type.id === 6 ? 'code' : 'database') as IconName,
+      icon: type.icon,
       isOther: false,
       tasks: detail.tasks.filter((t) => t.taskTypeIds.length === 1 && t.taskTypeIds[0] === type.id),
     }));
@@ -860,16 +941,39 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   });
 
   toggleSection(id: number): void {
-    this.expandedSections.update((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    const open = this.isSectionExpanded(id);
+    this.sectionToggles.update((current) => ({ ...current, [id]: !open }));
   }
 
   isSectionExpanded(id: number): boolean {
-    return this.expandedSections().has(id);
+    const toggled = this.sectionToggles()[id];
+    if (toggled !== undefined) return toggled;
+    if (!this.isOfficeType(id)) return true;
+    return (this.typeSections().find((s) => s.id === id)?.tasks.length ?? 0) > 0;
+  }
+
+  isOfficeType(typeId: number): boolean {
+    return OFFICE_TASK_TYPE_IDS.has(typeId);
+  }
+
+  /** Irodai feladat: pontosan egy, irodai típus. Ennél nincs kódrészlet/referencia-kód, a
+   *  javítás a tanár feltöltött megoldásfájljából készült szempontlistával történik. */
+  isOfficeTask(task: TeacherTaskDto): boolean {
+    return task.taskTypeIds.length === 1 && this.isOfficeType(task.taskTypeIds[0]);
+  }
+
+  readonly officeTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => this.isOfficeTask(t)));
+
+  /** A feladatsor-szintű fájlok; egy (még meglévő) feladathoz kötött fájl a feladat saját blokkjában jelenik meg. */
+  readonly taskSetFiles = computed(() => {
+    const detail = this.store.selectedDetail();
+    if (!detail) return [];
+    const taskIds = new Set(detail.tasks.map((t) => t.id));
+    return detail.files.filter((f) => f.taskId == null || !taskIds.has(f.taskId));
+  });
+
+  taskFiles(taskId: number, kind: TeacherFileKind): TeacherFileDto[] {
+    return (this.store.selectedDetail()?.files ?? []).filter((f) => f.taskId === taskId && f.kind === kind);
   }
 
   /** SQL-kódrészlet esetén a publikáláshoz create.sql + create_lite.sql pár kell. */
@@ -1462,6 +1566,34 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     input.value = '';
   }
 
+  /**
+   * Irodai forrás-/megoldásfájlok egy feladathoz. A kiterjesztést és a méretet itt is
+   * ellenőrizzük (a backend is), hogy a tanár ne egy elutasított kérésből tudja meg - a nem
+   * megfelelő fájlokat kihagyjuk és megnevezzük, a többit feltöltjük.
+   */
+  uploadOfficeFiles(taskSetId: number, taskId: number, kind: TeacherFileKind, event: Event): void {
+    if (this.store.loading()) return;
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length === 0) return;
+
+    const allowed = new Set(OFFICE_FILE_ACCEPT.split(','));
+    const extension = (name: string) => (name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '');
+    const rejected = files.filter((f) => !allowed.has(extension(f.name)) || f.size > OFFICE_FILE_MAX_BYTES);
+    if (rejected.length > 0) {
+      this.toastService.warning(
+        `Kihagyva (nem elfogadott típus vagy 20 MB fölött): ${rejected.map((f) => f.name).join(', ')}`,
+        6000,
+      );
+    }
+    const accepted = files.filter((f) => !rejected.includes(f));
+    if (accepted.length === 0) return;
+    this.store.uploadFiles(taskSetId, kind, accepted, taskId, () =>
+      this.toastService.success(accepted.length === 1 ? 'Fájl feltöltve.' : `${accepted.length} fájl feltöltve.`),
+    );
+  }
+
   async deleteFile(taskSetId: number, fileId: string, fileName: string): Promise<void> {
     // UI-TT-140 (UI-TT-29 testvér-előfordulása) — ld. deleteTask() fenti kommentje.
     const ok = await this.confirmService.ask({
@@ -1476,7 +1608,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   fileKindLabel(kind: TeacherFileKind): string {
-    return this.fileKinds.find((k) => k.kind === kind)?.label ?? kind;
+    return this.fileKinds.find((k) => k.kind === kind)?.label ?? OTHER_FILE_KIND_LABELS[kind] ?? kind;
   }
 
   /**

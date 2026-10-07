@@ -131,7 +131,11 @@ export interface SnippetDto {
   code: string;
 }
 
-export type TeacherFileKind = 'SolutionPdf' | 'InputTxt' | 'CreateSql' | 'CreateLiteSql';
+/**
+ * OfficeSource: irodai feladat forrásfájlja (feladatonként több); OfficeSolution: a tanár saját
+ * megoldása (a backend `<név>_megoldas.<kit>` néven tárolja, vizsga alatt rejtve). Image: kvízkép.
+ */
+export type TeacherFileKind = 'SolutionPdf' | 'InputTxt' | 'CreateSql' | 'CreateLiteSql' | 'Image' | 'OfficeSource' | 'OfficeSolution';
 
 export interface TeacherFileDto {
   id: string;
@@ -142,6 +146,8 @@ export interface TeacherFileDto {
   createdAt: string;
   /** A jogosultság-ellenőrzött kiszolgáló endpoint URL-je. */
   url: string;
+  /** A feladat, amelyhez a fájl tartozik (irodai forrás-/megoldásfájl); feladatsor-szintű fájlnál null. */
+  taskId?: number | null;
 }
 
 // ── Automatikus javítás minősége + tanári szempontlista (TANARI-SZEMPONTLISTA-API.md) ──
