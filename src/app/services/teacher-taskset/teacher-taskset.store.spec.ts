@@ -417,6 +417,30 @@ describe('TeacherTaskSetStore', () => {
   // JSON-alakokat ismerte fel, ezért ez csendben a tartalmatlan "A művelet sikertelen."
   // generikus üzenetre esett vissza, a tanár sosem tudta meg, hogy a fájl mérete volt a
   // gond (és hogy a nginx-limit jóval alacsonyabb, mint a dokumentált app-szintű limitek).
+  it('uploadFiles(): a fájlokat egymás UTÁN tölti fel a feladathoz, és csak a végén tölti újra a feladatsort', () => {
+    configure();
+    const first$ = new Subject<unknown>();
+    const second$ = new Subject<unknown>();
+    serviceMock.uploadFile.mockReturnValueOnce(first$.asObservable()).mockReturnValueOnce(second$.asObservable());
+    serviceMock.getDetail.mockReturnValue(of(makeDetail()));
+    const onSuccess = vi.fn();
+    const a = new File(['a'], 'a.docx');
+    const b = new File(['b'], 'b.png');
+
+    store.uploadFiles(1, 'OfficeSource', [a, b], 7, onSuccess);
+    expect(serviceMock.uploadFile).toHaveBeenCalledWith(1, 'OfficeSource', a, 7);
+    expect(serviceMock.uploadFile).toHaveBeenCalledWith(1, 'OfficeSource', b, 7);
+
+    first$.next({});
+    first$.complete();
+    expect(serviceMock.getDetail).not.toHaveBeenCalled();
+
+    second$.next({});
+    second$.complete();
+    expect(serviceMock.getDetail).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
   it('BUG UI-TT-109: 413-as (nginx "Request Entity Too Large", nem-JSON HTML törzsű) uploadFile()-hiba esetén a dedikált "fájl túl nagy" üzenet jelenik meg, nem a tartalmatlan generikus szöveg', () => {
     configure();
     const httpError = new HttpErrorResponse({

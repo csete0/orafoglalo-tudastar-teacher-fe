@@ -7,7 +7,9 @@ import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-task
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
+import { GradingQualityDto, TeacherFileDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
+import { ToastService } from '../../shared/toast/toast.service';
+import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -43,6 +45,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     updateSubTask: ReturnType<typeof vi.fn>;
     updateTask: ReturnType<typeof vi.fn>;
     uploadFile: ReturnType<typeof vi.fn>;
+    uploadFiles: ReturnType<typeof vi.fn>;
     deleteTask: ReturnType<typeof vi.fn>;
     deleteSubTask: ReturnType<typeof vi.fn>;
     deleteFile: ReturnType<typeof vi.fn>;
@@ -56,6 +59,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
   };
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
+  // Alapból minden feladat automatikus javítása „zöld” - a publikálási figyelmeztetés-tesztek írják felül.
+  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn>; getRubric: ReturnType<typeof vi.fn>; getRubricQuota: ReturnType<typeof vi.fn> };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -77,6 +82,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // meg az onSuccess callback-et.
       updateTask: vi.fn(),
       uploadFile: vi.fn(),
+      uploadFiles: vi.fn(),
       deleteTask: vi.fn(),
       deleteSubTask: vi.fn(),
       deleteFile: vi.fn(),
@@ -88,6 +94,13 @@ describe('FeladatsorSzerkesztoComponent', () => {
       revoke: vi.fn(),
     };
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(false), pending: signal(null), resolve: vi.fn() };
+    rubricServiceMock = {
+      getGradingQuality: vi.fn(() =>
+        of({ kind: 'code', level: 'green', checks: [], rubric: { status: 'approved', itemCount: 1, machineCount: 0 } } as GradingQualityDto),
+      ),
+      getRubric: vi.fn(() => of(null)),
+      getRubricQuota: vi.fn(() => of({ used: 0, limit: 30, month: '2026-10' })),
+    };
 
     TestBed.configureTestingModule({
       imports: [FeladatsorSzerkesztoComponent],
@@ -96,6 +109,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
         { provide: SchoolStore, useValue: schoolStoreMock },
         { provide: AuthorizedFileService, useValue: authorizedFileServiceMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
+        { provide: TeacherRubricService, useValue: rubricServiceMock },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } },
@@ -395,6 +409,61 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  describe('publikálás hiányos automatikus javítással', () => {
+    const task = (id: number, title: string) => ({
+      id, title, description: 'd', maxPoints: 10, taskOrder: id, taskTypeIds: [6], subTasks: [], completeSolutionSnippets: [],
+    });
+
+    it('ha egy feladat sárga/piros, megerősítő ablak sorolja fel a hiányokat; elutasításkor nem publikál', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Rendben'), task(2, 'Hiányos')] }));
+      rubricServiceMock.getGradingQuality.mockImplementation((_: number, taskId: number) =>
+        of(
+          taskId === 2
+            ? ({
+                kind: 'code',
+                level: 'red',
+                checks: [{ key: 'reference', ok: false, label: 'Nincs referencia', hint: 'Add meg a teljes referencia-megoldást.' }],
+                rubric: { status: 'none', itemCount: 0, machineCount: 0 },
+              } as GradingQualityDto)
+            : ({ kind: 'code', level: 'green', checks: [], rubric: { status: 'approved', itemCount: 1, machineCount: 0 } } as GradingQualityDto),
+        ),
+      );
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(confirmServiceMock.ask).toHaveBeenCalledTimes(1);
+      const message: string = confirmServiceMock.ask.mock.calls[0][0].message;
+      expect(message).toContain('2. Hiányos');
+      expect(message).toContain('Add meg a teljes referencia-megoldást.');
+      expect(message).not.toContain('Rendben');
+      expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+    });
+
+    it('a figyelmeztetés nem tiltás: megerősítés után publikál', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Hiányos')] }));
+      rubricServiceMock.getGradingQuality.mockReturnValue(
+        of({ kind: 'code', level: 'yellow', checks: [], rubric: { status: 'none', itemCount: 0, machineCount: 0 } } as GradingQualityDto),
+      );
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it('ha minden feladat zöld, nem kérdez rá', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Rendben')] }));
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+      expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('publish() megvárja a schoolStore.loading() lezárását race esetén, mielőtt eldönti, kell-e megerősítés (UI-TT-47)', async () => {
@@ -1622,6 +1691,103 @@ describe('FeladatsorSzerkesztoComponent', () => {
       component.updateMetadata(1);
 
       expect(taskSetStoreMock.updateTaskSet).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('F: irodai feladatok', () => {
+    const officeTask = (overrides: Partial<TeacherTaskDto> = {}): TeacherTaskDto => ({
+      id: 7,
+      title: 'Meghívó',
+      description: 'd',
+      maxPoints: 10,
+      taskOrder: 1,
+      taskTypeIds: [1],
+      subTasks: [{ id: 70, label: 'a)', description: 'Cím formázása', points: 10, snippets: [] }],
+      completeSolutionSnippets: [],
+      ...overrides,
+    });
+    const file = (overrides: Partial<TeacherFileDto>): TeacherFileDto => ({
+      id: 'f1',
+      kind: 'OfficeSource',
+      originalFileName: 'nyers.txt',
+      contentType: 'text/plain',
+      sizeBytes: 10,
+      createdAt: '2026-10-07T10:00:00Z',
+      url: '/api/teacher-files/f1',
+      taskId: 7,
+      ...overrides,
+    });
+    const fileEvent = (files: File[]) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      Object.defineProperty(input, 'files', { value: files });
+      return { target: input } as unknown as Event;
+    };
+
+    it('a típusválasztó az irodai típusokat is kínálja; az üres irodai blokk alapból csukva, a feladatot tartalmazó nyitva', () => {
+      configure(makeDetail({ tasks: [officeTask()] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      expect(component.taskTypes.map((t) => t.label)).toEqual([
+        'Programozás', 'SQL', 'Szövegszerkesztés', 'Táblázatkezelés', 'Prezentáció', 'Grafika', 'Weblap',
+      ]);
+      expect(component.taskTypes.map((t) => t.id)).toEqual([6, 5, 1, 2, 3, 4, 7]);
+      expect(component.isSectionExpanded(1)).toBe(true); // van benne feladat
+      expect(component.isSectionExpanded(2)).toBe(false); // üres irodai blokk
+      expect(component.isSectionExpanded(6)).toBe(true);
+      component.toggleSection(2);
+      expect(component.isSectionExpanded(2)).toBe(true);
+    });
+
+    it('irodai feladatnál nincs kódrészlet- és összevont-megoldás-szerkesztő, helyette a Fájlok részre utal', () => {
+      configure(makeDetail({ tasks: [officeTask()] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(7);
+      fixture.detectChanges();
+      const text = fixture.nativeElement.textContent as string;
+
+      expect(text).not.toContain('Kódrészletek mentése');
+      expect(text).not.toContain('Összevont megoldás');
+      expect(fixture.nativeElement.querySelector('[data-testid="office-files-hint"]')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('app-automatikus-javitas')).not.toBeNull();
+    });
+
+    it('a Fájlok részen feladatonként „Forrásfájlok” és „Megoldásod”; a feladathoz kötött fájl ott jelenik meg, nem a feladatsor-szintű listában', () => {
+      configure(
+        makeDetail({
+          tasks: [officeTask()],
+          files: [file({}), file({ id: 'f2', kind: 'CreateSql', originalFileName: 'create.sql', taskId: null })],
+        }),
+      );
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const block: HTMLElement = fixture.nativeElement.querySelector('[data-testid="office-files-7"]');
+
+      expect(block.querySelector('[data-testid="office-slot-OfficeSource"]')!.textContent).toContain('nyers.txt');
+      expect(block.textContent).toContain('Megoldásod');
+      expect(block.querySelector('[data-testid="office-solution-missing"]')!.textContent).toContain(
+        'Töltsd fel a saját megoldásodat – ebből készül a szempontlista.',
+      );
+      expect(fixture.componentInstance.taskSetFiles().map((f) => f.id)).toEqual(['f2']);
+    });
+
+    it('feltöltéskor a nem elfogadott típusú vagy 20 MB fölötti fájlt kihagyja és megnevezi, a többit a feladathoz tölti fel', () => {
+      configure(makeDetail({ tasks: [officeTask()] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const toast = TestBed.inject(ToastService);
+      const warning = vi.spyOn(toast, 'warning');
+      const ok = new File(['x'], 'megoldas.DOCX');
+      const bad = new File(['x'], 'virus.exe');
+      const big = new File(['x'], 'nagy.png');
+      Object.defineProperty(big, 'size', { value: 21 * 1024 * 1024 });
+
+      fixture.componentInstance.uploadOfficeFiles(1, 7, 'OfficeSolution', fileEvent([ok, bad, big]));
+
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('virus.exe, nagy.png'), 6000);
+      expect(taskSetStoreMock.uploadFiles).toHaveBeenCalledWith(1, 'OfficeSolution', [ok], 7, expect.any(Function));
     });
   });
 });
