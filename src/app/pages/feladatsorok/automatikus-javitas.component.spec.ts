@@ -29,11 +29,14 @@ function makeQuality(overrides: Partial<GradingQualityDto> = {}): GradingQuality
 }
 
 describe('AutomatikusJavitasComponent', () => {
-  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn> };
+  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn>; getRubric: ReturnType<typeof vi.fn>; getRubricQuota: ReturnType<typeof vi.fn> };
 
   function create(quality: GradingQualityDto | Error, task = makeTask()) {
     rubricServiceMock = {
       getGradingQuality: vi.fn(() => (quality instanceof Error ? throwError(() => ({ error: { errorMessage: quality.message } })) : of(quality))),
+      // A beágyazott szempontlista-panel: még nincs lista.
+      getRubric: vi.fn(() => of(null)),
+      getRubricQuota: vi.fn(() => of({ used: 0, limit: 30, month: '2026-10' })),
     };
     TestBed.configureTestingModule({
       imports: [AutomatikusJavitasComponent],

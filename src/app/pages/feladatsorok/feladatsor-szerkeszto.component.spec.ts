@@ -58,7 +58,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
   // Alapból minden feladat automatikus javítása „zöld” - a publikálási figyelmeztetés-tesztek írják felül.
-  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn> };
+  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn>; getRubric: ReturnType<typeof vi.fn>; getRubricQuota: ReturnType<typeof vi.fn> };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -95,6 +95,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
       getGradingQuality: vi.fn(() =>
         of({ kind: 'code', level: 'green', checks: [], rubric: { status: 'approved', itemCount: 1, machineCount: 0 } } as GradingQualityDto),
       ),
+      getRubric: vi.fn(() => of(null)),
+      getRubricQuota: vi.fn(() => of({ used: 0, limit: 30, month: '2026-10' })),
     };
 
     TestBed.configureTestingModule({

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untr
 import { GradingQualityCheckDto, GradingQualityDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { SzempontlistaComponent } from './szempontlista.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /** Az állapot közérthető, egysoros összefoglalója (a kártyán és a közzétételi figyelmeztetésben is ez áll). */
@@ -31,7 +32,8 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
 
 /**
  * „Automatikus javítás” blokk egy feladatkártyán: a `grading-quality` végpont alapján
- * zöld/sárga/piros állapot és a feltételek listája (pipa vagy teendő).
+ * zöld/sárga/piros állapot és a feltételek listája (pipa vagy teendő), alatta a tanári
+ * szempontlista (`app-szempontlista`).
  *
  * A minőséget a feladat MINDEN változásakor újratölti: a store minden sikeres mutáció
  * (kódrészlet-mentés, fájlfeltöltés, részfeladat-módosítás) után a teljes feladatsort
@@ -42,7 +44,7 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-automatikus-javitas',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, SzempontlistaComponent],
   template: `
     <div class="bg-bg-panel rounded-xl p-3" data-testid="auto-grading-block">
       <p class="text-sm font-medium mb-2">Automatikus javítás</p>
@@ -75,6 +77,9 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
       } @else {
         <p class="text-sm text-text-muted">Ellenőrzés…</p>
       }
+
+      <!-- A lista minden változása (vázlat, jóváhagyás) a javítás-minőséget is érinti. -->
+      <app-szempontlista [taskSetId]="taskSetId()" [task]="task()" [quality]="quality()" (changed)="loadQuality()" />
     </div>
   `,
 })
