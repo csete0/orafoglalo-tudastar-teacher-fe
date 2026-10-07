@@ -7,7 +7,8 @@ import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-task
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
+import { GradingQualityDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
+import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -56,6 +57,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
   };
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
+  // Alapból minden feladat automatikus javítása „zöld” - a publikálási figyelmeztetés-tesztek írják felül.
+  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn> };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -88,6 +91,11 @@ describe('FeladatsorSzerkesztoComponent', () => {
       revoke: vi.fn(),
     };
     confirmServiceMock = { ask: vi.fn().mockResolvedValue(false), pending: signal(null), resolve: vi.fn() };
+    rubricServiceMock = {
+      getGradingQuality: vi.fn(() =>
+        of({ kind: 'code', level: 'green', checks: [], rubric: { status: 'approved', itemCount: 1, machineCount: 0 } } as GradingQualityDto),
+      ),
+    };
 
     TestBed.configureTestingModule({
       imports: [FeladatsorSzerkesztoComponent],
@@ -96,6 +104,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
         { provide: SchoolStore, useValue: schoolStoreMock },
         { provide: AuthorizedFileService, useValue: authorizedFileServiceMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
+        { provide: TeacherRubricService, useValue: rubricServiceMock },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } },
@@ -395,6 +404,61 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+  });
+
+  describe('publikálás hiányos automatikus javítással', () => {
+    const task = (id: number, title: string) => ({
+      id, title, description: 'd', maxPoints: 10, taskOrder: id, taskTypeIds: [6], subTasks: [], completeSolutionSnippets: [],
+    });
+
+    it('ha egy feladat sárga/piros, megerősítő ablak sorolja fel a hiányokat; elutasításkor nem publikál', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Rendben'), task(2, 'Hiányos')] }));
+      rubricServiceMock.getGradingQuality.mockImplementation((_: number, taskId: number) =>
+        of(
+          taskId === 2
+            ? ({
+                kind: 'code',
+                level: 'red',
+                checks: [{ key: 'reference', ok: false, label: 'Nincs referencia', hint: 'Add meg a teljes referencia-megoldást.' }],
+                rubric: { status: 'none', itemCount: 0, machineCount: 0 },
+              } as GradingQualityDto)
+            : ({ kind: 'code', level: 'green', checks: [], rubric: { status: 'approved', itemCount: 1, machineCount: 0 } } as GradingQualityDto),
+        ),
+      );
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(confirmServiceMock.ask).toHaveBeenCalledTimes(1);
+      const message: string = confirmServiceMock.ask.mock.calls[0][0].message;
+      expect(message).toContain('2. Hiányos');
+      expect(message).toContain('Add meg a teljes referencia-megoldást.');
+      expect(message).not.toContain('Rendben');
+      expect(taskSetStoreMock.publish).not.toHaveBeenCalled();
+    });
+
+    it('a figyelmeztetés nem tiltás: megerősítés után publikál', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Hiányos')] }));
+      rubricServiceMock.getGradingQuality.mockReturnValue(
+        of({ kind: 'code', level: 'yellow', checks: [], rubric: { status: 'none', itemCount: 0, machineCount: 0 } } as GradingQualityDto),
+      );
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it('ha minden feladat zöld, nem kérdez rá', async () => {
+      configure(makeDetail({ tasks: [task(1, 'Rendben')] }));
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+
+      await component.publish(1);
+
+      expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+      expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('publish() megvárja a schoolStore.loading() lezárását race esetén, mielőtt eldönti, kell-e megerősítés (UI-TT-47)', async () => {

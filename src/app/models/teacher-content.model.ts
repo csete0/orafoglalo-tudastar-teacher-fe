@@ -144,6 +144,67 @@ export interface TeacherFileDto {
   url: string;
 }
 
+// ── Automatikus javítás minősége + tanári szempontlista (TANARI-SZEMPONTLISTA-API.md) ──
+
+/** Zöld = pontos, sárga = működik, de pontatlanabb, piros = nem lesz (pontos) automatikus javítás. */
+export type GradingQualityLevel = 'green' | 'yellow' | 'red';
+
+export interface GradingQualityCheckDto {
+  /** reference | referenceRuns | stdin | rubric | solutionFile | subtasks */
+  key: string;
+  ok: boolean;
+  label: string;
+  /** Teendő, ha a feltétel nem teljesül. */
+  hint?: string | null;
+}
+
+/** GET api/teacher/task-sets/{taskSetId}/tasks/{taskId}/grading-quality */
+export interface GradingQualityDto {
+  kind: 'code' | 'sql' | 'office';
+  level: GradingQualityLevel;
+  checks: GradingQualityCheckDto[];
+  rubric: { status: 'none' | 'draft' | 'approved'; itemCount: number; machineCount: number };
+}
+
+export interface TeacherRubricItemDto {
+  id: number;
+  order: number;
+  subTaskId: number | null;
+  section: string | null;
+  text: string;
+  points: number;
+  /** Van gépi szabálya (RuleJson). A szabályt a tanár nem szerkesztheti, csak a tételt törölheti. */
+  machine: boolean;
+  /** A kapu eredménye a tanár megoldásán; kód/SQL tételnél null. */
+  gate: 'ok' | 'failed' | null;
+  gateReason: string | null;
+}
+
+/** GET …/rubric (a legfrissebb tanári lista: vázlat vagy jóváhagyott). */
+export interface TeacherRubricDto {
+  id: number;
+  status: 'draft' | 'approved';
+  rawTotal: number;
+  examPoints: number;
+  model: string | null;
+  createdAt: string;
+  items: TeacherRubricItemDto[];
+  /** Jóváhagyást akadályozó hibák. */
+  problems: string[];
+}
+
+export interface UpdateTeacherRubricItemRequest {
+  text: string;
+  points: number;
+}
+
+/** GET api/teacher/rubric-quota - a havi szempontlista-készítési keret. */
+export interface RubricQuotaDto {
+  used: number;
+  limit: number;
+  month: string;
+}
+
 export interface AssignTaskSetToGroupRequest {
   groupId: number;
   opensAt?: string | null;

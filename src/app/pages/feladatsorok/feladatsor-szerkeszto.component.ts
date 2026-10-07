@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, filter, firstValueFrom, of, take } from 'rxjs';
+import { catchError, filter, firstValueFrom, forkJoin, of, take } from 'rxjs';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { SkillPickerComponent } from '../../shared/skill-picker/skill-picker.component';
@@ -12,13 +12,15 @@ import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
-import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherSubTaskDto, TeacherTaskDto } from '../../models/teacher-content.model';
+import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherSubTaskDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { environment } from '../../../environments/environment';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
+import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -56,7 +58,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -263,6 +265,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
                       @if (expandedTaskId() === task.id) {
                         <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
+                          <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
+                          <app-automatikus-javitas [taskSetId]="detail.id" [task]="task" />
+
                           <!-- Részfeladatok -->
                           @for (solution of task.subTasks; track solution.id) {
                             <div class="bg-bg-panel rounded-xl p-3">
@@ -647,6 +652,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly schoolStore = inject(SchoolStore);
   private readonly authorizedFileService = inject(AuthorizedFileService);
   private readonly taskSetService = inject(TeacherTaskSetService);
+  private readonly rubricService = inject(TeacherRubricService);
   readonly groupStore = inject(GroupStore);
   private readonly fb = inject(FormBuilder);
   // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
@@ -1529,6 +1535,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Hiányos automatikus javítás: figyelmeztetünk, de nem tiltjuk a publikálást. Feladat
+    // nélkül nincs mit ellenőrizni - ilyenkor await sincs, a fenti szinkron út megmarad.
+    if (detail && detail.tasks.length > 0 && !(await this.confirmGradingGaps(detail))) {
+      this._publishing = false;
+      return;
+    }
+
     if (this.schoolStore.schools().length > 0) {
       const confirmed = await this.confirmService.ask({
         message:
@@ -1543,6 +1556,43 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.store.publish(taskSetId, () => {
       this._publishing = false;
       this.toastService.success('Feladatsor publikálva.');
+    });
+  }
+
+  /**
+   * Publikálás előtt friss állapotot kér MINDEN feladat automatikus javításáról; ha bármelyik
+   * sárga vagy piros, megerősítő ablakban felsorolja a hiányokat. Nem tilt: a tanár tudatosan
+   * dönthet úgy, hogy így adja ki (pl. maga javítja). Egy sikertelen lekérést kihagyunk - a
+   * figyelmeztetés hiánya nem akadályozhatja a publikálást.
+   */
+  private async confirmGradingGaps(detail: TeacherTaskSetDetailDto): Promise<boolean> {
+    const qualities = await firstValueFrom(
+      forkJoin(
+        detail.tasks.map((task) =>
+          this.rubricService.getGradingQuality(detail.id, task.id).pipe(catchError(() => of(null))),
+        ),
+      ),
+    );
+    const gaps = detail.tasks
+      .map((task, i) => ({ task, quality: qualities[i] }))
+      .filter((x) => x.quality && x.quality.level !== 'green');
+    if (gaps.length === 0) return true;
+
+    const lines = gaps.map(({ task, quality }) => {
+      const todos = quality!.checks
+        .map((c) => gradingCheckHint(c) ?? (c.ok ? null : c.label))
+        .filter((t): t is string => !!t)
+        .map((t) => `   – ${t}`);
+      return [`• ${task.taskOrder}. ${task.title}: ${gradingQualityHeadline(quality!)}`, ...todos].join('\n');
+    });
+    return this.confirmService.ask({
+      title: 'Hiányos automatikus javítás',
+      message:
+        'Néhány feladatnál a diákok beadásainak gépi javítása pontatlanabb lesz, vagy el is marad:\n\n' +
+        lines.join('\n') +
+        '\n\nA hiányokat a feladatkártyák „Automatikus javítás” részén pótolhatod. Publikálod mégis?',
+      confirmLabel: 'Publikálás mégis',
+      cancelLabel: 'Vissza',
     });
   }
 }
