@@ -654,7 +654,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   <span class="font-semibold">Dolgozatként adom ki</span>
                   <span class="block text-sm text-text-muted">
                     Egyszer írható meg, szünet nélkül, a megadott időkorláttal. A feladatok a kezdésig rejtve maradnak,
-                    a rendszer automatikusan pontoz, az eredményt te teszed közzé. Csak a programozási és SQL-feladatok kerülnek bele.
+                    a rendszer automatikusan pontoz, az eredményt te teszed közzé. Minden feladattípus belekerül (programozás, SQL, szövegszerkesztés, táblázatkezelés, prezentáció, grafika, weblap).
                   </span>
                 </span>
               </label>
