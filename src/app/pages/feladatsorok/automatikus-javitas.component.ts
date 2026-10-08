@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { GradingQualityCheckDto, GradingQualityDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { IconComponent } from '../../shared/icon/icon.component';
@@ -38,7 +38,9 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
  * A minőséget a feladat MINDEN változásakor újratölti: a store minden sikeres mutáció
  * (kódrészlet-mentés, fájlfeltöltés, részfeladat-módosítás) után a teljes feladatsort
  * újratölti, így a `task` input új objektumot kap - ez a jel, hogy a referencia, a fájlok
- * vagy a részfeladatok változhattak.
+ * vagy a részfeladatok változhattak. A tesztbemenet mentése nem a store-on megy át, ezért ott
+ * a szerkesztő hívja a `loadQuality()`-t; a „stdin” teendő a `stdinRequested` jelzéssel a
+ * „Tesztbemenet” részhez vezet.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,6 +70,11 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
                 @if (checkHint(check); as hint) {
                   <span class="block text-text-muted">{{ hint }}</span>
                 }
+                @if (check.key === 'stdin' && !check.ok) {
+                  <button type="button" class="text-primary hover:underline" (click)="stdinRequested.emit()" data-testid="auto-grading-stdin-link">
+                    Tesztbemenet megadása
+                  </button>
+                }
               </span>
             </li>
           }
@@ -88,6 +95,8 @@ export class AutomatikusJavitasComponent {
 
   readonly taskSetId = input.required<number>();
   readonly task = input.required<TeacherTaskDto>();
+  /** A „stdin” teendő gombja: a szerkesztő kinyitja a „Tesztbemenet” részt és odagörget. */
+  readonly stdinRequested = output<void>();
 
   readonly quality = signal<GradingQualityDto | null>(null);
   readonly error = signal<string | null>(null);

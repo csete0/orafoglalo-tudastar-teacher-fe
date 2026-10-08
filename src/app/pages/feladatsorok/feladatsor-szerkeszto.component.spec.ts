@@ -60,7 +60,13 @@ describe('FeladatsorSzerkesztoComponent', () => {
   let authorizedFileServiceMock: { resolveUrl: ReturnType<typeof vi.fn>; revoke: ReturnType<typeof vi.fn> };
   let confirmServiceMock: { ask: ReturnType<typeof vi.fn>; pending: ReturnType<typeof signal<null>>; resolve: ReturnType<typeof vi.fn> };
   // Alapból minden feladat automatikus javítása „zöld” - a publikálási figyelmeztetés-tesztek írják felül.
-  let rubricServiceMock: { getGradingQuality: ReturnType<typeof vi.fn>; getRubric: ReturnType<typeof vi.fn>; getRubricQuota: ReturnType<typeof vi.fn> };
+  let rubricServiceMock: {
+    getGradingQuality: ReturnType<typeof vi.fn>;
+    getRubric: ReturnType<typeof vi.fn>;
+    getRubricQuota: ReturnType<typeof vi.fn>;
+    getRunInput: ReturnType<typeof vi.fn>;
+    saveRunInput: ReturnType<typeof vi.fn>;
+  };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
     taskSetStoreMock = {
@@ -100,6 +106,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
       ),
       getRubric: vi.fn(() => of(null)),
       getRubricQuota: vi.fn(() => of({ used: 0, limit: 30, month: '2026-10' })),
+      getRunInput: vi.fn(() => of({ stdin: null, isRandom: false })),
+      saveRunInput: vi.fn((_: number, __: number, input: { stdin: string | null; isRandom: boolean }) => of(input)),
     };
 
     TestBed.configureTestingModule({
@@ -1801,6 +1809,77 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       expect(warning).toHaveBeenCalledWith(expect.stringContaining('virus.exe, nagy.png'), 6000);
       expect(taskSetStoreMock.uploadFiles).toHaveBeenCalledWith(1, 'OfficeSolution', [ok], 7, expect.any(Function));
+    });
+  });
+
+  describe('Tesztbemenet (tárolt billentyűzetes bemenet)', () => {
+    const codeTask = (taskTypeIds: number[], code = 'x = input()\nprint(x)') => ({
+      id: 9, title: 'Beolvasás', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds, subTasks: [],
+      completeSolutionSnippets: [{ programmingLanguageId: 2, code }],
+    });
+
+    it('kód-feladatnál az Összevont megoldás alatt megjelenik, SQL-feladatnál nem', () => {
+      configure(makeDetail({ tasks: [codeTask([6])] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(9);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('app-tesztbemenet')).not.toBeNull();
+      expect(rubricServiceMock.getRunInput).toHaveBeenCalledWith(1, 9);
+      TestBed.resetTestingModule();
+
+      configure(makeDetail({ tasks: [codeTask([5], 'SELECT 1;')] }));
+      const sql = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      sql.componentInstance.toggleTask(9);
+      sql.detectChanges();
+      expect(sql.nativeElement.querySelector('app-tesztbemenet')).toBeNull();
+    });
+
+    it('mentés után az Automatikus javítás blokk újratölti az állapotot', () => {
+      configure(makeDetail({ tasks: [codeTask([6])] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(9);
+      fixture.detectChanges();
+      const before = rubricServiceMock.getGradingQuality.mock.calls.length;
+
+      const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector('[data-testid="run-input-stdin"]');
+      textarea.value = '5';
+      textarea.dispatchEvent(new Event('input'));
+      (fixture.nativeElement.querySelector('[data-testid="run-input-save"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(rubricServiceMock.saveRunInput).toHaveBeenCalledWith(1, 9, { stdin: '5', isRandom: false });
+      expect(rubricServiceMock.getGradingQuality.mock.calls.length).toBe(before + 1);
+    });
+
+    it('a „stdin” teendő gombja kinyitja a Tesztbemenet részt és odagörget', async () => {
+      configure(makeDetail({ tasks: [codeTask([6], 'print(1)')] }));
+      rubricServiceMock.getGradingQuality.mockReturnValue(
+        of({
+          kind: 'code',
+          level: 'yellow',
+          checks: [{ key: 'stdin', ok: false, label: 'A billentyűzetes bemenethez van tárolt bemenet', hint: 'Add meg.' }],
+          rubric: { status: 'none', itemCount: 0, machineCount: 0 },
+        } as GradingQualityDto),
+      );
+      const scroll = vi.fn();
+      const original = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = scroll;
+      onTestFinished(() => {
+        HTMLElement.prototype.scrollIntoView = original;
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(9);
+      fixture.detectChanges();
+      // A megoldás nem olvas a billentyűzetről: a rész csukva indul.
+      expect(fixture.nativeElement.querySelector('[data-testid="run-input-stdin"]')).toBeNull();
+
+      (fixture.nativeElement.querySelector('[data-testid="auto-grading-stdin-link"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      await new Promise((r) => setTimeout(r));
+
+      expect(fixture.nativeElement.querySelector('[data-testid="run-input-stdin"]')).not.toBeNull();
+      expect(scroll).toHaveBeenCalled();
     });
   });
 });

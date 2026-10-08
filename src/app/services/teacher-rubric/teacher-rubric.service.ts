@@ -6,6 +6,7 @@ import {
   GradingQualityDto,
   RubricQuotaDto,
   TeacherRubricDto,
+  TeacherRunInputDto,
   UpdateTeacherRubricItemRequest,
 } from '../../models/teacher-content.model';
 
@@ -53,6 +54,16 @@ export class TeacherRubricService {
   /** Hiba (`RubricHasProblems`), ha a vázlatnak van jóváhagyást akadályozó problémája. */
   approveRubric(taskSetId: number, taskId: number): Observable<TeacherRubricDto> {
     return this.http.post<TeacherRubricDto>(`${this.taskUrl(taskSetId, taskId)}/rubric/approve`, {});
+  }
+
+  /** A kód-feladat tárolt bemenete (nincs → `{ stdin: null, isRandom: false }`). SQL/irodai feladaton 400. */
+  getRunInput(taskSetId: number, taskId: number): Observable<TeacherRunInputDto> {
+    return this.http.get<TeacherRunInputDto>(`${this.taskUrl(taskSetId, taskId)}/run-input`);
+  }
+
+  /** Legfeljebb 64 KB; üres stdin + isRandom=false törli. Élő vizsga közben 400. */
+  saveRunInput(taskSetId: number, taskId: number, input: TeacherRunInputDto): Observable<TeacherRunInputDto> {
+    return this.http.put<TeacherRunInputDto>(`${this.taskUrl(taskSetId, taskId)}/run-input`, input);
   }
 
   getRubricQuota(): Observable<RubricQuotaDto> {

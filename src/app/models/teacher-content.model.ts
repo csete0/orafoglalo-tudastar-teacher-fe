@@ -172,6 +172,14 @@ export interface GradingQualityDto {
   rubric: { status: 'none' | 'draft' | 'approved'; itemCount: number; machineCount: number };
 }
 
+/** GET/PUT …/run-input: a kód-feladat tárolt bemenete. Üres stdin + isRandom=false mentése törli. */
+export interface TeacherRunInputDto {
+  /** A billentyűzetről beolvasott sorok (soronként egy bemenet); null, ha nincs. */
+  stdin: string | null;
+  /** A program véletlenszámokat használ: a futtatásos összevetés kimarad, az MI pontoz. */
+  isRandom: boolean;
+}
+
 export interface TeacherRubricItemDto {
   id: number;
   order: number;
