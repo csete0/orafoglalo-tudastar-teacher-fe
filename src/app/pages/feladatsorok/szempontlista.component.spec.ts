@@ -52,6 +52,7 @@ function makeRubric(overrides: Partial<TeacherRubricDto> = {}): TeacherRubricDto
     examPoints: 10,
     model: 'claude-opus',
     createdAt: '2026-10-07T10:00:00Z',
+    note: null,
     items: [
       item({ id: 1, order: 1, subTaskId: 101, text: 'A cím félkövér', points: 4, machine: true, gate: 'ok' }),
       item({ id: 2, order: 2, subTaskId: 102, text: 'A táblázat 3 oszlopos', points: 6, gate: 'failed', gateReason: 'a megoldásban 4 oszlop van' }),
@@ -181,6 +182,20 @@ describe('SzempontlistaComponent', () => {
     expect(gates[0]).toContain('teljesült a megoldásodon');
     expect(gates[1]).toBe('nem teljesült a megoldásodon – MI-re állítva: a megoldásban 4 oszlop van');
     expect(el(fixture, 'rubric-status')!.textContent).toContain('Vázlat');
+  });
+
+  it('a modell megjegyzése (pl. szöveg és megoldás eltérése) feltűnően, a lista tetején jelenik meg', () => {
+    const fixture = create(makeRubric({ note: 'A szöveg 20 pontos címet kér, a megoldásodban 16 pontos.' }));
+
+    const note = el(fixture, 'rubric-note')!;
+    expect(note.textContent).toContain('A szöveg 20 pontos címet kér, a megoldásodban 16 pontos.');
+    expect(note.textContent).toContain('nézd át, mielőtt jóváhagyod');
+    // a tételek előtt áll
+    expect(note.compareDocumentPosition(all(fixture, 'rubric-group')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('megjegyzés nélkül nincs figyelmeztető doboz', () => {
+    expect(el(create(makeRubric()), 'rubric-note')).toBeNull();
   });
 
   it('hosszú listánál a csoportok alapból összecsukva, kattintásra nyílnak', () => {

@@ -194,6 +194,8 @@ export interface TeacherRubricDto {
   examPoints: number;
   model: string | null;
   createdAt: string;
+  /** A vázlatot író modell megjegyzése (pl. a feladatszöveg és a megoldás eltérése) vagy a sikertelen önellenőrzés; null, ha nincs. */
+  note: string | null;
   items: TeacherRubricItemDto[];
   /** Jóváhagyást akadályozó hibák. */
   problems: string[];
