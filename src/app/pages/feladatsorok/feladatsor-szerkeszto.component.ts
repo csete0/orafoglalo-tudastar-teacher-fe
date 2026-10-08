@@ -261,9 +261,11 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           </div>
                         </div>
                       } @else {
+                        <!-- min-w-0: enélkül a cím-gomb flex-elemként nem zsugorodhat a cím szélessége alá, így
+                             a truncate nem rövidít, és 375 px-en a „Törlés” kilóg a kártyából. -->
                         <div class="flex justify-between items-start gap-2">
                           <button (click)="toggleTask(task.id)" [attr.aria-expanded]="expandedTaskId() === task.id"
-                            class="text-left flex-1 flex items-start gap-2 group">
+                            class="text-left flex-1 min-w-0 flex items-start gap-2 group" data-testid="task-toggle">
                             <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
                               [class.-rotate-90]="expandedTaskId() !== task.id" />
                             <span class="min-w-0 flex-1">

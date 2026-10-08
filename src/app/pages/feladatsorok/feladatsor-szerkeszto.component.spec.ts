@@ -322,6 +322,51 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(el.querySelector('[data-testid="taskset-title"]')!.parentElement!.parentElement!.className).toContain('flex-[1_1_16rem]');
   });
 
+  // Platform-teszt (2026-10-08): 375 px-en a csukott feladatkártya „Törlés” linkje kilógott, mert a cím-gomb
+  // flex-elemként nem zsugorodhatott a cím szélessége alá (min-width: auto), így a truncate nem rövidített.
+  it('a csukott feladatkártya cím-gombja zsugorodhat (min-w-0), a hosszú cím rövidül, a gombsor nem zsugorodik', () => {
+    const hosszuCim = 'Nagyon hosszú feladatcím, amely mobilon biztosan nem fér ki egy sorban a gombok mellett';
+    const fixture = renderel(makeDetail({
+      tasks: [{ id: 1, title: hosszuCim, description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [], completeSolutionSnippets: [], subTasks: [] }],
+    }));
+    const toggle: HTMLElement = fixture.nativeElement.querySelector('[data-testid="task-toggle"]');
+
+    expect(toggle.classList).toContain('flex-1');
+    expect(toggle.classList).toContain('min-w-0');
+    expect(toggle.querySelector('p.truncate')!.textContent).toContain(hosszuCim);
+    expect(toggle.nextElementSibling!.classList).toContain('shrink-0');
+  });
+
+  // TANARI-SZOVEG-ESCAPE: a leírás sima szöveg - a „<név>” helyőrző szó szerint látszik és nyersen kerül a
+  // szerkesztőbe, a HTML-nek látszó szövegből pedig nem lesz DOM-elem (interpoláció, nem innerHTML).
+  it('a részfeladat szövegében a <név> és a HTML-nek látszó szöveg szó szerint látszik, nyersen szerkeszthető és menthető', async () => {
+    const szoveg = 'Köszöntsd: „Szia, <név>!” <img src=x onerror="window.__xss=1"> List<int> & a < b';
+    const fixture = renderel(makeDetail({
+      tasks: [{
+        id: 1, title: 'F1', description: szoveg, maxPoints: 10, taskOrder: 1, taskTypeIds: [], completeSolutionSnippets: [],
+        subTasks: [{ id: 7, description: szoveg, points: 10, label: '1. feladat', snippets: [], rowVersion: 'rv' }],
+      }],
+    }));
+    const component = fixture.componentInstance;
+    component.toggleTask(1);
+    fixture.detectChanges();
+
+    const leiras: HTMLElement = fixture.nativeElement.querySelector('p.break-words');
+    expect(leiras.textContent!.trim()).toBe(szoveg);
+    expect(fixture.nativeElement.querySelector('img')).toBeNull();
+    expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+
+    component.startEditSolution(component.store.selectedDetail()!.tasks[0].subTasks[0]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const ertekek = [...fixture.nativeElement.querySelectorAll('textarea')].map((t) => (t as HTMLTextAreaElement).value);
+    expect(ertekek).toContain(szoveg);
+
+    component.saveEditSolution(1, component.store.selectedDetail()!.tasks[0].subTasks[0]);
+    expect(taskSetStoreMock.updateSubTask).toHaveBeenCalledWith(1, 7, expect.objectContaining({ description: szoveg }), expect.any(Function));
+  });
+
   it('publikált feladatsornál MEGJELENIK a visszavonás gomb', () => {
     const fixture = renderel(makeDetail({ isPublished: true }));
 
