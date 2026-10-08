@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal, viewChildren } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -21,6 +21,7 @@ import { environment } from '../../../environments/environment';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
+import { TesztbemenetComponent } from './tesztbemenet.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -51,6 +52,7 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
   { id: 7, label: 'Weblap', icon: 'link' },
 ];
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
+const SQL_TASK_TYPE_ID = 5;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -77,7 +79,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -287,7 +289,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
                       @if (expandedTaskId() === task.id) {
                         <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
                           <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
-                          <app-automatikus-javitas [taskSetId]="detail.id" [task]="task" />
+                          <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
+                            (stdinRequested)="openRunInput(task.id)" />
 
                           <!-- Részfeladatok -->
                           @for (solution of task.subTasks; track solution.id) {
@@ -411,6 +414,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
                                 Összevont megoldás mentése
                               </button>
                             </div>
+                            @if (isCodeTask(task)) {
+                              <!-- A billentyűzetről olvasó megoldás tárolt bemenete; mentés után a javítás-minőség újratöltődik. -->
+                              <app-tesztbemenet [taskSetId]="detail.id" [task]="task" (saved)="autoGrading.loadQuality()" />
+                            }
                           }
                         </div>
                       }
@@ -962,6 +969,18 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
    *  javítás a tanár feltöltött megoldásfájljából készült szempontlistával történik. */
   isOfficeTask(task: TeacherTaskDto): boolean {
     return task.taskTypeIds.length === 1 && this.isOfficeType(task.taskTypeIds[0]);
+  }
+
+  // A „Tesztbemenet” részek (a kinyitott kód-feladatoké) - az „Automatikus javítás” „stdin” teendője ide vezet.
+  private readonly runInputPanels = viewChildren(TesztbemenetComponent);
+
+  openRunInput(taskId: number): void {
+    this.runInputPanels().find((p) => p.task().id === taskId)?.open();
+  }
+
+  /** Programozási feladat (nem irodai, nem SQL): ehhez adható meg tárolt billentyűzetes bemenet. */
+  isCodeTask(task: TeacherTaskDto): boolean {
+    return !this.isOfficeTask(task) && !task.taskTypeIds.includes(SQL_TASK_TYPE_ID);
   }
 
   readonly officeTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => this.isOfficeTask(t)));

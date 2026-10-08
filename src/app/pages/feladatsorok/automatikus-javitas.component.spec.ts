@@ -99,6 +99,25 @@ describe('AutomatikusJavitasComponent', () => {
     expect(rubricServiceMock.getGradingQuality).toHaveBeenCalledTimes(2);
   });
 
+  it('a hiányzó tárolt bemenet teendőjénél gomb vezet a Tesztbemenet részhez', () => {
+    const fixture = create(
+      makeQuality({
+        level: 'yellow',
+        checks: [
+          { key: 'stdin', ok: false, label: 'A billentyűzetes bemenethez van tárolt bemenet', hint: 'Add meg a „Tesztbemenet” részben.' },
+          { key: 'reference', ok: true, label: 'Van teljes referencia-megoldás', hint: null },
+        ],
+      }),
+    );
+    const requested = vi.fn();
+    fixture.componentInstance.stdinRequested.subscribe(requested);
+    const links = fixture.nativeElement.querySelectorAll('[data-testid="auto-grading-stdin-link"]');
+
+    expect(links.length).toBe(1);
+    (links[0] as HTMLButtonElement).click();
+    expect(requested).toHaveBeenCalledTimes(1);
+  });
+
   it('lekérési hibánál a hibaüzenetet mutatja', () => {
     const fixture = create(new Error('Nem található feladat.'));
     expect(text(fixture)).toContain('Nem található feladat.');
