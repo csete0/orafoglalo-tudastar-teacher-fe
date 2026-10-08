@@ -174,6 +174,28 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
   });
 
+  it('a gépi tételnél közérthető indok, a nyers szabály-útvonal nélkül; a blokk címe semleges', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    openFirstCell(fixture, makeReview({
+      submissionFiles: [{ id: 'f1', name: 'level.docx', sizeBytes: 83007 }],
+      rubricGrade: {
+        gradeId: 9, draftRubric: false, rawPoints: 0, rawTotal: 1, files: ['level.docx'],
+        items: [
+          { itemId: 1, order: 1, section: null, text: 'A „Fontos:” kezdetű bekezdés félkövér', kind: 'criterion', maxPoints: 1, points: 0, ok: null,
+            reason: 'Gépi ellenőrzés: Paragraphs[?Text~^Fontos:].Runs[*].Bold: nincs adat (elvárt: true).', groupNo: null },
+        ],
+      },
+    }));
+    const rubric = fixture.nativeElement.querySelector('[data-testid="attempt-rubric"]') as HTMLElement;
+    expect(rubric.querySelector('summary')!.textContent).toContain('Szempontonként');
+    expect(rubric.querySelector('summary')!.textContent).not.toContain('(MI)');
+    expect(rubric.querySelector('[data-testid="attempt-rubric-reason"]')!.textContent).toContain('Gépi ellenőrzés: nem teljesült');
+    expect(rubric.querySelector('[data-testid="attempt-rubric-reason-detail"]')!.textContent!.trim()).toBe('nincs adat (elvárt: true).');
+    expect(rubric.textContent).not.toContain('Paragraphs[');
+  });
+
   it('betöltéskor meghívja a loadTaskSetResults-t a route id-vel', () => {
     configure(null);
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
