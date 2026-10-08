@@ -89,6 +89,15 @@ const COLLAPSE_ABOVE_ITEMS = 8;
 
       <!-- ── A lista részfeladatonként ── -->
       @if (rubric(); as r) {
+        @if (r.note) {
+          <div class="flex items-start gap-2 bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm" role="note" data-testid="rubric-note">
+            <app-icon name="warning-triangle" class="w-4 h-4 mt-0.5 block shrink-0 text-warning" />
+            <div class="min-w-0">
+              <p class="font-medium">Az MI megjegyzése a vázlathoz – nézd át, mielőtt jóváhagyod</p>
+              <p class="break-words whitespace-pre-line">{{ r.note }}</p>
+            </div>
+          </div>
+        }
         <p class="text-xs text-text-muted">
           {{ r.items.length }} tétel ({{ machineCount() }} gépi) · {{ r.rawTotal }} pont
           @if (r.rawTotal !== r.examPoints) {

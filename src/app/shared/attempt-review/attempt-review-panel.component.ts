@@ -6,6 +6,7 @@ import { ReportService } from '../../services/report/report.service';
 import { ConfirmService } from '../confirm/confirm.service';
 import { ToastService } from '../toast/toast.service';
 import { LocalSpinnerComponent } from '../local-spinner/local-spinner.component';
+import { gradeReason, GradeReasonView } from '../grade-reason.util';
 
 /** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
 const MAX_FEEDBACK_LENGTH = 2000;
@@ -137,7 +138,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
         @if (r.rubricGrade; as g) {
           <details class="mt-4 text-sm" data-testid="attempt-rubric">
             <summary class="cursor-pointer">
-              <span class="text-xs uppercase tracking-wide text-text-muted">Szempontonként (MI)</span>
+              <span class="text-xs uppercase tracking-wide text-text-muted">Szempontonként</span>
               <strong class="ml-2">{{ g.rawPoints }}/{{ g.rawTotal }} nyers pont</strong>
               @if (g.draftRubric) { <span class="text-xs text-warning ml-1">vázlat-útmutató</span> }
               <span class="text-xs text-text-muted ml-1">– {{ lost(g.items).length }} szempontnál veszett pont</span>
@@ -147,7 +148,10 @@ const MAX_FEEDBACK_LENGTH = 2000;
                 <li [class.text-text-muted]="!isLost(item)">
                   <span class="font-semibold tabular-nums">{{ item.kind === 'statement' ? (item.ok ? '✓' : '✗') : item.points + '/' + item.maxPoints }}</span>
                   {{ item.text }}
-                  @if (item.reason && isLost(item)) { <span class="text-text-muted">– {{ item.reason }}</span> }
+                  @if (isLost(item) && reason(item); as why) {
+                    <span class="text-text-muted" data-testid="attempt-rubric-reason">– {{ why.text }}</span>
+                    @if (why.detail) { <span class="block text-xs text-text-muted" data-testid="attempt-rubric-reason-detail">{{ why.detail }}</span> }
+                  }
                 </li>
               }
             </ul>
@@ -413,6 +417,12 @@ export class AttemptReviewPanelComponent {
   /** Pontot vesztett szempont: állításnál hamis, egyébként a maximumnál kevesebb pont. */
   isLost(item: RubricGradeItemDto): boolean {
     return item.kind === 'statement' ? item.ok === false : item.points < item.maxPoints;
+  }
+
+  /** Az indok közérthetően (a gépi tétel nyers szabály-útvonala nélkül). */
+  reason(item: RubricGradeItemDto): GradeReasonView | null {
+    const state = item.kind === 'statement' ? (item.ok ? 'full' : 'none') : item.points >= item.maxPoints ? 'full' : item.points > 0 ? 'partial' : 'none';
+    return gradeReason(item.reason, state);
   }
 
   lost(items: RubricGradeItemDto[]): RubricGradeItemDto[] {
