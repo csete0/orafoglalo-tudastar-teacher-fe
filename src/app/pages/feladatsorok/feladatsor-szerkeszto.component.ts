@@ -81,16 +81,18 @@ type SnippetDraft = Record<number, Record<number, string>>;
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
-        <div class="flex justify-between items-start mb-6 gap-3">
-          <div class="min-w-0">
+        <!-- Mobilon a műveletek a cím alá törnek (platform-teszt D, 2026-10-08): a shrink-0 gombsor 375 px-en a címet
+             teljesen kiszorította, és a sor 160 px-szel kilógott. -->
+        <div class="flex flex-wrap justify-between items-start mb-6 gap-3" data-testid="taskset-header">
+          <div class="min-w-0 flex-[1_1_16rem]">
             <div class="flex items-center gap-2 flex-wrap">
-              <h1 class="text-2xl font-black tracking-tight truncate min-w-0">{{ detail.title }}</h1>
+              <h1 class="text-2xl font-black tracking-tight truncate min-w-0" data-testid="taskset-title">{{ detail.title }}</h1>
               <span class="badge" [class]="taskSetBadgeClass(detail)">
                 {{ taskSetBadgeLabel(detail) }}</span>
             </div>
             <p class="text-text-muted text-sm mt-1">{{ detail.taskCount }} feladat</p>
           </div>
-          <div class="flex gap-2 items-center shrink-0">
+          <div class="flex flex-wrap gap-2 items-center" data-testid="taskset-actions">
             @if (detail.isPublished) {
               <a [routerLink]="['/feladatsorok', detail.id, 'eredmenyek']" class="text-sm text-primary hover:underline">Eredmények</a>
             }

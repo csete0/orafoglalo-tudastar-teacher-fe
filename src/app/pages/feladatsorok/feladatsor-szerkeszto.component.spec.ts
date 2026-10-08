@@ -301,6 +301,19 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(lines[2]).toBe('10 pont · 2 részfeladat');
   });
 
+  // Platform-teszt D (2026-10-08): 375 px-en a nem törő, shrink-0 gombsor a címet teljesen kiszorította. A jsdom nem mér
+  // elrendezést - a tördelés feltételeit ellenőrizzük; a tényleges 375 px-es képet a böngészős platform-teszt adja.
+  it('a fejléc mobilon tördel: a gombsor nem shrink-0, a címblokk kitöltheti a teljes sort', () => {
+    const fixture = renderel(makeDetail({ isPublished: true, hasExamSessions: true }));
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('[data-testid="taskset-header"]')!.classList).toContain('flex-wrap');
+    const actions = el.querySelector('[data-testid="taskset-actions"]')!;
+    expect(actions.classList).toContain('flex-wrap');
+    expect(actions.classList).not.toContain('shrink-0');
+    expect(el.querySelector('[data-testid="taskset-title"]')!.parentElement!.parentElement!.className).toContain('flex-[1_1_16rem]');
+  });
+
   it('publikált feladatsornál MEGJELENIK a visszavonás gomb', () => {
     const fixture = renderel(makeDetail({ isPublished: true }));
 
