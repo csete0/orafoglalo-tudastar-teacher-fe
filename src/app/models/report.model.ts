@@ -33,6 +33,24 @@ export interface StudentActivityDetailDto extends StudentActivitySummaryDto {
   recentQuizzes: StudentQuizSessionDto[];
   /** UI-UX-T9: a diák csoporttagságai - a KÉRŐ tanár látókörére szűkítve. */
   groups: StudentGroupRefDto[];
+  /**
+   * Gyakorló értékelések (PATRICKS-GYAKORLO-ERTEKELES-TERV.md, 6. fázis): a diák utolsó 20,
+   * gyakorló módban kért MI-értékelése, csak pontszám-szinten (kódpillanatkép nélkül).
+   * Opcionális: a régebbi BE nem adja, ilyenkor a blokk nem jelenik meg.
+   */
+  practiceGrades?: StudentPracticeGradeDto[] | null;
+}
+
+/** Egy gyakorló értékelés a tanári diák-részletekben. NEM vizsgaeredmény. */
+export interface StudentPracticeGradeDto {
+  taskTitle: string;
+  taskSetTitle: string;
+  /** null: még fut vagy hibával zárult az értékelés. */
+  points: number | null;
+  max: number | null;
+  createdAt: string;
+  /** Ugyanennek a feladatnak az előző értékelése (javulás); az első értékelésnél hiányzik. */
+  previousPoints?: number | null;
 }
 
 export interface StudentGroupRefDto {

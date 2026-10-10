@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { Location } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ReportStore } from '../../services/report/report.store';
-import { StudentActivityDetailDto } from '../../models/report.model';
+import { StudentActivityDetailDto, StudentPracticeGradeDto } from '../../models/report.model';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
@@ -136,6 +136,48 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
           </table>
         </div>
         </div>
+
+        <!-- Gyakorló értékelések (PATRICKS-GYAKORLO-ERTEKELES-TERV.md, 6. fázis): csak pontszám-szinten,
+             kódpillanatkép nélkül. Üres listánál vagy ha a BE nem adja a mezőt, a blokk el sem jelenik. -->
+        @if (practiceGrades(detail); as grades) {
+          <h2 class="font-bold mb-1 mt-8">Gyakorló értékelések</h2>
+          <p class="text-xs text-text-muted mb-3">Gyakorlás közben kért MI-értékelések – nem vizsgaeredmények.</p>
+          <div class="card overflow-hidden" data-testid="practice-grades">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
+                  <th class="py-3 px-4">Feladat</th>
+                  <th class="py-3 px-4">Pont</th>
+                  <th class="py-3 px-4">Dátum</th>
+                  <th class="py-3 px-4">Javulás</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (grade of grades; track $index) {
+                  <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
+                    <td class="py-2.5 px-4">
+                      {{ grade.taskTitle }}
+                      <span class="block text-xs text-text-muted">{{ grade.taskSetTitle }}</span>
+                    </td>
+                    <td class="py-2.5 px-4 tabular-nums whitespace-nowrap">
+                      {{ grade.points != null && grade.max != null ? grade.points + ' / ' + grade.max : '–' }}
+                    </td>
+                    <td class="py-2.5 px-4 whitespace-nowrap">{{ grade.createdAt | date: 'yyyy.MM.dd' }}</td>
+                    <td class="py-2.5 px-4 tabular-nums whitespace-nowrap">
+                      @if (improvement(grade); as change) {
+                        <span [class.text-success]="change.delta > 0" [class.text-danger]="change.delta < 0">{{ change.label }}</span>
+                      } @else {
+                        <span class="text-text-muted">–</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          </div>
+        }
       </div>
     } @else if (store.studentDetailLoading()) {
       <app-local-spinner />
@@ -172,6 +214,20 @@ export class DiakReszletekComponent implements OnInit {
       .map((part) => part[0])
       .join('')
       .toUpperCase();
+  }
+
+  /** Az utolsó 20 gyakorló értékelés; null, ha nincs mit mutatni (üres lista vagy régebbi BE mező nélkül). */
+  practiceGrades(detail: StudentActivityDetailDto): StudentPracticeGradeDto[] | null {
+    const grades = detail.practiceGrades ?? [];
+    return grades.length ? grades.slice(0, 20) : null;
+  }
+
+  /** Javulás az ugyanerre a feladatra kért előző értékeléshez képest, pl. „+3 (9 → 12)”. null: első értékelés vagy nincs pont. */
+  improvement(grade: StudentPracticeGradeDto): { delta: number; label: string } | null {
+    if (grade.points == null || grade.previousPoints == null) return null;
+    const delta = grade.points - grade.previousPoints;
+    const sign = delta > 0 ? '+' : delta < 0 ? '−' : '±';
+    return { delta, label: `${sign}${Math.abs(delta)} (${grade.previousPoints} → ${grade.points})` };
   }
 
   stats(detail: StudentActivityDetailDto): { label: string; value: string; icon: IconName; tile: string }[] {
