@@ -536,7 +536,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   <span class="truncate">{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
                 </span>
                 <div class="flex items-center gap-3 shrink-0">
-                  <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
+                  <a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>
                   <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
                 </div>
               </li>
@@ -586,7 +586,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <li class="flex justify-between items-center gap-2 text-sm bg-bg-element rounded-lg px-2 py-1">
                               <span class="truncate min-w-0">{{ file.originalFileName }}</span>
                               <span class="flex items-center gap-3 shrink-0">
-                                <a [href]="downloadHref(file)" target="_blank" class="text-primary hover:underline">Megnyitás</a>
+                                <a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>
                                 <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
                               </span>
                             </li>

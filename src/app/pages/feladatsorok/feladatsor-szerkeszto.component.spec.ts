@@ -780,7 +780,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(h1.className).toContain('truncate');
   });
 
-  it('a "Megnyitás" link a bearer tokennel lekért blob URL-re mutat, nem a nyers (401-et adó) API URL-re', () => {
+  it('a letöltő link a bearer tokennel lekért blob URL-re mutat, nem a nyers (401-et adó) API URL-re', () => {
     configure(
       makeDetail({
         files: [
@@ -797,6 +797,25 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
     expect(link.getAttribute('href')).toBe(`blob:resolved-${expectedApiUrl}`);
+  });
+
+  it('a letöltő link az eredeti fájlnéven ment, nem a blob GUID-ján', () => {
+    // A blob URL-nek nincs fájlneve (a BE Content-Disposition fejléce a blobbal elvész, és cross-origin amúgy sem
+    // olvasható) - név nélküli letöltésnél a böngésző a blob azonosítóját adná névnek.
+    configure(
+      makeDetail({
+        files: [
+          { id: 'f1', kind: 'OfficeSource', originalFileName: 'Árvíztűrő forrás.xlsx', contentType: 'application/octet-stream', sizeBytes: 10, createdAt: '', url: '/api/teacher-files/f1' },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
+    expect(link.getAttribute('download')).toBe('Árvíztűrő forrás.xlsx');
+    expect(link.textContent?.trim()).toBe('Letöltés');
   });
 
   it('UI-TT-163 javítva: nem hívja meg kétszer a resolveUrl()-t ugyanarra a (még fel nem oldott) fájlra, ha a detail két gyors, egymástól FÜGGETLEN mentés miatt kétszer újratöltődik, mielőtt az első blob-letöltés válasza megérkezne — nincs vesztes, sosem revoke-olt blob URL', () => {
