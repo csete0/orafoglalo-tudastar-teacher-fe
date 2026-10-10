@@ -818,6 +818,24 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(link.textContent?.trim()).toBe('Letöltés');
   });
 
+  it('a PDF új lapon nyílik meg (előnézet), nem töltődik le', () => {
+    configure(
+      makeDetail({
+        files: [
+          { id: 'f1', kind: 'SolutionPdf', originalFileName: 'feladatlap.pdf', contentType: 'application/pdf', sizeBytes: 10, createdAt: '', url: '/api/teacher-files/f1' },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.hasAttribute('download')).toBe(false);
+    expect(link.textContent?.trim()).toBe('Megnyitás');
+  });
+
   it('UI-TT-163 javítva: nem hívja meg kétszer a resolveUrl()-t ugyanarra a (még fel nem oldott) fájlra, ha a detail két gyors, egymástól FÜGGETLEN mentés miatt kétszer újratöltődik, mielőtt az első blob-letöltés válasza megérkezne — nincs vesztes, sosem revoke-olt blob URL', () => {
     const file = {
       id: 'f1',

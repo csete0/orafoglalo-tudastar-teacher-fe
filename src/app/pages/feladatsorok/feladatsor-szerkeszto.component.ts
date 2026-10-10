@@ -536,7 +536,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   <span class="truncate">{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
                 </span>
                 <div class="flex items-center gap-3 shrink-0">
-                  <a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>
+                  @if (isPdf(file)) {<a [href]="downloadHref(file)" target="_blank" rel="noopener" class="text-primary hover:underline">Megnyitás</a>} @else {<a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>}
                   <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
                 </div>
               </li>
@@ -586,7 +586,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <li class="flex justify-between items-center gap-2 text-sm bg-bg-element rounded-lg px-2 py-1">
                               <span class="truncate min-w-0">{{ file.originalFileName }}</span>
                               <span class="flex items-center gap-3 shrink-0">
-                                <a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>
+                                @if (isPdf(file)) {<a [href]="downloadHref(file)" target="_blank" rel="noopener" class="text-primary hover:underline">Megnyitás</a>} @else {<a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>}
                                 <button (click)="deleteFile(detail.id, file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
                               </span>
                             </li>
@@ -1089,6 +1089,11 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     for (const url of Object.values(this.resolvedDownloadUrls())) {
       this.authorizedFileService.revoke(url);
     }
+  }
+
+  /** A PDF a böngészőben nyílik meg (új lapon, előnézetnek), minden más fájl az eredeti nevén töltődik le. */
+  isPdf(file: TeacherFileDto): boolean {
+    return file.originalFileName.toLowerCase().endsWith('.pdf');
   }
 
   downloadHref(file: TeacherFileDto): string {
