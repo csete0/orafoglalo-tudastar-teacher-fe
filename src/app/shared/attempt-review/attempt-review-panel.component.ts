@@ -7,6 +7,7 @@ import { ConfirmService } from '../confirm/confirm.service';
 import { ToastService } from '../toast/toast.service';
 import { LocalSpinnerComponent } from '../local-spinner/local-spinner.component';
 import { gradeReason, GradeReasonView } from '../grade-reason.util';
+import { saveBlob } from '../save-blob.util';
 
 /** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
 const MAX_FEEDBACK_LENGTH = 2000;
@@ -435,14 +436,7 @@ export class AttemptReviewPanelComponent {
 
   downloadFile(r: TeacherAttemptReviewDto, f: SubmittedFileDto): void {
     this.reportService.downloadAttemptFile(r.attemptId, f.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = f.name;
-        a.click();
-        URL.revokeObjectURL(url);
-      },
+      next: (blob) => saveBlob(blob, f.name),
       error: () => this.toastService.danger('A fájl nem tölthető le.'),
     });
   }

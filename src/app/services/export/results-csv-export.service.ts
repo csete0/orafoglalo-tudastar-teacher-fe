@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { StudentTaskSetResultRowDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 import { TeacherQuizResultsDto, TeacherQuizStudentResultDto } from '../../models/teacher-quiz.model';
+import { saveBlob } from '../../shared/save-blob.util';
 
 /**
  * Magyar területi beállítású Excel a pontosvesszőt várja mezőelválasztóként —
@@ -36,7 +37,7 @@ export class ResultsCsvExportService {
   exportTaskSetResults(results: TeacherTaskSetResultsDto): void {
     const csv = this.buildCsv(results);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    this.triggerDownload(blob, this.buildFileName(results.title));
+    saveBlob(blob, this.buildFileName(results.title));
   }
 
   /**
@@ -57,7 +58,7 @@ export class ResultsCsvExportService {
       .join('\r\n');
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    this.triggerDownload(blob, this.buildFileName(`${results.title}-${viewSuffix}`));
+    saveBlob(blob, this.buildFileName(`${results.title}-${viewSuffix}`));
   }
 
   private buildQuizRow(s: TeacherQuizStudentResultDto): string[] {
@@ -174,17 +175,4 @@ export class ResultsCsvExportService {
     return `${safeTitle}_eredmenyek_${stamp}.csv`;
   }
 
-  private triggerDownload(blob: Blob, fileName: string): void {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    // A diák-app helperje közvetlenül a click() után revokeol. Kis fájlnál működik,
-    // de egy nagy osztály exportjánál a böngésző még olvashatja az URL-t, amikor az
-    // már érvénytelen — ezért a következő eseményciklusra halasztjuk.
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
 }
