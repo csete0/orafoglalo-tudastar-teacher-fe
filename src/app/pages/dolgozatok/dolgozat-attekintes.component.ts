@@ -122,7 +122,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
                         <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" title="Az idő lejártakor automatikusan adódott be (a mentett munkájából)">lejárt az idő</span>
                       }
                       @if (row.needsManualGrading) {
-                        <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Az AI nem pontozta (elfogyott a havi keret) - pontozd kézzel">kézi pontozás</span>
+                        <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Ezt a dolgozatot az AI nem pontozta (pl. betelt a havi keret, vagy hiba történt a pontozáskor) - pontozd kézzel; amíg pontozatlan, az eredmény nem tehető közzé">kézi pontozás</span>
                       }
                     </td>
                     <td class="py-2.5 px-4 whitespace-nowrap tabular-nums">
