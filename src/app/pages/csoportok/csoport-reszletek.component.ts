@@ -31,14 +31,15 @@ import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
+import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
 
-type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak';
+type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -103,7 +104,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
              a gombok role="tab" + aria-selected nélkül egy képernyőolvasó-felhasználó
              számára 4 néma, állapot nélküli "gomb"-ként hangzott el. -->
         <nav class="flex gap-4 border-b border-border-default mb-6 overflow-x-auto" role="tablist">
-          @for (option of tabs; track option.value) {
+          @for (option of tabs(); track option.value) {
             <button (click)="setTab(option.value)" class="tab-btn"
               [class.tab-btn-active]="tab() === option.value"
               role="tab" [attr.aria-selected]="tab() === option.value">
@@ -360,7 +361,9 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
               @for (p of projectAssignments(); track p.id) {
                 <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
                   <div class="min-w-0 flex-1">
-                    <p class="font-semibold">{{ p.projectTitle }}</p>
+                    <p class="font-semibold">{{ p.projectTitle }}
+                      @if (p.isTest) { <span class="badge badge-warning ml-1">Dolgozat</span> }
+                    </p>
                     <p class="text-xs text-text-muted">
                       {{ p.startedCount }}/{{ p.memberCount }} elkezdte · {{ p.completedCount }} kész
                       @if (p.runtime) { · csak {{ projectRuntimeLabels[p.runtime] }} }
@@ -468,6 +471,10 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
             }
           }
 
+          @case ('vizsgaresz-terkep') {
+            <app-vizsgaresz-terkep [groupId]="group.id" />
+          }
+
           @case ('gyenge-temak') {
             <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
             @if (weakTopicsError(); as err) {
@@ -571,15 +578,18 @@ export class CsoportReszletekComponent implements OnInit {
   readonly weakTopicsLoading = signal(false);
   readonly weakTopicsError = signal<string | null>(null);
 
-  readonly tabs: { value: Tab; label: string }[] = [
+  /** A „Vizsgarész-térkép” fül csak technikumként jelölt intézmény tanárának látszik (mint a technikumi projektek). */
+  readonly tabs = computed<{ value: Tab; label: string }[]>(() => [
     { value: 'tagok', label: 'Tagok' },
     { value: 'kiadva', label: 'Kiadva' },
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
+    ...(this.schoolStore.schools().some((s) => s.schoolType === 'technikum')
+      ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
     { value: 'ranglista', label: 'Ranglista' },
     { value: 'gyenge-temak', label: 'Gyenge témák' },
     { value: 'meghivo', label: 'Meghívó' },
-  ];
+  ]);
 
   readonly tab = signal<Tab>('tagok');
   // ── UI-UX-T3: "Kiadva" fül állapota ──

@@ -13,7 +13,7 @@ const student = (userId: number, name: string, current: number | null, steps: Re
 
 const view: ProjectAssignmentStudentsDto = {
   assignment: { id: 7, projectSlug: 'bufe', projectTitle: 'Büfé-rendelő', groupId: 1, groupName: '11.B', assignedAt: '', opensAt: null, dueAt: null,
-    runtime: null, memberCount: 3, startedCount: 2, completedCount: 0, membersWithoutFullAccess: 1, milestoneCount: 3, freeMilestoneCount: 2 },
+    runtime: null, isTest: false, timeLimitSeconds: null, memberCount: 3, startedCount: 2, completedCount: 0, membersWithoutFullAccess: 1, milestoneCount: 3, freeMilestoneCount: 2 },
   milestones: [1, 2, 3].map((o) => ({ orderNo: o, title: `Lépés ${o}`, kind: 'build', estimatedMinutes: 30, examAreas: [] })),
   students: [
     student(1, 'Anna', 3, [step(1, true, 'onallo'), step(2, true, 'kis-segitseggel'), step(3, false)]),
@@ -23,7 +23,7 @@ const view: ProjectAssignmentStudentsDto = {
 };
 
 describe('ProjektKiadasComponent (osztály-nézet)', () => {
-  async function setup() {
+  async function setup(diak?: string) {
     const thread = (id: number, line: number, lineText: string, over: Partial<CodeCommentThreadDto> = {}): CodeCommentThreadDto =>
       ({ id, path: 'backend/app.py', line, lineText, body: `megjegyzés ${id}`, authorName: 'Kovács tanár', authorIsTeacher: true,
          createdAt: '2026-10-01T09:00:00', resolvedAt: null, replies: [], ...over });
@@ -37,6 +37,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     TestBed.configureTestingModule({ imports: [ProjektKiadasComponent], providers: [provideRouter([]), { provide: TeacherProjectService, useValue: api }] });
     const fixture = TestBed.createComponent(ProjektKiadasComponent);
     fixture.componentRef.setInput('id', '7');
+    if (diak) fixture.componentRef.setInput('diak', diak);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -60,6 +61,12 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     fixture.detectChanges();
     expect(api.studentCode).toHaveBeenCalledWith(7, 1);
     expect(el.querySelector('[data-testid="code-view"]')?.textContent).toContain('print(1)');
+  });
+
+  it('a „diak” query-paraméter (vizsgarész-térképről) betöltéskor megnyitja a diák kódját', async () => {
+    const { el, api } = await setup('1');
+    expect(api.studentCode).toHaveBeenCalledWith(7, 1);
+    expect(el.querySelector('[data-testid="student-code"]')?.textContent).toContain('Anna kódja');
   });
 
   it('sorszámozott kód a megjegyzés-szálakkal: elavult jelölés, új megjegyzés egy sorra, válasz', async () => {

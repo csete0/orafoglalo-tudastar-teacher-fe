@@ -10,6 +10,7 @@ import {
   SchoolDto,
   SchoolGroupDto,
   SchoolMemberDto,
+  SchoolType,
 } from '../../models/school.model';
 import { SchoolLicenseOverviewDto } from '../../models/school-license.model';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
@@ -135,6 +136,21 @@ export class SchoolStore {
     const generation = this._membersGeneration;
     this.mutate(
       this.service.update(id, request),
+      (school) => {
+        this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
+        if (onSuccess) onSuccess();
+        if (generation === this._membersGeneration) this._loading.set(false);
+      },
+      id,
+    );
+  }
+
+  /** Iskolatípus (403, ha az admin rögzítette - a hibaágon a loadMine() frissíti a zárolást is). */
+  setType(id: number, type: SchoolType | null, onSuccess?: () => void): void {
+    // UI-TT-170, ld. update() fenti megjegyzését.
+    const generation = this._membersGeneration;
+    this.mutate(
+      this.service.setType(id, type),
       (school) => {
         this._schools.update((list) => list.map((s) => (s.id === id ? school : s)));
         if (onSuccess) onSuccess();
