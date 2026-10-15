@@ -57,6 +57,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                           (click)="publish(t)">Eredmények közzététele</button>
                 }
               </div>
+              @if (publishWarning()[t.assignmentId]; as warn) {
+                <p class="text-warning text-xs mt-2" role="status" data-testid="publish-warning">{{ warn }}</p>
+              }
               @if (publishError()[t.assignmentId]; as err) {
                 <p class="text-danger text-xs mt-2" role="alert" data-testid="publish-error">{{ err }}</p>
               }
@@ -90,14 +93,14 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                   <td class="py-1.5 px-1.5 text-center">
                     @if (cellOf(s, p.key); as c) {
                       @if (c.fromClassTest && c.sessionId) {
-                        <button type="button" [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [attr.title]="cellTitle(c)"
-                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}</button>
+                        <button type="button" [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
+                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span aria-hidden="true"> !</span>}</button>
                       } @else if (c.assignmentId) {
-                        <a [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [attr.title]="cellTitle(c)"
+                        <a [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
                            [attr.data-testid]="'cell-' + s.userId + '-' + p.key"
                            [routerLink]="['/feladatsorok/projektek/kiadas', c.assignmentId]" [queryParams]="{ diak: s.userId }">{{ c.points }}/{{ c.maxPoints }}</a>
                       } @else {
-                        <span [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [attr.title]="cellTitle(c)"
+                        <span [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
                               [attr.data-testid]="'cell-' + s.userId + '-' + p.key">{{ c.points }}/{{ c.maxPoints }}</span>
                       }
                     } @else {
@@ -121,7 +124,8 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
       </div>
       <p class="text-xs text-text-muted mt-2">
         Részenként a legjobb bírált eredmény; ha a diák írt belőle dolgozatot ebben a csoportban, az számít. Kattints a cellára:
-        a dolgozat beadott változata a bírálattal, a gyakorlás a diák kódja megjegyzésekkel.
+        a dolgozat beadott változata a bírálattal, a gyakorlás a diák kódja megjegyzésekkel. A felkiáltójeles, piros keretes
+        dolgozat-rész bírálata végleg sikertelen volt, ezért 0 pontnak számít.
       </p>
 
       @if (snapshotLoading() || snapshot() || snapshotError()) {
@@ -197,6 +201,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
     .heat-cell { display: inline-block; min-width: 3.25rem; padding: 0.25rem 0.375rem; border-radius: 0.5rem; font-size: 0.75rem;
       font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
     a.heat-cell:hover, button.heat-cell:hover, a.heat-cell:focus-visible, button.heat-cell:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+    .heat-cell--failed { box-shadow: inset 0 0 0 2px var(--color-danger); }
     .heat-cell--empty { color: var(--color-text-muted); background: var(--color-bg-element); }
     .legend-dot { display: inline-block; width: 0.875rem; height: 0.875rem; border-radius: 0.25rem; }
     .compile-output { margin-top: 0.25rem; max-height: 12rem; overflow: auto; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.6875rem;
@@ -229,6 +234,7 @@ export class VizsgareszTerkepComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly publishing = signal<number | null>(null);
   readonly publishError = signal<Record<number, string>>({});
+  readonly publishWarning = signal<Record<number, string>>({});
   readonly snapshot = signal<ExamSessionSnapshotDto | null>(null);
   readonly snapshotLoading = signal(false);
   readonly snapshotError = signal<string | null>(null);
@@ -253,16 +259,21 @@ export class VizsgareszTerkepComponent implements OnInit {
 
   cellTitle(c: HeatmapCellDto): string {
     const source = c.fromClassTest ? 'dolgozat' : c.source === 'exam' ? 'próbavizsga' : 'gyakorlás';
-    return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%`;
+    const failed = c.gradingFailed ? ' – a bírálat végleg sikertelen, 0 pontnak számít' : '';
+    return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%${failed}`;
   }
 
   publish(t: HeatmapTestDto): void {
     this.publishing.set(t.assignmentId);
     this.publishError.update(({ [t.assignmentId]: _, ...rest }) => rest);
     this.api.publish(t.assignmentId).pipe(take(1), finalize(() => this.publishing.set(null))).subscribe({
-      next: () => {
+      next: (r) => {
         this.map.update((m) => m && { ...m, tests: m.tests.map((x) => (x.assignmentId === t.assignmentId ? { ...x, resultsPublished: true } : x)) });
-        this.toast.success(`Közzétéve: ${t.projectTitle}`);
+        this.toast.success(`Közzétéve: ${t.projectTitle} (${r.published} dolgozat)`);
+        if (r.sessionsWithFailedParts > 0) {
+          this.publishWarning.update((w) => ({ ...w, [t.assignmentId]:
+            `${r.sessionsWithFailedParts} dolgozat egy vagy több részének bírálata végleg sikertelen volt – azok a részek 0 pontot kaptak.` }));
+        }
       },
       error: (e) => this.publishError.update((errs) => ({ ...errs, [t.assignmentId]: extractErrorMessage(e, 'A közzététel sikertelen.') })),
     });

@@ -43,6 +43,14 @@ export interface HeatmapCellDto {
   /** Csak vizsga-munkamenet eredményénél. */
   sessionId: number | null;
   gradedAt: string;
+  /** Dolgozat-rész, amelynek bírálata végleg sikertelen (vagy végleg hiányzik): 0 pontnak számít. */
+  gradingFailed: boolean;
+}
+
+/** A közzététel eredménye: közzétett munkamenetek, és ezek közül hánynak van végleg sikertelen (0 pontos) része. */
+export interface PublishResultDto {
+  published: number;
+  sessionsWithFailedParts: number;
 }
 
 export interface HeatmapTheoryDto {

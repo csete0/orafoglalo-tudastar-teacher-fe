@@ -9,7 +9,7 @@ import { ExamSessionSnapshotDto, HeatmapCellDto, TechnikumHeatmapDto } from '../
 
 const cell = (over: Partial<HeatmapCellDto>): HeatmapCellDto => ({
   partKey: 'console', points: 8, maxPoints: 15, ratio: 8 / 15, source: 'exam', fromClassTest: true, projectSlug: 'konyvtar',
-  projectTitle: 'Könyvtár', assignmentId: 7, sessionId: 31, gradedAt: '2026-10-10T10:00:00', ...over,
+  projectTitle: 'Könyvtár', assignmentId: 7, sessionId: 31, gradedAt: '2026-10-10T10:00:00', gradingFailed: false, ...over,
 });
 
 const heatmap: TechnikumHeatmapDto = {
@@ -25,6 +25,7 @@ const heatmap: TechnikumHeatmapDto = {
       cells: [
         cell({}),
         cell({ partKey: 'api', points: 14, ratio: 14 / 15, source: 'practice', fromClassTest: false, assignmentId: 9, sessionId: null }),
+        cell({ partKey: 'web', points: 0, maxPoints: 10, ratio: 0, gradingFailed: true }),
         cell({ partKey: 'client', points: 9, ratio: 0.6, source: 'practice', fromClassTest: false, assignmentId: null, sessionId: null }),
       ],
     },
@@ -50,7 +51,7 @@ const snapshot: ExamSessionSnapshotDto = {
 };
 
 describe('VizsgareszTerkepComponent', () => {
-  async function setup(publish = vi.fn(() => of(undefined))) {
+  async function setup(publish = vi.fn(() => of({ published: 4, sessionsWithFailedParts: 0 }))) {
     const api = { heatmap: vi.fn(() => of(structuredClone(heatmap))), snapshot: vi.fn(() => of(snapshot)), publish };
     const toast = { success: vi.fn() };
     TestBed.configureTestingModule({
@@ -78,7 +79,16 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="cell-55-client"]')!.className).toContain('bg-primary-subtle');
     expect(el.querySelector('[data-testid="theory-55"]')!.className).toContain('bg-danger-subtle');
     expect(el.querySelector('[data-testid="theory-55"]')!.textContent!.trim()).toBe('5/40');
-    expect(row.querySelectorAll('.heat-cell--empty').length).toBe(2);
+    expect(row.querySelectorAll('.heat-cell--empty').length).toBe(1);
+  });
+
+  it('a végleg sikertelen bírálatú dolgozat-rész 0 pontként, külön jelölve (és nem a sikereseké)', async () => {
+    const { el } = await setup();
+    const failed = el.querySelector('[data-testid="cell-55-web"]')!;
+    expect(failed.className).toContain('heat-cell--failed');
+    expect(failed.textContent).toContain('0/10');
+    expect(failed.getAttribute('title')).toContain('végleg sikertelen');
+    expect(el.querySelector('[data-testid="cell-55-console"]')!.className).not.toContain('heat-cell--failed');
   });
 
   it('a nem dolgozatból jövő cella a projekt osztály-nézetébe visz a diák kódjához; kiadás nélkül nem kattintható', async () => {
@@ -122,6 +132,14 @@ describe('VizsgareszTerkepComponent', () => {
     expect(api.publish).toHaveBeenCalledWith(7);
     expect(toast.success).toHaveBeenCalled();
     expect(el.querySelector('[data-testid="technikum-test-7"]')!.textContent).toContain('Eredmény közzétéve');
+    expect(el.querySelector('[data-testid="publish-warning"]')).toBeNull();
+  });
+
+  it('közzététel: ha egyes részek bírálata végleg sikertelen, figyelmeztet (0 pont)', async () => {
+    const { fixture, el } = await setup(vi.fn(() => of({ published: 4, sessionsWithFailedParts: 2 })));
+    el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="publish-warning"]')!.textContent).toContain('2 dolgozat egy vagy több részének bírálata végleg sikertelen');
   });
 
   it('közzététel: a BE 400-as üzenete változatlanul látszik (pl. még tart a bírálat)', async () => {
