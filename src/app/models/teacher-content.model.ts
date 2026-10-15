@@ -258,3 +258,72 @@ export interface TeacherGroupTaskSetAssignmentDto {
   timeLimitSeconds?: number | null;
   resultsPublishedAt?: string | null;
 }
+
+// ── Hiányzó SQL-fájl elkészítése (POST /teacher/task-sets/{id}/sql-generation) ──
+
+/** createSql: create.sql → create_lite.sql · createLiteSql: create_lite.sql → create.sql · dataFiles: bemeneti fájlokból mindkettő. */
+export type SqlGenerationSource = 'createSql' | 'createLiteSql' | 'dataFiles';
+
+export interface SqlGenerationRequest {
+  source: SqlGenerationSource;
+  description?: string | null;
+  /** Adatfájlos módban a használt bemeneti fájlok (üres → mind). */
+  fileIds?: string[] | null;
+  hasHeader?: boolean;
+}
+
+export interface GeneratedSqlFileDto {
+  kind: 'CreateSql' | 'CreateLiteSql';
+  fileName: string;
+  content: string;
+  sizeBytes: number;
+}
+
+export interface GeneratedColumnDto {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  notNull: boolean;
+  /** „tábla.oszlop”, ha idegen kulcs. */
+  references: string | null;
+}
+
+export interface GeneratedTableDto {
+  name: string;
+  /** A forrás (tábla neve vagy adatfájl neve). */
+  source: string;
+  columns: GeneratedColumnDto[];
+  expectedRows: number;
+  /** A futtatón (SQLite) megszámolt sorok; null, ha nem futott. */
+  actualRows: number | null;
+}
+
+export interface SqlValidationDto {
+  status: 'ok' | 'failed' | 'unavailable';
+  errors: string[];
+}
+
+export interface ReferenceSubtaskCheckDto {
+  label: string;
+  status: 'match' | 'different' | 'ok' | 'error' | 'not_query';
+  rows: number | null;
+  message: string | null;
+}
+
+export interface ReferenceCheckDto {
+  taskId: number;
+  taskTitle: string;
+  subtasks: ReferenceSubtaskCheckDto[];
+}
+
+export interface SqlGenerationResultDto {
+  source: SqlGenerationSource;
+  model: string;
+  files: GeneratedSqlFileDto[];
+  tables: GeneratedTableDto[];
+  warnings: string[];
+  validation: SqlValidationDto;
+  referenceChecks: ReferenceCheckDto[];
+  aiNotes: string | null;
+  canSave: boolean;
+}
