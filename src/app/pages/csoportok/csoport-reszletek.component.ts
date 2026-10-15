@@ -472,7 +472,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           }
 
           @case ('vizsgaresz-terkep') {
-            <app-vizsgaresz-terkep [groupId]="group.id" />
+            <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepOff.set(true); setTab('tagok')" />
           }
 
           @case ('gyenge-temak') {
@@ -578,13 +578,16 @@ export class CsoportReszletekComponent implements OnInit {
   readonly weakTopicsLoading = signal(false);
   readonly weakTopicsError = signal<string | null>(null);
 
+  /** Igaz, ha a BE jelezte: a technikumi modul ki van kapcsolva (a fül elrejtve). */
+  readonly terkepOff = signal(false);
+
   /** A „Vizsgarész-térkép” fül csak technikumként jelölt intézmény tanárának látszik (mint a technikumi projektek). */
   readonly tabs = computed<{ value: Tab; label: string }[]>(() => [
     { value: 'tagok', label: 'Tagok' },
     { value: 'kiadva', label: 'Kiadva' },
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
-    ...(this.schoolStore.schools().some((s) => s.schoolType === 'technikum')
+    ...(!this.terkepOff() && this.schoolStore.schools().some((s) => s.schoolType === 'technikum')
       ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
     { value: 'ranglista', label: 'Ranglista' },
     { value: 'gyenge-temak', label: 'Gyenge témák' },

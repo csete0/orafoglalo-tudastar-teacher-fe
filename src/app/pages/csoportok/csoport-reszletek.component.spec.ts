@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { NEVER, of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { NEVER, of, throwError } from 'rxjs';
 import { CsoportReszletekComponent } from './csoport-reszletek.component';
 import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
@@ -209,6 +210,22 @@ describe('CsoportReszletekComponent', () => {
     tab.click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).not.toBeNull();
+  });
+
+  it('kikapcsolt technikumi modulnál (404 FeatureDisabled) a Vizsgarész-térkép fül eltűnik és a Tagok marad', () => {
+    const school = { id: 5, name: 'Iskola', slug: 'iskola', createdAt: '', groupCount: 1,
+      myRole: 'Teacher' as const, teacherCount: 3, schoolType: 'technikum' as const, schoolTypeSetByAdmin: false };
+    configure(makeGroup(), [school]);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { heatmap: vi.fn(() => throwError(() => new HttpErrorResponse({
+      status: 404, error: { errorType: 'FeatureDisabled', errorMessage: 'A technikumi modul nincs bekapcsolva.' } }))) } });
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    const labels = () => [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].map((b: Element) => b.textContent?.trim());
+    expect(labels()).toContain('Vizsgarész-térkép');
+    (([...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[]).find((b) => b.textContent?.trim() === 'Vizsgarész-térkép'))!.click();
+    fixture.detectChanges();
+    expect(labels()).not.toContain('Vizsgarész-térkép');
+    expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).toBeNull();
   });
 
   // UI-TT-178: a DateRangeFilterComponent egy @switch/@case ágban él, ezért minden

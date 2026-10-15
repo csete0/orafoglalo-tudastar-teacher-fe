@@ -257,7 +257,7 @@ export class ProjektKiadasComponent implements OnInit {
       next: (v) => {
         this.view.set(v);
         const s = v.students.find((x) => String(x.userId) === this.diak());
-        if (s) this.openCode(s);
+        if (s?.runtime) this.openCode(s);
       },
       error: (e) => this.error.set(extractErrorMessage(e, 'Az osztály-nézet betöltése sikertelen.')),
     });

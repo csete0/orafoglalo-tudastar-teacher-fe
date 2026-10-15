@@ -14,7 +14,7 @@ const assignment = (over: Partial<ProjectAssignmentDto> = {}): ProjectAssignment
   membersWithoutFullAccess: 3, milestoneCount: 6, freeMilestoneCount: 2, ...over,
 });
 const project = (assignments: ProjectAssignmentDto[] = []): TeacherProjectDto => ({
-  slug: 'bufe-rendelo', title: 'Büfé-rendelő', summary: 'Rendelés a büfében.', level: 'kozephalado', estimatedHours: 7, previewImageUrl: null,
+  slug: 'bufe-rendelo', title: 'Büfé-rendelő', summary: 'Rendelés a büfében.', level: 'kozephalado', kind: 'practice', estimatedHours: 7, previewImageUrl: null,
   runtimes: ['browser-python', 'browser-js'], freeMilestoneCount: 2, examAreas: [{ key: 'adatbazis', name: 'Adatbázis' }],
   milestones: [{ orderNo: 1, title: 'Az adatbázis', kind: 'build', estimatedMinutes: 45, examAreas: [] }], assignments,
 });
@@ -65,8 +65,8 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
     expect(el.querySelector('[data-testid="assignment-9"]')?.textContent).toContain('12.A');
   });
 
-  it('dolgozat (időkorláttal): csak ASP.NET Core-os projektnél; kezdés és befejezés kötelező, a perc másodpercben megy', async () => {
-    const exam: TeacherProjectDto = { ...project(), slug: 'konyvtar', title: 'Könyvtár', runtimes: ['judge0-aspnet'] };
+  it('dolgozat (időkorláttal): csak vizsgaprojektnél (kind = exam); kezdés és befejezés kötelező, a perc másodpercben megy', async () => {
+    const exam: TeacherProjectDto = { ...project(), slug: 'konyvtar', title: 'Könyvtár', kind: 'exam' };
     const { fixture, el } = await setup([project(), exam]);
     (el.querySelector('[data-testid="assign-open-bufe-rendelo"]') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -91,6 +91,12 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
     fixture.detectChanges();
     expect(api['assign']).not.toHaveBeenCalled();
     expect(el.querySelector('[role="alert"]')!.textContent).toContain('kezdés és a befejezés');
+
+    set('assign-opens', '2026-11-03T10:00');
+    set('assign-due', '2026-11-03T08:00');
+    el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alert"]')!.textContent).toContain('A befejezés nem lehet korábbi, mint a kezdés.');
 
     set('assign-opens', '2026-11-03T08:00');
     set('assign-due', '2026-11-03T10:00');

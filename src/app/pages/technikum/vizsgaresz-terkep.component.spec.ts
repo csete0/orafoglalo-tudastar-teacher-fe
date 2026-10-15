@@ -73,7 +73,9 @@ describe('VizsgareszTerkepComponent', () => {
     expect(headers[1]).toContain('Konzolos alkalmazás');
     expect(headers[6]).toContain('Elméleti teszt');
     const row = el.querySelector('[data-testid="heat-row-55"]')!;
-    expect(row.querySelectorAll('td').length).toBe(7);
+    expect(row.querySelectorAll('td').length).toBe(6);
+    expect(row.querySelector('th[scope="row"]')).not.toBeNull();
+    expect(row.querySelector('.heat-cell--empty .sr-only')!.textContent).toBe('nincs eredmény');
     expect(el.querySelector('[data-testid="cell-55-console"]')!.className).toContain('bg-warning-subtle');
     expect(el.querySelector('[data-testid="cell-55-api"]')!.className).toContain('bg-success-subtle');
     expect(el.querySelector('[data-testid="cell-55-client"]')!.className).toContain('bg-primary-subtle');
@@ -87,6 +89,7 @@ describe('VizsgareszTerkepComponent', () => {
     const failed = el.querySelector('[data-testid="cell-55-web"]')!;
     expect(failed.className).toContain('heat-cell--failed');
     expect(failed.textContent).toContain('0/10');
+    expect(failed.querySelector('.sr-only')!.textContent).toContain('bírálat sikertelen');
     expect(failed.getAttribute('title')).toContain('végleg sikertelen');
     expect(el.querySelector('[data-testid="cell-55-console"]')!.className).not.toContain('heat-cell--failed');
   });
@@ -163,5 +166,22 @@ describe('VizsgareszTerkepComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('A technikumi modul nincs bekapcsolva.');
     expect(fixture.nativeElement.querySelector('[data-testid="heatmap"]')).toBeNull();
+  });
+
+  it('kikapcsolt modulnál (404 FeatureDisabled) jelzi a szülőnek, más hibánál nem', () => {
+    const run = (status: number, errorType: string) => {
+      TestBed.resetTestingModule();
+      const api = { heatmap: vi.fn(() => throwError(() => new HttpErrorResponse({ status, error: { errorType, errorMessage: 'x' } }))) };
+      TestBed.configureTestingModule({ imports: [VizsgareszTerkepComponent], providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }] });
+      const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+      const spy = vi.fn();
+      fixture.componentInstance.unavailable.subscribe(spy);
+      fixture.componentRef.setInput('groupId', 3);
+      fixture.detectChanges();
+      return spy;
+    };
+    expect(run(404, 'FeatureDisabled')).toHaveBeenCalledTimes(1);
+    expect(run(404, 'NotFound')).not.toHaveBeenCalled();
+    expect(run(500, 'Unknown')).not.toHaveBeenCalled();
   });
 });

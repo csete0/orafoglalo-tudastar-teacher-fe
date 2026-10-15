@@ -222,11 +222,10 @@ export class ProjektekListaComponent implements OnInit {
   }
 
   /**
-   * Dolgozat csak technikumi próbavizsgából adható ki (a BE ellenőrzi és 400-zal utasítja el a többit). A katalógus-DTO nem
-   * hozza a projekt fajtáját; a próbavizsga backendje kötötten ASP.NET Core, ezért arra mutatjuk a kapcsolót.
+   * Dolgozat csak technikumi próbavizsgából (`kind === 'exam'`) adható ki (a BE ellenőrzi és 400-zal utasítja el a többit).
    */
   canBeTest(p: TeacherProjectDto): boolean {
-    return p.runtimes.includes('judge0-aspnet');
+    return p.kind === 'exam';
   }
 
   runtimeList(runtimes: ProjectRuntime[]): string {
@@ -238,7 +237,7 @@ export class ProjektekListaComponent implements OnInit {
     const d = this.draft();
     if (!d.groupId) return;
     if (d.opensAt && d.dueAt && new Date(d.opensAt) > new Date(d.dueAt)) {
-      this.formError.set('A határidő nem lehet korábbi, mint a nyitás.');
+      this.formError.set(d.isTest && this.canBeTest(p) ? 'A befejezés nem lehet korábbi, mint a kezdés.' : 'A határidő nem lehet korábbi, mint a nyitás.');
       return;
     }
     const isTest = d.isTest && this.canBeTest(p);

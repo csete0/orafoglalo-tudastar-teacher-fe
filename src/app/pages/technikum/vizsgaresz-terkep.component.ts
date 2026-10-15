@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { finalize, take } from 'rxjs';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
@@ -68,9 +69,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
         </ul>
       }
 
-      <div class="flex flex-wrap gap-3 text-xs mb-3" aria-label="Jelmagyarázat">
+      <div class="flex flex-wrap gap-3 text-xs mb-3" role="group" aria-label="Jelmagyarázat">
         @for (l of legend; track l.heat) {
-          <span class="inline-flex items-center gap-1.5"><span [class]="'legend-dot ' + heatClass[l.heat]"></span>{{ l.label }}</span>
+          <span class="inline-flex items-center gap-1.5"><span [class]="'legend-dot ' + heatClass[l.heat]" aria-hidden="true"></span>{{ l.label }}</span>
         }
       </div>
 
@@ -88,23 +89,23 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
           <tbody>
             @for (s of m.students; track s.userId) {
               <tr class="border-b border-border-default last:border-b-0" [attr.data-testid]="'heat-row-' + s.userId">
-                <td class="py-2 px-3 font-semibold whitespace-nowrap">{{ s.name }}</td>
+                <th scope="row" class="py-2 px-3 font-semibold whitespace-nowrap text-left">{{ s.name }}</th>
                 @for (p of m.parts; track p.key) {
                   <td class="py-1.5 px-1.5 text-center">
                     @if (cellOf(s, p.key); as c) {
                       @if (c.fromClassTest && c.sessionId) {
                         <button type="button" [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
-                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span aria-hidden="true"> !</span>}</button>
+                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span aria-hidden="true"> !</span><span class="sr-only"> – bírálat sikertelen</span>}</button>
                       } @else if (c.assignmentId) {
                         <a [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
                            [attr.data-testid]="'cell-' + s.userId + '-' + p.key"
-                           [routerLink]="['/feladatsorok/projektek/kiadas', c.assignmentId]" [queryParams]="{ diak: s.userId }">{{ c.points }}/{{ c.maxPoints }}</a>
+                           [routerLink]="['/feladatsorok/projektek/kiadas', c.assignmentId]" [queryParams]="{ diak: s.userId }">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}</a>
                       } @else {
                         <span [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
-                              [attr.data-testid]="'cell-' + s.userId + '-' + p.key">{{ c.points }}/{{ c.maxPoints }}</span>
+                              [attr.data-testid]="'cell-' + s.userId + '-' + p.key">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}</span>
                       }
                     } @else {
-                      <span class="heat-cell heat-cell--empty" aria-label="nincs eredmény">–</span>
+                      <span class="heat-cell heat-cell--empty"><span aria-hidden="true">–</span><span class="sr-only">nincs eredmény</span></span>
                     }
                   </td>
                 }
@@ -112,7 +113,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                   @if (s.theory; as t) {
                     <span [class]="'heat-cell ' + heatClass[heat(t.ratio)]" [attr.data-testid]="'theory-' + s.userId">{{ t.points }}/{{ t.maxPoints }}</span>
                   } @else {
-                    <span class="heat-cell heat-cell--empty" aria-label="nincs eredmény">–</span>
+                    <span class="heat-cell heat-cell--empty"><span aria-hidden="true">–</span><span class="sr-only">nincs eredmény</span></span>
                   }
                 </td>
               </tr>
@@ -213,6 +214,8 @@ export class VizsgareszTerkepComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly groupId = input.required<number>();
+  /** A technikumi modul ki van kapcsolva (BE: 404 FeatureDisabled) - a szülő elrejti a fület. */
+  readonly unavailable = output<void>();
 
   readonly utc = parseUtc;
   readonly partLabel = EXAM_PART_LABEL;
@@ -226,7 +229,7 @@ export class VizsgareszTerkepComponent implements OnInit {
     { heat: 'fail', label: '40% alatt (nem felelt meg)' },
     { heat: 'low', label: '40–59%' },
     { heat: 'mid', label: '60–79%' },
-    { heat: 'high', label: '80% fölött' },
+    { heat: 'high', label: '80% és fölötte' },
   ];
 
   readonly map = signal<TechnikumHeatmapDto | null>(null);
@@ -243,7 +246,10 @@ export class VizsgareszTerkepComponent implements OnInit {
   ngOnInit(): void {
     this.api.heatmap(this.groupId()).pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
       next: (m) => this.map.set(m),
-      error: (e) => this.error.set(extractErrorMessage(e, 'A vizsgarész-térkép betöltése sikertelen.')),
+      error: (e) => {
+        this.error.set(extractErrorMessage(e, 'A vizsgarész-térkép betöltése sikertelen.'));
+        if (e instanceof HttpErrorResponse && e.status === 404 && e.error?.errorType === 'FeatureDisabled') this.unavailable.emit();
+      },
     });
   }
 

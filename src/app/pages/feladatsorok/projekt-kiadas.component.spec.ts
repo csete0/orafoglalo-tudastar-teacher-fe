@@ -69,6 +69,22 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     expect(el.querySelector('[data-testid="student-code"]')?.textContent).toContain('Anna kódja');
   });
 
+  it('a „diak” paraméter olyan diákra, aki még nem kezdte, nem nyit kódot', async () => {
+    const { el, api } = await setup('3');
+    expect(api.studentCode).not.toHaveBeenCalled();
+    expect(el.querySelector('[data-testid="student-code"]')).toBeNull();
+  });
+
+  it('fájlváltás megszünteti a nyitott új megjegyzést', async () => {
+    const { fixture, el } = await setup('1');
+    el.querySelector<HTMLButtonElement>('[aria-label="Megjegyzés a(z) 2. sorhoz"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="new-comment"]')).not.toBeNull();
+    fixture.componentInstance.selectFile('backend/app.py');
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="new-comment"]')).toBeNull();
+  });
+
   it('sorszámozott kód a megjegyzés-szálakkal: elavult jelölés, új megjegyzés egy sorra, válasz', async () => {
     const { fixture, el, api } = await setup();
     [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.trim() === 'Anna')!.click();

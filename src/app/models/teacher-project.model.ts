@@ -62,6 +62,8 @@ export interface TeacherProjectDto {
   title: string;
   summary: string;
   level: string;
+  /** practice | exam (technikumi próbavizsga). */
+  kind: 'practice' | 'exam';
   estimatedHours: number;
   previewImageUrl: string | null;
   runtimes: ProjectRuntime[];
