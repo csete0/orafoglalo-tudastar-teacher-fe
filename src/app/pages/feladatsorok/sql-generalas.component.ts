@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { concat, toArray } from 'rxjs';
+import { concat, Subscription, toArray } from 'rxjs';
 import {
   GeneratedSqlFileDto,
   ReferenceSubtaskCheckDto,
@@ -228,6 +229,9 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
 export class SqlGeneralasComponent implements OnInit {
   private readonly service = inject(TeacherTaskSetService);
   private readonly toastService = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
+  /** A folyamatban lévő elkészítés - bezáráskor megszakítjuk (a válasz ne írjon egy már nem látható ablakba). */
+  private generation: Subscription | null = null;
 
   readonly taskSetId = input.required<number>();
   /** A feladatsor fájljai (a forrás-választáshoz és a csere-jelzéshez). */
@@ -307,13 +311,14 @@ export class SqlGeneralasComponent implements OnInit {
     if (!source || !this.canGenerate()) return;
     this.generating.set(true);
     this.error.set(null);
-    this.service
+    this.generation = this.service
       .generateSqlFiles(this.taskSetId(), {
         source,
         description: source === 'dataFiles' ? this.description().trim() || null : null,
         fileIds: source === 'dataFiles' ? [...this.selectedFileIds()] : null,
         hasHeader: this.hasHeader(),
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
           this.generating.set(false);
@@ -360,6 +365,9 @@ export class SqlGeneralasComponent implements OnInit {
 
   close(): void {
     if (this.saving()) return;
+    this.generation?.unsubscribe();
+    this.generation = null;
+    this.generating.set(false);
     this.closed.emit();
   }
 

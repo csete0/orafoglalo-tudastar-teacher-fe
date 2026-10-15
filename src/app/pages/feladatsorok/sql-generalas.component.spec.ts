@@ -86,6 +86,20 @@ describe('SqlGeneralasComponent', () => {
     expect(q(fixture, 'sql-gen-preview')).not.toBeNull();
   });
 
+  it('bezáráskor a folyamatban lévő elkészítést megszakítja', () => {
+    const pending = new Subject<SqlGenerationResultDto>();
+    const fixture = create([file('a', 'CreateSql', 'create.sql')], pending);
+    const closed = vi.fn();
+    fixture.componentInstance.closed.subscribe(closed);
+    q(fixture, 'sql-gen-generate')!.click();
+    fixture.detectChanges();
+    expect(pending.observed).toBe(true);
+
+    q(fixture, 'sql-gen-close')!.click();
+    expect(pending.observed).toBe(false);
+    expect(closed).toHaveBeenCalled();
+  });
+
   it('kiválasztott adatfájl nélkül nem indítható', () => {
     const fixture = create([file('f1', 'InputTxt', 'a.txt')]);
     q(fixture, 'sql-gen-file-option-f1')!.click();

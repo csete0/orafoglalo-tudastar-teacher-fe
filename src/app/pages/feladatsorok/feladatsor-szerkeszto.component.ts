@@ -167,7 +167,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
             <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
             <span>SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
             SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.
-            <button type="button" class="underline font-semibold" (click)="sqlGenerationOpen.set(true)" data-testid="sql-files-warning-generate">Hiányzó SQL-fájl elkészítése</button></span>
+            <button type="button" class="underline font-semibold disabled:no-underline disabled:opacity-60" [disabled]="!!detail.takedownAt"
+              (click)="sqlGenerationOpen.set(true)" data-testid="sql-files-warning-generate">Hiányzó SQL-fájl elkészítése</button></span>
           </p>
         }
 
