@@ -1,3 +1,5 @@
+import { AiHelperQuotaItemDto } from '../shared/ai-helper-quota.util';
+
 // Dolgozat mód (tanári áttekintő) - a backend ClassTestOverviewDto párja.
 
 export interface ClassTestTask {
@@ -103,6 +105,8 @@ export interface ClassTestFeedbackDraftsDto {
   items: ClassTestFeedbackDraftDto[];
   /** Az időkeretből kimaradt diákok - ezekkel kell újra hívni. */
   pendingUserIds: number[];
+  /** A havi keret a kérés után (egy egység = egy diák vázlata). */
+  quota?: AiHelperQuotaItemDto;
 }
 
 export interface ClassTestFeedbackItem {

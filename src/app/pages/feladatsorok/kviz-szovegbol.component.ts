@@ -14,11 +14,20 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { ReportService } from '../../services/report/report.service';
+import {
+  AI_HELPER_PREMIUM_TEXT,
+  aiHelperBlock,
+  aiHelperErrorMessage,
+  AiHelperQuotaItemDto,
+  quotaRemaining,
+} from '../../shared/ai-helper-quota.util';
 
 /** A BE-vel azonos korlátok. */
 export const SOURCE_MIN_CHARS = 200;
 export const SOURCE_MAX_CHARS = 30_000;
 export const SOURCE_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const SOURCE_MAX_COUNT = 15;
 const ALLOWED_EXTENSIONS = ['.txt', '.docx', '.pdf'];
 
 type SourceMode = 'text' | 'file';
@@ -29,12 +38,14 @@ export function sourceErrorMessage(err: unknown): string {
   if (status === 429) return 'Rövid időn belül túl sok kérést indítottál - várj néhány percet, és próbáld újra.';
   if (status === 413) return 'A fájl túl nagy (legfeljebb 10 MB).';
   if (status === 0) return 'Nem sikerült elérni a szervert - ellenőrizd az internetkapcsolatot, és próbáld újra.';
-  return extractErrorMessage(err, 'A kérdések elkészítése nem sikerült.');
+  // A szerver 80 mp után maga is leáll (érthető üzenettel); ez az átjáró (proxy) időtúllépése.
+  if (status === 504 || status === 524) return 'Az MI nem válaszolt időben (80 mp) - próbáld újra rövidebb szöveggel vagy kevesebb kérdéssel.';
+  return aiHelperErrorMessage(err) ?? extractErrorMessage(err, 'A kérdések elkészítése nem sikerült.');
 }
 
 /**
  * „Kérdések szövegből” párbeszédablak a kvíz-szerkesztőben: beillesztett tananyagból vagy fájlból (.txt/.docx/.pdf) az MI
- * kérdés-piszkozatokat készít (a tanár napi MI-keretéből). Minden kérdéshez forrás-idézet kell, amit a szerver szó szerint
+ * kérdés-piszkozatokat készít (Prémium tanárnak, havi kerettel: egy egység = egy generálás). Minden kérdéshez forrás-idézet kell, amit a szerver szó szerint
  * visszakeres a szövegben - ami nem megy át, az okkal kimarad. Az elkészült kérdések jóváhagyatlanul kerülnek a kvízbe.
  */
 @Component({
@@ -60,7 +71,7 @@ export function sourceErrorMessage(err: unknown): string {
 
         @if (generating()) {
           <div aria-live="polite">
-            <app-local-spinner label="Készülnek a kérdések, és a szerver ellenőrzi az idézeteket… ez akár egy-másfél percig is tarthat." />
+            <app-local-spinner label="Készülnek a kérdések, és a szerver ellenőrzi az idézeteket… ez legfeljebb 80 másodpercig tart." />
           </div>
         } @else if (result(); as r) {
           <!-- ── Eredmény ─────────────────────────────── -->
@@ -76,6 +87,14 @@ export function sourceErrorMessage(err: unknown): string {
                 @if (r.refunded) { A felhasznált MI-keretet visszakaptad. }
                 Próbáld más szöveggel, kevesebb kérdéssel vagy több kérdéstípussal.
               </p>
+            }
+
+            @if (r.warnings?.length) {
+              <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning" data-testid="quiz-source-warnings">
+                <ul class="list-disc pl-5 space-y-0.5">
+                  @for (w of r.warnings; track $index) { <li>{{ w }}</li> }
+                </ul>
+              </div>
             }
 
             @if (r.dropped.length > 0) {
@@ -107,6 +126,12 @@ export function sourceErrorMessage(err: unknown): string {
               szó szerinti idézet kell a szövegből - amit nem talál benne a rendszer, az kimarad. Az elkészült kérdések
               piszkozatként kerülnek a kvízbe, jóváhagyás után válnak a részévé.
             </p>
+
+            @if (blockMessage(); as block) {
+              <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning" role="status" data-testid="quiz-source-blocked">{{ block }}</p>
+            } @else if (quota(); as q) {
+              <p class="text-xs text-text-muted" data-testid="quiz-source-quota">Havi keret: ebben a hónapban még {{ remaining(q) }} / {{ q.limit }} generálás.</p>
+            }
 
             <div role="radiogroup" aria-label="A forrás" class="flex flex-wrap gap-2">
               @for (m of modes; track m.value) {
@@ -140,7 +165,9 @@ export function sourceErrorMessage(err: unknown): string {
                 @if (fileError()) {
                   <p class="text-xs text-danger mt-1" role="alert" data-testid="quiz-source-file-error">{{ fileError() }}</p>
                 }
-                <p class="text-xs text-text-muted mt-1">Szkennelt (kép) PDF-ből nem olvasható ki a szöveg - akkor másold be.</p>
+                <p class="text-xs text-text-muted mt-1">
+                  Szkennelt (kép) PDF-ből nem olvasható ki a szöveg - akkor másold be. Hosszú PDF-ből csak az első 20 oldal szövege kerül be.
+                </p>
               </div>
             }
 
@@ -154,8 +181,8 @@ export function sourceErrorMessage(err: unknown): string {
                 </select>
               </label>
               <label class="block">
-                <span class="text-sm text-text-muted">Darabszám (1–20)</span>
-                <input type="number" min="1" max="20" class="input mt-1" [ngModel]="count()" (ngModelChange)="count.set($event)"
+                <span class="text-sm text-text-muted">Darabszám (1–{{ maxCount }})</span>
+                <input type="number" min="1" [max]="maxCount" class="input mt-1" [ngModel]="count()" (ngModelChange)="count.set($event)"
                   [ngModelOptions]="{ standalone: true }" data-testid="quiz-source-count" />
               </label>
               <label class="block">
@@ -201,6 +228,7 @@ export function sourceErrorMessage(err: unknown): string {
 })
 export class KvizSzovegbolComponent implements OnInit {
   private readonly service = inject(TeacherQuizService);
+  private readonly reports = inject(ReportService);
   private readonly destroyRef = inject(DestroyRef);
   /** A folyamatban lévő kérés - bezáráskor megszakítjuk (a válasz ne írjon egy már nem látható ablakba). */
   private request: Subscription | null = null;
@@ -235,6 +263,20 @@ export class KvizSzovegbolComponent implements OnInit {
   readonly difficulty = signal<QuizDifficulty>('Medium');
   readonly selectedTypes = signal<Set<QuizSourceQuestionType>>(new Set(['single', 'multi', 'truefalse', 'cloze']));
 
+  readonly maxCount = SOURCE_MAX_COUNT;
+  readonly remaining = quotaRemaining;
+  /** A havi keret (betöltéskor és minden válasz után); null: nem ismert. */
+  readonly quota = signal<AiHelperQuotaItemDto | null>(null);
+  /** false: nem Prémium tanár (a keret-végpontból vagy a hibából). */
+  readonly premium = signal<boolean | null>(null);
+  /** Prémium hiánya / elfogyott keret: a készítés tiltott, és ez a magyarázat. */
+  readonly blockMessage = computed(() => {
+    if (this.premium() === false) return AI_HELPER_PREMIUM_TEXT;
+    const q = this.quota();
+    if (q && quotaRemaining(q) === 0) return `Elfogyott a havi kereted (${q.limit} generálás / hó) - a következő hónapban újra kérhetsz.`;
+    return null;
+  });
+
   readonly generating = signal(false);
   readonly error = signal<string | null>(null);
   readonly result = signal<QuizSourceResultDto | null>(null);
@@ -243,9 +285,9 @@ export class KvizSzovegbolComponent implements OnInit {
   readonly textTooShort = computed(() => this.charCount() > 0 && this.charCount() < SOURCE_MIN_CHARS);
 
   readonly canGenerate = computed(() => {
-    if (this.generating() || this.topicId() == null || this.selectedTypes().size === 0) return false;
+    if (this.generating() || this.blockMessage() || this.topicId() == null || this.selectedTypes().size === 0) return false;
     const count = Number(this.count());
-    if (!Number.isInteger(count) || count < 1 || count > 20) return false;
+    if (!Number.isInteger(count) || count < 1 || count > SOURCE_MAX_COUNT) return false;
     return this.mode() === 'text'
       ? this.charCount() >= SOURCE_MIN_CHARS && this.charCount() <= SOURCE_MAX_CHARS
       : this.file() !== null && this.fileError() === null;
@@ -256,6 +298,17 @@ export class KvizSzovegbolComponent implements OnInit {
   ngOnInit(): void {
     const initial = this.initialTopicId();
     this.topicId.set(initial != null && this.topics().some((t) => t.id === initial) ? initial : null);
+    // A keret csak tájékoztatás: ha nem jön meg, a szerver úgyis érthető hibát ad.
+    this.reports
+      .getAiHelperQuota()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (q) => {
+          this.premium.set(q.premium);
+          if (!this.quota()) this.quota.set(q.quizSource);
+        },
+        error: () => {},
+      });
     setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
@@ -310,12 +363,20 @@ export class KvizSzovegbolComponent implements OnInit {
           this.request = null;
           this.generating.set(false);
           this.result.set(res);
+          if (res.quota) this.quota.set(res.quota);
           if (res.created.length > 0) this.changed.emit(res.created.length);
         },
         error: (err) => {
           this.request = null;
           this.generating.set(false);
-          this.error.set(sourceErrorMessage(err));
+          const block = aiHelperBlock(err);
+          if (block === 'premium') this.premium.set(false);
+          if (block === 'quota') {
+            const q = this.quota();
+            if (q) this.quota.set({ ...q, used: q.limit });
+          }
+          this.error.set(block ? null : sourceErrorMessage(err));
+          if (block && !this.blockMessage()) this.error.set(sourceErrorMessage(err));
         },
       });
   }

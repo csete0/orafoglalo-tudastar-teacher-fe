@@ -15,6 +15,8 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { ReportService } from '../../services/report/report.service';
+import { aiHelperBlock, aiHelperErrorMessage, AiHelperQuotaItemDto, quotaRemaining } from '../../shared/ai-helper-quota.util';
 
 /** Egy diák sora a párbeszédablakban. */
 export interface FeedbackRow {
@@ -36,14 +38,17 @@ export function draftErrorMessage(err: unknown): string {
   const status = (err as { status?: number })?.status;
   if (status === 429) return 'Rövid időn belül túl sok vázlatot kértél - várj néhány percet, és folytasd.';
   if (status === 0) return 'Nem sikerült elérni a szervert - ellenőrizd az internetkapcsolatot, és folytasd.';
-  return extractErrorMessage(err, 'A vázlatok elkészítése nem sikerült.');
+  return aiHelperErrorMessage(err) ?? extractErrorMessage(err, 'A vázlatok elkészítése nem sikerült.');
 }
 
 const norm = (s: string | null | undefined) => (s ?? '').trim();
 
+/** Ha egy kör „pending” diákot hagyott, de legalább egy elkészült, ennyiszer kérünk újra magától (utána „Folytatás”). */
+export const AUTO_CONTINUE_ROUNDS = 1;
+
 /**
  * „Visszajelzések AI-vázlattal” a dolgozat-áttekintőben: diákonként egy, a dolgozat egészére szóló szöveg. Az MI a pontokból
- * és az értékelés tényeiből vázlatot ír (a tanár napi MI-keretéből; a számokat a szerver ellenőrzi), a tanár átírja, és
+ * és az értékelés tényeiből vázlatot ír (Prémium tanárnak, havi kerettel - egy egység = egy diák; a számokat a szerver ellenőrzi), a tanár átírja, és
  * egyben menti. Az időkeretből kimaradt diákokat („pending”) a felület magától újra kéri, haladásjelzéssel. A mentés a pontot
  * nem módosítja; a diák a szöveget az eredmények közzététele után látja.
  */
@@ -70,9 +75,12 @@ const norm = (s: string | null | undefined) => (s ?? '').trim();
 
         <div id="feedback-help" class="text-sm text-text-muted space-y-1 mb-4">
           <p>
-            Az MI a pontokból és az értékelésből diákonként rövid vázlatot ír a napi MI-keretedből; a benne szereplő számokat a
-            rendszer ellenőrzi. Írd át nyugodtan - a pontokat a mentés nem változtatja meg.
+            Az MI a pontokból és az értékelésből diákonként rövid vázlatot ír (Prémium tanárnak, havi kerettel); a benne szereplő
+            számokat a rendszer ellenőrzi. Írd át nyugodtan - a pontokat a mentés nem változtatja meg. Vázlat nélkül is írhatsz.
           </p>
+          @if (quota(); as q) {
+            <p class="text-xs" data-testid="feedback-quota">Havi keret: ebben a hónapban még {{ quotaLeft(q) }} / {{ q.limit }} diák-vázlat.</p>
+          }
           <p class="font-medium" [class.text-warning]="published()" data-testid="feedback-visibility">
             @if (published()) {
               Az eredmény már közzé van téve: a diákok mentés után azonnal látják, és értesítést kapnak.
@@ -92,6 +100,10 @@ const norm = (s: string | null | undefined) => (s ?? '').trim();
                 <div class="h-full bg-primary transition-all" [style.width.%]="total() ? (100 * processed()) / total() : 0"></div>
               </div>
             </div>
+          } @else if (blocked()) {
+            <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning" role="status" data-testid="feedback-blocked">
+              {{ draftError() }} A visszajelzést kézzel így is megírhatod.
+            </p>
           } @else if (remaining() > 0) {
             <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex flex-wrap items-center justify-between gap-2"
               role="status" data-testid="feedback-remaining">
@@ -116,6 +128,9 @@ const norm = (s: string | null | undefined) => (s ?? '').trim();
               </div>
 
               @if (isEditable(row)) {
+                @if (row.draft?.status === 'skipped') {
+                  <p class="text-xs text-text-muted mb-1" [attr.data-testid]="'feedback-skipped-' + row.userId">Nincs vázlat: {{ row.draft!.reason }} Kézzel megírhatod.</p>
+                }
                 @if (row.draft?.status === 'failed') {
                   <p class="text-xs text-danger mb-1" [attr.data-testid]="'feedback-failed-' + row.userId">Nem készült vázlat: {{ row.draft!.reason }} - írd meg kézzel.</p>
                 }
@@ -168,6 +183,7 @@ const norm = (s: string | null | undefined) => (s ?? '').trim();
 })
 export class DolgozatVisszajelzesComponent implements OnInit {
   private readonly service = inject(ClassTestService);
+  private readonly reports = inject(ReportService);
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
@@ -185,6 +201,12 @@ export class DolgozatVisszajelzesComponent implements OnInit {
   readonly norm = norm;
 
   readonly rows = signal<FeedbackRow[]>([]);
+  readonly quotaLeft = quotaRemaining;
+  readonly quota = signal<AiHelperQuotaItemDto | null>(null);
+  /** Prémium hiánya vagy elfogyott keret: további vázlatot nem kérünk (a „Folytatás” sem segítene). */
+  readonly blocked = signal(false);
+  /** Hányszor kértünk újra magától „pending” maradék miatt a legutóbbi indítás óta. */
+  private autoContinued = 0;
   readonly drafting = signal(false);
   readonly draftError = signal<string | null>(null);
   readonly saving = signal(false);
@@ -227,10 +249,18 @@ export class DolgozatVisszajelzesComponent implements OnInit {
     this.total.set(wanted.length);
     this.queue.set(wanted);
     this.next();
+    // A keret csak tájékoztatás; a vázlat-válasz is hozza.
+    this.reports
+      .getAiHelperQuota()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (q) => this.quota.update((current) => current ?? q.testFeedback), error: () => {} });
     setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
-  /** A következő legfeljebb 60 diák vázlata; a kimaradtak („pending”) a sor elejére kerülnek, és újra kérjük őket. */
+  /**
+   * A következő legfeljebb 60 diák vázlata. Az időkeretből kimaradtak („pending”) a sor elejére kerülnek: ha a kör legalább egy
+   * diákot elkészített, egyszer magától újra kérjük őket, különben (vagy a második ilyen kör után) „Folytatás” gomb jön.
+   */
   private next(): void {
     const queue = this.queue();
     if (queue.length === 0) {
@@ -249,13 +279,18 @@ export class DolgozatVisszajelzesComponent implements OnInit {
           if (generation !== this.generation) return;
           this.draftRequest = null;
           this.merge(res.items);
+          if (res.quota) this.quota.set(res.quota);
           const pending = new Set(res.pendingUserIds);
           const stillPending = batch.filter((id) => pending.has(id));
           this.queue.set([...stillPending, ...this.queue().slice(batch.length)]);
-          // Előrehaladás nélkül nem kérünk újra (különben végtelen ciklus) - a tanár a „Folytatás”-sal indíthatja.
-          if (stillPending.length === batch.length) {
-            this.drafting.set(false);
-            return;
+          if (stillPending.length > 0) {
+            // Előrehaladás nélkül, vagy ha már egyszer magától újrakértük, megállunk - a tanár a „Folytatás”-sal indíthatja.
+            const progressed = stillPending.length < batch.length;
+            if (!progressed || this.autoContinued >= AUTO_CONTINUE_ROUNDS) {
+              this.drafting.set(false);
+              return;
+            }
+            this.autoContinued++;
           }
           this.next();
         },
@@ -264,12 +299,14 @@ export class DolgozatVisszajelzesComponent implements OnInit {
           this.draftRequest = null;
           this.drafting.set(false);
           this.draftError.set(draftErrorMessage(err));
+          if (aiHelperBlock(err)) this.blocked.set(true);
         },
       });
   }
 
   resume(): void {
-    if (this.drafting() || this.saving() || this.remaining() === 0) return;
+    if (this.drafting() || this.saving() || this.blocked() || this.remaining() === 0) return;
+    this.autoContinued = 0;
     this.next();
   }
 
@@ -288,8 +325,11 @@ export class DolgozatVisszajelzesComponent implements OnInit {
     );
   }
 
+  /** Beadott dolgozatnál mindig írható (vázlat nélkül is, pl. elfogyott keretnél) - kivéve amíg a vázlata épp készül. */
   isEditable(row: FeedbackRow): boolean {
-    return row.submitted && row.examSessionId != null && !!row.draft && (row.draft.status === 'ready' || row.draft.status === 'failed');
+    if (!row.submitted || row.examSessionId == null) return false;
+    const waiting = !row.draft || row.draft.status === 'pending';
+    return !(waiting && this.drafting());
   }
 
   isChanged(row: FeedbackRow): boolean {

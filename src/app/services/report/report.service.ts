@@ -14,6 +14,7 @@ import {
   TeacherWeakTopicDto,
   WeakTopicSummaryDto,
 } from '../../models/report.model';
+import { AiHelperQuotaDto } from '../../shared/ai-helper-quota.util';
 
 @Injectable({ providedIn: 'root' })
 export class ReportService {
@@ -58,6 +59,11 @@ export class ReportService {
     let params = new HttpParams();
     if (threshold !== undefined) params = params.set('threshold', threshold);
     return this.http.get<WeakTopicSummaryDto>(`${this.baseUrl}/groups/${groupId}/weak-topics/summary`, { params });
+  }
+
+  /** A tanári MI-segítségek (kérdések szövegből, dolgozat-visszajelzés) havi kerete és a prémium-jogosultság. */
+  getAiHelperQuota(): Observable<AiHelperQuotaDto> {
+    return this.http.get<AiHelperQuotaDto>(`${this.baseUrl}/ai-helpers/quota`);
   }
 
   getTaskSetResults(taskSetId: number, filter?: TaskSetResultsFilter): Observable<TeacherTaskSetResultsDto> {

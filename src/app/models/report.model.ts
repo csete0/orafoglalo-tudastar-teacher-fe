@@ -294,6 +294,8 @@ export interface WeakTopicSuggestionDto {
   action: 'assign' | 'copyAssign' | 'assigned' | 'none';
   assignTaskSetId: number | null;
   canCopy: boolean;
+  /** Ha az action „none”: miért nem adható ki (pl. a korábbi másolatot a platform-admin visszavonta). */
+  reason?: string | null;
 }
 
 export interface WeakTopicSummaryTopicDto {

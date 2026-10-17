@@ -470,10 +470,13 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           }
 
           @case ('gyenge-temak') {
-            <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással. -->
-            <app-gyenge-temak-javaslatok [groupId]="group.id" />
+            <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással - csak ha van gyenge téma,
+                 különben egyetlen üres állapot látszik (lent). -->
+            @if (!weakTopicsLoading() && weakTopics().length) {
+              <app-gyenge-temak-javaslatok [groupId]="group.id" />
+              <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-2">Minden gyenge téma</h3>
+            }
             <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
-            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-2">Minden gyenge téma</h3>
             @if (weakTopicsError(); as err) {
               <p class="text-danger text-sm mb-4">{{ err }}</p>
             }

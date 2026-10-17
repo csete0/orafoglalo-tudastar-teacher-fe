@@ -4,6 +4,10 @@ import { Subject, of, throwError } from 'rxjs';
 import { KvizSzovegbolComponent, SOURCE_MAX_FILE_BYTES, sourceErrorMessage } from './kviz-szovegbol.component';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { QuizSourceResultDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
+import { ReportService } from '../../services/report/report.service';
+import { AiHelperQuotaDto } from '../../shared/ai-helper-quota.util';
+
+const QUOTA: AiHelperQuotaDto = { month: '2026-10', premium: true, quizSource: { used: 3, limit: 60 }, testFeedback: { used: 0, limit: 600 } };
 
 const TOPICS = [
   { id: 3, name: 'Hálózatok' },
@@ -24,19 +28,22 @@ function result(overrides: Partial<QuizSourceResultDto> = {}): QuizSourceResultD
     dropped: [{ reason: 'A forrás-idézet nem található szó szerint a megadott szövegben.', text: 'Mi a TCP?' }],
     sourceChars: 340,
     model: 'm',
-    refunded: false,
+    warnings: [],
+    quota: { used: 4, limit: 60 },
     ...overrides,
   };
 }
 
 describe('KvizSzovegbolComponent', () => {
   let service: { generateFromSource: ReturnType<typeof vi.fn> };
+  let reports: { getAiHelperQuota: ReturnType<typeof vi.fn> };
 
-  function create(response: unknown = of(result()), initialTopicId: number | null = 7) {
+  function create(response: unknown = of(result()), initialTopicId: number | null = 7, quota: unknown = of(QUOTA)) {
     service = { generateFromSource: vi.fn(() => response) };
+    reports = { getAiHelperQuota: vi.fn(() => quota) };
     TestBed.configureTestingModule({
       imports: [KvizSzovegbolComponent],
-      providers: [{ provide: TeacherQuizService, useValue: service }],
+      providers: [{ provide: TeacherQuizService, useValue: service }, { provide: ReportService, useValue: reports }],
     });
     const fixture = TestBed.createComponent(KvizSzovegbolComponent);
     fixture.componentRef.setInput('quizId', 42);
@@ -86,8 +93,10 @@ describe('KvizSzovegbolComponent', () => {
     expect(c.canGenerate()).toBe(false);
     c.topicId.set(3);
     expect(c.canGenerate()).toBe(true);
-    c.count.set(21);
+    c.count.set(16);
     expect(c.canGenerate()).toBe(false);
+    c.count.set(15);
+    expect(c.canGenerate()).toBe(true);
     c.count.set(4);
     for (const t of ['single', 'multi', 'truefalse', 'cloze'] as const) c.toggleType(t);
     expect(c.canGenerate()).toBe(false);
@@ -123,7 +132,7 @@ describe('KvizSzovegbolComponent', () => {
   });
 
   it('egy kérdés sem ment át: visszatérítés jelzése, nincs újratöltés', () => {
-    const { fixture, c, changed } = create(of(result({ created: [], refunded: true })));
+    const { fixture, c, changed } = create(of(result({ created: [], refunded: true } as Partial<QuizSourceResultDto>)));
     c.text.set(LONG_TEXT);
     c.generate();
     fixture.detectChanges();
@@ -194,6 +203,69 @@ describe('KvizSzovegbolComponent', () => {
 
     pending.next(result());
     expect(c.result()).toBeNull();
+  });
+
+  describe('Prémium és havi keret', () => {
+    it('a hátralévő keretet mutatja, és a válasz kerete frissíti', () => {
+      const { fixture, c } = create();
+      expect(reports.getAiHelperQuota).toHaveBeenCalled();
+      expect(q(fixture, 'quiz-source-quota')!.textContent).toContain('még 57 / 60 generálás');
+      c.text.set(LONG_TEXT);
+      c.generate();
+      c.again();
+      fixture.detectChanges();
+      expect(q(fixture, 'quiz-source-quota')!.textContent).toContain('még 56 / 60');
+    });
+
+    it('nem Prémium tanár: magyarázat, a készítés tiltott', () => {
+      const { fixture, c } = create(of(result()), 7, of({ ...QUOTA, premium: false }));
+      c.text.set(LONG_TEXT);
+      fixture.detectChanges();
+      expect(q(fixture, 'quiz-source-blocked')!.textContent).toContain('Prémium tanári előfizetéssel');
+      expect(c.canGenerate()).toBe(false);
+    });
+
+    it('elfogyott keret: magyarázat, a készítés tiltott; a keret-végpont hibája nem zavar', () => {
+      const exhausted = create(of(result()), 7, of({ ...QUOTA, quizSource: { used: 60, limit: 60 } }));
+      exhausted.c.text.set(LONG_TEXT);
+      exhausted.fixture.detectChanges();
+      expect(q(exhausted.fixture, 'quiz-source-blocked')!.textContent).toContain('Elfogyott a havi kereted (60 generálás / hó)');
+      expect(exhausted.c.canGenerate()).toBe(false);
+
+      TestBed.resetTestingModule();
+      const failing = create(of(result()), 7, throwError(() => new HttpErrorResponse({ status: 500 })));
+      failing.c.text.set(LONG_TEXT);
+      expect(failing.c.canGenerate()).toBe(true);
+      expect(q(failing.fixture, 'quiz-source-quota')).toBeNull();
+    });
+
+    it('a szerver prémium / keret hibája (errorType) is tiltó magyarázatra vált', () => {
+      const premiumErr = new HttpErrorResponse({ status: 400, error: { errorType: 'AiHelperPremiumRequired', errorMessage: 'x' } });
+      const { fixture, c } = create(throwError(() => premiumErr));
+      c.text.set(LONG_TEXT);
+      c.generate();
+      fixture.detectChanges();
+      expect(q(fixture, 'quiz-source-blocked')!.textContent).toContain('Prémium');
+      expect(q(fixture, 'quiz-source-error')).toBeNull();
+
+      TestBed.resetTestingModule();
+      const quotaErr = new HttpErrorResponse({ status: 400, error: { errorType: 'AiHelperQuotaExceeded', errorMessage: 'Elfogyott a havi kereted (60 kvíz-generálás / hó).' } });
+      const second = create(throwError(() => quotaErr));
+      second.c.text.set(LONG_TEXT);
+      second.c.generate();
+      second.fixture.detectChanges();
+      expect(q(second.fixture, 'quiz-source-blocked')!.textContent).toContain('Elfogyott');
+      expect(second.c.canGenerate()).toBe(false);
+    });
+  });
+
+  it('a 20 oldalnál hosszabb PDF figyelmeztetése az eredményben; az átjáró-időtúllépés érthető', () => {
+    const { fixture, c } = create(of(result({ warnings: ['A PDF 35 oldalas - csak az első 20 oldal szövegéből készültek kérdések.'] })));
+    c.text.set(LONG_TEXT);
+    c.generate();
+    fixture.detectChanges();
+    expect(q(fixture, 'quiz-source-warnings')!.textContent).toContain('csak az első 20 oldal');
+    expect(sourceErrorMessage({ status: 504 })).toContain('80 mp');
   });
 
   it('bezárás kérés nélkül: nincs újratöltés; a háttérre kattintás is bezár', () => {

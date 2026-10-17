@@ -1,3 +1,5 @@
+import { AiHelperQuotaItemDto } from '../shared/ai-helper-quota.util';
+
 /**
  * Tanári kvíz-szerkesztés modelljei.
  *
@@ -186,8 +188,12 @@ export interface QuizSourceResultDto {
   dropped: QuizSourceDroppedDto[];
   sourceChars: number;
   model: string;
-  /** Egy kérdés sem ment át - a felhasznált MI-keret visszajárt. */
-  refunded: boolean;
+  /** Pl. a 20 oldalnál hosszabb PDF-ből csak az első 20 oldal szövege került be. */
+  warnings?: string[];
+  /** A havi keret a kérés után (egy egység = egy generálás). */
+  quota?: AiHelperQuotaItemDto;
+  /** Régi mező (a fix round 2 óta nem jön): egy kérdés sem ment át, és a keret visszajárt. */
+  refunded?: boolean;
 }
 
 // ── Témakörök (a diák-oldali /quiz/topics végpontról) ─────────

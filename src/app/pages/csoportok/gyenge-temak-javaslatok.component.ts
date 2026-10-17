@@ -24,12 +24,16 @@ export function accessLabel(s: WeakTopicSuggestionDto): string {
     : 'Fizetős – diákjaidnak előfizetés vagy iskolai licenc kell';
 }
 
-/** Miért nem adható ki egy hivatalos sor (action: none). */
+/** Miért nem adható ki egy hivatalos sor (action: none) - a szerver oka elsőként (pl. visszavont másolat). */
 export function blockedReason(s: WeakTopicSuggestionDto): string {
+  if (s.reason?.trim()) return s.reason.trim();
   if (s.requiredTier === 'premium') return 'Prémium tartalom - a kiadásához Prémium előfizetés kell.';
   if (s.isPaid) return 'Fizetős tartalom - a kiadásához előfizetés kell.';
   return 'Ezt a feladatsort most nem adhatod ki.';
 }
+
+export const COPY_IN_PROGRESS = 'CopyInProgress';
+export const COPY_IN_PROGRESS_TEXT = 'A másolás még folyamatban van - próbáld újra pár másodperc múlva.';
 
 /** A kiadás hibája érthető magyar mondatként (a rate limiter 429-es válasza nem `errorMessage` alakú). */
 export function assignErrorMessage(err: unknown): string {
@@ -61,7 +65,7 @@ const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'r
           <button type="button" class="btn btn-ghost !px-3 !py-1" (click)="load()">Újra</button>
         </div>
       } @else if (summary(); as s) {
-        @if (s.sentences.length > 0) {
+        @if (s.topics.length > 0 && s.sentences.length > 0) {
           <div class="card p-4 mb-4 space-y-1.5 text-sm" data-testid="weak-summary-sentences">
             @for (sentence of s.sentences; track $index) {
               <p>{{ sentence }}</p>
@@ -108,7 +112,10 @@ const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'r
                           </span>
                         }
                         @case ('none') {
-                          <span class="text-xs text-text-muted text-right" [attr.data-testid]="'weak-blocked-' + key(item)">{{ blocked(item) }}</span>
+                          <button type="button" class="btn btn-primary !px-3 !py-1.5" disabled [attr.aria-describedby]="'weak-blocked-' + key(item)"
+                            [attr.data-testid]="'weak-assign-' + key(item)">Kiadás</button>
+                          <span class="text-xs text-text-muted text-right max-w-xs" [id]="'weak-blocked-' + key(item)"
+                            [attr.data-testid]="'weak-blocked-' + key(item)">{{ blocked(item) }}</span>
                         }
                         @default {
                           @if (s.canAssign) {
@@ -314,6 +321,11 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
       },
       error: (err) => {
         this.busyKey.set(null);
+        // Párhuzamos másolás (pl. másik lapon): nem hiba, csak várni kell - rövid toast, a gomb újra kattintható.
+        if ((err as { error?: { errorType?: string } })?.error?.errorType === COPY_IN_PROGRESS) {
+          this.toastService.warning(COPY_IN_PROGRESS_TEXT);
+          return;
+        }
         this.errors.update((current) => ({ ...current, [key]: assignErrorMessage(err) }));
       },
     });

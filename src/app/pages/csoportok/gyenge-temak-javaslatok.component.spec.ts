@@ -88,12 +88,39 @@ describe('GyengeTemakJavaslatokComponent', () => {
     expect(q(fixture, 'weak-suggestion-quiz-33')!.textContent).toContain('6 kérdés a témakörből');
   });
 
-  it('állapotok: már kiadott → „Kiadva”; nem másolható → ok, gomb nélkül', () => {
+  it('állapotok: már kiadott → „Kiadva”; nem másolható → tiltott gomb az okkal', () => {
     const { fixture } = create();
     expect(q(fixture, 'weak-assigned-taskSet-12')!.textContent).toContain('Kiadva');
     expect(q(fixture, 'weak-assign-taskSet-12')).toBeNull();
     expect(q(fixture, 'weak-blocked-taskSet-502')!.textContent).toContain('Prémium előfizetés kell');
-    expect(q(fixture, 'weak-assign-taskSet-502')).toBeNull();
+    const button = q(fixture, 'weak-assign-taskSet-502') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-describedby')).toBe('weak-blocked-taskSet-502');
+  });
+
+  it('„none” a szerver okával (visszavont másolat)', () => {
+    const takenDown = suggestion({ id: 503, source: 'catalog', title: 'Visszavont', action: 'none', assignTaskSetId: null,
+      reason: 'A korábbi másolatodat a platform-admin visszavonta - ez a feladatsor így nem adható ki.' });
+    const base = summary();
+    const { fixture } = create(of(summary({ topics: [{ ...base.topics[0], taskSets: [takenDown], quizzes: [] }] })));
+    expect(q(fixture, 'weak-blocked-taskSet-503')!.textContent).toContain('platform-admin visszavonta');
+    expect((q(fixture, 'weak-assign-taskSet-503') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('folyamatban lévő másolás (CopyInProgress): érthető toast, nincs tartós hiba, újra kattintható', () => {
+    const { fixture, c } = create();
+    taskSets.catalogAssign.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 400, error: { errorType: 'CopyInProgress', errorMessage: 'x' } })));
+    c.act(CATALOG);
+    c.confirmCatalog();
+    fixture.detectChanges();
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('folyamatban'));
+    expect(q(fixture, 'weak-catalog-error')).toBeNull();
+    expect(c.busyKey()).toBeNull();
+  });
+
+  it('témakör nélküli összefoglalónál nem mutat mondatot', () => {
+    const { fixture } = create(of(summary({ topics: [] })));
+    expect(q(fixture, 'weak-summary-sentences')).toBeNull();
   });
 
   it('saját feladatsor: egy kattintás → a meglévő kiadási API az assignTaskSetId-val, utána „Kiadva”', () => {

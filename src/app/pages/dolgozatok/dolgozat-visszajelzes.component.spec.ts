@@ -6,6 +6,7 @@ import { ClassTestService } from '../../services/class-test/class-test.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { ClassTestFeedbackDraftDto, ClassTestFeedbackDraftsDto, ClassTestStudentRow } from '../../models/class-test.model';
+import { ReportService } from '../../services/report/report.service';
 
 function student(userId: number, overrides: Partial<ClassTestStudentRow> = {}): ClassTestStudentRow {
   return {
@@ -29,8 +30,10 @@ describe('DolgozatVisszajelzesComponent', () => {
   let service: { draftFeedback: ReturnType<typeof vi.fn>; saveFeedback: ReturnType<typeof vi.fn> };
   let confirm: { ask: ReturnType<typeof vi.fn> };
   let toast: { success: ReturnType<typeof vi.fn> };
+  let reports: { getAiHelperQuota: ReturnType<typeof vi.fn> };
 
   function create(students: ClassTestStudentRow[], responses: unknown[], published = false) {
+    reports = { getAiHelperQuota: vi.fn(() => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 60 }, testFeedback: { used: 40, limit: 600 } })) };
     const draftFeedback = vi.fn();
     for (const r of responses) draftFeedback.mockReturnValueOnce(r);
     service = { draftFeedback, saveFeedback: vi.fn(() => of({ saved: 1, examSessionIds: [], notifiedStudents: 0 })) };
@@ -42,6 +45,7 @@ describe('DolgozatVisszajelzesComponent', () => {
         { provide: ClassTestService, useValue: service },
         { provide: ConfirmService, useValue: confirm },
         { provide: ToastService, useValue: toast },
+        { provide: ReportService, useValue: reports },
       ],
     });
     const fixture = TestBed.createComponent(DolgozatVisszajelzesComponent);
@@ -76,7 +80,8 @@ describe('DolgozatVisszajelzesComponent', () => {
     expect(c.drafting()).toBe(false);
     expect((q(fixture, 'feedback-text-1') as HTMLTextAreaElement).value).toBe('Vázlat 1.');
     expect(q(fixture, 'feedback-skipped-2')!.textContent).toContain('kézi pontozásra vár');
-    expect(q(fixture, 'feedback-text-2')).toBeNull();
+    // Vázlat nélkül is kézzel megírható (beadott munkamenet).
+    expect(q(fixture, 'feedback-text-2')).not.toBeNull();
     expect(q(fixture, 'feedback-row-3')!.textContent).toContain('Nem adta be');
     expect(q(fixture, 'feedback-dialog')!.getAttribute('role')).toBe('dialog');
     expect(q(fixture, 'feedback-visibility')!.textContent).toContain('az eredmények közzététele után látják');
@@ -102,6 +107,43 @@ describe('DolgozatVisszajelzesComponent', () => {
     expect(c.drafting()).toBe(false);
     expect(c.processed()).toBe(3);
     expect((q(fixture, 'feedback-text-3') as HTMLTextAreaElement).value).toBe('Vázlat 3.');
+  });
+
+  it('a második „pending” kör után már nem kér magától: „Folytatás” gomb, ami újra egy automatikus kört enged', () => {
+    const { fixture, c } = create([student(1), student(2), student(3)], [
+      of(drafts([item(1), item(2, { status: 'pending', draft: null }), item(3, { status: 'pending', draft: null })], [2, 3])),
+      of(drafts([item(2), item(3, { status: 'pending', draft: null })], [3])),
+      of(drafts([item(3)])),
+    ]);
+    fixture.detectChanges();
+    expect(service.draftFeedback).toHaveBeenCalledTimes(2);
+    expect(c.drafting()).toBe(false);
+    expect(q(fixture, 'feedback-resume')!.textContent).toContain('Folytatás (1)');
+
+    c.resume();
+    expect(service.draftFeedback).toHaveBeenNthCalledWith(3, 7, [3]);
+    expect(c.remaining()).toBe(0);
+  });
+
+  it('havi keret: a hátralévőt mutatja, a válasz frissíti; a keret fölötti diák oka látszik, és kézzel írható', async () => {
+    const { fixture } = create([student(1), student(2)], [
+      of({ ...drafts([item(1), item(2, { status: 'skipped', draft: null, reason: 'Elfogyott a havi visszajelzés-vázlat kereted - a következő hónapban újra kérhetsz.' })]), quota: { used: 600, limit: 600 } }),
+    ]);
+    await settle(fixture);
+    expect(q(fixture, 'feedback-quota')!.textContent).toContain('még 0 / 600 diák-vázlat');
+    expect(q(fixture, 'feedback-skipped-2')!.textContent).toContain('Elfogyott a havi visszajelzés-vázlat kereted');
+    expect(q(fixture, 'feedback-text-2')).not.toBeNull();
+  });
+
+  it('nem Prémium tanár: érthető üzenet, nincs „Folytatás”, a sorok kézzel írhatók', () => {
+    const err = new HttpErrorResponse({ status: 400, error: { errorType: 'AiHelperPremiumRequired', errorMessage: 'x' } });
+    const { fixture, c } = create([student(1)], [throwError(() => err)]);
+    fixture.detectChanges();
+    expect(q(fixture, 'feedback-blocked')!.textContent).toContain('Prémium tanári előfizetéssel');
+    expect(q(fixture, 'feedback-resume')).toBeNull();
+    expect(q(fixture, 'feedback-text-1')).not.toBeNull();
+    c.resume();
+    expect(service.draftFeedback).toHaveBeenCalledTimes(1);
   });
 
   it('60-nál több diák: 60-as részletekben kér', () => {
