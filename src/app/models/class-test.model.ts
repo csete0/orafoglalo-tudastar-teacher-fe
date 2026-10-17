@@ -32,6 +32,8 @@ export interface ClassTestStudentRow {
   focusLossCount: number;
   pasteCount: number;
   pastedChars: number;
+  /** A tanár egész dolgozatra szóló szöveges visszajelzése (a diák a közzététel után látja). */
+  teacherFeedback?: string | null;
 }
 
 export interface ClassTestStats {
@@ -64,4 +66,53 @@ export interface ClassTestOverview {
   stats: ClassTestStats;
   aiGradedThisMonth: number;
   aiMonthlyLimit: number;
+}
+
+// ── Visszajelzés MI-vázlattal (feedback-drafts) és tömeges mentés ──
+
+/** Egy kérésben legfeljebb ennyi diák vázlata kérhető (BE: MaxStudentsPerRequest). */
+export const FEEDBACK_DRAFT_BATCH = 60;
+/** Egy mentésben legfeljebb ennyi tétel (BE). */
+export const FEEDBACK_SAVE_BATCH = 200;
+/** Egy visszajelzés legfeljebb ennyi karakter (BE). */
+export const FEEDBACK_MAX_CHARS = 2000;
+
+/**
+ * ready: kész vázlat; failed: nem lett ellenőrzött vázlat (reason); pending: nem fért bele az időkeretbe (újra kérhető);
+ * skipped: nem kérhető (pl. nincs beadva, kézi pontozásra vár - reason).
+ */
+export type FeedbackDraftStatus = 'ready' | 'failed' | 'pending' | 'skipped';
+
+export interface ClassTestFeedbackDraftDto {
+  userId: number;
+  studentName: string;
+  /** A mentés kulcsa. */
+  examSessionId: number | null;
+  status: FeedbackDraftStatus;
+  draft: string | null;
+  reason: string | null;
+  earnedPoints: number | null;
+  maxPoints: number | null;
+  /** A már elmentett visszajelzés, ha van. */
+  savedFeedback: string | null;
+}
+
+export interface ClassTestFeedbackDraftsDto {
+  assignmentId: number;
+  model: string;
+  items: ClassTestFeedbackDraftDto[];
+  /** Az időkeretből kimaradt diákok - ezekkel kell újra hívni. */
+  pendingUserIds: number[];
+}
+
+export interface ClassTestFeedbackItem {
+  examSessionId: number;
+  /** Üres: a meglévő visszajelzés törlése. */
+  feedback: string | null;
+}
+
+export interface ClassTestFeedbackSaveResultDto {
+  saved: number;
+  examSessionIds: number[];
+  notifiedStudents: number;
 }

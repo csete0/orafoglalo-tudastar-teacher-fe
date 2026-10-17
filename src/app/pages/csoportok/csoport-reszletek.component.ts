@@ -31,6 +31,7 @@ import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
+import { GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
 type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak';
 
@@ -38,7 +39,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -469,7 +470,10 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           }
 
           @case ('gyenge-temak') {
+            <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással. -->
+            <app-gyenge-temak-javaslatok [groupId]="group.id" />
             <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
+            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-2">Minden gyenge téma</h3>
             @if (weakTopicsError(); as err) {
               <p class="text-danger text-sm mb-4">{{ err }}</p>
             }

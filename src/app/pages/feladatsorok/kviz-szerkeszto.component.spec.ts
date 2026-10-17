@@ -521,6 +521,27 @@ describe('KvizSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="unpublish-btn"]')).toBeNull();
     });
 
+    it('„Kérdések szövegből”: csak tanári kvíznél; megnyitva az ablak jelenik meg, változáskor a kérdéslista újratölt', () => {
+      const admin = configure(makeDetail(), [], { scope: 'admin' });
+      admin.detectChanges();
+      expect((admin.nativeElement as HTMLElement).querySelector('[data-testid="quiz-source-section"]')).toBeNull();
+
+      TestBed.resetTestingModule();
+      const fixture = configure();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="quiz-source-section"]')).not.toBeNull();
+      expect(el.querySelector('app-kviz-szovegbol')).toBeNull();
+
+      fixture.componentInstance.sourceOpen.set(true);
+      fixture.detectChanges();
+      expect(el.querySelector('app-kviz-szovegbol')).not.toBeNull();
+
+      storeMock.loadDetail.mockClear();
+      fixture.componentInstance.onSourceChanged();
+      expect(storeMock.loadDetail).toHaveBeenCalledWith(7);
+    });
+
     it('publikált platform-kvíznél Visszavonás gomb - megerősítés után store.unpublish(), elutasításnál nem', async () => {
       const fixture = configure(makeDetail({ isPublished: true, questionCount: 3 }), [], { scope: 'admin' });
       fixture.detectChanges();

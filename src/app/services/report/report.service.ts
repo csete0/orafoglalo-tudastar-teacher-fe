@@ -12,6 +12,7 @@ import {
   TeacherTaskSetResultsDto,
   TeacherDashboardDto,
   TeacherWeakTopicDto,
+  WeakTopicSummaryDto,
 } from '../../models/report.model';
 
 @Injectable({ providedIn: 'root' })
@@ -50,6 +51,13 @@ export class ReportService {
     let params = new HttpParams();
     if (threshold !== undefined) params = params.set('threshold', threshold);
     return this.http.get<TeacherWeakTopicDto[]>(`${this.baseUrl}/groups/${groupId}/weak-topics`, { params });
+  }
+
+  /** A csoport 3 leggyengébb témaköre magyar mondatokban + gyakorló javaslatok (MI nélkül; csak a csoport saját tanárának). */
+  getGroupWeakTopicSummary(groupId: number, threshold?: number): Observable<WeakTopicSummaryDto> {
+    let params = new HttpParams();
+    if (threshold !== undefined) params = params.set('threshold', threshold);
+    return this.http.get<WeakTopicSummaryDto>(`${this.baseUrl}/groups/${groupId}/weak-topics/summary`, { params });
   }
 
   getTaskSetResults(taskSetId: number, filter?: TaskSetResultsFilter): Observable<TeacherTaskSetResultsDto> {

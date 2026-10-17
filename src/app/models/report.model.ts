@@ -264,3 +264,60 @@ export interface TeacherUpcomingDeadlineDto {
   completedMemberCount: number;
   memberCount: number;
 }
+
+// ── Gyenge témák összefoglaló + gyakorló javaslatok (MI nélkül) ──
+
+export interface WeakTopicTrendDto {
+  direction: 'improving' | 'declining' | 'steady';
+  recentPercent: number;
+  previousPercent: number;
+  recentAnswers: number;
+  previousAnswers: number;
+}
+
+/**
+ * Egy gyakorló javaslat. `action`:
+ * - assign: saját anyag, kiadható most (feladatsornál az `assignTaskSetId`, kvíznél az `id` kiadása);
+ * - copyAssign: hivatalos sor - másolás (vagy a meglévő másolat) + publikálás + kiadás egy hívásban (catalog-assign);
+ * - assigned: már ki van adva ennek a csoportnak;
+ * - none: nem másolható (a tanár csomagja nem engedi) és nincs másolata.
+ */
+export interface WeakTopicSuggestionDto {
+  kind: 'taskSet' | 'quiz';
+  source: 'own' | 'catalog';
+  id: number;
+  title: string;
+  /** Feladatsornál a feladatok, kvíznél a témakörbe eső kérdések száma. */
+  itemCount: number;
+  isPaid: boolean;
+  requiredTier: 'none' | 'subscription' | 'premium';
+  action: 'assign' | 'copyAssign' | 'assigned' | 'none';
+  assignTaskSetId: number | null;
+  canCopy: boolean;
+}
+
+export interface WeakTopicSummaryTopicDto {
+  topicId: number;
+  topicName: string;
+  topicColor?: string | null;
+  topicIcon?: string | null;
+  successRate: number;
+  studentCount: number;
+  weakStudentCount: number;
+  trend: WeakTopicTrendDto | null;
+  matchedTaskTypes: string[];
+  sentences: string[];
+  taskSets: WeakTopicSuggestionDto[];
+  quizzes: WeakTopicSuggestionDto[];
+}
+
+export interface WeakTopicSummaryDto {
+  groupId: number;
+  groupName: string;
+  threshold: number;
+  /** Archivált csoportnak nem adható ki semmi. */
+  canAssign: boolean;
+  /** A teljes összefoglaló mondatai sorrendben (bevezető + témakörönként). */
+  sentences: string[];
+  topics: WeakTopicSummaryTopicDto[];
+}

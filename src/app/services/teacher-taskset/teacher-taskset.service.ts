@@ -4,6 +4,8 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AssignTaskSetToGroupRequest,
+  CatalogAssignRequest,
+  CatalogAssignResultDto,
   CatalogCopyResultDto,
   CatalogPageDto,
   CatalogQuery,
@@ -152,6 +154,11 @@ export class TeacherTaskSetService {
   /** Egy hivatalos feladatsor átmásolása a tanár új, nem publikált feladatsorába (`copyAgain`: a már lemásolt sor újabb példánya). */
   copyFromCatalog(taskSetId: number, copyAgain = false): Observable<CatalogCopyResultDto> {
     return this.http.post<CatalogCopyResultDto>(`${this.baseUrl}/catalog/task-sets/${taskSetId}/copy`, copyAgain ? { copyAgain: true } : {});
+  }
+
+  /** Hivatalos feladatsor kiadása a csoportnak egy hívásban: másolás (vagy a meglévő másolat) → publikálás → kiadás. */
+  catalogAssign(groupId: number, request: CatalogAssignRequest): Observable<CatalogAssignResultDto> {
+    return this.http.post<CatalogAssignResultDto>(`${this.baseUrl}/groups/${groupId}/catalog-assign`, request);
   }
 
   getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {

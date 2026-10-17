@@ -150,6 +150,46 @@ export interface GenerateTeacherQuizQuestionsRequest {
   difficulty: QuizDifficulty;
 }
 
+// ── Kérdések szövegből (generate-from-source) ─────────
+
+/** A „Kérdések szövegből” kérdéstípusai - az igaz/hamis egyválasztósként tárolódik („Igaz”/„Hamis”). */
+export type QuizSourceQuestionType = 'single' | 'multi' | 'truefalse' | 'cloze';
+
+export const QUIZ_SOURCE_TYPE_LABELS: Record<QuizSourceQuestionType, string> = {
+  single: 'Egyválasztós',
+  multi: 'Többválasztós',
+  truefalse: 'Igaz/hamis',
+  cloze: 'Hiányos kitöltés',
+};
+
+/** Pontosan az egyik: `text` (beillesztett tananyag) vagy `file` (.txt/.docx/.pdf). */
+export interface GenerateQuizFromSourceRequest {
+  text?: string | null;
+  file?: File | null;
+  topicId: number;
+  count: number;
+  difficulty: QuizDifficulty;
+  /** Üres: mind a négy típus. */
+  questionTypes: QuizSourceQuestionType[];
+}
+
+export interface QuizSourceDroppedDto {
+  /** Miért maradt ki (pl. a forrás-idézet nem található szó szerint a szövegben). */
+  reason: string;
+  /** A kérdés szövege (≤300 karakter). */
+  text: string;
+}
+
+export interface QuizSourceResultDto {
+  /** Jóváhagyatlan piszkozatként mentett kérdések. */
+  created: TeacherQuizQuestionDto[];
+  dropped: QuizSourceDroppedDto[];
+  sourceChars: number;
+  model: string;
+  /** Egy kérdés sem ment át - a felhasznált MI-keret visszajárt. */
+  refunded: boolean;
+}
+
 // ── Témakörök (a diák-oldali /quiz/topics végpontról) ─────────
 
 export interface QuizTopicOptionDto {

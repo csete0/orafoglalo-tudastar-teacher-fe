@@ -10,6 +10,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { DolgozatVisszajelzesComponent } from './dolgozat-visszajelzes.component';
 
 const STATUS_LABELS: Record<ClassTestStudentRow['status'], string> = {
   not_started: 'nem kezdte el',
@@ -30,7 +31,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-dolgozat-attekintes',
   standalone: true,
-  imports: [RouterLink, DatePipe, LocalSpinnerComponent, AttemptReviewPanelComponent],
+  imports: [RouterLink, DatePipe, LocalSpinnerComponent, AttemptReviewPanelComponent, DolgozatVisszajelzesComponent],
   template: `
     <div class="max-w-6xl mx-auto px-4 py-6">
       @if (overview(); as o) {
@@ -46,6 +47,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <button type="button" class="btn btn-ghost" (click)="exportCsv(o)">Exportálás CSV-be</button>
+            <button type="button" class="btn btn-ghost" (click)="feedbackOpen.set(true)" [disabled]="o.stats.submitted === 0"
+                    [title]="o.stats.submitted === 0 ? 'Még nincs beadott dolgozat' : ''" data-testid="feedback-open">
+              Visszajelzések AI-vázlattal
+            </button>
             @if (o.resultsPublishedAt) {
               <span class="badge badge-success">Közzétéve: {{ o.resultsPublishedAt | date: 'MM.dd. HH:mm' }}</span>
             } @else {
@@ -112,7 +117,15 @@ const LIVE_TAIL_MS = 15 * 60_000;
               <tbody>
                 @for (row of o.students; track row.userId) {
                   <tr class="border-b border-border-default last:border-b-0" [class.opacity-50]="row.status === 'not_started'">
-                    <td class="py-2.5 px-4 whitespace-nowrap">{{ row.name }}</td>
+                    <td class="py-2.5 px-4 whitespace-nowrap align-top">
+                      {{ row.name }}
+                      @if (row.teacherFeedback) {
+                        <details class="mt-1 whitespace-normal max-w-xs" [attr.data-testid]="'saved-feedback-' + row.userId">
+                          <summary class="text-xs text-primary cursor-pointer">Visszajelzés</summary>
+                          <p class="text-xs text-text-muted mt-1 whitespace-pre-line break-words">{{ row.teacherFeedback }}</p>
+                        </details>
+                      }
+                    </td>
                     <td class="py-2.5 px-4 whitespace-nowrap">
                       {{ statusLabels[row.status] }}
                       @if (row.status === 'in_progress') {
@@ -174,6 +187,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
             </table>
           </div>
         </div>
+        @if (feedbackOpen()) {
+          <app-dolgozat-visszajelzes [assignmentId]="o.assignmentId" [students]="o.students" [published]="!!o.resultsPublishedAt"
+            (closed)="feedbackOpen.set(false)" (saved)="load()" />
+        }
       } @else if (error()) {
         <p class="text-danger">{{ error() }}</p>
       } @else {
@@ -194,6 +211,8 @@ export class DolgozatAttekintesComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly publishing = signal(false);
   readonly openAttemptId = signal<number | null>(null);
+  /** „Visszajelzések AI-vázlattal” párbeszédablak. */
+  readonly feedbackOpen = signal(false);
   readonly statusLabels = STATUS_LABELS;
   readonly grades = ['1', '2', '3', '4', '5'];
 
@@ -211,8 +230,8 @@ export class DolgozatAttekintesComponent implements OnInit {
     this.assignmentId = Number(this.route.snapshot.paramMap.get('assignmentId'));
     this.load();
     const timer = setInterval(() => {
-      // Nyitott értékelő panel alatt nem frissítünk, hogy a tanár szerkesztése ne ugráljon.
-      if (this.isLive() && this.openAttemptId() === null) this.load();
+      // Nyitott értékelő panel / visszajelzés-ablak alatt nem frissítünk, hogy a tanár szerkesztése ne ugráljon.
+      if (this.isLive() && this.openAttemptId() === null && !this.feedbackOpen()) this.load();
     }, LIVE_REFRESH_MS);
     this.destroyRef.onDestroy(() => clearInterval(timer));
   }
