@@ -44,10 +44,10 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
   standalone: true,
   imports: [FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
+    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
       <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
       <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-gen-title" tabindex="-1" data-testid="sql-generation-dialog"
-        class="card relative w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 outline-none">
+        class="card relative w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="database" class="w-5 h-5 block" /></div>
