@@ -10,6 +10,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { GradingQualityDto, TeacherFileDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
+import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -211,6 +212,63 @@ describe('FeladatsorSzerkesztoComponent', () => {
     fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('[data-testid="sql-files-warning-generate"]') as HTMLButtonElement).disabled).toBe(true);
     expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  describe('AI programozási feladat', () => {
+    const aiServiceMock = () => ({
+      getQuota: vi.fn(() => of({ used: 1, limit: 30, month: '2026-10', isPremium: true })),
+      getActiveJob: vi.fn(() => of(null)),
+    });
+    const tasks = () => [
+      { id: 1, title: 'Prog', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], aiAssisted: true,
+        subTasks: [{ id: 11, description: 'a', points: 10, snippets: [] }] },
+      { id: 2, title: 'SQL', description: 'd', maxPoints: 10, taskOrder: 2, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] },
+    ];
+
+    it('csak a programozási feladat kártyáján kínálja az AI-val kiegészítést, és jelöli az AI-val készültet', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelectorAll('[data-testid="task-ai-assisted"]').length).toBe(1);
+      fixture.componentInstance.toggleTask(2);
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-complete-open"]')).toBeNull();
+
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+      (el.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Feladat kiegészítése AI-val');
+    });
+
+    it('a Programozás blokk „Új feladat” űrlapja mellől új feladat kérhető; mentés után újratölt és kinyitja az új feladatot', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelectorAll('[data-testid="ai-new-open"]').length).toBe(1);
+      (el.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Új programozási feladat AI-val');
+
+      fixture.componentInstance.onAiTaskSaved(1, 456);
+      expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
+      expect(fixture.componentInstance.expandedTaskId()).toBe(456);
+    });
+
+    it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
+      configure(makeDetail({ takedownAt: '2026-10-01T00:00:00Z', tasks: tasks() }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+      expect((fixture.nativeElement.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).disabled).toBe(true);
+      expect((fixture.nativeElement.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).disabled).toBe(true);
+    });
   });
 
   it('SQL nélküli feladatsoron nem kínálja a hiányzó SQL-fájl elkészítését', () => {

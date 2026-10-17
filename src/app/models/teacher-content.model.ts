@@ -98,6 +98,8 @@ export interface TeacherTaskDto {
   taskTypeIds: number[];
   subTasks: TeacherSubTaskDto[];
   completeSolutionSnippets: SnippetDto[];
+  /** A feladat AI programozási feladat-készítővel készült/egészült ki (csak a tanári felületen látszik). */
+  aiAssisted?: boolean;
 
   /**
    * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
