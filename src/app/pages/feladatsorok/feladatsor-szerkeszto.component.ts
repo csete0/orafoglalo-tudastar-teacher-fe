@@ -23,6 +23,7 @@ import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubr
 import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
 import { TesztbemenetComponent } from './tesztbemenet.component';
 import { SqlGeneralasComponent } from './sql-generalas.component';
+import { AiFeladatComponent } from './ai-feladat.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -54,6 +55,7 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 ];
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
 const SQL_TASK_TYPE_ID = 5;
+const PROGRAMMING_TASK_TYPE_ID = 6;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -80,7 +82,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, AiFeladatComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -282,6 +284,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
                               } @else {
                                 <p class="text-sm text-text-muted" data-testid="task-points-summary">{{ task.maxPoints }} pont · {{ task.subTasks.length }} részfeladat</p>
                               }
+                              @if (task.aiAssisted) {
+                                <span class="badge badge-primary mt-1" data-testid="task-ai-assisted">AI-val készült</span>
+                              }
                             </span>
                           </button>
                           <div class="flex items-center gap-3 shrink-0">
@@ -296,6 +301,15 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
                           <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
                             (stdinRequested)="openRunInput(task.id)" />
+                          @if (isProgrammingTask(task)) {
+                            <div class="flex flex-wrap items-center justify-between gap-2 bg-bg-panel rounded-xl p-3" data-testid="ai-complete-entry">
+                              <span class="text-sm text-text-muted min-w-0 flex-[1_1_14rem]">Hiányzik a mintamegoldás, a pontozás vagy az adatfájl? Az AI elkészíti, mentés előtt átnézed.</span>
+                              <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                                (click)="openAiTask('complete', task)" data-testid="ai-complete-open">
+                                <app-icon name="sparkles" class="w-4 h-4 block" /> AI-val kiegészítés
+                              </button>
+                            </div>
+                          }
 
                           <!-- Részfeladatok -->
                           @for (solution of task.subTasks; track solution.id) {
@@ -433,7 +447,15 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
                   @if (!section.isOther) {
                     <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2">
-                      <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
+                        @if (section.id === programmingTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="openAiTask('new', null)" data-testid="ai-new-open">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Új feladat AI-val
+                          </button>
+                        }
+                      </div>
                       <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id"
                         [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
                       <textarea [(ngModel)]="newTaskDrafts[section.id].description" [attr.name]="'newTaskDescription-' + section.id"
@@ -580,6 +602,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
           @if (sqlGenerationOpen()) {
             <app-sql-generalas [taskSetId]="detail.id" [files]="taskSetFiles()"
               (closed)="sqlGenerationOpen.set(false)" (saved)="store.loadDetail(detail.id)" />
+          }
+          @if (aiTaskDialog(); as ai) {
+            <app-ai-feladat [taskSetId]="detail.id" [startMode]="ai.mode" [task]="ai.task"
+              (closed)="aiTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
 
           <!--
@@ -1020,6 +1046,25 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak. */
   readonly sqlGenerationOpen = signal(false);
+
+  /** Az „AI programozási feladat” párbeszédablak: meglévő feladat kiegészítése vagy új feladat. */
+  readonly aiTaskDialog = signal<{ mode: 'complete' | 'new'; task: TeacherTaskDto | null } | null>(null);
+  readonly programmingTypeId = PROGRAMMING_TASK_TYPE_ID;
+
+  /** Csak a Programozás típusú (nem SQL, nem irodai, nem vegyes) feladatokhoz kérhető AI-kiegészítés. */
+  isProgrammingTask(task: TeacherTaskDto): boolean {
+    return task.taskTypeIds.length === 1 && task.taskTypeIds[0] === PROGRAMMING_TASK_TYPE_ID;
+  }
+
+  openAiTask(mode: 'complete' | 'new', task: TeacherTaskDto | null): void {
+    this.aiTaskDialog.set({ mode, task });
+  }
+
+  /** Mentés után friss feladatsor; az érintett (új) feladat kinyílik. */
+  onAiTaskSaved(taskSetId: number, taskId: number): void {
+    this.store.loadDetail(taskSetId);
+    this.expandedTaskId.set(taskId);
+  }
 
   /** SQL-feladat vagy SQL-fájl esetén kínáljuk fel a hiányzó create.sql / create_lite.sql elkészítését. */
   readonly showSqlGeneration = computed(() => {
