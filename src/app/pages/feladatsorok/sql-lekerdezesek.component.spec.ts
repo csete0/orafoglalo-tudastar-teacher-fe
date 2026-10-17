@@ -27,6 +27,7 @@ function item(overrides: Partial<SqlQueryItemDto> = {}): SqlQueryItemDto {
     subTaskId: 124,
     label: '3. feladat',
     hadSnippet: false,
+    willSave: true,
     sql: 'SELECT varmegye, COUNT(*) AS db\nFROM telepules\nGROUP BY varmegye\nORDER BY varmegye;',
     status: 'ok',
     error: null,
@@ -101,7 +102,7 @@ describe('SqlLekerdezesekComponent', () => {
     expect(q(fixture, 'sql-q-summary')!.textContent).toContain('1');
     expect((q(fixture, 'sql-q-regenerate') as HTMLInputElement).checked).toBe(false);
     q(fixture, 'sql-q-generate')!.click();
-    expect(serviceMock.generateSqlQueries).toHaveBeenCalledWith(9, 95, { regenerate: false });
+    expect(serviceMock.generateSqlQueries).toHaveBeenCalledWith(9, 95, { regenerate: false, overwrite: false });
   });
 
   it('bejelölve a meglévőket is újraíratja', () => {
@@ -109,7 +110,7 @@ describe('SqlLekerdezesekComponent', () => {
     q(second, 'sql-q-regenerate')!.click();
     second.detectChanges();
     q(second, 'sql-q-generate')!.click();
-    expect(serviceMock.generateSqlQueries).toHaveBeenCalledWith(9, 95, { regenerate: true });
+    expect(serviceMock.generateSqlQueries).toHaveBeenCalledWith(9, 95, { regenerate: true, overwrite: true });
   });
 
   it('ha minden részfeladatnak van megoldása, az újraírás az alapértelmezés; kikapcsolva nem indítható', () => {
@@ -230,7 +231,7 @@ describe('SqlLekerdezesekComponent', () => {
     expect(serviceMock.validateSqlQueries).toHaveBeenCalledWith(9, 95, [
       { subTaskId: 123, sql: item().sql },
       { subTaskId: 124, sql: 'SELECT 2;' },
-    ]);
+    ], false);
     expect(q(fixture, 'sql-q-dirty')).toBeNull();
     expect(q(fixture, 'sql-q-status-124')!.textContent).toContain('✔');
     expect((q(fixture, 'sql-q-select-124') as HTMLInputElement).checked).toBe(true);
@@ -370,5 +371,58 @@ describe('SqlLekerdezesekComponent', () => {
     expect(dialog.getAttribute('role')).toBe('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(fixture.nativeElement.querySelector('#' + dialog.getAttribute('aria-labelledby'))!.textContent).toContain('SQL megoldó lekérdezések');
+  });
+
+  it('újraírás felülírás nélkül: a meglévő megoldásúak „nem lesz mentve” jelölést kapnak, és kimaradnak a mentésből', () => {
+    const fixture = create({
+      generated: of(
+        result([
+          item({ subTaskId: 123, label: '2. feladat', hadSnippet: true, willSave: false,
+            warnings: ['Nem lesz mentve – már van megoldás (cseréhez kapcsold be a felülírást).', 'Nincs ORDER BY.'] }),
+          item(),
+        ]),
+      ),
+    });
+    q(fixture, 'sql-q-regenerate')!.click();
+    fixture.detectChanges();
+    q(fixture, 'sql-q-overwrite')!.click();
+    fixture.detectChanges();
+    q(fixture, 'sql-q-generate')!.click();
+    fixture.detectChanges();
+
+    expect(serviceMock.generateSqlQueries).toHaveBeenCalledWith(9, 95, { regenerate: true, overwrite: false });
+    expect(q(fixture, 'sql-q-wont-save-123')!.textContent).toContain('Nem lesz mentve – már van megoldás');
+    expect(q(fixture, 'sql-q-had-123')).toBeNull();
+    // A jelvény mondja - a figyelmeztetések között nem ismétlődik.
+    expect(q(fixture, 'sql-q-item-warnings-123')!.textContent).not.toContain('Nem lesz mentve');
+    expect(q(fixture, 'sql-q-item-warnings-123')!.textContent).toContain('Nincs ORDER BY.');
+    const select = q(fixture, 'sql-q-select-123') as HTMLInputElement;
+    expect(select.checked).toBe(false);
+    expect(select.disabled).toBe(true);
+    expect(q(fixture, 'sql-q-save')!.textContent).toContain('Mentés (1)');
+
+    q(fixture, 'sql-q-save')!.click();
+    expect(serviceMock.applySqlQueries).toHaveBeenCalledWith(9, 95, { queries: [{ subTaskId: 124, sql: item().sql }], overwrite: false });
+  });
+
+  it('csak „nem lesz mentve” tételeknél nem menthető', () => {
+    const fixture = create({ generated: of(result([item({ hadSnippet: true, willSave: false })])) });
+    q(fixture, 'sql-q-generate')!.click();
+    fixture.detectChanges();
+    expect((q(fixture, 'sql-q-save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('az újraellenőrzés a felülírás-beállítást is küldi, és a friss willSave-et használja', () => {
+    const fixture = create({ task: task({ subTasks: [{ id: 124, label: '3.', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] }) });
+    q(fixture, 'sql-q-generate')!.click(); // újraírás + felülírás az alapértelmezés
+    fixture.detectChanges();
+    serviceMock.validateSqlQueries.mockReturnValue(of(result([item({ sql: 'SELECT 2;', willSave: false })], { model: '' })));
+    typeInto(fixture, 'sql-q-editor-124', 'SELECT 2;');
+    q(fixture, 'sql-q-revalidate')!.click();
+    fixture.detectChanges();
+
+    expect(serviceMock.validateSqlQueries).toHaveBeenCalledWith(9, 95, [{ subTaskId: 124, sql: 'SELECT 2;' }], true);
+    expect(q(fixture, 'sql-q-wont-save-124')).not.toBeNull();
+    expect((q(fixture, 'sql-q-save') as HTMLButtonElement).disabled).toBe(true);
   });
 });

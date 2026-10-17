@@ -9,6 +9,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
 
 export const CATALOG_PAGE_SIZE = 20;
 /** A BE ennél rövidebb keresőszöt nem vesz figyelembe. */
@@ -115,6 +116,8 @@ type LoadResult = { page: CatalogPageDto } | { error: string };
                     <p class="text-xs text-text-muted break-words">
                       {{ item.categoryName ?? 'Kategória nélkül' }} · {{ levelLabel(item) }}{{ item.year ? ' · ' + item.year : '' }} · {{ item.taskCount }} feladat
                     </p>
+                    <p class="text-xs mt-1 break-words" [class.text-warning]="isPaid(item)" [class.text-success]="!isPaid(item)"
+                      [attr.data-testid]="'catalog-access-' + item.id">{{ accessText(item) }}</p>
                     @if (item.isPremium || item.alreadyCopied) {
                       <div class="flex flex-wrap gap-1.5 mt-1">
                         @if (item.isPremium) { <span class="badge badge-primary" [attr.data-testid]="'catalog-premium-' + item.id">Prémium</span> }
@@ -291,6 +294,15 @@ export class KatalogusMasolasComponent implements OnInit {
     return LEVELS.find((l) => l.id === item.levelId)?.label ?? item.levelName ?? '';
   }
 
+  isPaid(item: CatalogTaskSetDto): boolean {
+    return isPaidAccess(item);
+  }
+
+  /** A másolat a forrás hozzáférését örökli - ezt látja a tanár már a választáskor. */
+  accessText(item: CatalogTaskSetDto): string {
+    return this.isPaid(item) ? PAID_ACCESS_TEXT : FREE_ACCESS_TEXT;
+  }
+
   blockedReason(item: CatalogTaskSetDto): string {
     return copyBlockedReason(item);
   }
@@ -300,21 +312,36 @@ export class KatalogusMasolasComponent implements OnInit {
     if (!item.canCopy || this.copyingId() !== null) return;
     this.copyingId.set(item.id);
     this.copyError.set(null);
-    const confirmed = await this.confirmService.ask({
-      title: 'Másolás a katalógusból',
-      message:
-        `A(z) „${item.title}” (${item.taskCount} feladat) a saját feladatsoraid közé kerül nem publikált piszkozatként, ` +
-        'feladatokkal, megoldásokkal, fájlokkal és szempontlistával. Utána szabadon szerkesztheted.' +
-        (item.alreadyCopied ? ' Ezt már egyszer lemásoltad - most egy újabb, külön példány készül.' : ''),
-      confirmLabel: 'Másolás',
-      cancelLabel: 'Mégsem',
-    });
+    // A már lemásolt sornál rögtön az „új másolat?” kérdés jön (és copyAgain-nel megy a kérés).
+    const confirmed = item.alreadyCopied
+      ? await this.askCopyAgain()
+      : await this.confirmService.ask({
+          title: 'Másolás a katalógusból',
+          message:
+            `A(z) „${item.title}” (${item.taskCount} feladat) a saját feladatsoraid közé kerül nem publikált piszkozatként, ` +
+            `feladatokkal, megoldásokkal, fájlokkal és szempontlistával. Utána szabadon szerkesztheted. ${this.accessText(item)}`,
+          confirmLabel: 'Másolás',
+          cancelLabel: 'Mégsem',
+        });
     if (!confirmed) {
       this.copyingId.set(null);
       return;
     }
+    this.send(item, item.alreadyCopied);
+  }
+
+  private askCopyAgain(): Promise<boolean> {
+    return this.confirmService.ask({
+      title: 'Már lemásoltad',
+      message: 'Ezt a feladatsort már lemásoltad. Készítsek egy új másolatot?',
+      confirmLabel: 'Új másolat',
+      cancelLabel: 'Mégsem',
+    });
+  }
+
+  private send(item: CatalogTaskSetDto, copyAgain: boolean): void {
     this.service
-      .copyFromCatalog(item.id)
+      .copyFromCatalog(item.id, copyAgain)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
@@ -325,7 +352,16 @@ export class KatalogusMasolasComponent implements OnInit {
           this.closed.emit();
           this.router.navigate(['/feladatsorok', res.taskSetId, 'szerkesztes']);
         },
-        error: (err) => {
+        error: async (err) => {
+          // A lista elavult volt (közben lemásolta): megerősítés után új példány.
+          if (!copyAgain && err?.error?.errorType === 'AlreadyCopied') {
+            if (await this.askCopyAgain()) {
+              this.send(item, true);
+              return;
+            }
+            this.copyingId.set(null);
+            return;
+          }
           this.copyingId.set(null);
           this.copyError.set(copyErrorMessage(err));
         },

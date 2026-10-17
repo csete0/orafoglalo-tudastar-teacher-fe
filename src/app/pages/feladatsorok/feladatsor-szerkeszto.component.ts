@@ -24,6 +24,7 @@ import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline }
 import { TesztbemenetComponent } from './tesztbemenet.component';
 import { SqlGeneralasComponent } from './sql-generalas.component';
 import { SqlLekerdezesekComponent } from './sql-lekerdezesek.component';
+import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -142,6 +143,15 @@ type SnippetDraft = Record<number, Record<number, string>>;
             <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
             <span>Ezt a feladatsort a platform-admin adminisztratív okból visszavonta — a tartalma nem publikálható újra, amíg
             az admin fel nem oldja a visszavonást.</span>
+          </p>
+        }
+
+        <!-- Katalógus-másolat: a diákok a forrás hivatalos sor hozzáférési szintjével nyithatják meg. -->
+        @if (detail.copiedFromTaskSetId != null) {
+          <p class="rounded-xl p-3 mb-6 text-sm flex items-start gap-2 border" data-testid="copied-access"
+            [class]="isPaidAccess(detail) ? 'bg-warning-subtle border-warning/40 text-warning' : 'bg-success-subtle border-success/40 text-success'">
+            <app-icon name="clipboard-list" class="w-5 h-5 block shrink-0" />
+            <span>Katalógusból másolt feladatsor, a hivatalos sor hozzáférését örökli. {{ isPaidAccess(detail) ? paidAccessText : freeAccessText }}</span>
           </p>
         }
 
@@ -1038,6 +1048,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak. */
   readonly sqlGenerationOpen = signal(false);
+
+  readonly isPaidAccess = isPaidAccess;
+  readonly paidAccessText = PAID_ACCESS_TEXT;
+  readonly freeAccessText = FREE_ACCESS_TEXT;
 
   /** Melyik SQL-feladat „SQL megoldó lekérdezések MI-vel” ablaka van nyitva. */
   readonly sqlQueriesTaskId = signal<number | null>(null);

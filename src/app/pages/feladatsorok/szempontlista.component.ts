@@ -89,6 +89,11 @@ const COLLAPSE_ABOVE_ITEMS = 8;
 
       <!-- ── A lista részfeladatonként ── -->
       @if (rubric(); as r) {
+        @if (hidesRules()) {
+          <p class="text-xs text-text-muted flex items-center gap-1" data-testid="rubric-catalog-copy">
+            <app-icon name="shield" class="w-4 h-4 block shrink-0" /> Hivatalos szempontlista – a gépi ellenőrzés szabályai rejtettek.
+          </p>
+        }
         @if (r.note) {
           <div class="flex items-start gap-2 bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm" role="note" data-testid="rubric-note">
             <app-icon name="warning-triangle" class="w-4 h-4 mt-0.5 block shrink-0 text-warning" />
@@ -99,7 +104,7 @@ const COLLAPSE_ABOVE_ITEMS = 8;
           </div>
         }
         <p class="text-xs text-text-muted">
-          {{ r.items.length }} tétel ({{ machineCount() }} gépi) · {{ r.rawTotal }} pont
+          {{ r.items.length }} tétel{{ hidesRules() ? '' : ' (' + machineCount() + ' gépi)' }} · {{ r.rawTotal }} pont
           @if (r.rawTotal !== r.examPoints) {
             – a feladat {{ r.examPoints }} pontjára arányosan átszámolva
           }
@@ -234,6 +239,8 @@ export class SzempontlistaComponent {
 
   private readonly taskId = computed(() => this.task().id);
 
+  /** Katalógusból másolt hivatalos lista: a gépi szabályok rejtettek (a pontozás használja őket, a tanár nem látja). */
+  readonly hidesRules = computed(() => this.rubric()?.source === 'catalog-copy');
   readonly machineCount = computed(() => this.rubric()?.items.filter((i) => i.machine).length ?? 0);
 
   readonly groups = computed<RubricGroup[]>(() => {

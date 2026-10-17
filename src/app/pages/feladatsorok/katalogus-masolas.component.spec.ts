@@ -191,7 +191,7 @@ describe('KatalogusMasolasComponent', () => {
     await fixture.componentInstance.copy(row());
 
     expect(confirmMock.ask).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Másolás' }));
-    expect(serviceMock.copyFromCatalog).toHaveBeenCalledWith(15);
+    expect(serviceMock.copyFromCatalog).toHaveBeenCalledWith(15, false);
     expect(toastMock.success).toHaveBeenCalledWith('„2024. május-június (másolat)” létrejött (4 feladat, 21 fájl) - most szerkesztheted.');
     expect(routerMock.navigate).toHaveBeenCalledWith(['/feladatsorok', 812, 'szerkesztes']);
     expect(closed).toHaveBeenCalled();
@@ -199,19 +199,61 @@ describe('KatalogusMasolasComponent', () => {
 
   it('kihagyott fájloknál figyelmeztető toast', async () => {
     const fixture = create();
-    serviceMock.copyFromCatalog.mockReturnValue(of({ taskSetId: 812, title: 'X', taskCount: 1, fileCount: 0, warnings: ['A(z) „x.txt” fájl kimaradt.'] }));
+    serviceMock.copyFromCatalog.mockReturnValue(
+      of({ taskSetId: 812, title: 'X', taskCount: 1, fileCount: 0, warnings: ['A(z) „x.txt” fájl kimaradt.', 'A 2. feladat leírása 5000 karakternél hosszabb - módosítás előtt rövidítsd.'] }),
+    );
     await fixture.componentInstance.copy(row());
     expect(toastMock.warning).toHaveBeenCalledWith(expect.stringContaining('A(z) „x.txt” fájl kimaradt.'), 10000);
+    expect(toastMock.warning.mock.calls[0][0]).toContain('módosítás előtt rövidítsd');
     expect(routerMock.navigate).toHaveBeenCalled();
   });
 
-  it('a mégsem nem másol; a már lemásoltnál a megerősítés jelzi az újabb példányt', async () => {
+  it('a mégsem nem másol', async () => {
     const fixture = create();
     confirmMock.ask.mockResolvedValue(false);
-    await fixture.componentInstance.copy(row({ alreadyCopied: true }));
-    expect(confirmMock.ask.mock.calls[0][0].message).toContain('már egyszer lemásoltad');
+    await fixture.componentInstance.copy(row());
     expect(serviceMock.copyFromCatalog).not.toHaveBeenCalled();
     expect(fixture.componentInstance.copyingId()).toBeNull();
+  });
+
+  it('már lemásolt sornál az „új másolat?” kérdés után copyAgain-nel kér', async () => {
+    const fixture = create();
+    await fixture.componentInstance.copy(row({ alreadyCopied: true }));
+    expect(confirmMock.ask).toHaveBeenCalledTimes(1);
+    expect(confirmMock.ask.mock.calls[0][0].message).toBe('Ezt a feladatsort már lemásoltad. Készítsek egy új másolatot?');
+    expect(serviceMock.copyFromCatalog).toHaveBeenCalledWith(15, true);
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/feladatsorok', 812, 'szerkesztes']);
+  });
+
+  it('AlreadyCopied hibára megerősítés, majd copyAgain-nel újra küldi', async () => {
+    const fixture = create();
+    serviceMock.copyFromCatalog
+      .mockReturnValueOnce(throwError(() => ({ status: 400, error: { errorType: 'AlreadyCopied', errorMessage: 'Ezt a feladatsort már lemásoltad.' } })))
+      .mockReturnValueOnce(of({ taskSetId: 813, title: 'X (másolat)', taskCount: 4, fileCount: 2, warnings: [] }));
+    await fixture.componentInstance.copy(row());
+    await vi.waitFor(() => expect(serviceMock.copyFromCatalog).toHaveBeenCalledTimes(2));
+
+    expect(confirmMock.ask).toHaveBeenCalledTimes(2);
+    expect(confirmMock.ask.mock.calls[1][0].message).toBe('Ezt a feladatsort már lemásoltad. Készítsek egy új másolatot?');
+    expect(serviceMock.copyFromCatalog.mock.calls[1]).toEqual([15, true]);
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/feladatsorok', 813, 'szerkesztes']);
+  });
+
+  it('AlreadyCopied hibánál a mégsem nem másol újra, és nem mutat hibát', async () => {
+    const fixture = create();
+    confirmMock.ask.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    serviceMock.copyFromCatalog.mockReturnValue(throwError(() => ({ status: 400, error: { errorType: 'AlreadyCopied', errorMessage: 'x' } })));
+    await fixture.componentInstance.copy(row());
+    await vi.waitFor(() => expect(fixture.componentInstance.copyingId()).toBeNull());
+    expect(serviceMock.copyFromCatalog).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.copyError()).toBeNull();
+  });
+
+  it('a sorok mutatják, milyen hozzáférést örököl a másolat', () => {
+    const fixture = create(of(page([row(), row({ id: 16, isFree: false }), row({ id: 17, isPremium: true, isFree: false })])));
+    expect(q(fixture, 'catalog-access-15')!.textContent).toContain('Ingyenes – minden diákod eléri.');
+    expect(q(fixture, 'catalog-access-16')!.textContent).toContain('Fizetős – a diákjaidnak előfizetés vagy iskolai licenc kell hozzá; dolgozatban mindenki elérheti');
+    expect(q(fixture, 'catalog-access-17')!.textContent).toContain('Fizetős');
   });
 
   it('dupla kattintásra egyetlen másolás indul; nem másolható sornál semmi', async () => {

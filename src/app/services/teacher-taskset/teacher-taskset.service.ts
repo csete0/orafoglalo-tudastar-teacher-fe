@@ -130,8 +130,8 @@ export class TeacherTaskSetService {
   }
 
   /** A (kézzel javított) lekérdezések újraellenőrzése MI nélkül, mentés nélkül - ugyanaz a válaszalak. */
-  validateSqlQueries(taskSetId: number, taskId: number, queries: SqlQueryInput[]): Observable<SqlQueryResultDto> {
-    return this.http.post<SqlQueryResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks/${taskId}/sql-queries/validate`, { queries });
+  validateSqlQueries(taskSetId: number, taskId: number, queries: SqlQueryInput[], overwrite: boolean): Observable<SqlQueryResultDto> {
+    return this.http.post<SqlQueryResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks/${taskId}/sql-queries/validate`, { queries, overwrite });
   }
 
   /** A lekérdezések mentése a részfeladatok SQL-megoldásaként. */
@@ -149,9 +149,9 @@ export class TeacherTaskSetService {
     return this.http.get<CatalogPageDto>(`${this.baseUrl}/catalog/task-sets`, { params });
   }
 
-  /** Egy hivatalos feladatsor átmásolása a tanár új, nem publikált feladatsorába. */
-  copyFromCatalog(taskSetId: number): Observable<CatalogCopyResultDto> {
-    return this.http.post<CatalogCopyResultDto>(`${this.baseUrl}/catalog/task-sets/${taskSetId}/copy`, {});
+  /** Egy hivatalos feladatsor átmásolása a tanár új, nem publikált feladatsorába (`copyAgain`: a már lemásolt sor újabb példánya). */
+  copyFromCatalog(taskSetId: number, copyAgain = false): Observable<CatalogCopyResultDto> {
+    return this.http.post<CatalogCopyResultDto>(`${this.baseUrl}/catalog/task-sets/${taskSetId}/copy`, copyAgain ? { copyAgain: true } : {});
   }
 
   getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {

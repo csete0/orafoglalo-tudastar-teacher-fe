@@ -92,7 +92,9 @@ function errorText(err: unknown, fallback: string): string {
                     <span aria-hidden="true">{{ statusIcon(check?.status) }}</span>&nbsp;{{ statusLabel(check?.status) }}
                   </span>
                   @if (isChanged(item)) { <span class="badge badge-warning">módosítva</span> }
-                  @if (item.hadSnippet) {
+                  @if (!willSave(item.subTaskId)) {
+                    <span class="badge badge-neutral" [attr.data-testid]="'sql-q-wont-save-' + item.subTaskId">Nem lesz mentve – már van megoldás</span>
+                  } @else if (item.hadSnippet) {
                     <span class="badge badge-neutral" [attr.data-testid]="'sql-q-had-' + item.subTaskId">van már SQL-megoldása – felülíródik</span>
                   }
                 </div>
@@ -100,9 +102,9 @@ function errorText(err: unknown, fallback: string): string {
                 @if (check?.error) {
                   <p class="text-sm text-danger break-words" [attr.data-testid]="'sql-q-error-' + item.subTaskId">{{ check!.error }}</p>
                 }
-                @if ((check?.warnings ?? []).length > 0) {
+                @if (itemWarnings(check).length > 0) {
                   <ul class="text-sm text-warning list-disc pl-5 space-y-0.5" [attr.data-testid]="'sql-q-item-warnings-' + item.subTaskId">
-                    @for (w of check!.warnings; track $index) { <li>{{ w }}</li> }
+                    @for (w of itemWarnings(check); track $index) { <li>{{ w }}</li> }
                   </ul>
                 }
 
@@ -113,7 +115,7 @@ function errorText(err: unknown, fallback: string): string {
 
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <label class="flex items-center gap-2 text-sm">
-                    <input type="checkbox" [checked]="isSelected(item.subTaskId)" [disabled]="!hasText(item.subTaskId)"
+                    <input type="checkbox" [checked]="isSelected(item.subTaskId)" [disabled]="!hasText(item.subTaskId) || !willSave(item.subTaskId)"
                       (change)="toggleSelected(item.subTaskId)" [attr.data-testid]="'sql-q-select-' + item.subTaskId" />
                     Mentésre kijelölve
                   </label>
@@ -216,15 +218,27 @@ function errorText(err: unknown, fallback: string): string {
                 <span class="font-semibold">{{ missingCount() }}</span> még SQL-megoldás nélkül.
               </p>
               <label class="flex items-start gap-2 rounded-xl p-3 border border-border-default">
-                <input type="checkbox" class="mt-1" [ngModel]="regenerate()" (ngModelChange)="regenerate.set($event)" [ngModelOptions]="{ standalone: true }"
+                <input type="checkbox" class="mt-1" [checked]="regenerate()" (change)="regenerate.set(!regenerate())"
                   data-testid="sql-q-regenerate" />
                 <span>
                   <span class="text-sm font-medium block">A meglévő lekérdezéseket is írd újra</span>
                   <span class="text-xs text-text-muted block">
-                    Mentéskor a kijelölt részfeladatok meglévő SQL-megoldása lecserélődik; a más nyelvű kódrészletek megmaradnak.
+                    Az MI a már megoldott részfeladatokra is javasol lekérdezést.
                   </span>
                 </span>
               </label>
+              @if (regenerate()) {
+                <label class="flex items-start gap-2 rounded-xl p-3 border border-border-default ml-6">
+                  <input type="checkbox" class="mt-1" [checked]="overwriteExisting()" (change)="overwriteExisting.set(!overwriteExisting())" data-testid="sql-q-overwrite" />
+                  <span>
+                    <span class="text-sm font-medium block">Mentéskor írja felül a meglévő megoldásokat</span>
+                    <span class="text-xs text-text-muted block">
+                      Kikapcsolva a meglévő megoldásokhoz írt javaslat csak összehasonlításra látszik, nem kerül mentésre.
+                      A más nyelvű kódrészletek mindig megmaradnak.
+                    </span>
+                  </span>
+                </label>
+              }
               @if (!regenerate() && missingCount() === 0) {
                 <p class="text-sm text-text-muted" data-testid="sql-q-nothing-missing">
                   Minden részfeladatnak van már SQL-megoldása - újraíráshoz jelöld be a fenti lehetőséget.
@@ -268,6 +282,8 @@ export class SqlLekerdezesekComponent implements OnInit {
   readonly openSqlFiles = output<void>();
 
   readonly regenerate = signal(false);
+  /** Újraírásnál: mentéskor felülírja-e a meglévő SQL-megoldásokat. */
+  readonly overwriteExisting = signal(true);
   readonly generating = signal(false);
   readonly error = signal<string | null>(null);
   /** Az elkészítéskor kapott eredmény (a „Visszaállítás” ide tér vissza). */
@@ -309,7 +325,9 @@ export class SqlLekerdezesekComponent implements OnInit {
       .map((q) => ({ subTaskId: q.subTaskId, sql: this.texts()[q.subTaskId] })),
   );
 
-  readonly selectedPayload = computed(() => this.toValidate().filter((q) => this.selected().has(q.subTaskId)));
+  readonly selectedPayload = computed(() =>
+    this.toValidate().filter((q) => this.selected().has(q.subTaskId) && this.willSave(q.subTaskId)),
+  );
   readonly selectedHasError = computed(() => this.selectedPayload().some((q) => this.checks()[q.subTaskId]?.status === 'error'));
   readonly selectedUnchecked = computed(() => this.selectedPayload().some((q) => !isGood(this.checks()[q.subTaskId]?.status)));
 
@@ -326,16 +344,17 @@ export class SqlLekerdezesekComponent implements OnInit {
   generate(): void {
     if (!this.canGenerate()) return;
     const regenerate = this.regenerate();
+    const overwrite = regenerate && this.overwriteExisting();
     this.generating.set(true);
     this.error.set(null);
     this.generation = this.service
-      .generateSqlQueries(this.taskSetId(), this.task().id, { regenerate })
+      .generateSqlQueries(this.taskSetId(), this.task().id, { regenerate, overwrite })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
           this.generating.set(false);
           this.generation = null;
-          this.overwrite = regenerate;
+          this.overwrite = overwrite;
           this.showGenerated(result);
         },
         error: (err) => {
@@ -360,7 +379,7 @@ export class SqlLekerdezesekComponent implements OnInit {
     this.validatedTexts.set({ ...texts });
     this.checks.set(Object.fromEntries(result.queries.map((q) => [q.subTaskId, q])));
     this.latest.set(result);
-    this.selected.set(new Set(result.queries.filter((q) => q.sql?.trim() && isGood(q.status)).map((q) => q.subTaskId)));
+    this.selected.set(new Set(result.queries.filter((q) => q.sql?.trim() && isGood(q.status) && q.willSave !== false).map((q) => q.subTaskId)));
     this.revalidateError.set(null);
     this.saveError.set(null);
     this.generated.set(result);
@@ -371,7 +390,18 @@ export class SqlLekerdezesekComponent implements OnInit {
   }
 
   isSelected(subTaskId: number): boolean {
-    return this.selected().has(subTaskId) && this.hasText(subTaskId);
+    return this.selected().has(subTaskId) && this.hasText(subTaskId) && this.willSave(subTaskId);
+  }
+
+  /** A BE szerint az apply menti-e ezt a részfeladatot (régebbi válaszban hiányzó mező: igen). */
+  willSave(subTaskId: number): boolean {
+    return this.checks()[subTaskId]?.willSave !== false;
+  }
+
+  /** A „nem lesz mentve” figyelmeztetést a jelvény mutatja - a listában nem ismételjük. */
+  itemWarnings(check: SqlQueryItemDto | undefined): string[] {
+    const warnings = check?.warnings ?? [];
+    return check?.willSave === false ? warnings.filter((w) => !w.startsWith('Nem lesz mentve')) : warnings;
   }
 
   toggleSelected(subTaskId: number): void {
@@ -415,7 +445,7 @@ export class SqlLekerdezesekComponent implements OnInit {
     this.revalidateError.set(null);
     this.saveError.set(null);
     this.revalidation = this.service
-      .validateSqlQueries(this.taskSetId(), this.task().id, sent)
+      .validateSqlQueries(this.taskSetId(), this.task().id, sent, this.overwrite)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
@@ -428,12 +458,12 @@ export class SqlLekerdezesekComponent implements OnInit {
           for (const q of basis.queries) {
             const fresh = result.queries.find((r) => r.subTaskId === q.subTaskId);
             // Az üresen hagyott (nem küldött) lekérdezésnek nincs eredménye.
-            next[q.subTaskId] = fresh ?? { ...q, sql: null, status: 'missing', error: null, warnings: [], preview: null };
+            next[q.subTaskId] = fresh ?? { ...q, sql: null, status: 'missing', error: null, warnings: [], preview: null, willSave: q.willSave };
           }
           // A most rendbe jött lekérdezés automatikusan mentésre kerül (a tanár ezért javította).
           this.selected.update((current) => {
             const sel = new Set(current);
-            for (const id of Object.keys(next).map(Number)) if (isGood(next[id].status) && !isGood(previous[id]?.status)) sel.add(id);
+            for (const id of Object.keys(next).map(Number)) if (isGood(next[id].status) && next[id].willSave !== false && !isGood(previous[id]?.status)) sel.add(id);
             return sel;
           });
           this.checks.set(next);

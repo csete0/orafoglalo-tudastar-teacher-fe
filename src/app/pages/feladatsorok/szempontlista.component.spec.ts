@@ -267,4 +267,28 @@ describe('SzempontlistaComponent', () => {
     expect(confirmMock.ask.mock.calls[0][0].message).toContain('1 egység a havi keretedből');
     expect(service.createRubricDraft).not.toHaveBeenCalled();
   });
+
+  it('katalógusból másolt hivatalos lista: rejtett szabályok mellett sem törik, megjegyzést mutat', () => {
+    const fixture = create(
+      makeRubric({
+        status: 'approved',
+        source: 'catalog-copy',
+        model: null,
+        note: null,
+        items: [
+          item({ id: 1, order: 1, subTaskId: 101, text: 'A cím félkövér', points: 4 }),
+          item({ id: 2, order: 2, subTaskId: 102, text: 'Három oszlop', points: 6 }),
+        ],
+      }),
+    );
+    expect(el(fixture, 'rubric-catalog-copy')!.textContent).toContain('Hivatalos szempontlista – a gépi ellenőrzés szabályai rejtettek');
+    expect(fixture.nativeElement.textContent).toContain('A cím félkövér');
+    expect(fixture.nativeElement.textContent).not.toContain('gépi)');
+    expect(all(fixture, 'rubric-item-gate').length).toBe(0);
+  });
+
+  it('saját listánál nincs „hivatalos” megjegyzés', () => {
+    const fixture = create(makeRubric());
+    expect(el(fixture, 'rubric-catalog-copy')).toBeNull();
+  });
 });

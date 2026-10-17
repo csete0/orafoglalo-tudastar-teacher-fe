@@ -42,6 +42,14 @@ export interface TeacherTaskSetDto {
   takedownAt: string | null;
 
   /**
+   * Katalógus-másolatnál a forrás hivatalos sor id-ja; a másolat a forrás hozzáférését örökli (isFree / isPremiumOnly).
+   * Opcionális: a BE még nem minden válaszban adja.
+   */
+  copiedFromTaskSetId?: number | null;
+  isFree?: boolean | null;
+  isPremiumOnly?: boolean | null;
+
+  /**
    * Van-e MAR vizsga-munkamenet a feladatsoron. Ha igen, SOSEM torolheto - a diakok
    * eredmenyei es statisztikai hozza kotodnek.
    *
@@ -201,6 +209,8 @@ export interface TeacherRubricDto {
   rawTotal: number;
   examPoints: number;
   model: string | null;
+  /** A lista eredete; „catalog-copy”: hivatalos lista másolata, a gépi szabályai rejtettek. Opcionális. */
+  source?: string | null;
   createdAt: string;
   /** A vázlatot író modell megjegyzése (pl. a feladatszöveg és a megoldás eltérése) vagy a sikertelen önellenőrzés; null, ha nincs. */
   note: string | null;
@@ -342,6 +352,8 @@ export interface SqlGenerationResultDto {
 export interface SqlQueryGenerationRequest {
   /** true: a már SQL-megoldással rendelkező részfeladatokra is kér újat (mentéskor az overwrite dönt). */
   regenerate?: boolean;
+  /** Mentéskor felülírja-e a meglévő SQL-megoldást - ettől függ a tételek `willSave` jelzése. */
+  overwrite?: boolean;
   /** Csak ezekre a részfeladatokra (üres/null: mind). */
   subTaskIds?: number[] | null;
 }
@@ -367,6 +379,8 @@ export interface SqlQueryItemDto {
   label: string;
   /** A részfeladatnak már van SQL-megoldása (mentéskor csak felülírással cserélődik). */
   hadSnippet: boolean;
+  /** Az apply ugyanezzel a felülírás-beállítással menti-e (false: már van megoldás, felülírás nélkül). */
+  willSave: boolean;
   sql: string | null;
   status: SqlQueryStatus;
   error: string | null;

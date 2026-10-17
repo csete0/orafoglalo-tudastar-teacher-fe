@@ -2066,4 +2066,28 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.draftCode(70, 6)).toBe('SELECT 1;');
     });
   });
+
+  describe('katalógus-másolat hozzáférése', () => {
+    it('fizetős forrás másolatánál a fizetős hozzáférést jelzi', () => {
+      configure(makeDetail({ copiedFromTaskSetId: 15, isFree: false, isPremiumOnly: false }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]').textContent)
+        .toContain('Fizetős – a diákjaidnak előfizetés vagy iskolai licenc kell hozzá; dolgozatban mindenki elérheti');
+    });
+
+    it('ingyenes forrás másolatánál az ingyenes hozzáférést jelzi', () => {
+      configure(makeDetail({ copiedFromTaskSetId: 15, isFree: true, isPremiumOnly: false }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]').textContent).toContain('Ingyenes – minden diákod eléri.');
+    });
+
+    it('saját (nem másolt) feladatsornál nincs hozzáférés-sáv', () => {
+      configure(makeDetail());
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]')).toBeNull();
+    });
+  });
 });
