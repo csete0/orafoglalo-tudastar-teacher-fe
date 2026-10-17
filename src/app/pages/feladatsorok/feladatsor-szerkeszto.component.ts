@@ -23,6 +23,7 @@ import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubr
 import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
 import { TesztbemenetComponent } from './tesztbemenet.component';
 import { SqlGeneralasComponent } from './sql-generalas.component';
+import { SqlLekerdezesekComponent } from './sql-lekerdezesek.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -80,7 +81,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -296,6 +297,23 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
                           <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
                             (stdinRequested)="openRunInput(task.id)" />
+
+                          @if (isSqlTask(task)) {
+                            <!-- SQL-feladat: a részfeladatok megoldó lekérdezései MI-vel (előnézet + futtatás, majd mentés). -->
+                            <div class="bg-bg-panel rounded-xl p-3 flex flex-wrap items-center justify-between gap-3" [attr.data-testid]="'sql-queries-entry-' + task.id">
+                              <span class="flex items-start gap-2 text-sm text-text-muted min-w-0 flex-[1_1_14rem]">
+                                <app-icon name="database" class="w-4 h-4 block shrink-0 mt-0.5" />
+                                A részfeladatok megoldó lekérdezéseit megírhatja az MI - lefuttatva, mentés előtt átnézheted.
+                              </span>
+                              <button type="button" class="btn btn-primary shrink-0" [disabled]="store.loading() || !!detail.takedownAt"
+                                (click)="sqlQueriesTaskId.set(task.id)" [attr.data-testid]="'sql-queries-open-' + task.id">SQL megoldó lekérdezések MI-vel</button>
+                            </div>
+                            @if (sqlQueriesTaskId() === task.id) {
+                              <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
+                                (closed)="sqlQueriesTaskId.set(null)" (saved)="onSqlQueriesSaved(detail.id, $event)"
+                                (openSqlFiles)="sqlQueriesTaskId.set(null); sqlGenerationOpen.set(true)" />
+                            }
+                          }
 
                           <!-- Részfeladatok -->
                           @for (solution of task.subTasks; track solution.id) {
@@ -1020,6 +1038,28 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak. */
   readonly sqlGenerationOpen = signal(false);
+
+  /** Melyik SQL-feladat „SQL megoldó lekérdezések MI-vel” ablaka van nyitva. */
+  readonly sqlQueriesTaskId = signal<number | null>(null);
+
+  isSqlTask(task: TeacherTaskDto): boolean {
+    return task.taskTypeIds.includes(SQL_TASK_TYPE_ID);
+  }
+
+  /** A futtató a feladatra kötött, különben a feladatsor-szintű create_lite.sql-t használja. */
+  hasLiteSqlFor(taskId: number): boolean {
+    return (this.store.selectedDetail()?.files ?? []).some((f) => f.kind === 'CreateLiteSql' && (f.taskId == null || f.taskId === taskId));
+  }
+
+  /** Mentés után a mentett részfeladatok kódrészlet-piszkozatai a szerver állapotára állnak (a tanár ezt választotta). */
+  onSqlQueriesSaved(taskSetId: number, subTaskIds: number[]): void {
+    this.dirtyDraftKeys.update((current) => {
+      const next = new Set(current);
+      for (const id of subTaskIds) next.delete(id);
+      return next;
+    });
+    this.store.loadDetail(taskSetId);
+  }
 
   /** SQL-feladat vagy SQL-fájl esetén kínáljuk fel a hiányzó create.sql / create_lite.sql elkészítését. */
   readonly showSqlGeneration = computed(() => {
