@@ -290,5 +290,90 @@ describe('SqlGeneralasComponent', () => {
       expect(q(fixture, 'sql-gen-download-CreateLiteSql')).not.toBeNull();
       expect(q(fixture, 'sql-gen-large-CreateLiteSql')!.textContent).toContain('töltsd le, szerkeszd a gépeden');
     });
+
+    it('a Vissza megszakítja a folyamatban lévő újraellenőrzést - az elavult válasz nem engedi a mentést', () => {
+      const pending = new Subject<SqlGenerationResultDto>();
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      serviceMock.validateSqlFiles.mockReturnValue(pending);
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'más');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      expect(pending.observed).toBe(true);
+
+      q(fixture, 'sql-gen-back')!.click();
+      fixture.detectChanges();
+      expect(pending.observed).toBe(false);
+      expect(fixture.componentInstance.revalidating()).toBe(false);
+      pending.next(result({ source: 'validate', files: [], canSave: true }));
+      fixture.detectChanges();
+      expect(q(fixture, 'sql-gen-input')).not.toBeNull();
+      expect(fixture.componentInstance.result()).toBeNull();
+      // A mentés üres fájllistával sem dob.
+      expect(() => fixture.componentInstance.save()).not.toThrow();
+      expect(serviceMock.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it('új elkészítés után az előző újraellenőrzés válasza eldobva', () => {
+      const pending = new Subject<SqlGenerationResultDto>();
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      serviceMock.validateSqlFiles.mockReturnValue(pending);
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'más');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      q(fixture, 'sql-gen-back')!.click();
+      fixture.detectChanges();
+      generated(fixture);
+
+      pending.next(result({ source: 'validate', files: [], canSave: true }));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.result()!.source).toBe('createSql');
+      expect(fixture.componentInstance.generatedFiles().length).toBe(1);
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('újraellenőrzés után a sáv a javított fájlról szól, és csak összevetésnél állít egyezést', () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      serviceMock.validateSqlFiles.mockReturnValue(of(result({ source: 'validate', comparedWith: 'a feladatsor feltöltött create.sql fájlja' })));
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'más');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      const banner = q(fixture, 'sql-gen-valid')!.textContent!;
+      expect(banner).toContain('A javított fájl lefutott');
+      expect(banner).toContain('egyezik (a feladatsor feltöltött create.sql fájlja)');
+      expect(banner).not.toContain('a forrással');
+      expect(q(fixture, 'sql-gen-dirty')).toBeNull();
+    });
+
+    it('csak create.sql javításánál: csak a szerkezet és a sorok száma ellenőrizhető, összevetés nélkül nincs egyezés-állítás', () => {
+      const tsqlOnly = result({ source: 'createLiteSql', files: [{ kind: 'CreateSql', fileName: 'create.sql', content: 'CREATE TABLE [t] ([id] INT);', sizeBytes: 28 }] });
+      const fixture = create([file('b', 'CreateLiteSql', 'create_lite.sql')], of(tsqlOnly));
+      serviceMock.validateSqlFiles.mockReturnValue(of(result({ source: 'validate', comparedWith: null })));
+      generated(fixture);
+      typeInto(fixture, 'CreateSql', 'CREATE TABLE [t] ([id] BIGINT);');
+      expect(q(fixture, 'sql-gen-file-CreateSql')!.textContent).toContain('31 bájt'); // a méret a javított szövegé
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      expect(serviceMock.validateSqlFiles).toHaveBeenCalledWith(9, { createSql: 'CREATE TABLE [t] ([id] BIGINT);', createLiteSql: null });
+      const banner = q(fixture, 'sql-gen-valid')!.textContent!;
+      expect(banner).toContain('csak a szerkezet és a sorok száma ellenőrizhető');
+      expect(banner).not.toContain('egyezik');
+    });
+
+    it('túl nagy javított fájl (413): érthető üzenet, szerepe alert', () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      serviceMock.validateSqlFiles.mockReturnValue(throwError(() => ({ status: 413, error: '<html>' })));
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'más');
+      expect(q(fixture, 'sql-gen-dirty')!.getAttribute('role')).toBe('status');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      const error = q(fixture, 'sql-gen-revalidate-error')!;
+      expect(error.getAttribute('role')).toBe('alert');
+      expect(error.textContent).toContain('legfeljebb 1 MB fájlonként');
+      expect(q(fixture, 'sql-gen-restore-CreateLiteSql')!.getAttribute('aria-label')).toContain('create_lite.sql');
+      expect(q(fixture, 'sql-gen-edit-CreateLiteSql')!.getAttribute('aria-label')).toContain('create_lite.sql');
+    });
   });
 });

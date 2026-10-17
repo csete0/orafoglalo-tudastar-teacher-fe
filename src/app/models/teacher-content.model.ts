@@ -333,4 +333,6 @@ export interface SqlGenerationResultDto {
   referenceChecks: ReferenceCheckDto[];
   aiNotes: string | null;
   canSave: boolean;
+  /** Újraellenőrzésnél: mivel vetettük össze a táblákat/sorszámokat (null: nem volt mivel). */
+  comparedWith?: string | null;
 }

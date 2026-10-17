@@ -67,7 +67,17 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
               @case ('ok') {
                 <p class="bg-success-subtle border border-success/40 rounded-xl p-3 text-sm text-success flex items-start gap-2" data-testid="sql-gen-valid">
                   <app-icon name="check" class="w-5 h-5 block shrink-0" />
-                  <span>A create_lite.sql hibátlanul lefutott a futtatón (SQLite), a táblák és a sorok száma egyezik a forrással.</span>
+                  <span>
+                    @if (r.source !== 'validate') {
+                      A create_lite.sql hibátlanul lefutott a futtatón (SQLite), a táblák és a sorok száma egyezik a forrással.
+                    } @else if (hasLiteText()) {
+                      A javított fájl lefutott a futtatón (SQLite) hiba nélkül.
+                      @if (r.comparedWith) { A táblák és a sorok száma egyezik ({{ r.comparedWith }}). }
+                    } @else {
+                      A javított create.sql értelmezhető – a futtató nem tudja lefuttatni, csak a szerkezet és a sorok száma ellenőrizhető.
+                      @if (r.comparedWith) { A táblák és a sorok száma egyezik ({{ r.comparedWith }}). }
+                    }
+                  </span>
                 </p>
               }
               @case ('unavailable') {
@@ -148,7 +158,7 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
             @for (f of generatedFiles(); track f.kind) {
               <details class="bg-bg-element rounded-xl p-3" [attr.data-testid]="'sql-gen-file-' + f.kind">
                 <summary class="cursor-pointer text-sm font-medium">
-                  {{ f.fileName }} <span class="text-text-muted font-normal">({{ sizeLabel(f.sizeBytes) }}{{ existingFileName(f) ? ' – a meglévő fájl lecserélődik' : '' }})</span>
+                  {{ f.fileName }} <span class="text-text-muted font-normal">({{ sizeLabel(currentSize(f)) }}{{ existingFileName(f) ? ' – a meglévő fájl lecserélődik' : '' }})</span>
                   @if (isChanged(f.kind)) { <span class="badge badge-warning ml-1">módosítva</span> }
                 </summary>
                 <div class="flex flex-wrap gap-2 mt-2">
@@ -156,9 +166,11 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
                     [attr.aria-label]="f.fileName + ' letöltése'">Letöltés</button>
                   @if (f.sizeBytes <= maxEditBytes) {
                     <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="toggleEdit(f.kind)" [attr.aria-pressed]="isEditing(f.kind)"
+                      [attr.aria-label]="f.fileName + (isEditing(f.kind) ? ' szerkesztésének befejezése' : ' szerkesztése')"
                       [attr.data-testid]="'sql-gen-edit-' + f.kind">{{ isEditing(f.kind) ? 'Szerkesztés vége' : 'Szerkesztés' }}</button>
                     @if (isChanged(f.kind)) {
-                      <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="restore(f.kind)" [attr.data-testid]="'sql-gen-restore-' + f.kind">Visszaállítás</button>
+                      <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="restore(f.kind)" [attr.data-testid]="'sql-gen-restore-' + f.kind"
+                        [attr.aria-label]="f.fileName + ' visszaállítása az elkészített változatra'">Visszaállítás</button>
                     }
                   }
                 </div>
@@ -178,7 +190,7 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
             }
 
             @if (dirty()) {
-              <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex flex-wrap items-center justify-between gap-2" data-testid="sql-gen-dirty">
+              <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex flex-wrap items-center justify-between gap-2" role="status" data-testid="sql-gen-dirty">
                 <span>Módosítottad a fájlt – mentés előtt ellenőrizd újra.</span>
                 <button type="button" class="btn btn-primary !px-3 !py-1" (click)="revalidate()" [disabled]="revalidating()" data-testid="sql-gen-revalidate">
                   {{ revalidating() ? 'Ellenőrzés…' : 'Újraellenőrzés' }}
@@ -186,7 +198,7 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
               </div>
             }
             @if (revalidateError()) {
-              <p class="text-sm text-danger" data-testid="sql-gen-revalidate-error">{{ revalidateError() }}</p>
+              <p class="text-sm text-danger" role="alert" data-testid="sql-gen-revalidate-error">{{ revalidateError() }}</p>
             }
 
             @if (saveError()) {
@@ -272,6 +284,8 @@ export class SqlGeneralasComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   /** A folyamatban lévő elkészítés - bezáráskor megszakítjuk (a válasz ne írjon egy már nem látható ablakba). */
   private generation: Subscription | null = null;
+  /** A folyamatban lévő újraellenőrzés - Vissza / új elkészítés esetén megszakítjuk (az elavult válasz ne írjon az új előnézetbe). */
+  private revalidation: Subscription | null = null;
 
   readonly taskSetId = input.required<number>();
   /** A feladatsor fájljai (a forrás-választáshoz és a csere-jelzéshez). */
@@ -391,13 +405,29 @@ export class SqlGeneralasComponent implements OnInit {
   }
 
   back(): void {
+    this.cancelRevalidation();
     this.result.set(null);
     this.generatedResult.set(null);
     this.saveError.set(null);
     this.revalidateError.set(null);
   }
 
+  private cancelRevalidation(): void {
+    this.revalidation?.unsubscribe();
+    this.revalidation = null;
+    this.revalidating.set(false);
+  }
+
+  /** A szerkesztett szöveg mérete (UTF-8 bájt) - a címkében ez látszik, nem az elkészítetté. */
+  currentSize(file: GeneratedSqlFileDto): number {
+    const text = this.texts()[file.kind];
+    return text === undefined || text === file.content ? file.sizeBytes : new TextEncoder().encode(text).length;
+  }
+
+  readonly hasLiteText = computed(() => this.texts().CreateLiteSql !== undefined);
+
   private showGenerated(result: SqlGenerationResultDto): void {
+    this.cancelRevalidation();
     this.generatedResult.set(result);
     const texts = Object.fromEntries(result.files.map((f) => [f.kind, f.content])) as Partial<Record<SqlFileKind, string>>;
     this.texts.set(texts);
@@ -445,23 +475,31 @@ export class SqlGeneralasComponent implements OnInit {
 
   /** A javított szöveg(ek) ellenőrzése a szerveren (MI nélkül); siker után menthető. */
   revalidate(): void {
-    if (this.revalidating()) return;
+    if (this.revalidating() || !this.generatedResult()) return;
     const sent = { ...this.texts() };
+    const basis = this.generatedResult();
     this.revalidating.set(true);
     this.revalidateError.set(null);
     this.saveError.set(null);
-    this.service
+    this.revalidation = this.service
       .validateSqlFiles(this.taskSetId(), { createSql: sent.CreateSql ?? null, createLiteSql: sent.CreateLiteSql ?? null })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
           this.revalidating.set(false);
+          // Közben új elkészítés vagy Vissza történt: az elavult válasz eldobva.
+          if (this.generatedResult() !== basis) return;
           this.validatedTexts.set(sent);
           this.result.set(result);
         },
         error: (err) => {
           this.revalidating.set(false);
-          this.revalidateError.set(extractErrorMessage(err, 'Az ellenőrzés nem sikerült.'));
+          if (this.generatedResult() !== basis) return;
+          this.revalidateError.set(
+            err?.status === 413
+              ? 'A javított fájl túl nagy az ellenőrzéshez (legfeljebb 1 MB fájlonként) – töltsd le, és a feltöltővel töltsd vissza.'
+              : extractErrorMessage(err, 'Az ellenőrzés nem sikerült.'),
+          );
         },
       });
   }
@@ -469,7 +507,7 @@ export class SqlGeneralasComponent implements OnInit {
   /** A szokásos feltöltés fájlonként, egymás után (create.sql előbb) - a feltöltés védelmei (élő vizsga, kvóta) itt is érvényesek. */
   save(): void {
     const result = this.result();
-    if (!result || !this.canSave() || this.saving()) return;
+    if (!result || !this.canSave() || this.saving() || this.generatedFiles().length === 0) return;
     this.saving.set(true);
     this.saveError.set(null);
     // A (javított és újraellenőrzött) szöveg megy fel, a szokásos feltöltésen.
@@ -497,6 +535,7 @@ export class SqlGeneralasComponent implements OnInit {
 
   close(): void {
     if (this.saving()) return;
+    this.cancelRevalidation();
     this.generation?.unsubscribe();
     this.generation = null;
     this.generating.set(false);
