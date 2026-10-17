@@ -69,6 +69,29 @@ const LANGUAGE_STATUS: Record<AiLanguageReport['status'], { label: string; badge
   skipped: { label: 'nem futott', badge: 'badge-neutral' },
 };
 
+/** Címke nélküli részfeladat neve - ugyanaz a tartalék, mint a szerver ellenőrzési riportjában („1. részfeladat”). */
+export const subtaskName = (label: string | null | undefined, index: number) => (label?.trim() ? label.trim() : `${index + 1}. részfeladat`);
+
+/**
+ * A mentés összefoglalója a toasthoz. A szerver 1. módban részfeladatonként „kódrészlet: <címke> (<nyelvek>)” sort ad, címke nélküli
+ * részfeladatnál üres névvel - ezeket a javaslat sorrendjéből (a friss kódrészletes részfeladatok közül a címke nélküliek) pótoljuk.
+ */
+export function savedSummary(saved: string[], proposal: AiCodeTaskProposal): string[] {
+  const unnamed = proposal.subtasks
+    .map((s, i) => ({ s, i }))
+    .filter(({ s, i }) => !s.label?.trim() && proposal.languages.some((l) => l.snippets[i] && !l.snippets[i].existing && l.snippets[i].code.trim()))
+    .map(({ i }) => subtaskName(null, i));
+  const blank = /^kódrészlet:\s+\((.*)\)$/;
+  const blankCount = saved.filter((e) => blank.test(e)).length;
+  let k = 0;
+  return saved.map((entry) => {
+    const m = blank.exec(entry);
+    if (!m) return entry;
+    const name = blankCount === unnamed.length ? unnamed[k++] : null;
+    return name ? `kódrészlet: ${name} (${m[1]})` : `kódrészlet (${m[1]})`;
+  });
+}
+
 const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null) => a === b || JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -110,7 +133,8 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                 <app-local-spinner [label]="progressText() || 'Indítás…'" />
               </div>
               <p class="text-sm text-text-muted text-center">
-                Az AI megírja a hiányzó részeket, majd a rendszer lefuttatja őket a futtatón. Ez néhány percig is tarthat.
+                {{ mode() === 'new' ? 'Az AI megírja a feladatot és a mintamegoldást' : 'Az AI megírja a hiányzó részeket' }}, majd a rendszer
+                lefuttatja a megoldást a futtatón. Ez néhány percig is tarthat.
                 Ha bezárod az ablakot, a készítés a háttérben folytatódik, és a gombbal később újra megnyithatod.
               </p>
               @if (pollError()) {
@@ -1040,7 +1064,8 @@ export class AiFeladatComponent implements OnInit {
     this.service.apply(this.taskSetId(), jobId, proposal).subscribe({
       next: (res) => {
         this.saving.set(false);
-        this.toastService.success(res.saved.length > 0 ? `Elmentve: ${res.saved.join(', ')}.` : 'Elmentve.');
+        const saved = savedSummary(res.saved, proposal);
+        this.toastService.success(saved.length > 0 ? `Elmentve: ${saved.join(', ')}.` : 'Nem volt mit menteni - a feladat minden része megvolt.');
         this.saved.emit(res.taskId);
         this.closed.emit();
       },

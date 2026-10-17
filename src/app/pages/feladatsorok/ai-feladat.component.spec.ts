@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Observable, of, Subject, throwError } from 'rxjs';
-import { AiFeladatComponent, POLL_MS, PREMIUM_REQUIRED_MESSAGE } from './ai-feladat.component';
+import { AiFeladatComponent, POLL_MS, PREMIUM_REQUIRED_MESSAGE, savedSummary } from './ai-feladat.component';
 import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
@@ -276,6 +276,19 @@ describe('AiFeladatComponent', () => {
 
     vi.advanceTimersByTime(POLL_MS * 5);
     expect(service.getJob).toHaveBeenCalledTimes(4);
+  });
+
+  it('a készítés szövege módfüggő: 2. módban a feladatot, 1. módban a hiányzó részeket írja', () => {
+    let fixture = create({ jobs: [() => of(job({ status: 'generating' }))] });
+    startNew(fixture);
+    expect(q(fixture, 'ai-task-running')!.textContent).toContain('Az AI megírja a feladatot és a mintamegoldást');
+    expect(q(fixture, 'ai-task-running')!.textContent).not.toContain('hiányzó részeket');
+
+    TestBed.resetTestingModule();
+    fixture = create({ mode: 'complete', task: codeTask(), jobs: [() => of(job({ mode: 'complete', taskId: 5, status: 'generating' }))] });
+    q(fixture, 'ai-task-start')!.click();
+    fixture.detectChanges();
+    expect(q(fixture, 'ai-task-running')!.textContent).toContain('Az AI megírja a hiányzó részeket');
   });
 
   it('bezáráskor a lekérdezés leáll (a job a háttérben fut tovább, megjegyezve marad)', () => {
@@ -691,12 +704,30 @@ describe('AiFeladatComponent', () => {
     });
   });
 
+  describe('mentés-összefoglaló (savedSummary)', () => {
+    const p = (labels: string[], fresh: boolean[]) =>
+      proposal({
+        subtasks: labels.map((label) => ({ subTaskId: 1, label, text: 't', points: 1, existing: true, pointsExisting: true })),
+        languages: [{ language: 'python', solution: 'x', solutionExisting: true, snippets: fresh.map((f) => ({ code: f ? 'kód' : '', existing: !f })) }],
+      });
+
+    it('a címke nélküli részfeladat kódrészlet-sorát „N. részfeladat” névvel pótolja (a friss kódrészletesek sorrendjében)', () => {
+      expect(savedSummary(['kódrészlet:  (python)', 'kódrészlet: 3. (python)', 'kódrészlet:  (python)'], p(['', '', '3.', ''], [true, false, true, true])))
+        .toEqual(['kódrészlet: 1. részfeladat (python)', 'kódrészlet: 3. (python)', 'kódrészlet: 4. részfeladat (python)']);
+    });
+
+    it('ha a darabszám nem egyezik, név nélkül, de üres hely nélkül írja; más sort nem bánt', () => {
+      expect(savedSummary(['mintamegoldás: python', 'kódrészlet:  (python, java)'], p(['', ''], [true, true])))
+        .toEqual(['mintamegoldás: python', 'kódrészlet (python, java)']);
+    });
+  });
+
   describe('1. mód előnézet', () => {
     it('a meglévő részek csak olvashatók, a hiányzó pont szerkeszthető; mentési hibánál is frissül a szerkesztő', () => {
       const existing = proposal({
         title: null,
         description: null,
-        subtasks: [{ subTaskId: 1, label: '1.', text: 'Olvasd be', points: null, existing: true, pointsExisting: false }],
+        subtasks: [{ subTaskId: 1, label: '', text: 'Olvasd be', points: null, existing: true, pointsExisting: false }],
         stdin: '5\n',
         stdinExisting: true,
         languages: [{ language: 'python', solution: 'x', solutionExisting: true, snippets: [{ code: 'y', existing: false }] }],
@@ -715,7 +746,11 @@ describe('AiFeladatComponent', () => {
       expect((q(fixture, 'ai-task-solution-python') as HTMLTextAreaElement).readOnly).toBe(true);
       expect((q(fixture, 'ai-task-stdin') as HTMLTextAreaElement).readOnly).toBe(true);
 
+      service.apply.mockReturnValueOnce(of({ taskId: 5, created: false, saved: ['kódrészlet:  (python)'] }));
+      q(fixture, 'ai-task-save')!.click();
+      expect(toast.success).toHaveBeenCalledWith('Elmentve: kódrészlet: 1. részfeladat (python).');
       const saved = vi.fn();
+      service.apply.mockClear();
       fixture.componentInstance.saved.subscribe(saved);
       service.apply.mockReturnValue(throwError(() => ({ status: 400, error: { errorMessage: 'Élő vizsga fut.' } })));
       q(fixture, 'ai-task-save')!.click();
