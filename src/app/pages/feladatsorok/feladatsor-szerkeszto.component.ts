@@ -22,6 +22,7 @@ import { extractErrorMessage } from '../../shared/http-error/extract-error-messa
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
 import { TesztbemenetComponent } from './tesztbemenet.component';
+import { SqlGeneralasComponent } from './sql-generalas.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -79,7 +80,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -165,7 +166,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
           <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 mb-6 text-sm text-warning flex items-start gap-2" data-testid="sql-files-warning">
             <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
             <span>SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
-            SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.</span>
+            SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.
+            <button type="button" class="underline font-semibold disabled:no-underline disabled:opacity-60" [disabled]="!!detail.takedownAt"
+              (click)="sqlGenerationOpen.set(true)" data-testid="sql-files-warning-generate">Hiányzó SQL-fájl elkészítése</button></span>
           </p>
         }
 
@@ -562,6 +565,22 @@ type SnippetDraft = Record<number, Record<number, string>>;
               </div>
             }
           </div>
+
+          <!-- Hiányzó create.sql / create_lite.sql: a meglévő párjából vagy az érettségi adatfájlokból (előnézet, majd mentés). -->
+          @if (showSqlGeneration()) {
+            <div class="mt-3 card !rounded-xl p-3 flex flex-wrap items-center justify-between gap-3" data-testid="sql-generation-entry">
+              <span class="flex items-start gap-2 text-sm text-text-muted min-w-0 flex-[1_1_16rem]">
+                <app-icon name="database" class="w-4 h-4 block shrink-0 mt-0.5" />
+                Csak a create.sql vagy csak a create_lite.sql van meg, esetleg csak az adatfájlok? A hiányzót elkészítjük, mentés előtt átnézheted.
+              </span>
+              <button type="button" class="btn btn-primary shrink-0" [disabled]="store.loading() || !!detail.takedownAt"
+                (click)="sqlGenerationOpen.set(true)" data-testid="sql-generation-open">Hiányzó SQL-fájl elkészítése</button>
+            </div>
+          }
+          @if (sqlGenerationOpen()) {
+            <app-sql-generalas [taskSetId]="detail.id" [files]="taskSetFiles()"
+              (closed)="sqlGenerationOpen.set(false)" (saved)="store.loadDetail(detail.id)" />
+          }
 
           <!--
             Irodai feladatonként: forrásfájlok (amit a diák megkap) és a tanár saját megoldása.
@@ -998,6 +1017,20 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   taskFiles(taskId: number, kind: TeacherFileKind): TeacherFileDto[] {
     return (this.store.selectedDetail()?.files ?? []).filter((f) => f.taskId === taskId && f.kind === kind);
   }
+
+  /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak. */
+  readonly sqlGenerationOpen = signal(false);
+
+  /** SQL-feladat vagy SQL-fájl esetén kínáljuk fel a hiányzó create.sql / create_lite.sql elkészítését. */
+  readonly showSqlGeneration = computed(() => {
+    const detail = this.store.selectedDetail();
+    if (!detail) return false;
+    return (
+      !this.sqlFilesPaired() ||
+      detail.tasks.some((t) => t.taskTypeIds.includes(SQL_TASK_TYPE_ID)) ||
+      detail.files.some((f) => f.kind === 'CreateSql' || f.kind === 'CreateLiteSql')
+    );
+  });
 
   /** SQL-kódrészlet esetén a publikáláshoz create.sql + create_lite.sql pár kell. */
   readonly sqlFilesPaired = computed(() => {

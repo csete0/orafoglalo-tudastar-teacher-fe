@@ -9,6 +9,9 @@ import {
   CreateTeacherTaskSetRequest,
   PublishResultDto,
   SnippetDto,
+  SqlFilesValidationRequest,
+  SqlGenerationRequest,
+  SqlGenerationResultDto,
   TaskSetAssignmentDto,
   TeacherGroupTaskSetAssignmentDto,
   TeacherSkillDto,
@@ -98,6 +101,19 @@ export class TeacherTaskSetService {
 
   deleteFile(fileId: string): Observable<unknown> {
     return this.http.delete(`${this.baseUrl}/files/${fileId}`);
+  }
+
+  /**
+   * Hiányzó create.sql / create_lite.sql elkészítése (MI-séma + gépi adatátalakítás + futtatásos ellenőrzés).
+   * Csak előnézet - a mentés a szokásos `uploadFile`-lal történik.
+   */
+  generateSqlFiles(taskSetId: number, request: SqlGenerationRequest): Observable<SqlGenerationResultDto> {
+    return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation`, request);
+  }
+
+  /** A kézzel javított create.sql / create_lite.sql újraellenőrzése (MI nélkül, mentés nélkül) - ugyanaz a válaszalak. */
+  validateSqlFiles(taskSetId: number, request: SqlFilesValidationRequest): Observable<SqlGenerationResultDto> {
+    return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation/validate`, request);
   }
 
   getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {

@@ -182,6 +182,44 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(warning.textContent).toContain('kötelező');
   });
 
+  it('SQL-feladatnál felkínálja a hiányzó SQL-fájl elkészítését, a gomb a párbeszédablakot nyitja', () => {
+    configure(
+      makeDetail({
+        tasks: [{ id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] }],
+        files: [],
+      }),
+    );
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
+    (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+  });
+
+  it('visszavont (takedown) feladatsoron a hiányzó SQL-fájl elkészítése le van tiltva', () => {
+    configure(
+      makeDetail({
+        takedownAt: '2026-10-01T00:00:00Z',
+        tasks: [{ id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [],
+          subTasks: [{ id: 1, description: 'd', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] }],
+        files: [],
+      }),
+    );
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('[data-testid="sql-files-warning-generate"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('SQL nélküli feladatsoron nem kínálja a hiányzó SQL-fájl elkészítését', () => {
+    configure(makeDetail({ tasks: [], files: [] }));
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-entry"]')).toBeNull();
+  });
+
   // UI-TT-30: az "Összevont megoldás" mező a részfeladatonkénti kódrészletektől teljesen
   // különálló - ha az SQL-kód kizárólag ide kerül, a régi usesSql-detektálás ezt sosem látta,
   // ezért a figyelmeztető banner sem jelent meg.
