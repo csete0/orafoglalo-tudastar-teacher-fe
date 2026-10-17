@@ -1,11 +1,10 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AiCodeTaskApplyResult,
   AiCodeTaskJobDto,
-  AiCodeTaskMode,
   AiCodeTaskProposal,
   AiCodeTaskQuotaDto,
   AiCodeTaskStartRequest,
@@ -13,20 +12,12 @@ import {
   AiCodeTaskValidateResult,
 } from '../../models/ai-code-task.model';
 
-/** Egy elindított, még nem mentett AI-feladat - a párbeszédablak bezárása után is megnyitható újra (a job a háttérben fut tovább). */
-export interface RememberedAiJob {
-  jobId: number;
-  mode: AiCodeTaskMode;
-  taskId: number | null;
-  taskTitle: string | null;
-}
-
 @Injectable({ providedIn: 'root' })
 export class TeacherAiCodeTaskService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/teacher`;
-  /** Feladatsoronként az utoljára indított job (memóriában, az oldal újratöltéséig). */
-  private readonly remembered = new Map<number, RememberedAiJob>();
+  /** Az ebben a munkamenetben „Elvetés”-sel félretett jobok - ezekhez nyitáskor nem kapcsolódunk vissza magától. */
+  private readonly dismissed = new Set<number>();
 
   getQuota(): Observable<AiCodeTaskQuotaDto> {
     return this.http.get<AiCodeTaskQuotaDto>(`${this.baseUrl}/ai-code-task/quota`);
@@ -49,16 +40,19 @@ export class TeacherAiCodeTaskService {
     return this.http.post<AiCodeTaskApplyResult>(`${this.taskSetUrl(taskSetId)}/apply`, { jobId, proposal });
   }
 
-  rememberedJob(taskSetId: number): RememberedAiJob | null {
-    return this.remembered.get(taskSetId) ?? null;
+  /** A tanár futó vagy elkészült, még nem mentett jobja ezen a feladatsoron (204 = nincs). Visszakapcsolódáshoz (újratöltés után is). */
+  getActiveJob(taskSetId: number): Observable<AiCodeTaskJobDto | null> {
+    return this.http
+      .get<AiCodeTaskJobDto>(`${this.taskSetUrl(taskSetId)}/jobs/active`, { observe: 'response' })
+      .pipe(map((res) => (res.status === 204 ? null : res.body)));
   }
 
-  remember(taskSetId: number, job: RememberedAiJob): void {
-    this.remembered.set(taskSetId, job);
+  dismiss(jobId: number): void {
+    this.dismissed.add(jobId);
   }
 
-  forget(taskSetId: number, jobId: number): void {
-    if (this.remembered.get(taskSetId)?.jobId === jobId) this.remembered.delete(taskSetId);
+  isDismissed(jobId: number): boolean {
+    return this.dismissed.has(jobId);
   }
 
   private taskSetUrl(taskSetId: number): string {

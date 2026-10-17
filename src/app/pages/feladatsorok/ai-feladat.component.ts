@@ -209,9 +209,21 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                                     [attr.data-testid]="'ai-task-st-points-' + i" />
                                 </div>
                                 @if (s.existing) { <span class="badge badge-neutral">a tiéd</span> }
-                                @if (mode() === 'new' && p.subtasks.length > 1) {
-                                  <button type="button" class="ml-auto text-sm text-danger hover:underline" (click)="removeSubtask(i)"
-                                    [attr.aria-label]="(s.label || (i + 1) + '.') + ' részfeladat törlése'">Törlés</button>
+                                @if (mode() === 'new') {
+                                  <span class="ml-auto flex items-center gap-3">
+                                    @if (i > 0) {
+                                      <button type="button" class="text-sm text-primary hover:underline" (click)="moveSubtask(i, -1)"
+                                        [attr.aria-label]="s.label + ' részfeladat feljebb'" [attr.data-testid]="'ai-task-st-up-' + i">Fel</button>
+                                    }
+                                    @if (i < p.subtasks.length - 1) {
+                                      <button type="button" class="text-sm text-primary hover:underline" (click)="moveSubtask(i, 1)"
+                                        [attr.aria-label]="s.label + ' részfeladat lejjebb'" [attr.data-testid]="'ai-task-st-down-' + i">Le</button>
+                                    }
+                                    @if (p.subtasks.length > 1) {
+                                      <button type="button" class="text-sm text-danger hover:underline" (click)="removeSubtask(i)"
+                                        [attr.aria-label]="s.label + ' részfeladat törlése'" [attr.data-testid]="'ai-task-st-remove-' + i">Törlés</button>
+                                    }
+                                  </span>
                                 }
                               </div>
                               <div>
@@ -222,8 +234,14 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                               </div>
                             </div>
                           }
-                          @if (mode() === 'new' && p.subtasks.length < maxSubtasks) {
-                            <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm" (click)="addSubtask()" data-testid="ai-task-add-subtask">Részfeladat hozzáadása</button>
+                          @if (mode() === 'new') {
+                            @if (p.subtasks.length < maxSubtasks) {
+                              <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm" (click)="addSubtask()" data-testid="ai-task-add-subtask">Részfeladat hozzáadása</button>
+                            }
+                            <p class="text-xs text-text-muted" data-testid="ai-task-renumber-note">
+                              Hozzáadáskor, törléskor és áthelyezéskor a címkék automatikusan újraszámozódnak (1., 2., …). A mintamegoldás
+                              „N. feladat” fejléceinek ehhez kell igazodniuk - az Újraellenőrzés ezt is ellenőrzi.
+                            </p>
                           }
                         </div>
                       }
@@ -231,7 +249,7 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                         <div class="space-y-3" data-testid="ai-task-panel-adatfajl">
                           @if (p.existingInputFiles.length > 0) {
                             <p class="text-sm">
-                              A feladat meglévő bemeneti fájljai (ezekkel fut a megoldás):
+                              {{ mode() === 'new' ? 'A feladatsor bemeneti fájljai (az új feladat ellenőrzése is ezekkel fut):' : 'A feladat meglévő bemeneti fájljai (ezekkel fut a megoldás):' }}
                               @for (f of p.existingInputFiles; track f; let last = $last) { <span class="font-mono">{{ f }}</span>{{ last ? '' : ', ' }} }
                             </p>
                           }
@@ -300,7 +318,11 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                                 (ngModelChange)="setSolution(languageIndex(), $event)" [ngModelOptions]="{ standalone: true }"
                                 [attr.data-testid]="'ai-task-solution-' + l.language"></textarea>
                             </div>
-                            <h3 class="font-semibold text-sm">Kódrészletek részfeladatonként</h3>
+                            @if (l.snippets.length > 0) {
+                              <h3 class="font-semibold text-sm">Kódrészletek részfeladatonként</h3>
+                            } @else {
+                              <p class="text-xs text-text-muted" data-testid="ai-task-no-snippets">Ennél a nyelvnél csak a teljes program készül - részfeladatonkénti kódrészlet Pythonban van.</p>
+                            }
                             @for (sn of l.snippets; track $index; let si = $index) {
                               <div>
                                 <label [for]="'ai-task-snippet-' + l.language + '-' + si" class="text-xs text-text-muted block">
@@ -328,6 +350,13 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                         <div class="space-y-3" data-testid="ai-task-panel-ellenorzes">
                           @if (dirty()) {
                             <p class="text-sm text-warning">Ez a módosítások előtti ellenőrzés eredménye - futtasd le újra.</p>
+                          }
+                          @if (p.isRandom) {
+                            <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex items-start gap-2" data-testid="ai-task-random">
+                              <app-icon name="warning-triangle" class="w-4 h-4 block shrink-0 mt-0.5" />
+                              <span>Véletlenszerű bemenet - nem ellenőrizhető automatikusan: a feladat véletlenszámosnak van jelölve, így a diákok kimenetét a
+                              rendszer nem tudja a mintamegoldáséhoz mérni.</span>
+                            </p>
                           }
                           @if (r.warnings.length > 0) {
                             <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning" data-testid="ai-task-warnings">
@@ -429,10 +458,10 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                 </p>
               }
 
-              @if (otherRemembered(); as job) {
-                <div class="card !rounded-xl p-3 flex flex-wrap items-center justify-between gap-2" data-testid="ai-task-remembered">
-                  <span class="text-sm">Van egy korábban indított AI-feladatod ebben a feladatsorban{{ job.taskTitle ? ' („' + job.taskTitle + '”)' : ' (új feladat)' }}.</span>
-                  <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm" (click)="resume(job.jobId, job.taskTitle)" data-testid="ai-task-resume">Megnyitás</button>
+              @if (otherJob(); as job) {
+                <div class="card !rounded-xl p-3 flex flex-wrap items-center justify-between gap-2" data-testid="ai-task-other-job">
+                  <span class="text-sm">Van egy elkészült, még nem mentett AI-feladatod ebben a feladatsorban{{ job.taskId ? ' („' + (titleOf(job.taskId) ?? 'meglévő feladat') + '”)' : ' (új feladat)' }}.</span>
+                  <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm" (click)="resume(job.jobId)" data-testid="ai-task-resume">Megnyitás</button>
                 </div>
               }
 
@@ -529,6 +558,8 @@ export class AiFeladatComponent implements OnInit {
   /** „complete”: a megadott feladat kiegészítése; „new”: új feladat. */
   readonly startMode = input.required<AiCodeTaskMode>();
   readonly task = input<TeacherTaskDto | null>(null);
+  /** A feladatsor feladatai - egy másik feladathoz készült job címének kiírásához. */
+  readonly tasks = input<TeacherTaskDto[]>([]);
   readonly closed = output<void>();
   /** Sikeres mentés után a feladat azonosítójával - a szerkesztő újratölti a feladatsort. */
   readonly saved = output<number>();
@@ -571,7 +602,7 @@ export class AiFeladatComponent implements OnInit {
   readonly taskSubtaskCount = computed(() => this.task()?.subTasks.length ?? 0);
 
   readonly canStart = computed(() => {
-    if (this.starting() || this.premiumRequired() || this.quotaExhausted()) return false;
+    if (this.starting() || this.checkingActive() || this.premiumRequired() || this.quotaExhausted()) return false;
     if (this.mode() === 'complete') return !!this.task() && this.taskSubtaskCount() > 0;
     const topic = this.topic().trim();
     return topic.length > 0 && topic.length <= MAX_TOPIC && this.idea().length <= MAX_IDEA;
@@ -605,8 +636,10 @@ export class AiFeladatComponent implements OnInit {
   readonly canSave = computed(() => !!this.report()?.canSave && !this.dirty() && !!this.validated());
   readonly pointsSum = computed(() => (this.proposal()?.subtasks ?? []).reduce((sum, s) => sum + (s.points ?? 0), 0));
 
-  /** Egy másik (más feladathoz / módhoz indított) emlékezett job - megnyitható. */
-  readonly otherRemembered = signal<{ jobId: number; taskTitle: string | null } | null>(null);
+  /** A tanár elkészült, még nem mentett jobja egy MÁSIK célra (más feladat / mód) - megnyitható. */
+  readonly otherJob = signal<AiCodeTaskJobDto | null>(null);
+  /** Nyitáskor a szerveren lévő aktív job lekérdezése - addig nem indítható új (különben „már készül” elutasítás). */
+  readonly checkingActive = signal(false);
 
   private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
 
@@ -621,13 +654,34 @@ export class AiFeladatComponent implements OnInit {
     }
     this.loadQuota();
 
-    const remembered = this.service.rememberedJob(this.taskSetId());
-    if (remembered) {
-      const sameTarget = remembered.mode === this.mode() && remembered.taskId === (task?.id ?? null);
-      if (sameTarget) this.resume(remembered.jobId);
-      else this.otherRemembered.set({ jobId: remembered.jobId, taskTitle: remembered.taskTitle });
-    }
+    this.reconnect();
     setTimeout(() => this.dialog()?.nativeElement.focus());
+  }
+
+  /**
+   * Visszakapcsolódás a szerveren futó / elkészült, még nem mentett jobhoz (oldal-újratöltés, bezárt ablak után is).
+   * Futó jobhoz mindig (úgysem indítható más), kész jobhoz akkor, ha ugyanerre a célra készült; különben felkínáljuk.
+   */
+  private reconnect(): void {
+    this.checkingActive.set(true);
+    this.service
+      .getActiveJob(this.taskSetId())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (job) => {
+          this.checkingActive.set(false);
+          if (!job || this.service.isDismissed(job.jobId) || this.step() !== 'input') return;
+          const sameTarget = job.mode === this.startMode() && job.taskId === (this.task()?.id ?? null);
+          if (ACTIVE_STATUSES.has(job.status) || sameTarget) this.resume(job.jobId);
+          else this.otherJob.set(job);
+        },
+        error: () => this.checkingActive.set(false),
+      });
+  }
+
+  titleOf(taskId: number | null): string | null {
+    if (taskId == null) return null;
+    return this.tasks().find((t) => t.id === taskId)?.title ?? (this.task()?.id === taskId ? this.task()!.title : null);
   }
 
   private loadQuota(): void {
@@ -671,12 +725,21 @@ export class AiFeladatComponent implements OnInit {
         next: (res) => {
           this.starting.set(false);
           this.quota.set(res.quota);
-          this.service.remember(this.taskSetId(), { jobId: res.jobId, mode: this.mode(), taskId: task?.id ?? null, taskTitle: this.taskTitle() });
-          this.otherRemembered.set(null);
+          this.otherJob.set(null);
           this.poll(res.jobId);
         },
         error: (err) => {
           this.starting.set(false);
+          if (err?.error?.errorType === 'AiCodeTaskAlreadyRunning') {
+            // Már fut egy job: ugyanezen a feladatsoron visszakapcsolódunk hozzá, máshol csak jelezzük.
+            const details = err.error.details as { jobId?: number; taskSetId?: number } | undefined;
+            if (details?.jobId && details.taskSetId === this.taskSetId()) {
+              this.resume(details.jobId);
+              return;
+            }
+            this.startError.set('Egy másik feladatsorodon már készül egy AI-feladat - várd meg, amíg elkészül (ott a gombbal meg is nyithatod).');
+            return;
+          }
           if (err?.error?.errorType === 'AiCodeTaskPremiumRequired') this.premiumRejected.set(true);
           if (err?.error?.errorType === 'AiCodeTaskQuotaExceeded') this.loadQuota();
           this.startError.set(this.errorText(err, 'Az AI-feladat indítása nem sikerült.'));
@@ -685,9 +748,9 @@ export class AiFeladatComponent implements OnInit {
   }
 
   /** Egy (korábban indított) job megnyitása: állapot-lekérdezés, amíg kész nincs. */
-  resume(jobId: number, taskTitle?: string | null): void {
-    if (taskTitle !== undefined) this.taskTitle.set(taskTitle);
-    this.otherRemembered.set(null);
+  resume(jobId: number): void {
+    this.otherJob.set(null);
+    this.startError.set(null);
     this.poll(jobId);
   }
 
@@ -713,7 +776,6 @@ export class AiFeladatComponent implements OnInit {
         error: (err) => {
           if (this.jobId() !== jobId) return;
           if (err?.status === 404) {
-            this.service.forget(this.taskSetId(), jobId);
             this.backToInput('Ez az AI-feladat már nem érhető el (24 óra után lejár). Indíts újat.');
           } else {
             this.pollError.set(extractErrorMessage(err, 'Az állapot lekérdezése nem sikerült - zárd be, és nyisd meg újra később.'));
@@ -724,14 +786,14 @@ export class AiFeladatComponent implements OnInit {
 
   private onJob(job: AiCodeTaskJobDto): void {
     this.mode.set(job.mode);
+    this.taskTitle.set(job.mode === 'complete' ? this.titleOf(job.taskId) : null);
     this.progressText.set(job.progressText);
     if (job.status === 'failed') {
-      this.service.forget(this.taskSetId(), job.jobId);
+      // A szerver üzenete mondja meg, visszajár-e a keret (csak ha az MI-t nem hívta).
       this.loadQuota();
-      this.backToInput(`${job.error || 'Az AI-feladat elkészítése nem sikerült.'} A havi keretedből nem vonódott le.`);
+      this.backToInput(job.error || 'Az AI-feladat elkészítése nem sikerült.');
     } else if (job.status === 'done') {
-      if (job.appliedTaskId != null && job.mode === 'new') {
-        this.service.forget(this.taskSetId(), job.jobId);
+      if (job.appliedTaskId != null) {
         this.backToInput('Ezt az AI-feladatot már elmentetted.');
       } else if (job.result) {
         this.showResult(job.result);
@@ -801,25 +863,44 @@ export class AiFeladatComponent implements OnInit {
     return value === null || value === '' || value === undefined || Number.isNaN(Number(value)) ? null : Number(value);
   }
 
-  /** 2. mód: új részfeladat a végére, minden nyelvnél egy üres kódrészlettel (a BE nyelvenként azonos számút vár). */
+  /**
+   * 2. mód: a részfeladatok új sorrendje (régi index, vagy null = új, üres részfeladat). A címkék 1., 2., … szerint újraszámozódnak
+   * (a kimenet „N. feladat” része a címkéből jön), a kódrészletek együtt mozognak - csak azoknál a nyelveknél, ahol vannak (a nem
+   * Python nyelveknél a BE üres listát ad: ott vagy egy sincs, vagy részfeladatonként egy).
+   */
+  private reorderSubtasks(order: (number | null)[]): void {
+    this.update((p) => ({
+      ...p,
+      subtasks: order.map((from, i) => ({
+        ...(from === null ? { subTaskId: null, text: '', points: 1, existing: false, pointsExisting: false } : p.subtasks[from]),
+        label: `${i + 1}.`,
+      })),
+      languages: p.languages.map((l) =>
+        l.snippets.length === 0 ? l : { ...l, snippets: order.map((from) => (from === null ? undefined : l.snippets[from]) ?? { code: '', existing: false }) },
+      ),
+    }));
+  }
+
+  private subtaskIndices(): number[] {
+    return (this.proposal()?.subtasks ?? []).map((_, i) => i);
+  }
+
   addSubtask(): void {
-    this.update((p) => {
-      if (p.subtasks.length >= MAX_SUBTASKS) return p;
-      const label = `${p.subtasks.length + 1}.`;
-      return {
-        ...p,
-        subtasks: [...p.subtasks, { subTaskId: null, label, text: '', points: 1, existing: false, pointsExisting: false }],
-        languages: p.languages.map((l) => ({ ...l, snippets: [...l.snippets, { code: '', existing: false }] })),
-      };
-    });
+    const order: (number | null)[] = this.subtaskIndices();
+    if (order.length < MAX_SUBTASKS) this.reorderSubtasks([...order, null]);
   }
 
   removeSubtask(index: number): void {
-    this.update((p) => ({
-      ...p,
-      subtasks: p.subtasks.filter((_, i) => i !== index),
-      languages: p.languages.map((l) => ({ ...l, snippets: l.snippets.filter((_, i) => i !== index) })),
-    }));
+    const order = this.subtaskIndices();
+    if (order.length > 1) this.reorderSubtasks(order.filter((i) => i !== index));
+  }
+
+  moveSubtask(index: number, delta: -1 | 1): void {
+    const order = this.subtaskIndices();
+    const target = index + delta;
+    if (target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    this.reorderSubtasks(order);
   }
 
   setDataFileName(fileName: string): void {
@@ -880,7 +961,8 @@ export class AiFeladatComponent implements OnInit {
   /** Az eredmény eldobása, vissza a kéréshez (új generálás = új keret-egység). */
   discard(): void {
     const jobId = this.jobId();
-    if (jobId != null) this.service.forget(this.taskSetId(), jobId);
+    // A szerver még 24 óráig „aktívként” adná vissza - ebben a munkamenetben nem nyitjuk meg magától újra.
+    if (jobId != null) this.service.dismiss(jobId);
     this.jobId.set(null);
     this.resetPreview();
     this.resetTarget();
@@ -934,7 +1016,6 @@ export class AiFeladatComponent implements OnInit {
     this.service.apply(this.taskSetId(), jobId, proposal).subscribe({
       next: (res) => {
         this.saving.set(false);
-        this.service.forget(this.taskSetId(), jobId);
         this.toastService.success(res.saved.length > 0 ? `Elmentve: ${res.saved.join(', ')}.` : 'Elmentve.');
         this.saved.emit(res.taskId);
         this.closed.emit();
@@ -975,6 +1056,10 @@ export class AiFeladatComponent implements OnInit {
         return PREMIUM_REQUIRED_MESSAGE;
       case 'AiCodeTaskQuotaExceeded':
         return 'Elfogyott a havi AI-feladat kereted - a következő hónapban újra kérhetsz.';
+      case 'AiCodeTaskAlreadyRunning':
+        return 'Már készül egy AI-feladatod - várd meg, amíg elkészül.';
+      case 'RequestTooLarge':
+        return 'A feladat túl nagy az ellenőrzéshez (legfeljebb 3 MB) - rövidítsd az adatfájlt (pl. kevesebb sor a generáló szkriptben).';
       case 'FeatureDisabled':
         return 'Az AI programozási feladat most nincs bekapcsolva. Próbáld később.';
     }

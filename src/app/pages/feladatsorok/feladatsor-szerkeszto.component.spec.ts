@@ -217,7 +217,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
   describe('AI programozási feladat', () => {
     const aiServiceMock = () => ({
       getQuota: vi.fn(() => of({ used: 1, limit: 30, month: '2026-10', isPremium: true })),
-      rememberedJob: vi.fn(() => null),
+      getActiveJob: vi.fn(() => of(null)),
+      isDismissed: vi.fn(() => false),
     });
     const tasks = () => [
       { id: 1, title: 'Prog', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], aiAssisted: true,

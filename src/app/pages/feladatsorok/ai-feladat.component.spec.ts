@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { AiFeladatComponent, POLL_MS, PREMIUM_REQUIRED_MESSAGE } from './ai-feladat.component';
-import { RememberedAiJob, TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
+import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
   AiCodeTaskJobDto,
@@ -114,25 +114,25 @@ describe('AiFeladatComponent', () => {
     getJob: ReturnType<typeof vi.fn>;
     validate: ReturnType<typeof vi.fn>;
     apply: ReturnType<typeof vi.fn>;
-    rememberedJob: ReturnType<typeof vi.fn>;
-    remember: ReturnType<typeof vi.fn>;
-    forget: ReturnType<typeof vi.fn>;
+    getActiveJob: ReturnType<typeof vi.fn>;
+    dismiss: ReturnType<typeof vi.fn>;
+    isDismissed: ReturnType<typeof vi.fn>;
   };
   let toast: { success: ReturnType<typeof vi.fn> };
   /** A getJob egymás utáni válaszai (az utolsó ismétlődik). */
   let jobQueue: (() => Observable<AiCodeTaskJobDto>)[];
 
-  function create(opts: { mode?: 'complete' | 'new'; task?: TeacherTaskDto | null; quota?: AiCodeTaskQuotaDto; remembered?: RememberedAiJob | null } = {}) {
-    jobQueue = [() => of(doneJob())];
+  function create(opts: { mode?: 'complete' | 'new'; task?: TeacherTaskDto | null; quota?: AiCodeTaskQuotaDto; active?: Observable<AiCodeTaskJobDto | null>; dismissed?: number[]; tasks?: TeacherTaskDto[]; jobs?: (() => Observable<AiCodeTaskJobDto>)[] } = {}) {
+    jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
       getQuota: vi.fn(() => of(opts.quota ?? { used: 3, limit: 30, month: '2026-10', isPremium: true })),
       startJob: vi.fn(() => of({ jobId: 77, status: 'queued', quota: { used: 4, limit: 30, month: '2026-10', isPremium: true } })),
       getJob: vi.fn(() => (jobQueue.length > 1 ? jobQueue.shift()! : jobQueue[0])()),
       validate: vi.fn((_: number, __: number, p: AiCodeTaskProposal) => of<AiCodeTaskValidateResult>({ proposal: p, report: report() })),
       apply: vi.fn(() => of({ taskId: 456, created: true, saved: ['feladat', '2 részfeladat kódrészletekkel'] })),
-      rememberedJob: vi.fn(() => opts.remembered ?? null),
-      remember: vi.fn(),
-      forget: vi.fn(),
+      getActiveJob: vi.fn(() => opts.active ?? of(null)),
+      dismiss: vi.fn(),
+      isDismissed: vi.fn((id: number) => (opts.dismissed ?? []).includes(id)),
     };
     toast = { success: vi.fn() };
     TestBed.configureTestingModule({
@@ -146,6 +146,7 @@ describe('AiFeladatComponent', () => {
     fixture.componentRef.setInput('taskSetId', 9);
     fixture.componentRef.setInput('startMode', opts.mode ?? 'new');
     fixture.componentRef.setInput('task', opts.task ?? null);
+    fixture.componentRef.setInput('tasks', opts.tasks ?? []);
     fixture.detectChanges();
     return fixture;
   }
@@ -229,7 +230,6 @@ describe('AiFeladatComponent', () => {
       languages: ['python', 'cpp'],
       idea: 'legyen rendezés',
     });
-    expect(service.remember).toHaveBeenCalledWith(9, { jobId: 77, mode: 'new', taskId: null, taskTitle: null });
   });
 
   it('1. mód: a feladat azonosítójával kér; a meglévő megoldás nyelvei alapból bejelölve; újraírás kérhető', () => {
@@ -294,7 +294,6 @@ describe('AiFeladatComponent', () => {
     expect(closed).toHaveBeenCalled();
     vi.advanceTimersByTime(POLL_MS * 5);
     expect(service.getJob).toHaveBeenCalledTimes(2);
-    expect(service.forget).not.toHaveBeenCalled();
   });
 
   it('bezáráskor a folyamatban lévő állapot-kérést is megszakítja', () => {
@@ -307,13 +306,13 @@ describe('AiFeladatComponent', () => {
     expect(pending.observed).toBe(false);
   });
 
-  it('sikertelen jobnál vissza a kéréshez a hibával, a keret visszajár, a megjegyzés törlődik', () => {
+  it('sikertelen jobnál vissza a kéréshez a szerver hibaüzenetével, a keret újratöltődik', () => {
     const fixture = create();
     jobQueue = [() => of(job({ status: 'failed', error: 'Az MI válasza használhatatlan volt.' }))];
     startNew(fixture);
     expect(q(fixture, 'ai-task-input')).not.toBeNull();
-    expect(q(fixture, 'ai-task-error')!.textContent).toContain('Az MI válasza használhatatlan volt. A havi keretedből nem vonódott le.');
-    expect(service.forget).toHaveBeenCalledWith(9, 77);
+    expect(q(fixture, 'ai-task-error')!.textContent!.trim()).toBe('Az MI válasza használhatatlan volt.');
+    expect(service.getQuota).toHaveBeenCalledTimes(2);
   });
 
   it('lejárt (404) jobnál vissza a kéréshez', () => {
@@ -321,21 +320,97 @@ describe('AiFeladatComponent', () => {
     jobQueue = [() => throwError(() => ({ status: 404 }))];
     startNew(fixture);
     expect(q(fixture, 'ai-task-error')!.textContent).toContain('már nem érhető el');
-    expect(service.forget).toHaveBeenCalledWith(9, 77);
   });
 
-  it('ugyanarra a célra megjegyzett jobot újranyitáskor folytatja; másikat felkínál', () => {
-    let fixture = create({ remembered: { jobId: 77, mode: 'new', taskId: null, taskTitle: null } });
-    expect(service.getJob).toHaveBeenCalledWith(9, 77);
-    expect(q(fixture, 'ai-task-preview')).not.toBeNull();
+  describe('visszakapcsolódás (jobs/active)', () => {
+    it('nyitáskor a futó jobhoz kapcsolódik vissza és lekérdezi, amíg kész', () => {
+      vi.useFakeTimers();
+      const fixture = create({
+        active: of(job({ status: 'running' })),
+        jobs: [() => of(job({ status: 'running', progressText: 'Lefuttatás a Judge0-n…' })), () => of(doneJob())],
+      });
+      expect(service.getActiveJob).toHaveBeenCalledWith(9);
+      expect(service.getJob).toHaveBeenCalledWith(9, 77);
+      expect(q(fixture, 'ai-task-running')!.textContent).toContain('Lefuttatás a Judge0-n…');
+      vi.advanceTimersByTime(POLL_MS);
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-preview')).not.toBeNull();
+    });
 
-    TestBed.resetTestingModule();
-    fixture = create({ mode: 'complete', task: codeTask(), remembered: { jobId: 70, mode: 'new', taskId: null, taskTitle: null } });
-    expect(service.getJob).not.toHaveBeenCalled();
-    expect(q(fixture, 'ai-task-remembered')!.textContent).toContain('új feladat');
-    q(fixture, 'ai-task-resume')!.click();
-    fixture.detectChanges();
-    expect(service.getJob).toHaveBeenCalledWith(9, 70);
+    it('nincs aktív job (204 → null): a kérés-lépés marad, és indítható', () => {
+      const fixture = create();
+      expect(service.getActiveJob).toHaveBeenCalledWith(9);
+      expect(service.getJob).not.toHaveBeenCalled();
+      expect(q(fixture, 'ai-task-input')).not.toBeNull();
+      fixture.componentInstance.topic.set('x');
+      fixture.detectChanges();
+      expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('amíg az aktív job lekérdezése tart, nem indítható', () => {
+      const pending = new Subject<AiCodeTaskJobDto | null>();
+      const fixture = create({ active: pending });
+      fixture.componentInstance.topic.set('x');
+      fixture.detectChanges();
+      expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(true);
+      pending.next(null);
+      fixture.detectChanges();
+      expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('ugyanerre a célra elkészült, nem mentett jobot nyitáskor megmutat', () => {
+      const fixture = create({ active: of(doneJob()) });
+      expect(service.getJob).toHaveBeenCalledWith(9, 77);
+      expect(q(fixture, 'ai-task-preview')).not.toBeNull();
+    });
+
+    it('másik feladathoz elkészült jobot felkínál a címével; megnyitva az a feladat a cél', () => {
+      const other = codeTask({ id: 8, title: 'Másik feladat' });
+      const fixture = create({ mode: 'new', tasks: [other], active: of(doneJob({ mode: 'complete', taskId: 8 })) });
+      expect(service.getJob).not.toHaveBeenCalled();
+      expect(q(fixture, 'ai-task-other-job')!.textContent).toContain('Másik feladat');
+      jobQueue = [() => of(doneJob({ mode: 'complete', taskId: 8 }))];
+      q(fixture, 'ai-task-resume')!.click();
+      fixture.detectChanges();
+      expect(service.getJob).toHaveBeenCalledWith(9, 77);
+      expect(fixture.componentInstance.mode()).toBe('complete');
+      expect(fixture.nativeElement.textContent).toContain('Másik feladat');
+    });
+
+    it('az Elvetéssel félretett jobhoz nem kapcsolódik vissza magától', () => {
+      const fixture = create({ active: of(doneJob()), dismissed: [77] });
+      expect(service.getJob).not.toHaveBeenCalled();
+      expect(q(fixture, 'ai-task-input')).not.toBeNull();
+    });
+
+    it('„már készül” elutasításnál ugyanezen a feladatsoron a futó jobhoz kapcsolódik', () => {
+      const fixture = create();
+      service.startJob.mockReturnValue(
+        throwError(() => ({ status: 400, error: { errorType: 'AiCodeTaskAlreadyRunning', errorMessage: 'Már készül', details: { jobId: 70, taskSetId: 9 } } })),
+      );
+      jobQueue = [() => of(job({ jobId: 70, status: 'generating', progressText: 'Az MI írja a feladatot…' }))];
+      startNew(fixture);
+      expect(service.getJob).toHaveBeenCalledWith(9, 70);
+      expect(q(fixture, 'ai-task-error')).toBeNull();
+      expect(q(fixture, 'ai-task-running')!.textContent).toContain('Az MI írja a feladatot…');
+    });
+
+    it('„már készül” elutasításnál más feladatsoron csak érthető üzenet', () => {
+      const fixture = create();
+      service.startJob.mockReturnValue(
+        throwError(() => ({ status: 400, error: { errorType: 'AiCodeTaskAlreadyRunning', errorMessage: 'Már készül', details: { jobId: 70, taskSetId: 3 } } })),
+      );
+      startNew(fixture);
+      expect(service.getJob).not.toHaveBeenCalled();
+      expect(q(fixture, 'ai-task-error')!.textContent).toContain('Egy másik feladatsorodon már készül');
+    });
+
+    it('a 403-as prémium-elutasítás is olvasható üzenet', () => {
+      const fixture = create();
+      service.startJob.mockReturnValue(throwError(() => ({ status: 403, error: { errorType: 'AiCodeTaskPremiumRequired', errorMessage: 'x' } })));
+      startNew(fixture);
+      expect(q(fixture, 'ai-task-error')!.textContent).toContain(PREMIUM_REQUIRED_MESSAGE);
+    });
   });
 
   describe('előnézet', () => {
@@ -454,15 +529,52 @@ describe('AiFeladatComponent', () => {
       expect(q(fixture, 'ai-task-df-content')!.textContent).toContain('az Újraellenőrzés futtatja le');
     });
 
-    it('2. mód: részfeladat hozzáadása minden nyelvhez kódrészletet ad, a törlés elveszi', () => {
-      const fixture = preview();
+    it('2. mód: hozzáadás/törlés/áthelyezés újraszámozza a címkéket, a kódrészletek együtt mozognak, a nem Python üres lista üres marad', () => {
+      const p = proposal();
+      const withEmptyCsharp = { ...p, languages: [p.languages[0], { ...p.languages[1], snippets: [] }] };
+      const fixture = preview(doneJob({ result: { proposal: withEmptyCsharp, report: report(), model: 'm', notes: null, reasked: false } }));
       const c = fixture.componentInstance;
+      expect(q(fixture, 'ai-task-renumber-note')!.textContent).toContain('„N. feladat” fejléceinek');
+
       q(fixture, 'ai-task-add-subtask')!.click();
       expect(c.proposal()!.subtasks.map((s) => s.label)).toEqual(['1.', '2.', '3.']);
-      expect(c.proposal()!.languages.every((l) => l.snippets.length === 3)).toBe(true);
+      expect(c.proposal()!.languages[0].snippets.length).toBe(3);
+      expect(c.proposal()!.languages[1].snippets).toEqual([]);
+
       c.removeSubtask(0);
-      expect(c.proposal()!.subtasks.map((s) => s.label)).toEqual(['2.', '3.']);
-      expect(c.proposal()!.languages[1].snippets[0].code).toBe('Console.WriteLine(f.Length);');
+      expect(c.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', 'Hány lap van?'], ['2.', '']]);
+      expect(c.proposal()!.languages[0].snippets[0].code).toBe('print(len(lines))');
+
+      fixture.detectChanges();
+      q(fixture, 'ai-task-st-down-0')!.click();
+      expect(c.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', ''], ['2.', 'Hány lap van?']]);
+      expect(c.proposal()!.languages[0].snippets[1].code).toBe('print(len(lines))');
+      expect(c.dirty()).toBe(true);
+    });
+
+    it('nem Python nyelvnél (üres kódrészlet-lista) nincs üres kódrészlet-szerkesztő', () => {
+      const p = proposal();
+      const withEmptyCsharp = { ...p, languages: [p.languages[0], { ...p.languages[1], snippets: [] }] };
+      const fixture = preview(doneJob({ result: { proposal: withEmptyCsharp, report: report(), model: 'm', notes: null, reasked: false } }));
+      fixture.componentInstance.tab.set('megoldas');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('[id^="ai-task-snippet-python-"]').length).toBe(2);
+      expect(q(fixture, 'ai-task-no-snippets')).toBeNull();
+      q(fixture, 'ai-task-lang-csharp')!.click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('[id^="ai-task-snippet-csharp-"]').length).toBe(0);
+      expect(q(fixture, 'ai-task-no-snippets')).not.toBeNull();
+    });
+
+    it('véletlenszámos feladatnál az Ellenőrzés fülön figyelmeztet; 2. módban a feladatsor bemeneti fájljai látszanak', () => {
+      const fixture = preview(doneJob({ result: { proposal: proposal({ isRandom: true, existingInputFiles: ['adatok.txt'] }), report: report(), model: 'm', notes: null, reasked: false } }));
+      q(fixture, 'ai-task-tab-ellenorzes')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-random')!.textContent).toContain('Véletlenszerű bemenet - nem ellenőrizhető automatikusan');
+      q(fixture, 'ai-task-tab-adatfajl')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-panel-adatfajl')!.textContent).toContain('A feladatsor bemeneti fájljai');
+      expect(q(fixture, 'ai-task-panel-adatfajl')!.textContent).toContain('adatok.txt');
     });
 
     it('Visszaállítás: a generált változat és ellenőrzés vissza, újra menthető', () => {
@@ -499,7 +611,7 @@ describe('AiFeladatComponent', () => {
       q(fixture, 'ai-task-discard')!.click();
       fixture.detectChanges();
       expect(pending.observed).toBe(false);
-      expect(service.forget).toHaveBeenCalledWith(9, 77);
+      expect(service.dismiss).toHaveBeenCalledWith(77);
       expect(q(fixture, 'ai-task-input')).not.toBeNull();
       expect(c.report()).toBeNull();
     });
@@ -520,7 +632,7 @@ describe('AiFeladatComponent', () => {
       expect(q(fixture, 'ai-task-revalidate')).not.toBeNull();
     });
 
-    it('Mentés: toast a mentett részekkel, saved a feladat azonosítójával, bezárás, megjegyzés törlése', () => {
+    it('Mentés: toast a mentett részekkel, saved a feladat azonosítójával, bezárás', () => {
       const fixture = preview();
       const saved = vi.fn();
       const closed = vi.fn();
@@ -531,7 +643,6 @@ describe('AiFeladatComponent', () => {
       expect(toast.success).toHaveBeenCalledWith('Elmentve: feladat, 2 részfeladat kódrészletekkel.');
       expect(saved).toHaveBeenCalledWith(456);
       expect(closed).toHaveBeenCalled();
-      expect(service.forget).toHaveBeenCalledWith(9, 77);
     });
 
     it('sikertelen mentésnél a hiba látszik, az ablak nyitva marad', () => {

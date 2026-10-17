@@ -604,7 +604,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
               (closed)="sqlGenerationOpen.set(false)" (saved)="store.loadDetail(detail.id)" />
           }
           @if (aiTaskDialog(); as ai) {
-            <app-ai-feladat [taskSetId]="detail.id" [startMode]="ai.mode" [task]="ai.task"
+            <app-ai-feladat [taskSetId]="detail.id" [startMode]="ai.mode" [task]="ai.task" [tasks]="detail.tasks"
               (closed)="aiTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
 

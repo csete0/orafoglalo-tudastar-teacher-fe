@@ -63,7 +63,11 @@ export interface AiCodeTaskProposal {
   dataFile: AiProposalDataFile | null;
   existingInputFiles: string[];
   stdin: string | null;
+  /** A tárolt bemenet-sor a tanáré (stdin és/vagy véletlenszám-jelölés) - a stdin ilyenkor csak olvasható. */
   stdinExisting: boolean;
+  /** 1. mód: a feladat véletlenszámosnak van jelölve - csak olvasható. */
+  isRandom?: boolean;
+  /** Nem Python nyelvnél üres lista is lehet (csak a teljes program készül). */
   languages: AiProposalLanguage[];
 }
 
