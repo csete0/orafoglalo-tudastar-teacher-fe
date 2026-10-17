@@ -7,6 +7,7 @@ import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-task
 import { CategoryService } from '../../services/category/category.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { PublicCategoryDto } from '../../models/category.model';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 
 describe('FeladatsorokListaComponent', () => {
   let storeMock: {
@@ -392,5 +393,23 @@ describe('FeladatsorokListaComponent', () => {
     expect(askSpy).not.toHaveBeenCalled();
     expect(storeMock.create).toHaveBeenCalledTimes(1);
     expect(storeMock.create.mock.calls[0][0]).toMatchObject({ levelId: 2 });
+  });
+
+  it('a „Másolás a katalógusból” gomb megnyitja, a bezárás elrejti a katalógust', () => {
+    configure();
+    const getCatalog = vi.fn(() => of({ page: 1, pageSize: 20, totalCount: 0, items: [], categories: [] }));
+    TestBed.overrideProvider(TeacherTaskSetService, { useValue: { getSkills: () => of([]), getCatalog } });
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).toBeNull();
+
+    (fixture.nativeElement.querySelector('[data-testid="catalog-open"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).not.toBeNull();
+    expect(getCatalog).toHaveBeenCalled();
+
+    (fixture.nativeElement.querySelector('[data-testid="catalog-close"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).toBeNull();
   });
 });

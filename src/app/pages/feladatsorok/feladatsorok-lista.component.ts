@@ -14,6 +14,7 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
 import { SkillPickerComponent } from '../../shared/skill-picker/skill-picker.component';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { TeacherSkillDto } from '../../models/teacher-content.model';
+import { KatalogusMasolasComponent } from './katalogus-masolas.component';
 
 const LEVELS = [
   { id: 1, label: 'Kezdő' },
@@ -25,19 +26,28 @@ const LEVELS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsorok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent, SkillPickerComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent, SkillPickerComponent, KatalogusMasolasComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
-      <div class="flex items-start justify-between gap-3">
-        <div>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
           <h1 class="page-title">Feladatsoraim</h1>
       <p class="text-sm text-text-muted mt-1">Saját feladatsorok szerkesztése és publikálása</p>
 
         </div>
-        <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
-          {{ createOpen() ? 'Mégse' : '+ Új feladatsor' }}
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" (click)="catalogOpen.set(true)" class="btn btn-ghost border border-border-default shrink-0" data-testid="catalog-open">
+            Másolás a katalógusból
+          </button>
+          <button type="button" (click)="createOpen.set(!createOpen())" class="btn btn-primary shrink-0">
+            {{ createOpen() ? 'Mégse' : '+ Új feladatsor' }}
+          </button>
+        </div>
       </div>
+
+      @if (catalogOpen()) {
+        <app-katalogus-masolas (closed)="catalogOpen.set(false)" />
+      }
 
       <app-tartalom-fulek />
 
@@ -123,7 +133,7 @@ const LEVELS = [
                   <app-icon name="clipboard-list" class="w-6 h-6 block" />
                 </div>
                 <p class="font-semibold">Még nincs feladatsorod.</p>
-                <p class="text-sm text-text-muted">Hozd létre az elsőt a "+ Új feladatsor" gombbal.</p>
+                <p class="text-sm text-text-muted text-center">Hozd létre az elsőt a "+ Új feladatsor" gombbal, vagy másolj egyet a katalógusból.</p>
               </li>
             }
           }
@@ -150,6 +160,8 @@ export class FeladatsorokListaComponent {
   readonly createSkillIds = signal<number[]>([]);
 
   readonly createOpen = signal(false);
+  /** „Másolás a katalógusból” ablak. */
+  readonly catalogOpen = signal(false);
   readonly search = signal('');
 
   readonly visibleTaskSets = computed(() => {

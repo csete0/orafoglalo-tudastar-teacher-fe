@@ -167,6 +167,8 @@ describe('SqlGeneralasComponent', () => {
     expect([taskSetId, kind, uploaded.name]).toEqual([9, 'CreateSql', 'create.sql']);
     expect(await uploaded.text()).toBe('CREATE TABLE t (id INT);');
     expect(serviceMock.uploadFile.mock.calls[1][1]).toBe('CreateLiteSql');
+    // Egy sémás feladatsor: feladatsor-szintű feltöltés, mint eddig.
+    expect(serviceMock.uploadFile.mock.calls[0][3]).toBeUndefined();
     expect(toastMock.success).toHaveBeenCalledWith('A create.sql és a create_lite.sql elmentve.');
     expect(saved).toHaveBeenCalled();
     expect(closed).toHaveBeenCalled();
@@ -375,5 +377,33 @@ describe('SqlGeneralasComponent', () => {
       expect(q(fixture, 'sql-gen-restore-CreateLiteSql')!.getAttribute('aria-label')).toContain('create_lite.sql');
       expect(q(fixture, 'sql-gen-edit-CreateLiteSql')!.getAttribute('aria-label')).toContain('create_lite.sql');
     });
+  });
+
+  it('feladatonkénti sémánál a célfeladathoz köti a mentett fájlt, és csak annak a fájlját jelzi cserélendőnek', () => {
+    const own = { ...file('a', 'CreateSql', 'create.sql'), taskId: 7 };
+    const other = { ...file('b', 'CreateLiteSql', 'masik_lite.sql'), taskId: 8 };
+    const fixture = create([own, other]);
+    fixture.componentRef.setInput('taskId', 7);
+    fixture.detectChanges();
+    q(fixture, 'sql-gen-generate')!.click();
+    fixture.detectChanges();
+
+    // A másik feladat create_lite.sql-je nem cserélődik.
+    expect(q(fixture, 'sql-gen-file-CreateLiteSql')!.textContent).not.toContain('lecserélődik');
+    q(fixture, 'sql-gen-save')!.click();
+    expect(serviceMock.uploadFile.mock.calls[0][1]).toBe('CreateLiteSql');
+    expect(serviceMock.uploadFile.mock.calls[0][3]).toBe(7);
+  });
+
+  it('a háttér fixed (görgetett tartalom alatt is takar), kattintásra bezár; a középre igazítás marad', () => {
+    const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+    const closed = vi.fn();
+    fixture.componentInstance.closed.subscribe(closed);
+    const backdrop = q(fixture, 'sql-gen-backdrop')!;
+    expect(backdrop.classList).toContain('fixed');
+    expect(backdrop.classList).not.toContain('absolute');
+    expect(q(fixture, 'sql-generation-dialog')!.classList).toContain('sm:my-auto');
+    backdrop.click();
+    expect(closed).toHaveBeenCalled();
   });
 });

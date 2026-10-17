@@ -45,7 +45,8 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
   imports: [FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
     <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
+      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
+      <div class="fixed inset-0 bg-black/40" data-testid="sql-gen-backdrop" (click)="close()"></div>
       <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-gen-title" tabindex="-1" data-testid="sql-generation-dialog"
         class="card relative w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
         <div class="flex items-start justify-between gap-3 mb-4">
@@ -290,6 +291,8 @@ export class SqlGeneralasComponent implements OnInit {
   readonly taskSetId = input.required<number>();
   /** A feladatsor fájljai (a forrás-választáshoz és a csere-jelzéshez). */
   readonly files = input.required<TeacherFileDto[]>();
+  /** Feladatonkénti sémánál a célfeladat - a mentés ehhez köti a fájlt (null: feladatsor-szintű, a régi viselkedés). */
+  readonly taskId = input<number | null>(null);
   readonly closed = output<void>();
   /** Sikeres mentés után - a szerkesztő újratölti a feladatsort. */
   readonly saved = output<void>();
@@ -512,7 +515,12 @@ export class SqlGeneralasComponent implements OnInit {
     this.saveError.set(null);
     // A (javított és újraellenőrzött) szöveg megy fel, a szokásos feltöltésen.
     const uploads = this.generatedFiles().map((f) =>
-      this.service.uploadFile(this.taskSetId(), f.kind, new File([this.texts()[f.kind] ?? f.content], f.fileName, { type: 'application/sql' })),
+      this.service.uploadFile(
+        this.taskSetId(),
+        f.kind,
+        new File([this.texts()[f.kind] ?? f.content], f.fileName, { type: 'application/sql' }),
+        this.taskId() ?? undefined,
+      ),
     );
     concat(...uploads)
       .pipe(toArray())
@@ -543,7 +551,9 @@ export class SqlGeneralasComponent implements OnInit {
   }
 
   existingFileName(file: GeneratedSqlFileDto): string | null {
-    return this.files().find((f) => f.kind === file.kind)?.originalFileName ?? null;
+    // Feladatonkénti sémánál csak a célfeladat (vagy a feladatsor-szintű) fájlja cserélődik.
+    const taskId = this.taskId();
+    return this.files().find((f) => f.kind === file.kind && (taskId === null || f.taskId == null || f.taskId === taskId))?.originalFileName ?? null;
   }
 
   preview(content: string): string {
