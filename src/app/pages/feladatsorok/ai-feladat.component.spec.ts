@@ -116,13 +116,12 @@ describe('AiFeladatComponent', () => {
     apply: ReturnType<typeof vi.fn>;
     getActiveJob: ReturnType<typeof vi.fn>;
     dismiss: ReturnType<typeof vi.fn>;
-    isDismissed: ReturnType<typeof vi.fn>;
   };
   let toast: { success: ReturnType<typeof vi.fn> };
   /** A getJob egymás utáni válaszai (az utolsó ismétlődik). */
   let jobQueue: (() => Observable<AiCodeTaskJobDto>)[];
 
-  function create(opts: { mode?: 'complete' | 'new'; task?: TeacherTaskDto | null; quota?: AiCodeTaskQuotaDto; active?: Observable<AiCodeTaskJobDto | null>; dismissed?: number[]; tasks?: TeacherTaskDto[]; jobs?: (() => Observable<AiCodeTaskJobDto>)[] } = {}) {
+  function create(opts: { mode?: 'complete' | 'new'; task?: TeacherTaskDto | null; quota?: AiCodeTaskQuotaDto; active?: Observable<AiCodeTaskJobDto | null>; tasks?: TeacherTaskDto[]; jobs?: (() => Observable<AiCodeTaskJobDto>)[] } = {}) {
     jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
       getQuota: vi.fn(() => of(opts.quota ?? { used: 3, limit: 30, month: '2026-10', isPremium: true })),
@@ -131,8 +130,7 @@ describe('AiFeladatComponent', () => {
       validate: vi.fn((_: number, __: number, p: AiCodeTaskProposal) => of<AiCodeTaskValidateResult>({ proposal: p, report: report() })),
       apply: vi.fn(() => of({ taskId: 456, created: true, saved: ['feladat', '2 részfeladat kódrészletekkel'] })),
       getActiveJob: vi.fn(() => opts.active ?? of(null)),
-      dismiss: vi.fn(),
-      isDismissed: vi.fn((id: number) => (opts.dismissed ?? []).includes(id)),
+      dismiss: vi.fn(() => of(undefined)),
     };
     toast = { success: vi.fn() };
     TestBed.configureTestingModule({
@@ -377,12 +375,6 @@ describe('AiFeladatComponent', () => {
       expect(fixture.nativeElement.textContent).toContain('Másik feladat');
     });
 
-    it('az Elvetéssel félretett jobhoz nem kapcsolódik vissza magától', () => {
-      const fixture = create({ active: of(doneJob()), dismissed: [77] });
-      expect(service.getJob).not.toHaveBeenCalled();
-      expect(q(fixture, 'ai-task-input')).not.toBeNull();
-    });
-
     it('„már készül” elutasításnál ugyanezen a feladatsoron a futó jobhoz kapcsolódik', () => {
       const fixture = create();
       service.startJob.mockReturnValue(
@@ -611,9 +603,51 @@ describe('AiFeladatComponent', () => {
       q(fixture, 'ai-task-discard')!.click();
       fixture.detectChanges();
       expect(pending.observed).toBe(false);
-      expect(service.dismiss).toHaveBeenCalledWith(77);
+      expect(service.dismiss).toHaveBeenCalledWith(9, 77);
       expect(q(fixture, 'ai-task-input')).not.toBeNull();
       expect(c.report()).toBeNull();
+    });
+
+    it('Elvetés: a szerveren is elveti; amíg tart, a gombok tiltottak; utána új kérés indítható', () => {
+      const fixture = preview();
+      const pending = new Subject<void>();
+      service.dismiss.mockReturnValue(pending);
+      q(fixture, 'ai-task-discard')!.click();
+      fixture.detectChanges();
+      expect(service.dismiss).toHaveBeenCalledWith(9, 77);
+      expect((q(fixture, 'ai-task-discard') as HTMLButtonElement).disabled).toBe(true);
+      expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(true);
+      expect(q(fixture, 'ai-task-preview')).not.toBeNull();
+
+      pending.next();
+      pending.complete();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-input')).not.toBeNull();
+      expect(q(fixture, 'ai-task-error')).toBeNull();
+      expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('sikertelen elvetésnél (pl. 400) az előnézet marad, a hiba olvasható', () => {
+      const fixture = preview();
+      service.dismiss.mockReturnValue(throwError(() => ({ status: 400, error: { errorType: 'OrafoglaloException', errorMessage: 'A generálás még fut - várd meg, amíg elkészül.' } })));
+      q(fixture, 'ai-task-discard')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-preview')).not.toBeNull();
+      expect(q(fixture, 'ai-task-save-error')!.textContent).toContain('A generálás még fut');
+      expect((q(fixture, 'ai-task-discard') as HTMLButtonElement).disabled).toBe(false);
+
+      service.dismiss.mockReturnValue(throwError(() => ({ status: 0, error: null })));
+      q(fixture, 'ai-task-discard')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-save-error')!.textContent).toContain('Az elvetés nem sikerült');
+    });
+
+    it('elvetésnél a már nem létező (404) job is visszavisz a kéréshez', () => {
+      const fixture = preview();
+      service.dismiss.mockReturnValue(throwError(() => ({ status: 404 })));
+      q(fixture, 'ai-task-discard')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'ai-task-input')).not.toBeNull();
     });
 
     it('a 413-at és a futtató-kiesést érthetően jelzi', () => {

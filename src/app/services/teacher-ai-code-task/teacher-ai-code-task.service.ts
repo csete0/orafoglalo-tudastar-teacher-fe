@@ -16,8 +16,6 @@ import {
 export class TeacherAiCodeTaskService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/teacher`;
-  /** Az ebben a munkamenetben „Elvetés”-sel félretett jobok - ezekhez nyitáskor nem kapcsolódunk vissza magától. */
-  private readonly dismissed = new Set<number>();
 
   getQuota(): Observable<AiCodeTaskQuotaDto> {
     return this.http.get<AiCodeTaskQuotaDto>(`${this.baseUrl}/ai-code-task/quota`);
@@ -47,12 +45,9 @@ export class TeacherAiCodeTaskService {
       .pipe(map((res) => (res.status === 204 ? null : res.body)));
   }
 
-  dismiss(jobId: number): void {
-    this.dismissed.add(jobId);
-  }
-
-  isDismissed(jobId: number): boolean {
-    return this.dismissed.has(jobId);
+  /** Kész (nem mentett) vagy sikertelen job elvetése (204) - utána a jobs/active nem adja vissza. Futó jobra 400. */
+  dismiss(taskSetId: number, jobId: number): Observable<void> {
+    return this.http.post<void>(`${this.taskSetUrl(taskSetId)}/jobs/${jobId}/dismiss`, null);
   }
 
   private taskSetUrl(taskSetId: number): string {

@@ -32,9 +32,12 @@ describe('TeacherAiCodeTaskService', () => {
     expect(result).toEqual({ jobId: 77, status: 'running' });
   });
 
-  it('az elvetett job megjegyzése', () => {
-    expect(service.isDismissed(77)).toBe(false);
-    service.dismiss(77);
-    expect(service.isDismissed(77)).toBe(true);
+  it('elvetés: POST …/jobs/{jobId}/dismiss', () => {
+    let done = false;
+    service.dismiss(9, 77).subscribe(() => (done = true));
+    const req = httpMock.expectOne(`${environment.apiUrl}/teacher/task-sets/9/ai-code-task/jobs/77/dismiss`);
+    expect(req.request.method).toBe('POST');
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    expect(done).toBe(true);
   });
 });

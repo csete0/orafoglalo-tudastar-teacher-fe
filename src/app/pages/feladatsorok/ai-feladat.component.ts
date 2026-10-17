@@ -429,11 +429,11 @@ const sameProposal = (a: AiCodeTaskProposal | null, b: AiCodeTaskProposal | null
                 }
 
                 <div class="flex flex-wrap justify-end gap-2 pt-2">
-                  <button type="button" class="btn btn-ghost mr-auto" (click)="discard()" [disabled]="saving()" data-testid="ai-task-discard">Elvetés</button>
+                  <button type="button" class="btn btn-ghost mr-auto" (click)="discard()" [disabled]="saving() || discarding()" data-testid="ai-task-discard">{{ discarding() ? 'Elvetés…' : 'Elvetés' }}</button>
                   @if (changedFromGenerated()) {
                     <button type="button" class="btn btn-ghost" (click)="restore()" [disabled]="saving()" data-testid="ai-task-restore">Visszaállítás</button>
                   }
-                  <button type="button" class="btn btn-primary" (click)="save()" [disabled]="!canSave() || saving()" data-testid="ai-task-save">
+                  <button type="button" class="btn btn-primary" (click)="save()" [disabled]="!canSave() || saving() || discarding()" data-testid="ai-task-save">
                     {{ saving() ? 'Mentés…' : 'Mentés' }}
                   </button>
                 </div>
@@ -630,6 +630,9 @@ export class AiFeladatComponent implements OnInit {
   readonly saveError = signal<string | null>(null);
   readonly dataFileError = signal<string | null>(null);
   private revalidation: Subscription | null = null;
+  /** „Elvetés”: a szerveren is elvetjük a jobot, hogy a jobs/active ne adja vissza. */
+  readonly discarding = signal(false);
+  private discardSub: Subscription | null = null;
 
   readonly dirty = computed(() => !sameProposal(this.proposal(), this.validated()));
   readonly changedFromGenerated = computed(() => !!this.generated() && !sameProposal(this.proposal(), this.generated()!.proposal));
@@ -670,7 +673,7 @@ export class AiFeladatComponent implements OnInit {
       .subscribe({
         next: (job) => {
           this.checkingActive.set(false);
-          if (!job || this.service.isDismissed(job.jobId) || this.step() !== 'input') return;
+          if (!job || this.step() !== 'input') return;
           const sameTarget = job.mode === this.startMode() && job.taskId === (this.task()?.id ?? null);
           if (ACTIVE_STATUSES.has(job.status) || sameTarget) this.resume(job.jobId);
           else this.otherJob.set(job);
@@ -961,8 +964,29 @@ export class AiFeladatComponent implements OnInit {
   /** Az eredmény eldobása, vissza a kéréshez (új generálás = új keret-egység). */
   discard(): void {
     const jobId = this.jobId();
-    // A szerver még 24 óráig „aktívként” adná vissza - ebben a munkamenetben nem nyitjuk meg magától újra.
-    if (jobId != null) this.service.dismiss(jobId);
+    if (jobId == null || this.discarding() || this.saving()) return;
+    this.discarding.set(true);
+    this.saveError.set(null);
+    this.discardSub = this.service
+      .dismiss(this.taskSetId(), jobId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.afterDiscard(jobId),
+        error: (err) => {
+          // 404: már nincs ilyen job (lejárt / törölt) - az eredmény úgyis elveszett, vissza a kéréshez.
+          if (err?.status === 404) {
+            this.afterDiscard(jobId);
+            return;
+          }
+          this.discarding.set(false);
+          this.saveError.set(this.errorText(err, 'Az elvetés nem sikerült - próbáld újra.'));
+        },
+      });
+  }
+
+  private afterDiscard(jobId: number): void {
+    this.discarding.set(false);
+    if (this.jobId() !== jobId) return;
     this.jobId.set(null);
     this.resetPreview();
     this.resetTarget();
@@ -1037,6 +1061,7 @@ export class AiFeladatComponent implements OnInit {
     this.starting.set(false);
     this.stopPolling();
     this.cancelRevalidation();
+    this.discardSub?.unsubscribe();
     this.closed.emit();
   }
 
