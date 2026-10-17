@@ -60,4 +60,27 @@ describe('TeacherQuizService - C5 scope (api/teacher ↔ api/admin)', () => {
     httpMock.expectOne({ method: 'POST', url: `${environment.apiUrl}/teacher/quizzes/7/assignments` }).flush({});
     httpMock.expectOne({ method: 'GET', url: `${environment.apiUrl}/teacher/quizzes/7/results` }).flush({});
   });
+
+  it('„Kérdések szövegből”: multipart - szövegnél text, fájlnál file (text nélkül), ismételt questionTypes', () => {
+    service.generateFromSource(7, { text: 'tananyag', topicId: 3, count: 5, difficulty: 'Hard', questionTypes: ['single', 'truefalse'] }).subscribe();
+    const textReq = httpMock.expectOne(`${environment.apiUrl}/teacher/quizzes/7/generate-from-source`);
+    expect(textReq.request.method).toBe('POST');
+    const form = textReq.request.body as FormData;
+    expect(form.get('text')).toBe('tananyag');
+    expect(form.has('file')).toBe(false);
+    expect(form.get('topicId')).toBe('3');
+    expect(form.get('count')).toBe('5');
+    expect(form.get('difficulty')).toBe('Hard');
+    expect(form.getAll('questionTypes')).toEqual(['single', 'truefalse']);
+    textReq.flush({ created: [], dropped: [], sourceChars: 0, model: 'm', refunded: true });
+
+    const file = new File(['x'], 'jegyzet.pdf');
+    service.generateFromSource(7, { file, topicId: 3, count: 2, difficulty: 'Easy', questionTypes: [] }).subscribe();
+    const fileReq = httpMock.expectOne(`${environment.apiUrl}/teacher/quizzes/7/generate-from-source`);
+    const fileForm = fileReq.request.body as FormData;
+    expect((fileForm.get('file') as File).name).toBe('jegyzet.pdf');
+    expect(fileForm.has('text')).toBe(false);
+    expect(fileForm.has('questionTypes')).toBe(false);
+    fileReq.flush({});
+  });
 });

@@ -446,6 +446,24 @@ export interface CatalogPageDto {
   categories: { id: number; name: string }[];
 }
 
+/** Hivatalos sor kiadása egy hívásban (másolás vagy a meglévő másolat → publikálás → kiadás). */
+export interface CatalogAssignRequest {
+  catalogTaskSetId: number;
+  opensAt?: string | null;
+  dueAt?: string | null;
+}
+
+export interface CatalogAssignResultDto {
+  /** A tanár saját másolata, amit kiadtunk. */
+  taskSetId: number;
+  /** Igaz: most készült a másolat; hamis: a meglévő másolatot használta. */
+  copied: boolean;
+  /** Igaz: a másolatot most publikálta. */
+  published: boolean;
+  assignment: TaskSetAssignmentDto;
+  warnings: string[];
+}
+
 export interface CatalogCopyResultDto {
   taskSetId: number;
   title: string;

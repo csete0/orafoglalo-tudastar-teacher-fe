@@ -1,3 +1,5 @@
+import { AiHelperQuotaItemDto } from '../shared/ai-helper-quota.util';
+
 /**
  * Tanári kvíz-szerkesztés modelljei.
  *
@@ -148,6 +150,50 @@ export interface GenerateTeacherQuizQuestionsRequest {
   topicId: number;
   count: number;
   difficulty: QuizDifficulty;
+}
+
+// ── Kérdések szövegből (generate-from-source) ─────────
+
+/** A „Kérdések szövegből” kérdéstípusai - az igaz/hamis egyválasztósként tárolódik („Igaz”/„Hamis”). */
+export type QuizSourceQuestionType = 'single' | 'multi' | 'truefalse' | 'cloze';
+
+export const QUIZ_SOURCE_TYPE_LABELS: Record<QuizSourceQuestionType, string> = {
+  single: 'Egyválasztós',
+  multi: 'Többválasztós',
+  truefalse: 'Igaz/hamis',
+  cloze: 'Hiányos kitöltés',
+};
+
+/** Pontosan az egyik: `text` (beillesztett tananyag) vagy `file` (.txt/.docx/.pdf). */
+export interface GenerateQuizFromSourceRequest {
+  text?: string | null;
+  file?: File | null;
+  topicId: number;
+  count: number;
+  difficulty: QuizDifficulty;
+  /** Üres: mind a négy típus. */
+  questionTypes: QuizSourceQuestionType[];
+}
+
+export interface QuizSourceDroppedDto {
+  /** Miért maradt ki (pl. a forrás-idézet nem található szó szerint a szövegben). */
+  reason: string;
+  /** A kérdés szövege (≤300 karakter). */
+  text: string;
+}
+
+export interface QuizSourceResultDto {
+  /** Jóváhagyatlan piszkozatként mentett kérdések. */
+  created: TeacherQuizQuestionDto[];
+  dropped: QuizSourceDroppedDto[];
+  sourceChars: number;
+  model: string;
+  /** Pl. a 20 oldalnál hosszabb PDF-ből csak az első 20 oldal szövege került be. */
+  warnings?: string[];
+  /** A havi keret a kérés után (egy egység = egy generálás). */
+  quota?: AiHelperQuotaItemDto;
+  /** Régi mező (a fix round 2 óta nem jön): egy kérdés sem ment át, és a keret visszajárt. */
+  refunded?: boolean;
 }
 
 // ── Témakörök (a diák-oldali /quiz/topics végpontról) ─────────

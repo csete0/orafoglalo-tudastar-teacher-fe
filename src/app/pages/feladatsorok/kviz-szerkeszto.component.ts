@@ -29,6 +29,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { environment } from '../../../environments/environment';
+import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
 
 /**
  * Tanári kvíz-szerkesztő: beállítások, kérdések (típusonként eltérő űrlappal),
@@ -50,7 +51,7 @@ import { environment } from '../../../environments/environment';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-szerkeszto',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent, DatePipe],
+  imports: [ReactiveFormsModule, RouterLink, IconComponent, DatePipe, KvizSzovegbolComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <div class="flex items-center gap-4">
@@ -469,6 +470,25 @@ import { environment } from '../../../environments/environment';
               {{ store.generating() ? 'Generálás folyamatban…' : 'Generálás' }}
             </button>
           </form>
+
+          <!-- Kérdések a tanár saját tananyagából (beillesztett szöveg vagy fájl) - csak tanári kvíznél. -->
+          @if (!isAdmin) {
+            <div class="border-t border-border-default mt-4 pt-4" data-testid="quiz-source-section">
+              <h3 class="font-semibold text-sm mb-1">Kérdések szövegből</h3>
+              <p class="text-sm text-text-muted mb-3">
+                Saját tananyagból (beillesztett szöveg vagy .txt, .docx, .pdf fájl): minden kérdés szó szerinti idézettel
+                ellenőrizve, jóváhagyásra várva kerül a kvízbe. Prémium tanároknak, havi kerettel (a napi MI-keretet nem érinti).
+              </p>
+              <button type="button" class="btn btn-ghost" (click)="sourceOpen.set(true)"
+                [disabled]="topics().length === 0 || !!quiz.takedownAt" data-testid="quiz-source-open">
+                Kérdések szövegből…
+              </button>
+            </div>
+            @if (sourceOpen()) {
+              <app-kviz-szovegbol [quizId]="quizId" [topics]="topics()" [initialTopicId]="generateTopicId()"
+                (closed)="sourceOpen.set(false)" (changed)="onSourceChanged()" />
+            }
+          }
         </section>
 
         <!-- ── Publikálás ─────────────────────────────────────── -->
@@ -1116,6 +1136,20 @@ export class KvizSzerkesztoComponent {
       { topicId: Number(raw.topicId), count: Number(raw.count), difficulty: 'Medium' },
       (count) => this.toastService.success(`${count} kérdés generálva — nézd át és hagyd jóvá őket.`),
     );
+  }
+
+  // ── Kérdések szövegből ──
+  readonly sourceOpen = signal(false);
+
+  /** Az AI-szekcióban kiválasztott témakör a „Kérdések szövegből” kezdőértékének. */
+  generateTopicId(): number | null {
+    const id = this.generateForm.controls.topicId.value;
+    return id == null ? null : Number(id);
+  }
+
+  /** A szövegből készült piszkozatok a meglévő jóváhagyási úton jelennek meg - a kérdéslista újratöltése (az eredményt az ablak mutatja). */
+  onSourceChanged(): void {
+    this.store.loadDetail(this.quizId);
   }
 
   toggleBankSearch(): void {

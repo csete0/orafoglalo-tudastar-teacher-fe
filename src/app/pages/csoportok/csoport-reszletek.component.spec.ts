@@ -1,3 +1,4 @@
+import { ReportService } from '../../services/report/report.service';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
@@ -131,6 +132,37 @@ describe('CsoportReszletekComponent', () => {
       ],
     });
   }
+
+  describe('Gyenge témák fül', () => {
+    function openWeakTab(weakTopics: unknown[]) {
+      configure(makeGroup());
+      const reportService = {
+        getGroupWeakTopics: vi.fn(() => of(weakTopics)),
+        getGroupWeakTopicSummary: vi.fn(() => of({ groupId: 1, groupName: 'x', threshold: 50, canAssign: true, sentences: ['Összefoglaló.'], topics: [] })),
+      };
+      TestBed.overrideProvider(ReportService, { useValue: reportService });
+      const fixture = TestBed.createComponent(CsoportReszletekComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.setTab('gyenge-temak');
+      fixture.detectChanges();
+      return { el: fixture.nativeElement as HTMLElement, reportService };
+    }
+
+    it('gyenge téma nélkül csak egy üres állapot látszik (nincs összefoglaló, nincs külön lista-címsor)', () => {
+      const { el, reportService } = openWeakTab([]);
+      expect(el.textContent).toContain('Nincs gyenge téma.');
+      expect(el.querySelector('app-gyenge-temak-javaslatok')).toBeNull();
+      expect(el.textContent).not.toContain('Minden gyenge téma');
+      expect(reportService.getGroupWeakTopicSummary).not.toHaveBeenCalled();
+    });
+
+    it('gyenge témáknál az összefoglaló a lista felett', () => {
+      const { el } = openWeakTab([{ topicId: 1, topicName: 'SQL', studentCount: 3, totalAnswered: 20, totalCorrect: 4, successRate: 20 }]);
+      expect(el.querySelector('app-gyenge-temak-javaslatok')).not.toBeNull();
+      expect(el.textContent).toContain('Minden gyenge téma');
+      expect(el.textContent).not.toContain('Nincs gyenge téma.');
+    });
+  });
 
   // BUG UI-TT-18: az "Eredmények" fül a ReportStore.error()-t rejtette el a "Nincs adat." mögé.
   it('az Eredmények fülön megjelenik a ReportStore valódi hibája "Nincs adat" helyett', () => {
