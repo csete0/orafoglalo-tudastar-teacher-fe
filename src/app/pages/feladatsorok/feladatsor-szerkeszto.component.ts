@@ -179,7 +179,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
             <span>SQL-kódrészletet találtam a feladatsorban — a create.sql ÉS a create_lite.sql fájl is kötelező (a futtató
             SQLite-ot használ), publikálás előtt mindkettőt fel kell tölteni.
             <button type="button" class="underline font-semibold disabled:no-underline disabled:opacity-60" [disabled]="!!detail.takedownAt"
-              (click)="sqlGenerationOpen.set(true)" data-testid="sql-files-warning-generate">Hiányzó SQL-fájl elkészítése</button></span>
+              (click)="openSqlGeneration(null)" data-testid="sql-files-warning-generate">Hiányzó SQL-fájl elkészítése</button></span>
           </p>
         }
 
@@ -321,7 +321,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             @if (sqlQueriesTaskId() === task.id) {
                               <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
                                 (closed)="sqlQueriesTaskId.set(null)" (saved)="onSqlQueriesSaved(detail.id, $event)"
-                                (openSqlFiles)="sqlQueriesTaskId.set(null); sqlGenerationOpen.set(true)" />
+                                (openSqlFiles)="sqlQueriesTaskId.set(null); openSqlGeneration(task.id)" />
                             }
                           }
 
@@ -560,11 +560,11 @@ type SnippetDraft = Record<number, Record<number, string>>;
         <section>
           <h2 class="font-bold mb-3">Fájlok</h2>
           <ul class="space-y-2 mb-4">
-            @for (file of taskSetFiles(); track file.id) {
-              <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
+            @for (file of listedFiles(); track file.id) {
+              <li class="flex justify-between items-center card !rounded-xl p-3 text-sm" [attr.data-testid]="'file-row-' + file.id">
                 <span class="flex items-center gap-2 min-w-0">
                   <app-icon name="document" class="w-4 h-4 block text-text-muted shrink-0" />
-                  <span class="truncate">{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }})</span>
+                  <span class="truncate">{{ file.originalFileName }} ({{ fileKindLabel(file.kind) }}{{ fileTaskLabel(file) }})</span>
                 </span>
                 <div class="flex items-center gap-3 shrink-0">
                   @if (isPdf(file)) {<a [href]="downloadHref(file)" target="_blank" rel="noopener" class="text-primary hover:underline">Megnyitás</a>} @else {<a [href]="downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>}
@@ -587,7 +587,20 @@ type SnippetDraft = Record<number, Record<number, string>>;
             @for (kindOption of fileKinds; track kindOption.kind) {
               <div class="card !rounded-xl p-3">
                 <label class="text-sm block mb-1">{{ kindOption.label }}</label>
-                <input type="file" [accept]="kindOption.accept" [disabled]="store.loading()"
+                <!-- Feladatonkénti séma (pl. két SQL-feladatos katalógus-másolat): a feltöltés csak a kiválasztott feladat fájlját cseréli. -->
+                @if (isSchemaKind(kindOption.kind) && taskBoundSchema()) {
+                  <label class="block text-xs text-text-muted mb-1">
+                    Melyik feladathoz?
+                    <select class="input !px-2 !py-1 mt-1" [ngModel]="schemaTaskId()" (ngModelChange)="schemaTaskChoice.set($event)"
+                      [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'schema-task-' + kindOption.kind">
+                      <option [ngValue]="null" disabled>Válassz feladatot…</option>
+                      @for (t of sqlTasks(); track t.id) { <option [ngValue]="t.id">{{ t.taskOrder }}. {{ t.title }}</option> }
+                    </select>
+                  </label>
+                }
+                <input type="file" [accept]="kindOption.accept"
+                  [disabled]="store.loading() || (isSchemaKind(kindOption.kind) && taskBoundSchema() && schemaTaskId() === null)"
+                  [attr.data-testid]="'file-input-' + kindOption.kind"
                   (change)="uploadFile(detail.id, kindOption.kind, $event)"
                   class="w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
               </div>
@@ -601,12 +614,20 @@ type SnippetDraft = Record<number, Record<number, string>>;
                 <app-icon name="database" class="w-4 h-4 block shrink-0 mt-0.5" />
                 Csak a create.sql vagy csak a create_lite.sql van meg, esetleg csak az adatfájlok? A hiányzót elkészítjük, mentés előtt átnézheted.
               </span>
-              <button type="button" class="btn btn-primary shrink-0" [disabled]="store.loading() || !!detail.takedownAt"
-                (click)="sqlGenerationOpen.set(true)" data-testid="sql-generation-open">Hiányzó SQL-fájl elkészítése</button>
+              @if (taskBoundSchema() && sqlTasks().length > 1) {
+                <select class="input !w-auto !px-2 !py-1 shrink-0" aria-label="Melyik feladathoz?" [ngModel]="schemaTaskId()"
+                  (ngModelChange)="schemaTaskChoice.set($event)" [ngModelOptions]="{ standalone: true }" data-testid="sql-generation-task">
+                  <option [ngValue]="null" disabled>Melyik feladathoz?</option>
+                  @for (t of sqlTasks(); track t.id) { <option [ngValue]="t.id">{{ t.taskOrder }}. {{ t.title }}</option> }
+                </select>
+              }
+              <button type="button" class="btn btn-primary shrink-0"
+                [disabled]="store.loading() || !!detail.takedownAt || (taskBoundSchema() && sqlTasks().length > 1 && schemaTaskId() === null)"
+                (click)="openSqlGeneration(null)" data-testid="sql-generation-open">Hiányzó SQL-fájl elkészítése</button>
             </div>
           }
           @if (sqlGenerationOpen()) {
-            <app-sql-generalas [taskSetId]="detail.id" [files]="taskSetFiles()"
+            <app-sql-generalas [taskSetId]="detail.id" [files]="sqlGenerationFiles()" [taskId]="sqlGenerationTaskId()"
               (closed)="sqlGenerationOpen.set(false)" (saved)="store.loadDetail(detail.id)" />
           }
 
@@ -1042,12 +1063,73 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     return detail.files.filter((f) => f.taskId == null || !taskIds.has(f.taskId));
   });
 
+  /** A „Fájlok” lista: a feladatsor-szintűek + a nem irodai feladatokhoz kötöttek (pl. katalógus-másolat feladatonkénti sémája) -
+   *  ezeknek nincs saját blokkja, különben láthatatlanok lennének. */
+  readonly listedFiles = computed(() => {
+    const detail = this.store.selectedDetail();
+    if (!detail) return [];
+    const officeIds = new Set(this.officeTasks().map((t) => t.id));
+    return detail.files.filter((f) => f.taskId == null || !officeIds.has(f.taskId));
+  });
+
+  fileTaskLabel(file: TeacherFileDto): string {
+    const task = file.taskId == null ? null : this.store.selectedDetail()?.tasks.find((t) => t.id === file.taskId);
+    return task ? ` · ${task.taskOrder}. feladat` : '';
+  }
+
+  readonly sqlTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => this.isSqlTask(t)));
+
+  isSchemaKind(kind: TeacherFileKind): boolean {
+    return kind === 'CreateSql' || kind === 'CreateLiteSql';
+  }
+
+  /** Van feladathoz kötött create.sql / create_lite.sql: ekkor a séma feladatonként él, a feltöltésnek feladatot kell céloznia
+   *  (feladatsor-szintű feltöltés az összes azonos fajtájú sémát lecserélné). Egy sémás feladatsoron minden marad a régiben. */
+  readonly taskBoundSchema = computed(() => {
+    const detail = this.store.selectedDetail();
+    if (!detail) return false;
+    const taskIds = new Set(detail.tasks.map((t) => t.id));
+    return detail.files.some((f) => this.isSchemaKind(f.kind) && f.taskId != null && taskIds.has(f.taskId));
+  });
+
+  /** Feladatonkénti sémánál a feltöltés / elkészítés célfeladata (egyetlen SQL-feladatnál automatikusan az). */
+  readonly schemaTaskChoice = signal<number | null>(null);
+  readonly schemaTaskId = computed(() => {
+    const chosen = this.schemaTaskChoice();
+    const tasks = this.sqlTasks();
+    if (chosen !== null && tasks.some((t) => t.id === chosen)) return chosen;
+    return tasks.length === 1 ? tasks[0].id : null;
+  });
+
   taskFiles(taskId: number, kind: TeacherFileKind): TeacherFileDto[] {
     return (this.store.selectedDetail()?.files ?? []).filter((f) => f.taskId === taskId && f.kind === kind);
   }
 
-  /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak. */
+  /** A „Hiányzó SQL-fájl elkészítése” párbeszédablak; feladatonkénti sémánál a célfeladattal. */
   readonly sqlGenerationOpen = signal(false);
+  readonly sqlGenerationTaskId = signal<number | null>(null);
+
+  /** A generátor a célfeladat fájljait látja (feladatsor-szintű + a feladathoz kötött); egy sémás feladatsoron a régi listát. */
+  readonly sqlGenerationFiles = computed(() => {
+    const taskId = this.sqlGenerationTaskId();
+    if (taskId === null) return this.taskSetFiles();
+    return (this.store.selectedDetail()?.files ?? []).filter((f) => f.taskId == null || f.taskId === taskId);
+  });
+
+  /** `contextTaskId`: egy feladatból (pl. az SQL-lekérdezések ablakából) nyitva annak a feladatnak a sémája készül. */
+  openSqlGeneration(contextTaskId: number | null): void {
+    if (!this.taskBoundSchema()) {
+      this.sqlGenerationTaskId.set(null);
+    } else {
+      const taskId = contextTaskId ?? this.schemaTaskId();
+      if (taskId === null) {
+        this.toastService.warning('Ebben a feladatsorban feladatonként külön séma van - előbb válaszd ki a Fájlok résznél, melyik feladathoz készüljön.');
+        return;
+      }
+      this.sqlGenerationTaskId.set(taskId);
+    }
+    this.sqlGenerationOpen.set(true);
+  }
 
   readonly isPaidAccess = isPaidAccess;
   readonly paidAccessText = PAID_ACCESS_TEXT;
@@ -1677,7 +1759,14 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.store.uploadFile(taskSetId, kind, file, undefined, () => this.toastService.success('Fájl feltöltve.'));
+    // Feladatonkénti sémánál a feltöltés a kiválasztott feladaté (különben minden feladat azonos fajtájú sémája lecserélődne).
+    const taskId = this.isSchemaKind(kind) && this.taskBoundSchema() ? this.schemaTaskId() : null;
+    if (this.isSchemaKind(kind) && this.taskBoundSchema() && taskId === null) {
+      this.toastService.warning('Előbb válaszd ki, melyik feladathoz tartozik a fájl.');
+      input.value = '';
+      return;
+    }
+    this.store.uploadFile(taskSetId, kind, file, taskId ?? undefined, () => this.toastService.success('Fájl feltöltve.'));
     input.value = '';
   }
 

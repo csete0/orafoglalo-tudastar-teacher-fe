@@ -290,6 +290,8 @@ export class SqlGeneralasComponent implements OnInit {
   readonly taskSetId = input.required<number>();
   /** A feladatsor fájljai (a forrás-választáshoz és a csere-jelzéshez). */
   readonly files = input.required<TeacherFileDto[]>();
+  /** Feladatonkénti sémánál a célfeladat - a mentés ehhez köti a fájlt (null: feladatsor-szintű, a régi viselkedés). */
+  readonly taskId = input<number | null>(null);
   readonly closed = output<void>();
   /** Sikeres mentés után - a szerkesztő újratölti a feladatsort. */
   readonly saved = output<void>();
@@ -512,7 +514,12 @@ export class SqlGeneralasComponent implements OnInit {
     this.saveError.set(null);
     // A (javított és újraellenőrzött) szöveg megy fel, a szokásos feltöltésen.
     const uploads = this.generatedFiles().map((f) =>
-      this.service.uploadFile(this.taskSetId(), f.kind, new File([this.texts()[f.kind] ?? f.content], f.fileName, { type: 'application/sql' })),
+      this.service.uploadFile(
+        this.taskSetId(),
+        f.kind,
+        new File([this.texts()[f.kind] ?? f.content], f.fileName, { type: 'application/sql' }),
+        this.taskId() ?? undefined,
+      ),
     );
     concat(...uploads)
       .pipe(toArray())
@@ -543,7 +550,9 @@ export class SqlGeneralasComponent implements OnInit {
   }
 
   existingFileName(file: GeneratedSqlFileDto): string | null {
-    return this.files().find((f) => f.kind === file.kind)?.originalFileName ?? null;
+    // Feladatonkénti sémánál csak a célfeladat (vagy a feladatsor-szintű) fájlja cserélődik.
+    const taskId = this.taskId();
+    return this.files().find((f) => f.kind === file.kind && (taskId === null || f.taskId == null || f.taskId === taskId))?.originalFileName ?? null;
   }
 
   preview(content: string): string {
