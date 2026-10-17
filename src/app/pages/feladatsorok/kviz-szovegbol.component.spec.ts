@@ -210,6 +210,10 @@ describe('KvizSzovegbolComponent', () => {
       const { fixture, c } = create();
       expect(reports.getAiHelperQuota).toHaveBeenCalled();
       expect(q(fixture, 'quiz-source-quota')!.textContent).toContain('még 57 / 60 generálás');
+      const help = q(fixture, 'quiz-source-help') ?? (fixture.nativeElement as HTMLElement).querySelector('#quiz-source-help')!;
+      expect(help.textContent).toContain('havi keretedből (3/60 felhasználva)');
+      expect(help.textContent).toContain('a napi MI-keretedet nem érinti');
+      expect(help.textContent).not.toContain('a napi MI-keretedből');
       c.text.set(LONG_TEXT);
       c.generate();
       c.again();

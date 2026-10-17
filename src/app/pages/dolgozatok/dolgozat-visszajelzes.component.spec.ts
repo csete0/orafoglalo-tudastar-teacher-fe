@@ -32,7 +32,8 @@ describe('DolgozatVisszajelzesComponent', () => {
   let toast: { success: ReturnType<typeof vi.fn> };
   let reports: { getAiHelperQuota: ReturnType<typeof vi.fn> };
 
-  function create(students: ClassTestStudentRow[], responses: unknown[], published = false) {
+  /** Alapból a megnyitás után a „Vázlat AI-val” gombot is megnyomja (az alapértelmezett vagy a megadott kijelöléssel). */
+  function create(students: ClassTestStudentRow[], responses: unknown[], published = false, opts: { generate?: boolean; select?: number[] } = {}) {
     reports = { getAiHelperQuota: vi.fn(() => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 60 }, testFeedback: { used: 40, limit: 600 } })) };
     const draftFeedback = vi.fn();
     for (const r of responses) draftFeedback.mockReturnValueOnce(r);
@@ -57,6 +58,11 @@ describe('DolgozatVisszajelzesComponent', () => {
     const closed = vi.fn();
     fixture.componentInstance.saved.subscribe(saved);
     fixture.componentInstance.closed.subscribe(closed);
+    if (opts.generate !== false) {
+      if (opts.select) fixture.componentInstance.selected.set(new Set(opts.select));
+      fixture.componentInstance.generateSelected();
+      fixture.detectChanges();
+    }
     return { fixture, c: fixture.componentInstance, saved, closed };
   }
 
@@ -70,6 +76,50 @@ describe('DolgozatVisszajelzesComponent', () => {
   const q = (fixture: { nativeElement: HTMLElement }, id: string) => fixture.nativeElement.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 
   afterEach(() => TestBed.resetTestingModule());
+
+  describe('megnyitás: nincs automatikus vázlat', () => {
+    it('megnyitáskor nem kér vázlatot; az elmentett visszajelzés a mezőben, a kijelölés alapból csak a visszajelzés nélküli beadottak', async () => {
+      const students = [student(1, { teacherFeedback: 'Már megírtam.' }), student(2), student(3, { status: 'not_started', examSessionId: null })];
+      const { fixture, c } = create(students, [], false, { generate: false });
+      await settle(fixture);
+      expect(service.draftFeedback).not.toHaveBeenCalled();
+      expect((q(fixture, 'feedback-text-1') as HTMLTextAreaElement).value).toBe('Már megírtam.');
+      expect((q(fixture, 'feedback-text-2') as HTMLTextAreaElement).value).toBe('');
+      expect([...c.selected()]).toEqual([2]);
+      expect((q(fixture, 'feedback-select-1') as HTMLInputElement).checked).toBe(false);
+      expect(q(fixture, 'feedback-select-3')).toBeNull();
+      expect(q(fixture, 'feedback-cost')!.textContent).toContain('1 diák kijelölve');
+      expect(q(fixture, 'feedback-cost')!.textContent).toContain('legfeljebb 1 egység a havi keretből');
+      expect(q(fixture, 'feedback-generate')!.textContent).toContain('Vázlat AI-val (1)');
+    });
+
+    it('ha mindenkinek van elmentett visszajelzése, semmi nincs kijelölve, a gomb tiltott', () => {
+      const { fixture, c } = create([student(1, { teacherFeedback: 'A' }), student(2, { teacherFeedback: 'B' })], [], false, { generate: false });
+      expect(c.selectedCount()).toBe(0);
+      expect((q(fixture, 'feedback-generate') as HTMLButtonElement).disabled).toBe(true);
+      c.generateSelected();
+      expect(service.draftFeedback).not.toHaveBeenCalled();
+    });
+
+    it('elmentett visszajelzésű diák újra-vázlatolása csak diákonkénti kijelöléssel; csak a kijelöltekre kér', () => {
+      const { fixture, c } = create([student(1, { teacherFeedback: 'A' }), student(2)], [of(drafts([item(1, { savedFeedback: 'A' }), item(2)]))], false, { generate: false });
+      (q(fixture, 'feedback-select-1') as HTMLInputElement).click();
+      (q(fixture, 'feedback-select-2') as HTMLInputElement).click();
+      fixture.detectChanges();
+      expect([...c.selected()]).toEqual([1]);
+      q(fixture, 'feedback-generate')!.click();
+      expect(service.draftFeedback).toHaveBeenCalledWith(7, [1]);
+      expect(c.selectedCount()).toBe(0);
+    });
+
+    it('ha a kijelölés több, mint a hátralévő keret, figyelmeztet', () => {
+      const { fixture } = create([student(1), student(2)], [], false, { generate: false });
+      reports.getAiHelperQuota.mockReturnValue(of({}));
+      fixture.componentInstance.quota.set({ used: 599, limit: 600 });
+      fixture.detectChanges();
+      expect(q(fixture, 'feedback-cost')!.textContent).toContain('A keretbe csak 1 fér bele');
+    });
+  });
 
   it('csak a beadott diákokra kér vázlatot; a kész vázlat szerkeszthető, a kimaradt diák oka látszik', async () => {
     const students = [student(1), student(2, { needsManualGrading: true }), student(3, { status: 'not_started', examSessionId: null })];
@@ -179,7 +229,7 @@ describe('DolgozatVisszajelzesComponent', () => {
   it('elmentett visszajelzés: azt mutatja (nem írja felül a vázlat), a vázlat gombbal behozható; sikertelen vázlat oka', async () => {
     const { fixture, c } = create([student(1, { teacherFeedback: 'Régi szöveg.' }), student(2)], [
       of(drafts([item(1, { savedFeedback: 'Régi szöveg.' }), item(2, { status: 'failed', draft: null, reason: 'a vázlat hibás számot tartalmazott' })])),
-    ]);
+    ], false, { select: [1, 2] });
     await settle(fixture);
     expect((q(fixture, 'feedback-text-1') as HTMLTextAreaElement).value).toBe('Régi szöveg.');
     expect(q(fixture, 'feedback-has-saved-1')).not.toBeNull();
@@ -195,7 +245,7 @@ describe('DolgozatVisszajelzesComponent', () => {
   it('Mentés: csak a módosított tételek, examSessionId-val; az üresre törölt elmentett szöveg null (törlés)', () => {
     const { fixture, c, saved, closed } = create([student(1), student(2, { teacherFeedback: 'Törlendő.' }), student(3, { teacherFeedback: 'Marad.' })], [
       of(drafts([item(1), item(2, { savedFeedback: 'Törlendő.' }), item(3, { savedFeedback: 'Marad.' })])),
-    ]);
+    ], false, { select: [1, 2, 3] });
     c.setText(1, '  Átírt vázlat.  ');
     c.setText(2, '   ');
     fixture.detectChanges();

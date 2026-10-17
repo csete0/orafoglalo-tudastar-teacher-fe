@@ -26,7 +26,7 @@ function summary(overrides: Partial<WeakTopicSummaryDto> = {}): WeakTopicSummary
     groupId: 5, groupName: '9.A', threshold: 50, canAssign: true,
     sentences: ['A 9.A csoport 3 leggyengébb kvíz-témaköre: „SQL alapok” (10%).', 'A fizetős feladatsorokhoz a diákoknak előfizetés vagy intézményi licenc kell.'],
     topics: [{
-      topicId: 14, topicName: 'SQL alapok', topicColor: null, topicIcon: null, successRate: 10, studentCount: 3, weakStudentCount: 3,
+      topicId: 14, topicName: 'SQL alapok', topicColor: null, topicIcon: null, successRate: 11.5, studentCount: 3, weakStudentCount: 3,
       trend: { direction: 'improving', recentPercent: 60, previousPercent: 20, recentAnswers: 10, previousAnswers: 10 },
       matchedTaskTypes: ['sql'], sentences: [],
       taskSets: [OWN, CATALOG, PREMIUM_BLOCKED, ASSIGNED], quizzes: [QUIZ],
@@ -75,6 +75,9 @@ describe('GyengeTemakJavaslatokComponent', () => {
 
     const card = q(fixture, 'weak-topic-14')!;
     expect(card.textContent).toContain('Gyakorlás: SQL alapok');
+    // Az összefoglaló mondataival egyezően lefelé kerekítve (11.5 → 11%).
+    expect(card.textContent).toContain('11% helyes');
+    expect(card.textContent).not.toContain('11.5');
     expect(card.textContent).toContain('2 hét alatt javul (20% → 60%)');
 
     const catalog = q(fixture, 'weak-suggestion-taskSet-501')!;

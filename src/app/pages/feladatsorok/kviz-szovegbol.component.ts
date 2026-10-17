@@ -122,7 +122,8 @@ export function sourceErrorMessage(err: unknown): string {
           <!-- ── Forrás és beállítások ─────────────────────── -->
           <div class="space-y-4" data-testid="quiz-source-input">
             <p id="quiz-source-help" class="text-sm text-text-muted">
-              Másold be a tananyagot, vagy tölts fel egy fájlt: az MI ebből készít kérdéseket a napi MI-keretedből. Minden kérdéshez
+              Másold be a tananyagot, vagy tölts fel egy fájlt: az MI ebből készít kérdéseket. Egy készítés egy egység a havi
+              keretedből@if (quota(); as q) { ({{ q.used }}/{{ q.limit }} felhasználva)}, a napi MI-keretedet nem érinti. Minden kérdéshez
               szó szerinti idézet kell a szövegből - amit nem talál benne a rendszer, az kimarad. Az elkészült kérdések
               piszkozatként kerülnek a kvízbe, jóváhagyás után válnak a részévé.
             </p>

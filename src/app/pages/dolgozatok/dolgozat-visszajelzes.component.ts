@@ -77,6 +77,7 @@ export const AUTO_CONTINUE_ROUNDS = 1;
           <p>
             Az MI a pontokból és az értékelésből diákonként rövid vázlatot ír (Prémium tanárnak, havi kerettel); a benne szereplő
             számokat a rendszer ellenőrzi. Írd át nyugodtan - a pontokat a mentés nem változtatja meg. Vázlat nélkül is írhatsz.
+            Vázlat csak a kijelölt diákoknak készül (alapból azoknak, akiknek még nincs elmentett visszajelzésük).
           </p>
           @if (quota(); as q) {
             <p class="text-xs" data-testid="feedback-quota">Havi keret: ebben a hónapban még {{ quotaLeft(q) }} / {{ q.limit }} diák-vázlat.</p>
@@ -89,6 +90,23 @@ export const AUTO_CONTINUE_ROUNDS = 1;
             }
           </p>
         </div>
+
+        <!-- Vázlat kérése a kijelölt diákoknak (megnyitáskor SOHA nem indul magától - minden diák egy egység a havi keretből). -->
+        @if (!drafting()) {
+          <div class="bg-bg-element rounded-xl p-3 mb-3 flex flex-wrap items-center justify-between gap-2" data-testid="feedback-generate-bar">
+            <p class="text-sm" data-testid="feedback-cost">
+              {{ selectedCount() }} diák kijelölve
+              @if (selectedCount() > 0) { · legfeljebb {{ selectedCount() }} egység a havi keretből }
+              @if (quota(); as q) {
+                @if (selectedCount() > quotaLeft(q)) {
+                  <span class="block text-xs text-warning">A keretbe csak {{ quotaLeft(q) }} fér bele - a többi diák kimarad.</span>
+                }
+              }
+            </p>
+            <button type="button" class="btn btn-primary !px-3 !py-1.5" (click)="generateSelected()" [disabled]="!canGenerate()"
+              data-testid="feedback-generate">Vázlat AI-val ({{ selectedCount() }})</button>
+          </div>
+        }
 
         <!-- Haladás -->
         <div aria-live="polite" class="mb-3">
@@ -121,6 +139,13 @@ export const AUTO_CONTINUE_ROUNDS = 1;
             <li class="bg-bg-element rounded-xl p-3" [attr.data-testid]="'feedback-row-' + row.userId">
               <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
                 <span class="font-medium">{{ row.name }}</span>
+                @if (canSelect(row)) {
+                  <label class="text-xs flex items-center gap-1.5 ml-auto mr-2">
+                    <input type="checkbox" [checked]="selected().has(row.userId)" (change)="toggleSelected(row.userId)" [disabled]="drafting() || saving()"
+                      [attr.data-testid]="'feedback-select-' + row.userId" />
+                    {{ row.saved ? 'Új AI-vázlat (az elmentett megmarad, amíg nem cseréled)' : 'AI-vázlat' }}
+                  </label>
+                }
                 <span class="text-xs text-text-muted tabular-nums">
                   @if (row.draft?.earnedPoints != null) { {{ row.draft!.earnedPoints }} / {{ row.draft!.maxPoints }} pont }
                   @if (statusLabel(row); as label) { · {{ label }} }
@@ -211,6 +236,10 @@ export class DolgozatVisszajelzesComponent implements OnInit {
   readonly draftError = signal<string | null>(null);
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
+  /** A vázlatra kijelölt diákok (alapból: beadták, és még nincs elmentett visszajelzésük). */
+  readonly selected = signal<Set<number>>(new Set());
+  readonly selectedCount = computed(() => this.selected().size);
+  readonly canGenerate = computed(() => this.selectedCount() > 0 && !this.drafting() && !this.saving() && !this.blocked());
   /** A még kérendő diákok (az időkeretből kimaradtak elöl). */
   private readonly queue = signal<number[]>([]);
   readonly total = signal(0);
@@ -244,11 +273,9 @@ export class DolgozatVisszajelzesComponent implements OnInit {
         text: s.teacherFeedback ?? '',
       })),
     );
-    // Csak beadott dolgozathoz kérünk vázlatot - a többinek nincs miből (és a keretet sem terheli).
-    const wanted = students.filter((s) => s.status === 'submitted').map((s) => s.userId);
-    this.total.set(wanted.length);
-    this.queue.set(wanted);
-    this.next();
+    // Megnyitáskor nem kérünk vázlatot (minden diák egy egység a havi keretből): alapból csak a még visszajelzés nélküli
+    // beadott dolgozatok vannak kijelölve, az elmentettek újra-vázlatolása diákonkénti, kifejezett döntés.
+    this.selected.set(new Set(this.rows().filter((r) => this.canSelect(r) && !norm(r.saved)).map((r) => r.userId)));
     // A keret csak tájékoztatás; a vázlat-válasz is hozza.
     this.reports
       .getAiHelperQuota()
@@ -304,6 +331,30 @@ export class DolgozatVisszajelzesComponent implements OnInit {
       });
   }
 
+  canSelect(row: FeedbackRow): boolean {
+    return row.submitted && row.examSessionId != null;
+  }
+
+  toggleSelected(userId: number): void {
+    this.selected.update((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
+
+  /** Vázlat a kijelölt diákoknak (a névsor sorrendjében); a kijelölés kiürül, a kimaradtak a „Folytatás”-hoz kerülnek. */
+  generateSelected(): void {
+    if (!this.canGenerate()) return;
+    const wanted = this.rows().filter((r) => this.selected().has(r.userId)).map((r) => r.userId);
+    this.selected.set(new Set());
+    this.total.set(wanted.length);
+    this.queue.set(wanted);
+    this.autoContinued = 0;
+    this.next();
+  }
+
   resume(): void {
     if (this.drafting() || this.saving() || this.blocked() || this.remaining() === 0) return;
     this.autoContinued = 0;
@@ -328,8 +379,7 @@ export class DolgozatVisszajelzesComponent implements OnInit {
   /** Beadott dolgozatnál mindig írható (vázlat nélkül is, pl. elfogyott keretnél) - kivéve amíg a vázlata épp készül. */
   isEditable(row: FeedbackRow): boolean {
     if (!row.submitted || row.examSessionId == null) return false;
-    const waiting = !row.draft || row.draft.status === 'pending';
-    return !(waiting && this.drafting());
+    return !(this.drafting() && this.queue().includes(row.userId));
   }
 
   isChanged(row: FeedbackRow): boolean {

@@ -477,7 +477,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
               <h3 class="font-semibold text-sm mb-1">Kérdések szövegből</h3>
               <p class="text-sm text-text-muted mb-3">
                 Saját tananyagból (beillesztett szöveg vagy .txt, .docx, .pdf fájl): minden kérdés szó szerinti idézettel
-                ellenőrizve, jóváhagyásra várva kerül a kvízbe.
+                ellenőrizve, jóváhagyásra várva kerül a kvízbe. Prémium tanároknak, havi kerettel (a napi MI-keretet nem érinti).
               </p>
               <button type="button" class="btn btn-ghost" (click)="sourceOpen.set(true)"
                 [disabled]="topics().length === 0 || !!quiz.takedownAt" data-testid="quiz-source-open">

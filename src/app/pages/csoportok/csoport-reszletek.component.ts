@@ -31,7 +31,7 @@ import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
-import { GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
+import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
 type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak';
 
@@ -492,7 +492,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                       <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
                     }
                     {{ topic.topicName }}
-                    <span class="opacity-70">{{ topic.successRate }}% · {{ topic.studentCount }} tanuló</span>
+                    <span class="opacity-70">{{ pct(topic.successRate) }}% · {{ topic.studentCount }} tanuló</span>
                   </li>
                 }
               </ul>
@@ -577,6 +577,8 @@ export class CsoportReszletekComponent implements OnInit {
   readonly weakTopics = signal<TeacherWeakTopicDto[]>([]);
   readonly weakTopicsLoading = signal(false);
   readonly weakTopicsError = signal<string | null>(null);
+  /** Az összefoglalóval egyező, lefelé kerekített százalék. */
+  readonly pct = floorPercent;
 
   readonly tabs: { value: Tab; label: string }[] = [
     { value: 'tagok', label: 'Tagok' },

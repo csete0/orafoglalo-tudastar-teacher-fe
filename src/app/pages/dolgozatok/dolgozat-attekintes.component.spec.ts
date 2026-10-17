@@ -140,12 +140,12 @@ describe('DolgozatAttekintesComponent', () => {
     expect((empty.el.querySelector('[data-testid="feedback-open"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('„Visszajelzések AI-vázlattal”: megnyitja az ablakot (csak a beadott diákra kér vázlatot), közben nincs élő frissítés', () => {
+  it('„Visszajelzések AI-vázlattal”: megnyitja az ablakot, magától NEM kér vázlatot (keret!), közben nincs élő frissítés', () => {
     const { fixture, el, classTests, component } = setup();
     (el.querySelector('[data-testid="feedback-open"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(el.querySelector('app-dolgozat-visszajelzes')).not.toBeNull();
-    expect(classTests.draftFeedback).toHaveBeenCalledWith(7, [1]);
+    expect(classTests.draftFeedback).not.toHaveBeenCalled();
     expect(component.feedbackOpen()).toBe(true);
   });
 

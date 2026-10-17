@@ -43,6 +43,11 @@ export function assignErrorMessage(err: unknown): string {
   return extractErrorMessage(err, 'A kiadás nem sikerült.');
 }
 
+/** Lefelé kerekített egész százalék - ugyanúgy, mint az összefoglaló mondatai (így sosem „50%” egy „50% alatt” mondat mellett). */
+export function floorPercent(value: number): number {
+  return Math.floor(value + 1e-9);
+}
+
 const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'romlik', steady: 'nem változott érdemben' };
 
 /**
@@ -82,7 +87,7 @@ const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'r
               <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
                 <h3 class="font-semibold" [id]="'weak-topic-' + topic.topicId">Gyakorlás: {{ topic.topicName }}</h3>
                 <span class="text-xs text-text-muted">
-                  {{ topic.successRate }}% helyes · {{ topic.weakStudentCount }}/{{ topic.studentCount }} diák a küszöb alatt
+                  {{ pct(topic.successRate) }}% helyes · {{ topic.weakStudentCount }}/{{ topic.studentCount }} diák a küszöb alatt
                   @if (topic.trend) { · {{ trendLabel(topic) }} }
                 </span>
               </div>
@@ -218,6 +223,7 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
   private readonly catalogDialog = viewChild<ElementRef<HTMLElement>>('catalogDialog');
 
   readonly key = suggestionKey;
+  readonly pct = floorPercent;
   readonly paidNote = accessLabel;
   readonly blocked = blockedReason;
 
