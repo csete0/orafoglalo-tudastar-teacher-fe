@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
-import { SqlGeneralasComponent } from './sql-generalas.component';
+import { MAX_EDIT_BYTES, SqlGeneralasComponent } from './sql-generalas.component';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { SqlGenerationResultDto, TeacherFileDto, TeacherFileKind } from '../../models/teacher-content.model';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -25,13 +25,14 @@ function result(overrides: Partial<SqlGenerationResultDto> = {}): SqlGenerationR
 }
 
 describe('SqlGeneralasComponent', () => {
-  let serviceMock: { generateSqlFiles: ReturnType<typeof vi.fn>; uploadFile: ReturnType<typeof vi.fn> };
+  let serviceMock: { generateSqlFiles: ReturnType<typeof vi.fn>; uploadFile: ReturnType<typeof vi.fn>; validateSqlFiles: ReturnType<typeof vi.fn> };
   let toastMock: { success: ReturnType<typeof vi.fn> };
 
   function create(files: TeacherFileDto[], generated: unknown = of(result())) {
     serviceMock = {
       generateSqlFiles: vi.fn(() => generated),
       uploadFile: vi.fn(() => of({})),
+      validateSqlFiles: vi.fn(() => of(result({ source: 'validate' }))),
     };
     toastMock = { success: vi.fn() };
     TestBed.configureTestingModule({
@@ -192,5 +193,102 @@ describe('SqlGeneralasComponent', () => {
     q(fixture, 'sql-gen-back')!.click();
     fixture.detectChanges();
     expect(q(fixture, 'sql-gen-input')).not.toBeNull();
+  });
+
+  describe('kézi javítás', () => {
+    function generated(fixture: ReturnType<typeof create>) {
+      q(fixture, 'sql-gen-generate')!.click();
+      fixture.detectChanges();
+    }
+
+    function typeInto(fixture: ReturnType<typeof create>, kind: string, text: string) {
+      q(fixture, `sql-gen-edit-${kind}`)!.click();
+      fixture.detectChanges();
+      const editor = q(fixture, `sql-gen-editor-${kind}`) as HTMLTextAreaElement;
+      expect(editor.getAttribute('aria-label')).toContain('szerkesztése');
+      editor.value = text;
+      editor.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    it('a szerkesztés letiltja a mentést, az újraellenőrzés a javított szöveggel visszaengedi', () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      generated(fixture);
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(false);
+
+      typeInto(fixture, 'CreateLiteSql', 'CREATE TABLE t (id INTEGER);');
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(true);
+      expect(q(fixture, 'sql-gen-dirty')).not.toBeNull();
+
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      expect(serviceMock.validateSqlFiles).toHaveBeenCalledWith(9, { createSql: null, createLiteSql: 'CREATE TABLE t (id INTEGER);' });
+      expect(q(fixture, 'sql-gen-dirty')).toBeNull();
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('sikertelen újraellenőrzés után nem menthető, a hibák látszanak', () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      serviceMock.validateSqlFiles.mockReturnValue(of(result({ source: 'validate', canSave: false, validation: { status: 'failed', errors: ['near "TABEL": syntax error'] } })));
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'CREATE TABEL t;');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+
+      expect(q(fixture, 'sql-gen-invalid')!.textContent).toContain('syntax error');
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('a mentés a javított szöveget tölti fel', async () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'JAVÍTOTT');
+      q(fixture, 'sql-gen-revalidate')!.click();
+      fixture.detectChanges();
+      q(fixture, 'sql-gen-save')!.click();
+      fixture.detectChanges();
+
+      const [, kind, uploaded] = serviceMock.uploadFile.mock.calls[0] as [number, string, File];
+      expect(kind).toBe('CreateLiteSql');
+      expect(await uploaded.text()).toBe('JAVÍTOTT');
+    });
+
+    it('a Visszaállítás az elkészített szöveget és az eredeti ellenőrzést hozza vissza', () => {
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'más');
+      q(fixture, 'sql-gen-restore-CreateLiteSql')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.texts().CreateLiteSql).toBe(result().files[0].content);
+      expect(q(fixture, 'sql-gen-dirty')).toBeNull();
+      expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('a Letöltés a (javított) szöveget a fájl nevén menti', async () => {
+      const blobs: Blob[] = [];
+      const names: string[] = [];
+      const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => { blobs.push(b as Blob); return 'blob:x'; });
+      const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download); });
+      const fixture = create([file('a', 'CreateSql', 'create.sql')]);
+      generated(fixture);
+      typeInto(fixture, 'CreateLiteSql', 'Árvíztűrő');
+      q(fixture, 'sql-gen-download-CreateLiteSql')!.click();
+
+      expect(names).toEqual(['create_lite.sql']);
+      expect(await blobs[0].text()).toBe('Árvíztűrő');
+      [createUrl, revoke, click].forEach((m) => m.mockRestore());
+    });
+
+    it('nagy fájlnál nincs böngészős szerkesztés, csak letöltés és útmutatás', () => {
+      const big = result({ files: [{ kind: 'CreateLiteSql', fileName: 'create_lite.sql', content: 'x', sizeBytes: MAX_EDIT_BYTES + 1 }] });
+      const fixture = create([file('a', 'CreateSql', 'create.sql')], of(big));
+      generated(fixture);
+
+      expect(q(fixture, 'sql-gen-edit-CreateLiteSql')).toBeNull();
+      expect(q(fixture, 'sql-gen-download-CreateLiteSql')).not.toBeNull();
+      expect(q(fixture, 'sql-gen-large-CreateLiteSql')!.textContent).toContain('töltsd le, szerkeszd a gépeden');
+    });
   });
 });

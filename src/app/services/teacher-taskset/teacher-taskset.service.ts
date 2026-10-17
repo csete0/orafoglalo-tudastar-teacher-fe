@@ -9,6 +9,7 @@ import {
   CreateTeacherTaskSetRequest,
   PublishResultDto,
   SnippetDto,
+  SqlFilesValidationRequest,
   SqlGenerationRequest,
   SqlGenerationResultDto,
   TaskSetAssignmentDto,
@@ -108,6 +109,11 @@ export class TeacherTaskSetService {
    */
   generateSqlFiles(taskSetId: number, request: SqlGenerationRequest): Observable<SqlGenerationResultDto> {
     return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation`, request);
+  }
+
+  /** A kézzel javított create.sql / create_lite.sql újraellenőrzése (MI nélkül, mentés nélkül) - ugyanaz a válaszalak. */
+  validateSqlFiles(taskSetId: number, request: SqlFilesValidationRequest): Observable<SqlGenerationResultDto> {
+    return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation/validate`, request);
   }
 
   getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {

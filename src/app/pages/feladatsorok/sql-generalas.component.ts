@@ -14,11 +14,16 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { saveBlob } from '../../shared/save-blob.util';
 
 /** A BE-vel azonos korlát. */
 const MAX_DESCRIPTION = 2000;
 /** Az előnézetben ennyi sor látszik egy fájlból (a teljes szöveg mentésre kerül). */
 const PREVIEW_LINES = 200;
+/** E fölött a böngészős szerkesztő lassú lenne: letöltés, gépen szerkesztés, visszatöltés a feltöltővel. */
+export const MAX_EDIT_BYTES = 200 * 1024;
+
+type SqlFileKind = GeneratedSqlFileDto['kind'];
 
 const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: string; badge: string }> = {
   match: { label: 'ugyanazt adja, mint eddig', badge: 'badge-success' },
@@ -140,13 +145,48 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
               </div>
             }
 
-            @for (f of r.files; track f.kind) {
+            @for (f of generatedFiles(); track f.kind) {
               <details class="bg-bg-element rounded-xl p-3" [attr.data-testid]="'sql-gen-file-' + f.kind">
                 <summary class="cursor-pointer text-sm font-medium">
                   {{ f.fileName }} <span class="text-text-muted font-normal">({{ sizeLabel(f.sizeBytes) }}{{ existingFileName(f) ? ' – a meglévő fájl lecserélődik' : '' }})</span>
+                  @if (isChanged(f.kind)) { <span class="badge badge-warning ml-1">módosítva</span> }
                 </summary>
-                <pre class="mt-2 max-h-80 overflow-auto text-xs font-mono whitespace-pre bg-bg-panel rounded-lg p-2">{{ preview(f) }}</pre>
+                <div class="flex flex-wrap gap-2 mt-2">
+                  <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="download(f)" [attr.data-testid]="'sql-gen-download-' + f.kind"
+                    [attr.aria-label]="f.fileName + ' letöltése'">Letöltés</button>
+                  @if (f.sizeBytes <= maxEditBytes) {
+                    <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="toggleEdit(f.kind)" [attr.aria-pressed]="isEditing(f.kind)"
+                      [attr.data-testid]="'sql-gen-edit-' + f.kind">{{ isEditing(f.kind) ? 'Szerkesztés vége' : 'Szerkesztés' }}</button>
+                    @if (isChanged(f.kind)) {
+                      <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="restore(f.kind)" [attr.data-testid]="'sql-gen-restore-' + f.kind">Visszaállítás</button>
+                    }
+                  }
+                </div>
+                @if (f.sizeBytes > maxEditBytes) {
+                  <p class="text-xs text-text-muted mt-2" [attr.data-testid]="'sql-gen-large-' + f.kind">
+                    Nagy fájl – töltsd le, szerkeszd a gépeden, és a feltöltővel töltsd vissza.
+                  </p>
+                }
+                @if (isEditing(f.kind)) {
+                  <textarea rows="16" spellcheck="false" [attr.aria-label]="f.fileName + ' szerkesztése'" [attr.data-testid]="'sql-gen-editor-' + f.kind"
+                    class="input mt-2 !bg-bg-panel !px-2 !py-1 !text-xs font-mono whitespace-pre"
+                    [ngModel]="texts()[f.kind]" (ngModelChange)="edit(f.kind, $event)" [ngModelOptions]="{ standalone: true }"></textarea>
+                } @else {
+                  <pre class="mt-2 max-h-80 overflow-auto text-xs font-mono whitespace-pre bg-bg-panel rounded-lg p-2">{{ preview(texts()[f.kind] ?? f.content) }}</pre>
+                }
               </details>
+            }
+
+            @if (dirty()) {
+              <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex flex-wrap items-center justify-between gap-2" data-testid="sql-gen-dirty">
+                <span>Módosítottad a fájlt – mentés előtt ellenőrizd újra.</span>
+                <button type="button" class="btn btn-primary !px-3 !py-1" (click)="revalidate()" [disabled]="revalidating()" data-testid="sql-gen-revalidate">
+                  {{ revalidating() ? 'Ellenőrzés…' : 'Újraellenőrzés' }}
+                </button>
+              </div>
+            }
+            @if (revalidateError()) {
+              <p class="text-sm text-danger" data-testid="sql-gen-revalidate-error">{{ revalidateError() }}</p>
             }
 
             @if (saveError()) {
@@ -155,7 +195,7 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
 
             <div class="flex flex-wrap justify-end gap-2 pt-2">
               <button type="button" class="btn btn-ghost" (click)="back()" [disabled]="saving()" data-testid="sql-gen-back">Vissza</button>
-              <button type="button" class="btn btn-primary" (click)="save()" [disabled]="!r.canSave || saving()" data-testid="sql-gen-save">
+              <button type="button" class="btn btn-primary" (click)="save()" [disabled]="!canSave() || saving()" data-testid="sql-gen-save">
                 {{ saving() ? 'Mentés…' : 'Mentés' }}
               </button>
             </div>
@@ -251,6 +291,25 @@ export class SqlGeneralasComponent implements OnInit {
   readonly saveError = signal<string | null>(null);
   readonly result = signal<SqlGenerationResultDto | null>(null);
 
+  // ── Kézi javítás ──
+  readonly maxEditBytes = MAX_EDIT_BYTES;
+  /** Az elkészítéskor kapott eredmény (a „Visszaállítás” ide tér vissza). */
+  private readonly generatedResult = signal<SqlGenerationResultDto | null>(null);
+  readonly generatedFiles = computed(() => this.generatedResult()?.files ?? []);
+  /** A fájlok jelenlegi szövege (fajtánként) és az utoljára sikeresen ellenőrzött szöveg. */
+  readonly texts = signal<Partial<Record<SqlFileKind, string>>>({});
+  private readonly validatedTexts = signal<Partial<Record<SqlFileKind, string>>>({});
+  private readonly editingKinds = signal<Set<SqlFileKind>>(new Set());
+  readonly revalidating = signal(false);
+  readonly revalidateError = signal<string | null>(null);
+  /** Van-e ellenőrizetlen módosítás - amíg van, nem menthető. */
+  readonly dirty = computed(() => {
+    const texts = this.texts();
+    const validated = this.validatedTexts();
+    return (Object.keys(texts) as SqlFileKind[]).some((k) => texts[k] !== validated[k]);
+  });
+  readonly canSave = computed(() => !!this.result()?.canSave && !this.dirty());
+
   private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
 
   private readonly hasKind = (kind: string) => this.files().some((f) => f.kind === kind);
@@ -322,7 +381,7 @@ export class SqlGeneralasComponent implements OnInit {
       .subscribe({
         next: (result) => {
           this.generating.set(false);
-          this.result.set(result);
+          this.showGenerated(result);
         },
         error: (err) => {
           this.generating.set(false);
@@ -333,24 +392,97 @@ export class SqlGeneralasComponent implements OnInit {
 
   back(): void {
     this.result.set(null);
+    this.generatedResult.set(null);
     this.saveError.set(null);
+    this.revalidateError.set(null);
+  }
+
+  private showGenerated(result: SqlGenerationResultDto): void {
+    this.generatedResult.set(result);
+    const texts = Object.fromEntries(result.files.map((f) => [f.kind, f.content])) as Partial<Record<SqlFileKind, string>>;
+    this.texts.set(texts);
+    this.validatedTexts.set({ ...texts });
+    this.editingKinds.set(new Set());
+    this.revalidateError.set(null);
+    this.result.set(result);
+  }
+
+  isEditing(kind: SqlFileKind): boolean {
+    return this.editingKinds().has(kind);
+  }
+
+  isChanged(kind: SqlFileKind): boolean {
+    return this.texts()[kind] !== this.generatedResult()?.files.find((f) => f.kind === kind)?.content;
+  }
+
+  toggleEdit(kind: SqlFileKind): void {
+    this.editingKinds.update((current) => {
+      const next = new Set(current);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  }
+
+  edit(kind: SqlFileKind, text: string): void {
+    this.texts.update((current) => ({ ...current, [kind]: text }));
+  }
+
+  /** Az elkészített szöveg vissza; ha így minden fájl az eredeti, az eredeti ellenőrzés is érvényes. */
+  restore(kind: SqlFileKind): void {
+    const generated = this.generatedResult();
+    if (!generated) return;
+    this.texts.update((current) => ({ ...current, [kind]: generated.files.find((f) => f.kind === kind)?.content }));
+    if (generated.files.every((f) => this.texts()[f.kind] === f.content)) {
+      this.validatedTexts.set({ ...this.texts() });
+      this.result.set(generated);
+    }
+  }
+
+  download(file: GeneratedSqlFileDto): void {
+    saveBlob(new Blob([this.texts()[file.kind] ?? file.content], { type: 'application/sql;charset=utf-8' }), file.fileName);
+  }
+
+  /** A javított szöveg(ek) ellenőrzése a szerveren (MI nélkül); siker után menthető. */
+  revalidate(): void {
+    if (this.revalidating()) return;
+    const sent = { ...this.texts() };
+    this.revalidating.set(true);
+    this.revalidateError.set(null);
+    this.saveError.set(null);
+    this.service
+      .validateSqlFiles(this.taskSetId(), { createSql: sent.CreateSql ?? null, createLiteSql: sent.CreateLiteSql ?? null })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.revalidating.set(false);
+          this.validatedTexts.set(sent);
+          this.result.set(result);
+        },
+        error: (err) => {
+          this.revalidating.set(false);
+          this.revalidateError.set(extractErrorMessage(err, 'Az ellenőrzés nem sikerült.'));
+        },
+      });
   }
 
   /** A szokásos feltöltés fájlonként, egymás után (create.sql előbb) - a feltöltés védelmei (élő vizsga, kvóta) itt is érvényesek. */
   save(): void {
     const result = this.result();
-    if (!result?.canSave || this.saving()) return;
+    if (!result || !this.canSave() || this.saving()) return;
     this.saving.set(true);
     this.saveError.set(null);
-    const uploads = result.files.map((f) =>
-      this.service.uploadFile(this.taskSetId(), f.kind, new File([f.content], f.fileName, { type: 'application/sql' })),
+    // A (javított és újraellenőrzött) szöveg megy fel, a szokásos feltöltésen.
+    const uploads = this.generatedFiles().map((f) =>
+      this.service.uploadFile(this.taskSetId(), f.kind, new File([this.texts()[f.kind] ?? f.content], f.fileName, { type: 'application/sql' })),
     );
     concat(...uploads)
       .pipe(toArray())
       .subscribe({
         next: () => {
           this.saving.set(false);
-          this.toastService.success(result.files.length > 1 ? 'A create.sql és a create_lite.sql elmentve.' : `${result.files[0].fileName} elmentve.`);
+          const files = this.generatedFiles();
+          this.toastService.success(files.length > 1 ? 'A create.sql és a create_lite.sql elmentve.' : `${files[0].fileName} elmentve.`);
           this.saved.emit();
           this.closed.emit();
         },
@@ -375,10 +507,10 @@ export class SqlGeneralasComponent implements OnInit {
     return this.files().find((f) => f.kind === file.kind)?.originalFileName ?? null;
   }
 
-  preview(file: GeneratedSqlFileDto): string {
-    const lines = file.content.split('\n');
+  preview(content: string): string {
+    const lines = content.split('\n');
     return lines.length <= PREVIEW_LINES
-      ? file.content
+      ? content
       : `${lines.slice(0, PREVIEW_LINES).join('\n')}\n… (további ${lines.length - PREVIEW_LINES} sor - a mentés a teljes fájlt tartalmazza)`;
   }
 

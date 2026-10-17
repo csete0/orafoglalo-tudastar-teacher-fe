@@ -316,8 +316,15 @@ export interface ReferenceCheckDto {
   subtasks: ReferenceSubtaskCheckDto[];
 }
 
+/** A kézzel javított fájl(ok) újraellenőrzése (POST …/sql-generation/validate) - legalább az egyik kell. */
+export interface SqlFilesValidationRequest {
+  createSql?: string | null;
+  createLiteSql?: string | null;
+}
+
 export interface SqlGenerationResultDto {
-  source: SqlGenerationSource;
+  /** 'validate': az újraellenőrzés válasza. */
+  source: SqlGenerationSource | 'validate';
   model: string;
   files: GeneratedSqlFileDto[];
   tables: GeneratedTableDto[];
