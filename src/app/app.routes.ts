@@ -115,6 +115,8 @@ export const routes: Routes = [
         path: 'projektek/kiadas/:id',
         loadComponent: () =>
           import('./pages/feladatsorok/projekt-kiadas.component').then((m) => m.ProjektKiadasComponent),
+        // El nem fogadott AI-javaslatok (csak a böngészőben élnek) elhagyás előtt megerősítést kérnek.
+        canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
       },
       {
         path: 'kvizek/:id/szerkesztes',
