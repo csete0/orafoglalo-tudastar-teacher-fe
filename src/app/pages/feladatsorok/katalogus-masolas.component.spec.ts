@@ -306,4 +306,15 @@ describe('KatalogusMasolasComponent', () => {
     q(fixture, 'catalog-close')!.click();
     expect(closed).toHaveBeenCalledTimes(2);
   });
+
+  it('a háttér fixed, kattintásra bezár', () => {
+    const fixture = create();
+    const closed = vi.fn();
+    fixture.componentInstance.closed.subscribe(closed);
+    const backdrop = q(fixture, 'catalog-backdrop')!;
+    expect(backdrop.classList).toContain('fixed');
+    expect(backdrop.classList).not.toContain('absolute');
+    backdrop.click();
+    expect(closed).toHaveBeenCalled();
+  });
 });

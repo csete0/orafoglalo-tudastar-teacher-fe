@@ -138,4 +138,15 @@ describe('ConfirmDialogComponent', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a háttér fixed (görgetéskor is takar), kattintásra false-szal zár', async () => {
+    const fixture = TestBed.createComponent(ConfirmDialogComponent);
+    const promise = service.ask({ message: 'Biztos?' });
+    fixture.detectChanges();
+    const backdrop = fixture.nativeElement.querySelector('[data-testid="confirm-backdrop"]') as HTMLElement;
+    expect(backdrop.classList).toContain('fixed');
+    expect(backdrop.classList).not.toContain('absolute');
+    backdrop.click();
+    await expect(promise).resolves.toBe(false);
+  });
 });

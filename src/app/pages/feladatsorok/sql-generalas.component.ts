@@ -45,7 +45,8 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
   imports: [FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
     <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
+      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
+      <div class="fixed inset-0 bg-black/40" data-testid="sql-gen-backdrop" (click)="close()"></div>
       <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-gen-title" tabindex="-1" data-testid="sql-generation-dialog"
         class="card relative w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
         <div class="flex items-start justify-between gap-3 mb-4">

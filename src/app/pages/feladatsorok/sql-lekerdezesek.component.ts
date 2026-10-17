@@ -41,7 +41,8 @@ function errorText(err: unknown, fallback: string): string {
   imports: [FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
     <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
+      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
+      <div class="fixed inset-0 bg-black/40" data-testid="sql-q-backdrop" (click)="close()"></div>
       <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-q-title" tabindex="-1" data-testid="sql-queries-dialog"
         class="card relative w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
         <div class="flex items-start justify-between gap-3 mb-4">
@@ -92,9 +93,11 @@ function errorText(err: unknown, fallback: string): string {
                     <span aria-hidden="true">{{ statusIcon(check?.status) }}</span>&nbsp;{{ statusLabel(check?.status) }}
                   </span>
                   @if (isChanged(item)) { <span class="badge badge-warning">módosítva</span> }
-                  @if (!willSave(item.subTaskId)) {
+                  @if (check?.status === 'missing') {
+                    <span class="badge badge-neutral" [attr.data-testid]="'sql-q-missing-' + item.subTaskId">Nem készült lekérdezés (pl. importálás – nem igényel SQL-t)</span>
+                  } @else if (!willSave(item.subTaskId) && (check?.hadSnippet ?? item.hadSnippet)) {
                     <span class="badge badge-neutral" [attr.data-testid]="'sql-q-wont-save-' + item.subTaskId">Nem lesz mentve – már van megoldás</span>
-                  } @else if (item.hadSnippet) {
+                  } @else if (check?.hadSnippet ?? item.hadSnippet) {
                     <span class="badge badge-neutral" [attr.data-testid]="'sql-q-had-' + item.subTaskId">van már SQL-megoldása – felülíródik</span>
                   }
                 </div>

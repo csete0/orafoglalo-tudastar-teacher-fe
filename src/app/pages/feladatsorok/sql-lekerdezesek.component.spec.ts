@@ -416,7 +416,7 @@ describe('SqlLekerdezesekComponent', () => {
     const fixture = create({ task: task({ subTasks: [{ id: 124, label: '3.', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] }) });
     q(fixture, 'sql-q-generate')!.click(); // újraírás + felülírás az alapértelmezés
     fixture.detectChanges();
-    serviceMock.validateSqlQueries.mockReturnValue(of(result([item({ sql: 'SELECT 2;', willSave: false })], { model: '' })));
+    serviceMock.validateSqlQueries.mockReturnValue(of(result([item({ sql: 'SELECT 2;', hadSnippet: true, willSave: false })], { model: '' })));
     typeInto(fixture, 'sql-q-editor-124', 'SELECT 2;');
     q(fixture, 'sql-q-revalidate')!.click();
     fixture.detectChanges();
@@ -424,5 +424,38 @@ describe('SqlLekerdezesekComponent', () => {
     expect(serviceMock.validateSqlQueries).toHaveBeenCalledWith(9, 95, [{ subTaskId: 124, sql: 'SELECT 2;' }], true);
     expect(q(fixture, 'sql-q-wont-save-124')).not.toBeNull();
     expect((q(fixture, 'sql-q-save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a háttér fixed, kattintásra bezár; a középre igazítás marad', () => {
+    const fixture = create();
+    const closed = vi.fn();
+    fixture.componentInstance.closed.subscribe(closed);
+    const backdrop = q(fixture, 'sql-q-backdrop')!;
+    expect(backdrop.classList).toContain('fixed');
+    expect(backdrop.classList).not.toContain('absolute');
+    expect(q(fixture, 'sql-queries-dialog')!.classList).toContain('sm:my-auto');
+    backdrop.click();
+    expect(closed).toHaveBeenCalled();
+  });
+
+  it('kihagyott (missing) részfeladat: „Nem készült lekérdezés”, nem „Nem lesz mentve”', () => {
+    const fixture = create({
+      generated: of(result([
+        item({ subTaskId: 125, label: '1. feladat', sql: null, status: 'missing', hadSnippet: false, willSave: false, preview: null }),
+        item(),
+      ])),
+    });
+    q(fixture, 'sql-q-generate')!.click();
+    fixture.detectChanges();
+    expect(q(fixture, 'sql-q-missing-125')!.textContent).toContain('Nem készült lekérdezés (pl. importálás – nem igényel SQL-t)');
+    expect(q(fixture, 'sql-q-wont-save-125')).toBeNull();
+    expect(q(fixture, 'sql-q-save')!.textContent).toContain('Mentés (1)');
+  });
+
+  it('willSave=false, de nincs meglévő megoldás: nincs „már van megoldás” jelvény', () => {
+    const fixture = create({ generated: of(result([item({ hadSnippet: false, willSave: false })])) });
+    q(fixture, 'sql-q-generate')!.click();
+    fixture.detectChanges();
+    expect(q(fixture, 'sql-q-wont-save-124')).toBeNull();
   });
 });

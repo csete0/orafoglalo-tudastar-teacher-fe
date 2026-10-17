@@ -50,7 +50,8 @@ type LoadResult = { page: CatalogPageDto } | { error: string };
   imports: [FormsModule, IconComponent],
   template: `
     <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
+      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
+      <div class="fixed inset-0 bg-black/40" data-testid="catalog-backdrop" (click)="close()"></div>
       <div #dialog role="dialog" aria-modal="true" aria-labelledby="catalog-title" aria-describedby="catalog-help" tabindex="-1"
         data-testid="catalog-dialog" class="card relative w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
         <div class="flex items-start justify-between gap-3 mb-3">
