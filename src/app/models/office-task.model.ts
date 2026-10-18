@@ -1,11 +1,13 @@
 /**
- * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel) - a backend
+ * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel, 2. fázis: Word) - a backend
  * `OfficeTaskModels.cs` tükre. A ★ mezőket a szerver tölti minden ellenőrzéskor, a kliens értéke nem számít.
  */
 
 export type OfficeTaskLevel = 'kozep' | 'emelt';
 export type OfficeTaskStatus = 'queued' | 'generating' | 'running' | 'done' | 'failed';
 export type OfficeSourceMode = 'derived' | 'own';
+/** A feltöltött megoldás fajtája (a kiterjesztésből): ez dönti el a visszacsinálási szókészletet. */
+export type OfficeFileKind = 'excel' | 'word';
 
 /** A zárt Excel-szókészlet (ExcelUndo.Vocabulary). */
 export type ExcelUndoOpName =
@@ -22,18 +24,58 @@ export type ExcelUndoOpName =
 
 export type ExcelStylePart = 'numberFormat' | 'font' | 'fill' | 'border' | 'alignment';
 
+/** A zárt Word-szókészlet (WordUndo.Vocabulary). */
+export type WordUndoOpName =
+  | 'clearRunFormatting'
+  | 'resetParagraphFormatting'
+  | 'setParagraphStyle'
+  | 'removeNumbering'
+  | 'removeParagraphBorderShading'
+  | 'removeHyperlinks'
+  | 'replaceText'
+  | 'removeTable'
+  | 'convertTableToText'
+  | 'removeImage'
+  | 'removeHeader'
+  | 'removeFooter'
+  | 'removeToc'
+  | 'removeField'
+  | 'removeFootnotes'
+  | 'resetPageSetup'
+  | 'removeColumns'
+  | 'removeSectionBreak';
+
+/** Word-bekezdés horgonya: 0-alapú sorszám (a törzs bekezdései dokumentum-sorrendben, a szövegdobozokéi nélkül) + a szöveg eleje. */
+export interface OfficeParagraphAnchor {
+  index: number | null;
+  startsWith: string | null;
+}
+
 export interface OfficeUndoOp {
   op: string;
   sheet: string | null;
   range: string | null;
   /** removeDefinedName: a név; removeChart: a diagram neve vagy címe. */
   name: string | null;
-  /** removeChart: a lap diagramjainak 0-alapú sorszáma. */
+  /** Excel removeChart: a lap diagramjainak 0-alapú sorszáma; Word: táblázat / rajz / szakasz 0-alapú sorszáma. */
   index: number | null;
   /** resetColumnWidth: „B” vagy „B:D”. */
   columns: string | null;
-  /** resetStyle: null = minden rész. */
-  parts: ExcelStylePart[] | null;
+  /** Excel resetStyle / Word clearRunFormatting, resetParagraphFormatting, resetPageSetup, removeFootnotes: null = minden rész. */
+  parts: string[] | null;
+  // ── Csak Word (a szerver csak kitöltve küldi; Excel-műveletnél hiányzik) ──
+  /** Az első érintett bekezdés. */
+  from?: OfficeParagraphAnchor | null;
+  /** Az utolsó érintett bekezdés (elhagyva = csak a „from”). */
+  to?: OfficeParagraphAnchor | null;
+  /** Szakasz (0-tól); elhagyva = minden szakasz. */
+  section?: number | null;
+  /** removeField: a mező fajtája (pl. „PAGE”). */
+  field?: string | null;
+  /** replaceText: a megoldásban álló szövegrész. */
+  find?: string | null;
+  /** replaceText: az eredeti szöveg (üres = törlés). */
+  original?: string | null;
   enabled: boolean;
   /** ★ ok | noop | error | null (kikapcsolva / saját kiinduló fájl). */
   result: 'ok' | 'noop' | 'error' | null;
@@ -93,11 +135,28 @@ export interface OfficeTaskResultDto {
   model: string;
   notes: string | null;
   reasked: boolean;
+  /** Word: a megoldás bekezdései a horgony-választóhoz (csak a generálás eredményében; olvashatatlan fájlnál és Excelnél hiányzik). */
+  paragraphs?: OfficeWordParagraph[] | null;
+  /** Word: a dokumentumnak több bekezdése van, mint amennyi a listában áll (a horgony kézzel adható meg). */
+  paragraphsCapped?: boolean;
+}
+
+/** A Word-megoldás egy bekezdése a szerver horgony-számozásával. */
+export interface OfficeWordParagraph {
+  /** 0-alapú sorszám (= a horgony „index”-e). */
+  index: number;
+  /** A szöveg eleje szóközök összevonva, ≤ 80 karakter, rövidítésjel nélkül - változtatás nélkül mehet a „startsWith”-be. */
+  text: string;
+  /** A bekezdés hosszabb a „text”-nél. */
+  truncated: boolean;
+  /** Bekezdésstílus neve (pl. „heading 1”). */
+  style?: string | null;
+  inTable: boolean;
 }
 
 export interface OfficeTaskJobDto {
   jobId: number;
-  fileKind: string;
+  fileKind: OfficeFileKind;
   fileName: string;
   status: OfficeTaskStatus;
   progressText: string | null;

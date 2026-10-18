@@ -8,8 +8,10 @@ import {
   OfficeTaskJobDto,
   OfficeTaskProposal,
   OfficeTaskReport,
+  OfficeTaskResultDto,
   OfficeTaskValidateResult,
   OfficeUndoOp,
+  OfficeWordParagraph,
 } from '../../models/office-task.model';
 
 const op = (o: Partial<OfficeUndoOp> = {}): OfficeUndoOp => ({
@@ -114,7 +116,9 @@ describe('IrodaiMegoldasbolComponent', () => {
   let toast: { success: ReturnType<typeof vi.fn> };
   let jobQueue: (() => Observable<OfficeTaskJobDto>)[];
 
-  function create(opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[] } = {}) {
+  function create(
+    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' } = {},
+  ) {
     jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
       getQuota: vi.fn(() => of(opts.quota ?? QUOTA)),
@@ -136,6 +140,7 @@ describe('IrodaiMegoldasbolComponent', () => {
     });
     const fixture = TestBed.createComponent(IrodaiMegoldasbolComponent);
     fixture.componentRef.setInput('taskSetId', 9);
+    if (opts.kindHint) fixture.componentRef.setInput('kindHint', opts.kindHint);
     fixture.detectChanges();
     return fixture;
   }
@@ -192,10 +197,10 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('csak .xlsx és legfeljebb 20 MB tölthető fel', () => {
+    it('csak .xlsx / .docx és legfeljebb 20 MB tölthető fel', () => {
       const fixture = create();
-      pick(fixture, xlsx('kupa.docx'));
-      expect(q(fixture, 'io-file-error')!.textContent).toContain('.xlsx');
+      pick(fixture, xlsx('kupa.pptx'));
+      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx) vagy Word-dokumentum (.docx)');
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
       pick(fixture, xlsx('kupa.xlsx', MAX_FILE_BYTES + 1));
       expect(q(fixture, 'io-file-error')!.textContent).toContain('20 MB');
@@ -639,6 +644,292 @@ describe('IrodaiMegoldasbolComponent', () => {
       fixture.detectChanges();
       expect(q(fixture, 'io-panel-ellenorzes')).not.toBeNull();
       expect(q(fixture, 'io-tab-ellenorzes')!.getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
+  describe('Word', () => {
+    const W_NULLS = { sheet: null, range: null, name: null, index: null, columns: null, parts: null };
+    /** A szerver alakja: a Word-paraméterek csak kitöltve jönnek. */
+    const wop = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ op: 'removeToc', ...W_NULLS, enabled: true, result: 'ok', message: null, ...o });
+    const MISMATCH = 'a(z) „from” horgony nem egyezik: a(z) 5. bekezdés szövegének eleje „Hozzatok kulacsot és esőkabátot!”, nem „Hozatok”';
+    const para = (index: number, text: string, truncated = false): OfficeWordParagraph => ({ index, text, truncated, style: 'Normal', inTable: false });
+    const PARAGRAPHS: OfficeWordParagraph[] = [
+      para(0, 'Osztálykirándulás'),
+      para(1, 'Program'),
+      para(2, ''),
+      para(3, 'Az indulás 2026. május 21-én reggel', true),
+      para(4, 'Hozzatok kulacsot és esőkabátot!'),
+      para(5, 'Kérjük, hogy időben érkezzetek.'),
+    ];
+
+    const wordProposal = (): OfficeTaskProposal => ({
+      title: 'Osztálykirándulás',
+      description: 'A kirandulas.docx dokumentumot…',
+      sourceMode: 'derived',
+      subtasks: [
+        {
+          label: '1.',
+          text: 'Formázd a bekezdéseket!',
+          points: 3,
+          undo: [
+            wop({ op: 'clearRunFormatting', parts: ['bold', 'italic'], from: { index: 3, startsWith: 'Az indulás 2026. május' }, to: { index: 5, startsWith: 'Kérjük, hogy' } }),
+            wop({ op: 'replaceText', from: { index: 4, startsWith: 'Hozatok' }, find: 'kulacsot és esőkabátot', original: 'kulacsot', result: 'error', message: MISMATCH }),
+          ],
+          rubric: [{ key: 'r1', text: 'Félkövér cím.', points: 3, machine: true, gate: 'ok', gateReason: null }],
+        },
+        {
+          label: '2.',
+          text: 'Táblázat, élőláb, oldalbeállítás.',
+          points: 2,
+          undo: [wop({ op: 'removeTable', index: 0 }), wop({ op: 'removeField', field: 'PAGE' }), wop({ op: 'resetPageSetup', section: 1, parts: ['margins'] })],
+          rubric: [{ key: 'r2', text: 'Táblázat.', points: 2, machine: false, gate: null, gateReason: null }],
+        },
+      ],
+    });
+
+    const wordReport = (o: Partial<OfficeTaskReport> = {}) =>
+      report({ sourceFileName: 'kirandulas.docx', solutionFileName: 'kirandulas_megoldas.docx', recalculated: false, warnings: [], ...o });
+
+    function previewWord(r: Partial<OfficeTaskReport> = {}, extra: Partial<OfficeTaskResultDto> = { paragraphs: PARAGRAPHS, paragraphsCapped: false }) {
+      const done = job({
+        fileKind: 'word',
+        fileName: 'kirandulas_megoldas.docx',
+        status: 'done',
+        result: { proposal: wordProposal(), report: wordReport(r), model: 'm', notes: null, reasked: false, ...extra },
+      });
+      const fixture = create({ jobs: [() => of(done)] });
+      pick(fixture, xlsx('kirandulas_megoldas.docx'));
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('.docx is feltölthető, a felismert fajta és a cím a fájlt követi; a Szövegszerkesztés blokkból nyitva Word a cím', () => {
+      let fixture = create();
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('Irodai feladat a megoldott fájlból (Excel)');
+      pick(fixture, xlsx('kirandulas_megoldas.DOCX'));
+      expect(q(fixture, 'io-file-error')).toBeNull();
+      expect(q(fixture, 'io-file-kind')!.textContent).toContain('Word-dokumentum');
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
+      expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(false);
+      pick(fixture, xlsx('kupa.xlsx'));
+      expect(q(fixture, 'io-file-kind')!.textContent).toContain('Excel-munkafüzet');
+      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx');
+
+      TestBed.resetTestingModule();
+      fixture = create({ kindHint: 'word' });
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(Word)');
+    });
+
+    it('a Visszacsinálás fül magyarul írja le a Word-műveleteket; a horgony-eltérés a műveletnél látszik, a valódi szöveg átvehető', () => {
+      const fixture = previewWord();
+      tab(fixture, 'visszacsinalas');
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(Word)');
+      expect(q(fixture, 'io-undo-text-0-0')!.textContent).toContain('[4]–[6] „Az indulás 2026. május” – „Kérjük, hogy”: karakterformázás törlése (félkövér, dőlt)');
+      expect(q(fixture, 'io-undo-text-0-1')!.textContent).toContain('[5] „Hozatok”: „kulacsot és esőkabátot” → „kulacsot” (szöveg visszaállítása)');
+      expect(q(fixture, 'io-undo-text-1-0')!.textContent).toContain('a(z) 1. táblázat törlése');
+      expect(q(fixture, 'io-undo-text-1-1')!.textContent).toContain('PAGE mező törlése (oldalszám)');
+      expect(q(fixture, 'io-undo-text-1-2')!.textContent).toContain('2. szakasz: margók');
+      expect(q(fixture, 'io-undo-result-0-1')!.textContent).toContain('hiba');
+      expect(q(fixture, 'io-undo-message-0-1')!.className).toContain('text-danger');
+      // A szerver üzenete is 1-től számoz, mint a felület (külön jelölés nem kell).
+      expect(q(fixture, 'io-undo-message-0-1')!.textContent).toContain('a(z) 5. bekezdés szövegének eleje');
+      expect(q(fixture, 'io-undo-numbering-0-1')).toBeNull();
+      expect(q(fixture, 'io-undo-fix-anchor-0-1')!.textContent).toContain('A(z) [5] bekezdés');
+      expect(q(fixture, 'io-undo-fix-anchor-0-0')).toBeNull();
+
+      q(fixture, 'io-undo-fix-anchor-0-1')!.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.proposal()!.subtasks[0].undo[1].from).toEqual({ index: 4, startsWith: 'Hozzatok kulacsot és esőkabátot!' });
+      expect(fixture.componentInstance.clientErrors()).toEqual([]);
+      q(fixture, 'io-revalidate')!.click();
+      const sent = service.validate.mock.calls[0][2] as OfficeTaskProposal;
+      expect(sent.subtasks[0].undo[1]).toMatchObject({ op: 'replaceText', from: { index: 4, startsWith: 'Hozzatok kulacsot és esőkabátot!' } });
+    });
+
+    it('bekezdés-választó: a generálás eredményének bekezdés-listájából (letöltés nélkül), a választás tölti a horgonyt; a „to” nem lehet a „from” előtt', () => {
+      const fixture = previewWord();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-edit-0-0')!.click();
+      fixture.detectChanges();
+      expect(service.downloadFile).not.toHaveBeenCalled();
+      expect(c.paragraphs()).toEqual(PARAGRAPHS);
+
+      expect(q(fixture, 'io-from-0-0-option-3')!.textContent).toContain('[4] Az indulás 2026. május 21-én reggel…');
+      expect(q(fixture, 'io-from-0-0-option-2')!.textContent).toContain('(üres bekezdés)');
+      expect(q(fixture, 'io-to-0-0-option-2')).toBeNull();
+      expect(q(fixture, 'io-op-0-0')!.querySelectorAll('option').length).toBe(18);
+      q(fixture, 'io-from-0-0-option-3')!.click();
+      fixture.detectChanges();
+      // A „…” csak megjelenítés: a horgony a szerver szövege változatlanul.
+      expect(c.proposal()!.subtasks[0].undo[0].from).toEqual({ index: 3, startsWith: 'Az indulás 2026. május 21-én reggel' });
+      q(fixture, 'io-from-0-0-option-1')!.click();
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[0].from).toEqual({ index: 1, startsWith: 'Program' });
+      q(fixture, 'io-to-0-0-clear')!.click();
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[0].to).toBeNull();
+      expect(q(fixture, 'io-undo-text-0-0')!.textContent).toContain('[2] „Program”: karakterformázás törlése');
+      expect(c.clientErrors()).toEqual([]);
+
+      c.setUndo(0, 0, { to: { index: 0, startsWith: 'Osztály' } });
+      fixture.detectChanges();
+      expect(q(fixture, 'io-undo-error-0-0')!.textContent).toContain('nem lehet az első');
+      c.setFrom(0, 0, null);
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[0].to).toBeNull();
+      expect(q(fixture, 'io-client-errors')!.textContent).toContain('1.: 1. visszacsinálási művelet - hiányzó első bekezdés');
+      expect((q(fixture, 'io-revalidate') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('az újraellenőrzés válasza (bekezdés-lista nélkül) nem törli a generáláskor kapott listát', () => {
+      const fixture = previewWord();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-fix-anchor-0-1')!.click();
+      fixture.detectChanges();
+      q(fixture, 'io-revalidate')!.click();
+      fixture.detectChanges();
+      expect(service.validate).toHaveBeenCalled();
+      expect(c.paragraphs()).toEqual(PARAGRAPHS);
+    });
+
+    it('horgony-eltérés lista nélkül: a szerver üzenetének szövege kerül a horgonyba; üres bekezdésnél üres szöveg', () => {
+      const fixture = previewWord({}, {});
+      const c = fixture.componentInstance;
+      c.fixAnchor(0, 1);
+      expect(c.proposal()!.subtasks[0].undo[1].from).toEqual({ index: 4, startsWith: 'Hozzatok kulacsot és esőkabátot!' });
+      c.setUndo(0, 1, { result: 'error', message: 'a(z) „from” horgony nem egyezik: a(z) 3. bekezdés üres (a horgony szövege legyen üres), nem „Hozz”' });
+      c.fixAnchor(0, 1);
+      expect(c.proposal()!.subtasks[0].undo[1].from).toEqual({ index: 2, startsWith: '' });
+    });
+
+    it('bekezdés-lista hiányában vagy korlát felett kézi megadás marad', () => {
+      for (const [extra, text] of [
+        [{}, 'nem érhető el'],
+        [{ paragraphs: PARAGRAPHS, paragraphsCapped: true }, 'túl sok bekezdés'],
+      ] as const) {
+        TestBed.resetTestingModule();
+        const fixture = previewWord({}, extra);
+        tab(fixture, 'visszacsinalas');
+        fixture.componentInstance.toggleEdit(0, 0);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.paragraphs()).toBeNull();
+        expect(q(fixture, 'io-from-0-0-list')).toBeNull();
+        expect(q(fixture, 'io-from-0-0-unavailable')!.textContent).toContain(text);
+        expect(q(fixture, 'io-from-0-0-index')).not.toBeNull();
+      }
+    });
+
+    it('szerkesztés: műveletváltás, sorszám, szakasz, mező, részek, szövegcsere; az új művelet Word-művelet', () => {
+      const fixture = previewWord();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+
+      c.changeWordKind(1, 0, 'removeImage');
+      expect(c.proposal()!.subtasks[1].undo[0]).toMatchObject({ op: 'removeImage', index: 0 });
+      c.toggleEdit(1, 0);
+      fixture.detectChanges();
+      expect((q(fixture, 'io-index-1-0') as HTMLInputElement).min).toBe('1');
+      c.setChartNumber(1, 0, '');
+      expect(c.clientErrors().some((e) => e.includes('hiányzó rajz-sorszám'))).toBe(true);
+      c.setChartNumber(1, 0, '3');
+      expect(c.proposal()!.subtasks[1].undo[0].index).toBe(2);
+      expect(describe1(c, 1, 0)).toBe('a(z) 3. rajz törlése (kép/alakzat/szövegdoboz/diagram)');
+
+      c.changeWordKind(1, 1, 'removeHeader');
+      expect(c.proposal()!.subtasks[1].undo[1]).toMatchObject({ op: 'removeHeader', field: null, section: null });
+      c.toggleEdit(1, 1);
+      fixture.detectChanges();
+      const options = q(fixture, 'io-section-1-1')!.querySelectorAll('option');
+      expect(options.length).toBe(11);
+      expect(options[1].textContent).toContain('1. szakasz');
+      c.setUndo(1, 1, { section: 2 });
+      expect(describe1(c, 1, 1)).toBe('élőfej törlése (3. szakasz)');
+      c.changeWordKind(1, 1, 'removeField');
+      fixture.detectChanges();
+      expect(q(fixture, 'io-field-1-1')!.textContent).toContain('NUMPAGES - oldalak száma');
+      expect(c.clientErrors().some((e) => e.includes('hiányzó mezőfajta'))).toBe(true);
+      c.setUndo(1, 1, { field: 'DATE' });
+      expect(describe1(c, 1, 1)).toBe('DATE mező törlése (dátum)');
+
+      c.changeWordKind(1, 2, 'removeFootnotes');
+      expect(c.proposal()!.subtasks[1].undo[2].parts).toBeNull();
+      c.toggleEdit(1, 2);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-part-1-2-footnotes')).not.toBeNull();
+      c.togglePart(1, 2, 'endnotes');
+      c.togglePart(1, 2, 'footnotes');
+      expect(c.proposal()!.subtasks[1].undo[2].parts).toEqual(['footnotes', 'endnotes']);
+
+      c.toggleEdit(0, 1);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-find-0-1')).not.toBeNull();
+      expect(q(fixture, 'io-original-0-1')).not.toBeNull();
+      expect(q(fixture, 'io-to-0-1')).toBeNull();
+      c.setUndo(0, 1, { original: 'kulacsot és esőkabátot' });
+      expect(c.clientErrors().some((e) => e.includes('azonos'))).toBe(true);
+      c.setUndo(0, 1, { original: 'kulacsot\tés' });
+      expect(c.clientErrors().some((e) => e.includes('vezérlőkaraktert'))).toBe(true);
+      c.setUndo(0, 1, { original: '' });
+      expect(describe1(c, 0, 1)).toContain('„kulacsot és esőkabátot” törlése');
+
+      c.addUndo(1);
+      expect(c.proposal()!.subtasks[1].undo[3]).toMatchObject({ op: 'clearRunFormatting', sheet: null, from: null });
+      expect(c.clientErrors().some((e) => e.includes('hiányzó első bekezdés'))).toBe(true);
+    });
+
+    function describe1(c: IrodaiMegoldasbolComponent, si: number, oi: number): string {
+      return c.describe(c.proposal()!.subtasks[si].undo[oi]);
+    }
+
+    it('a szerver figyelmeztetései változatlanok (1-től számoznak, külön jelölés nincs)', () => {
+      const fixture = previewWord({ warnings: ['1.: a(z) removeTable(#1) nem változtatott semmit (nem talált táblázatot).'] });
+      tab(fixture, 'ellenorzes');
+      expect(q(fixture, 'io-warnings')!.textContent).toContain('removeTable(#1)');
+      expect(q(fixture, 'io-warnings-numbering')).toBeNull();
+    });
+
+    it('a null Word-mező a szerver hiányzó mezőjével azonos (nem módosítás)', () => {
+      const fixture = previewWord();
+      const c = fixture.componentInstance;
+      c.setUndo(1, 0, { section: null, from: null, to: null, find: null });
+      expect(c.dirty()).toBe(false);
+      c.setUndo(1, 0, { section: 0 });
+      expect(c.dirty()).toBe(true);
+    });
+
+    it('saját kiinduló fájl csak .docx; a letöltések .docx nevűek; nincs újraszámolás-jelzés; az előnézet Wordre utal', () => {
+      const fixture = previewWord({ preview: null });
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      expect(q(fixture, 'io-own-upload')!.getAttribute('accept')).toBe('.docx');
+      c.loadOwnSource({ target: { files: [xlsx('kiindulo.xlsx')], value: 'x' } } as unknown as Event);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-own-error')!.textContent).toContain('A saját kiinduló fájl is .docx legyen');
+      q(fixture, 'io-source-own')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'io-client-errors')!.textContent).toContain('tölts fel egy .docx fájlt');
+      c.loadOwnSource({ target: { files: [xlsx('kiindulo.docx')], value: 'x' } } as unknown as Event);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-own-pending')!.textContent).toContain('kiindulo.docx');
+
+      tab(fixture, 'ellenorzes');
+      expect(q(fixture, 'io-panel-ellenorzes')!.textContent).toContain('kirandulas_megoldas.docx');
+      expect(q(fixture, 'io-not-recalculated')).toBeNull();
+      tab(fixture, 'elonezet');
+      expect(q(fixture, 'io-preview-unavailable')!.textContent).toContain('Wordben');
+
+      const names: string[] = [];
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        names.push(this.download);
+      });
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+      q(fixture, 'io-download-source')!.click();
+      q(fixture, 'io-download-solution')!.click();
+      expect(names).toEqual(['kirandulas.docx', 'kirandulas_megoldas.docx']);
+      click.mockRestore();
     });
   });
 });
