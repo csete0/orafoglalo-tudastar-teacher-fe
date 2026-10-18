@@ -48,7 +48,11 @@ function makeOverview(overrides: Partial<ClassTestOverview> = {}): ClassTestOver
 
 describe('DolgozatAttekintesComponent', () => {
   function setup(overview = makeOverview()) {
-    const classTests = { getOverview: vi.fn().mockReturnValue(of(overview)), publish: vi.fn().mockReturnValue(of(undefined)) };
+    const classTests = {
+      getOverview: vi.fn().mockReturnValue(of(overview)),
+      publish: vi.fn().mockReturnValue(of(undefined)),
+      draftFeedback: vi.fn().mockReturnValue(of({ assignmentId: 7, model: 'm', items: [], pendingUserIds: [] })),
+    };
     const confirm = { ask: vi.fn().mockResolvedValue(true) };
     const toast = { success: vi.fn(), warning: vi.fn(), danger: vi.fn() };
     TestBed.configureTestingModule({
@@ -122,6 +126,27 @@ describe('DolgozatAttekintesComponent', () => {
     fixture.detectChanges();
     expect(el.querySelector('app-attempt-review-panel')).not.toBeNull();
     expect(TestBed.inject(ReportStore).loadAttemptReview).toHaveBeenCalledWith(101);
+  });
+
+  it('az elmentett visszajelzés a névsorban lenyitható; beadott dolgozat nélkül a vázlat-gomb tiltott', () => {
+    const base = makeOverview();
+    const { el } = setup(makeOverview({ students: [{ ...base.students[0], teacherFeedback: 'Szép munka, a ciklusokat gyakorold.' }, base.students[1]] }));
+    const details = el.querySelector('[data-testid="saved-feedback-1"]')!;
+    expect(details.textContent).toContain('Szép munka, a ciklusokat gyakorold.');
+    expect(el.querySelector('[data-testid="saved-feedback-2"]')).toBeNull();
+
+    TestBed.resetTestingModule();
+    const empty = setup(makeOverview({ stats: { ...base.stats, submitted: 0 } }));
+    expect((empty.el.querySelector('[data-testid="feedback-open"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('„Visszajelzések AI-vázlattal”: megnyitja az ablakot, magától NEM kér vázlatot (keret!), közben nincs élő frissítés', () => {
+    const { fixture, el, classTests, component } = setup();
+    (el.querySelector('[data-testid="feedback-open"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('app-dolgozat-visszajelzes')).not.toBeNull();
+    expect(classTests.draftFeedback).not.toHaveBeenCalled();
+    expect(component.feedbackOpen()).toBe(true);
   });
 
   it('a CSV-export a meglévő exportálót kapja a dolgozat adataival', () => {

@@ -10,6 +10,8 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { GradingQualityDto, TeacherFileDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
+import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
+import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -180,6 +182,142 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const warning = fixture.nativeElement.querySelector('[data-testid="sql-files-warning"]');
     expect(warning).not.toBeNull();
     expect(warning.textContent).toContain('kötelező');
+  });
+
+  it('SQL-feladatnál felkínálja a hiányzó SQL-fájl elkészítését, a gomb a párbeszédablakot nyitja', () => {
+    configure(
+      makeDetail({
+        tasks: [{ id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] }],
+        files: [],
+      }),
+    );
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
+    (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+  });
+
+  it('visszavont (takedown) feladatsoron a hiányzó SQL-fájl elkészítése le van tiltva', () => {
+    configure(
+      makeDetail({
+        takedownAt: '2026-10-01T00:00:00Z',
+        tasks: [{ id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [],
+          subTasks: [{ id: 1, description: 'd', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] }],
+        files: [],
+      }),
+    );
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('[data-testid="sql-files-warning-generate"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  describe('AI programozási feladat', () => {
+    const aiServiceMock = () => ({
+      getQuota: vi.fn(() => of({ used: 1, limit: 30, month: '2026-10', isPremium: true })),
+      getActiveJob: vi.fn(() => of(null)),
+    });
+    const tasks = () => [
+      { id: 1, title: 'Prog', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], aiAssisted: true,
+        subTasks: [{ id: 11, description: 'a', points: 10, snippets: [] }] },
+      { id: 2, title: 'SQL', description: 'd', maxPoints: 10, taskOrder: 2, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] },
+    ];
+
+    it('csak a programozási feladat kártyáján kínálja az AI-val kiegészítést, és jelöli az AI-val készültet', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelectorAll('[data-testid="task-ai-assisted"]').length).toBe(1);
+      fixture.componentInstance.toggleTask(2);
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-complete-open"]')).toBeNull();
+
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+      (el.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Feladat kiegészítése AI-val');
+    });
+
+    it('a Programozás blokk „Új feladat” űrlapja mellől új feladat kérhető; mentés után újratölt és kinyitja az új feladatot', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelectorAll('[data-testid="ai-new-open"]').length).toBe(1);
+      (el.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Új programozási feladat AI-val');
+
+      fixture.componentInstance.onAiTaskSaved(1, 456);
+      expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
+      expect(fixture.componentInstance.expandedTaskId()).toBe(456);
+    });
+
+    it('a Táblázatkezelés blokk „Új feladat” űrlapja mellől nyílik az „Irodai feladat a megoldott fájlból (Excel)” ablak', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherOfficeTaskService, {
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      if (!fixture.componentInstance.isSectionExpanded(2)) fixture.componentInstance.toggleSection(2);
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('[data-testid="office-task-open"]').length).toBe(1);
+      (el.querySelector('[data-testid="office-task-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Excel)');
+      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
+    });
+
+    it('a Szövegszerkesztés blokk „Új feladat” űrlapja mellől Word-címmel nyílik ugyanaz az ablak', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherOfficeTaskService, {
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      if (!fixture.componentInstance.isSectionExpanded(1)) fixture.componentInstance.toggleSection(1);
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('[data-testid="office-task-open-word"]').length).toBe(1);
+      (el.querySelector('[data-testid="office-task-open-word"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
+      expect(el.querySelector('[data-testid="io-file"]')!.getAttribute('accept')).toBe('.xlsx,.docx');
+      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
+    });
+
+    it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
+      configure(makeDetail({ takedownAt: '2026-10-01T00:00:00Z', tasks: tasks() }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(1);
+      fixture.detectChanges();
+      expect((fixture.nativeElement.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).disabled).toBe(true);
+      expect((fixture.nativeElement.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
+  it('SQL nélküli feladatsoron nem kínálja a hiányzó SQL-fájl elkészítését', () => {
+    configure(makeDetail({ tasks: [], files: [] }));
+    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-entry"]')).toBeNull();
   });
 
   // UI-TT-30: az "Összevont megoldás" mező a részfeladatonkénti kódrészletektől teljesen
@@ -1962,6 +2100,168 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       expect(fixture.nativeElement.querySelector('[data-testid="run-input-stdin"]')).not.toBeNull();
       expect(scroll).toHaveBeenCalled();
+    });
+  });
+
+  describe('SQL megoldó lekérdezések MI-vel', () => {
+    const sqlTask = (overrides: Partial<TeacherTaskDto> = {}): TeacherTaskDto => ({
+      id: 7, title: 'Települések', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [],
+      subTasks: [{ id: 70, label: '2.', description: 'd', snippets: [] }], ...overrides,
+    });
+    const liteFile = (taskId: number | null): TeacherFileDto => ({
+      id: 'l', kind: 'CreateLiteSql', originalFileName: 'create_lite.sql', contentType: 'application/sql', sizeBytes: 10,
+      createdAt: '2026-10-15T10:00:00Z', url: '/api/teacher-files/l', taskId,
+    });
+
+    it('csak SQL-feladat kártyáján jelenik meg, és a párbeszédablakot nyitja', () => {
+      configure(makeDetail({ tasks: [sqlTask(), sqlTask({ id: 8, taskTypeIds: [6] })], files: [liteFile(null)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(8);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-entry-8"]')).toBeNull();
+
+      fixture.componentInstance.toggleTask(7);
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('[data-testid="sql-queries-open-7"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-dialog"]')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-q-no-lite"]')).toBeNull();
+    });
+
+    it('create_lite.sql nélkül az ablak az SQL-fájl generálóhoz irányít', () => {
+      configure(makeDetail({ tasks: [sqlTask()], files: [] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.toggleTask(7);
+      fixture.componentInstance.sqlQueriesTaskId.set(7);
+      fixture.detectChanges();
+
+      (fixture.nativeElement.querySelector('[data-testid="sql-q-open-sql-files"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-dialog"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+    });
+
+    it('a másik feladatra kötött create_lite.sql nem számít; a feladatsor-szintű és a sajátja igen', () => {
+      configure(makeDetail({ tasks: [sqlTask()], files: [liteFile(99)] }));
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+      expect(component.hasLiteSqlFor(7)).toBe(false);
+      taskSetStoreMock.selectedDetail.set(makeDetail({ tasks: [sqlTask()], files: [liteFile(7)] }));
+      expect(component.hasLiteSqlFor(7)).toBe(true);
+    });
+
+    it('mentés után újratölt, és a mentett részfeladat piszkozata a szerver állapotára áll', () => {
+      configure(makeDetail({ tasks: [sqlTask()], files: [liteFile(null)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      component.setDraftCode(70, 6, 'régi piszkozat');
+
+      component.onSqlQueriesSaved(1, [70]);
+      taskSetStoreMock.selectedDetail.set(
+        makeDetail({ tasks: [sqlTask({ subTasks: [{ id: 70, label: '2.', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] })], files: [liteFile(null)] }),
+      );
+      fixture.detectChanges();
+
+      expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
+      expect(component.draftCode(70, 6)).toBe('SELECT 1;');
+    });
+  });
+
+  describe('katalógus-másolat hozzáférése', () => {
+    it('fizetős forrás másolatánál a fizetős hozzáférést jelzi', () => {
+      configure(makeDetail({ copiedFromTaskSetId: 15, isFree: false, isPremiumOnly: false }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]').textContent)
+        .toContain('Fizetős – a diákjaidnak előfizetés vagy iskolai licenc kell hozzá; dolgozatban mindenki elérheti');
+    });
+
+    it('ingyenes forrás másolatánál az ingyenes hozzáférést jelzi', () => {
+      configure(makeDetail({ copiedFromTaskSetId: 15, isFree: true, isPremiumOnly: false }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]').textContent).toContain('Ingyenes – minden diákod eléri.');
+    });
+
+    it('saját (nem másolt) feladatsornál nincs hozzáférés-sáv', () => {
+      configure(makeDetail());
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="copied-access"]')).toBeNull();
+    });
+  });
+
+  describe('feladatonkénti SQL-séma (katalógus-másolat két SQL-feladattal)', () => {
+    const sql = (id: number, order: number): TeacherTaskDto => ({
+      id, title: 'SQL ' + order, description: 'd', maxPoints: 10, taskOrder: order, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [],
+    });
+    const schema = (id: string, kind: 'CreateSql' | 'CreateLiteSql', taskId: number | null): TeacherFileDto => ({
+      id, kind, originalFileName: id + '.sql', contentType: 'application/sql', sizeBytes: 10, createdAt: '2026-10-15T10:00:00Z',
+      url: '/api/teacher-files/' + id, taskId,
+    });
+    const pick = (fixture: { nativeElement: HTMLElement }, inputId: string) => {
+      const input = fixture.nativeElement.querySelector(`[data-testid="${inputId}"]`) as HTMLInputElement;
+      Object.defineProperty(input, 'files', { value: [new File(['x'], 'create_lite.sql')], configurable: true });
+      input.dispatchEvent(new Event('change'));
+    };
+
+    it('egy sémás feladatsoron nincs feladatválasztó, a feltöltés feladatsor-szintű (változatlan)', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('l', 'CreateLiteSql', null)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="schema-task-CreateLiteSql"]')).toBeNull();
+      pick(fixture, 'file-input-CreateLiteSql');
+      expect(taskSetStoreMock.uploadFile.mock.calls[0][3]).toBeUndefined();
+    });
+
+    it('feladathoz kötött sémánál „Melyik feladathoz?” választó; választásig tiltott, utána a feladatra tölt fel', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateLiteSql', 7), schema('b', 'CreateLiteSql', 8)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="schema-task-CreateLiteSql"]')).not.toBeNull();
+      expect((fixture.nativeElement.querySelector('[data-testid="file-input-CreateLiteSql"]') as HTMLInputElement).disabled).toBe(true);
+      // A nem SQL fajták változatlanok.
+      expect(fixture.nativeElement.querySelector('[data-testid="schema-task-InputTxt"]')).toBeNull();
+
+      fixture.componentInstance.schemaTaskChoice.set(8);
+      fixture.detectChanges();
+      expect((fixture.nativeElement.querySelector('[data-testid="file-input-CreateLiteSql"]') as HTMLInputElement).disabled).toBe(false);
+      pick(fixture, 'file-input-CreateLiteSql');
+      expect(taskSetStoreMock.uploadFile).toHaveBeenCalledWith(1, 'CreateLiteSql', expect.any(File), 8, expect.any(Function));
+    });
+
+    it('a feladathoz kötött sémák a fájllistában a feladat jelölésével látszanak', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateLiteSql', 7), schema('b', 'CreateLiteSql', 8)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="file-row-a"]').textContent).toContain('1. feladat');
+      expect(fixture.nativeElement.querySelector('[data-testid="file-row-b"]').textContent).toContain('2. feladat');
+    });
+
+    it('a generátor több SQL-feladatnál választás után nyílik, és a célfeladat fájljait kapja', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+
+      fixture.componentInstance.schemaTaskChoice.set(7);
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(7);
+      expect(fixture.componentInstance.sqlGenerationFiles().map((f) => f.id)).toEqual(['a']);
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+    });
+
+    it('feladatból (SQL-lekérdezések ablakából) nyitva annak a feladatnak készül; egy sémásnál feladat nélkül', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7)] }));
+      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
+      component.openSqlGeneration(8);
+      expect(component.sqlGenerationTaskId()).toBe(8);
+
+      taskSetStoreMock.selectedDetail.set(makeDetail({ tasks: [sql(7, 1)], files: [schema('a', 'CreateSql', null)] }));
+      component.openSqlGeneration(7);
+      expect(component.sqlGenerationTaskId()).toBeNull();
     });
   });
 });

@@ -29,14 +29,19 @@ export function codeLines(text: string | undefined): string[] {
   imports: [NgTemplateOutlet],
   template: `
     <div class="grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)]">
-      <ul class="space-y-0.5 text-xs font-mono">
-        @for (path of paths(); track path) {
-          <li><button type="button" class="w-full text-left px-2 py-1 rounded break-all" [class.bg-bg-element]="activePath() === path" (click)="activePath.set(path)">
-            {{ path }}{{ readOnlyPaths().includes(path) ? ' (keret)' : '' }}
-            @if (badges()[path]; as n) { <span class="comment-count" [attr.aria-label]="n + ' nyitott megjegyzés'">{{ n }}</span> }
-          </button></li>
-        }
-      </ul>
+      <div class="min-w-0">
+        <ul class="space-y-0.5 text-xs font-mono">
+          @for (path of paths(); track path) {
+            <li><button type="button" class="w-full text-left px-2 py-1 rounded break-all" [class.bg-bg-element]="activePath() === path" (click)="activePath.set(path)">
+              {{ path }}{{ readOnlyPaths().includes(path) ? ' (keret)' : '' }}
+              @if (badges()[path]; as n) { <span class="comment-count" [attr.aria-label]="n + ' nyitott megjegyzés'">{{ n }}</span> }
+              @if (suggestionBadges()[path]; as n) { <span class="suggestion-count" [attr.aria-label]="n + ' AI-javaslat'">{{ n }}</span> }
+            </button></li>
+          }
+        </ul>
+        <!-- A fájllista alá vetített tartalom (pl. az AI-javaslatok listája). -->
+        <ng-content />
+      </div>
       <div class="code-view" tabindex="0" data-testid="code-view">
         @for (text of lines(); track $index; let i = $index) {
           <div class="code-line" [class.code-line--marked]="markedLines().has(i + 1)">
@@ -66,6 +71,7 @@ export function codeLines(text: string | undefined): string[] {
     .code-ln--action:hover, .code-ln--action:focus-visible { color: var(--color-primary); text-decoration: underline; }
     .code-text { white-space: pre; padding-right: 0.75rem; }
     .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
+    .suggestion-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; border: 1px dashed var(--color-primary); color: var(--color-primary); font-size: 0.625rem; }
   `],
 })
 export class KodOlvasoComponent {
@@ -79,6 +85,8 @@ export class KodOlvasoComponent {
   readonly markedLines = input<ReadonlySet<number>>(new Set());
   /** Fájlonkénti jelvény-szám (pl. nyitott megjegyzések). */
   readonly badges = input<Record<string, number>>({});
+  /** Fájlonkénti AI-javaslat-szám (szaggatott keretes jelvény). */
+  readonly suggestionBadges = input<Record<string, number>>({});
   /** Minden sor alá rajzolt sablon (pl. megjegyzés-szálak). */
   readonly lineExtras = input<TemplateRef<KodSorKornyezet> | null>(null);
   readonly lineClick = output<number>();

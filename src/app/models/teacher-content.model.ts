@@ -42,6 +42,14 @@ export interface TeacherTaskSetDto {
   takedownAt: string | null;
 
   /**
+   * Katalógus-másolatnál a forrás hivatalos sor id-ja; a másolat a forrás hozzáférését örökli (isFree / isPremiumOnly).
+   * Opcionális: a BE még nem minden válaszban adja.
+   */
+  copiedFromTaskSetId?: number | null;
+  isFree?: boolean | null;
+  isPremiumOnly?: boolean | null;
+
+  /**
    * Van-e MAR vizsga-munkamenet a feladatsoron. Ha igen, SOSEM torolheto - a diakok
    * eredmenyei es statisztikai hozza kotodnek.
    *
@@ -90,6 +98,8 @@ export interface TeacherTaskDto {
   taskTypeIds: number[];
   subTasks: TeacherSubTaskDto[];
   completeSolutionSnippets: SnippetDto[];
+  /** A feladat AI programozási feladat-készítővel készült/egészült ki (csak a tanári felületen látszik). */
+  aiAssisted?: boolean;
 
   /**
    * Optimista konkurrencia-token. A mentésnél visszaküldjük, és ha időközben más
@@ -201,6 +211,8 @@ export interface TeacherRubricDto {
   rawTotal: number;
   examPoints: number;
   model: string | null;
+  /** A lista eredete; „catalog-copy”: hivatalos lista másolata, a gépi szabályai rejtettek. Opcionális. */
+  source?: string | null;
   createdAt: string;
   /** A vázlatot író modell megjegyzése (pl. a feladatszöveg és a megoldás eltérése) vagy a sikertelen önellenőrzés; null, ha nincs. */
   note: string | null;
@@ -257,4 +269,205 @@ export interface TeacherGroupTaskSetAssignmentDto {
   isTest?: boolean;
   timeLimitSeconds?: number | null;
   resultsPublishedAt?: string | null;
+}
+
+// ── Hiányzó SQL-fájl elkészítése (POST /teacher/task-sets/{id}/sql-generation) ──
+
+/** createSql: create.sql → create_lite.sql · createLiteSql: create_lite.sql → create.sql · dataFiles: bemeneti fájlokból mindkettő. */
+export type SqlGenerationSource = 'createSql' | 'createLiteSql' | 'dataFiles';
+
+export interface SqlGenerationRequest {
+  source: SqlGenerationSource;
+  description?: string | null;
+  /** Adatfájlos módban a használt bemeneti fájlok (üres → mind). */
+  fileIds?: string[] | null;
+  hasHeader?: boolean;
+}
+
+export interface GeneratedSqlFileDto {
+  kind: 'CreateSql' | 'CreateLiteSql';
+  fileName: string;
+  content: string;
+  sizeBytes: number;
+}
+
+export interface GeneratedColumnDto {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  notNull: boolean;
+  /** „tábla.oszlop”, ha idegen kulcs. */
+  references: string | null;
+}
+
+export interface GeneratedTableDto {
+  name: string;
+  /** A forrás (tábla neve vagy adatfájl neve). */
+  source: string;
+  columns: GeneratedColumnDto[];
+  expectedRows: number;
+  /** A futtatón (SQLite) megszámolt sorok; null, ha nem futott. */
+  actualRows: number | null;
+}
+
+export interface SqlValidationDto {
+  status: 'ok' | 'failed' | 'unavailable';
+  errors: string[];
+}
+
+export interface ReferenceSubtaskCheckDto {
+  label: string;
+  status: 'match' | 'different' | 'ok' | 'error' | 'not_query';
+  rows: number | null;
+  message: string | null;
+}
+
+export interface ReferenceCheckDto {
+  taskId: number;
+  taskTitle: string;
+  subtasks: ReferenceSubtaskCheckDto[];
+}
+
+/** A kézzel javított fájl(ok) újraellenőrzése (POST …/sql-generation/validate) - legalább az egyik kell. */
+export interface SqlFilesValidationRequest {
+  createSql?: string | null;
+  createLiteSql?: string | null;
+}
+
+export interface SqlGenerationResultDto {
+  /** 'validate': az újraellenőrzés válasza. */
+  source: SqlGenerationSource | 'validate';
+  model: string;
+  files: GeneratedSqlFileDto[];
+  tables: GeneratedTableDto[];
+  warnings: string[];
+  validation: SqlValidationDto;
+  referenceChecks: ReferenceCheckDto[];
+  aiNotes: string | null;
+  canSave: boolean;
+  /** Újraellenőrzésnél: mivel vetettük össze a táblákat/sorszámokat (null: nem volt mivel). */
+  comparedWith?: string | null;
+}
+
+// ── SQL megoldó lekérdezések MI-vel (POST /teacher/task-sets/{id}/tasks/{taskId}/sql-queries/…) ──
+
+export interface SqlQueryGenerationRequest {
+  /** true: a már SQL-megoldással rendelkező részfeladatokra is kér újat (mentéskor az overwrite dönt). */
+  regenerate?: boolean;
+  /** Mentéskor felülírja-e a meglévő SQL-megoldást - ettől függ a tételek `willSave` jelzése. */
+  overwrite?: boolean;
+  /** Csak ezekre a részfeladatokra (üres/null: mind). */
+  subTaskIds?: number[] | null;
+}
+
+export interface SqlQueryInput {
+  subTaskId: number;
+  sql: string;
+}
+
+export interface SqlQueryPreviewDto {
+  columns: string[];
+  /** Legfeljebb az első 20 sor, cellánként max. 200 karakter. */
+  rows: (string | null)[][];
+  totalRows: number;
+  truncated: boolean;
+}
+
+/** ok · not_query (nem lekérdezés, hibátlanul lefutott) · error · nondeterministic · missing (az MI nem adott rá) · not_run. */
+export type SqlQueryStatus = 'ok' | 'not_query' | 'error' | 'nondeterministic' | 'missing' | 'not_run';
+
+export interface SqlQueryItemDto {
+  subTaskId: number;
+  label: string;
+  /** A részfeladatnak már van SQL-megoldása (mentéskor csak felülírással cserélődik). */
+  hadSnippet: boolean;
+  /** Az apply ugyanezzel a felülírás-beállítással menti-e (false: már van megoldás, felülírás nélkül). */
+  willSave: boolean;
+  sql: string | null;
+  status: SqlQueryStatus;
+  error: string | null;
+  warnings: string[];
+  preview: SqlQueryPreviewDto | null;
+}
+
+export interface SqlQueryResultDto {
+  taskId: number;
+  /** Ellenőrzésnél üres. */
+  model: string;
+  queries: SqlQueryItemDto[];
+  warnings: string[];
+  validationStatus: 'ok' | 'failed' | 'unavailable';
+  canApply: boolean;
+  aiNotes: string | null;
+}
+
+export interface SqlQueryApplyRequest {
+  queries: SqlQueryInput[];
+  overwrite: boolean;
+}
+
+export interface SqlQueryApplyResultDto {
+  applied: number[];
+  skipped: { subTaskId: number; reason: string }[];
+}
+
+// ── Másolás a katalógusból (GET /teacher/catalog/task-sets, POST …/{id}/copy) ──
+
+export interface CatalogQuery {
+  q?: string | null;
+  categoryId?: number | null;
+  levelId?: number | null;
+  year?: number | null;
+  page: number;
+  pageSize: number;
+}
+
+export interface CatalogTaskSetDto {
+  id: number;
+  title: string;
+  categoryId: number | null;
+  categoryName: string | null;
+  levelId: number;
+  levelName: string | null;
+  year: number | null;
+  taskCount: number;
+  isPremium: boolean;
+  isFree: boolean;
+  canCopy: boolean;
+  alreadyCopied: boolean;
+}
+
+export interface CatalogPageDto {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: CatalogTaskSetDto[];
+  /** A másolható sorok kategóriái (a szűrőhöz). */
+  categories: { id: number; name: string }[];
+}
+
+/** Hivatalos sor kiadása egy hívásban (másolás vagy a meglévő másolat → publikálás → kiadás). */
+export interface CatalogAssignRequest {
+  catalogTaskSetId: number;
+  opensAt?: string | null;
+  dueAt?: string | null;
+}
+
+export interface CatalogAssignResultDto {
+  /** A tanár saját másolata, amit kiadtunk. */
+  taskSetId: number;
+  /** Igaz: most készült a másolat; hamis: a meglévő másolatot használta. */
+  copied: boolean;
+  /** Igaz: a másolatot most publikálta. */
+  published: boolean;
+  assignment: TaskSetAssignmentDto;
+  warnings: string[];
+}
+
+export interface CatalogCopyResultDto {
+  taskSetId: number;
+  title: string;
+  taskCount: number;
+  fileCount: number;
+  warnings: string[];
 }

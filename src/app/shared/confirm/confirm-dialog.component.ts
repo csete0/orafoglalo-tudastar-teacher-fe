@@ -18,7 +18,8 @@ import { ConfirmService } from './confirm.service';
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
            (keydown.escape)="confirmService.resolve(false)"
            (keydown)="onKeydown($event)">
-        <div class="absolute inset-0 bg-black/40" (click)="confirmService.resolve(false)"></div>
+        <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
+        <div class="fixed inset-0 bg-black/40" data-testid="confirm-backdrop" (click)="confirmService.resolve(false)"></div>
         <div role="alertdialog" aria-modal="true" data-testid="confirm-dialog"
              [attr.aria-label]="opts.title ?? 'Megerősítés'"
              class="card relative max-w-sm w-full p-6 shadow-xl">

@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AssignProjectRequest,
+  CodeCommentSuggestionsResponse,
   CodeCommentThreadDto,
   ProjectAssignmentDto,
   ProjectAssignmentStudentsDto,
@@ -51,6 +52,12 @@ export class TeacherProjectService {
 
   replyComment(assignmentId: number, userId: number, commentId: number, body: string): Observable<CodeCommentThreadDto> {
     return this.http.post<CodeCommentThreadDto>(`${this.commentsUrl(assignmentId, userId)}/${commentId}/replies`, { body });
+  }
+
+  /** MI-javaslatok a diák kódjára (Prémium, havi keret); `paths` null = minden saját fájl. Semmit nem ment. */
+  commentSuggestions(assignmentId: number, userId: number, paths: string[] | null): Observable<CodeCommentSuggestionsResponse> {
+    return this.http.post<CodeCommentSuggestionsResponse>(
+      `${this.baseUrl}/project-assignments/${assignmentId}/students/${userId}/comment-suggestions`, { paths });
   }
 
   private commentsUrl(assignmentId: number, userId: number): string {

@@ -1,14 +1,27 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AssignTaskSetToGroupRequest,
+  CatalogAssignRequest,
+  CatalogAssignResultDto,
+  CatalogCopyResultDto,
+  CatalogPageDto,
+  CatalogQuery,
   CreateTeacherSubTaskRequest,
   CreateTeacherTaskRequest,
   CreateTeacherTaskSetRequest,
   PublishResultDto,
   SnippetDto,
+  SqlFilesValidationRequest,
+  SqlGenerationRequest,
+  SqlGenerationResultDto,
+  SqlQueryApplyRequest,
+  SqlQueryApplyResultDto,
+  SqlQueryGenerationRequest,
+  SqlQueryInput,
+  SqlQueryResultDto,
   TaskSetAssignmentDto,
   TeacherGroupTaskSetAssignmentDto,
   TeacherSkillDto,
@@ -98,6 +111,54 @@ export class TeacherTaskSetService {
 
   deleteFile(fileId: string): Observable<unknown> {
     return this.http.delete(`${this.baseUrl}/files/${fileId}`);
+  }
+
+  /**
+   * Hiányzó create.sql / create_lite.sql elkészítése (MI-séma + gépi adatátalakítás + futtatásos ellenőrzés).
+   * Csak előnézet - a mentés a szokásos `uploadFile`-lal történik.
+   */
+  generateSqlFiles(taskSetId: number, request: SqlGenerationRequest): Observable<SqlGenerationResultDto> {
+    return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation`, request);
+  }
+
+  /** A kézzel javított create.sql / create_lite.sql újraellenőrzése (MI nélkül, mentés nélkül) - ugyanaz a válaszalak. */
+  validateSqlFiles(taskSetId: number, request: SqlFilesValidationRequest): Observable<SqlGenerationResultDto> {
+    return this.http.post<SqlGenerationResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/sql-generation/validate`, request);
+  }
+
+  /** SQL-feladat megoldó lekérdezései MI-vel - csak előnézet futtatásos ellenőrzéssel, nem ment. */
+  generateSqlQueries(taskSetId: number, taskId: number, request: SqlQueryGenerationRequest): Observable<SqlQueryResultDto> {
+    return this.http.post<SqlQueryResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks/${taskId}/sql-queries/generate`, request);
+  }
+
+  /** A (kézzel javított) lekérdezések újraellenőrzése MI nélkül, mentés nélkül - ugyanaz a válaszalak. */
+  validateSqlQueries(taskSetId: number, taskId: number, queries: SqlQueryInput[], overwrite: boolean): Observable<SqlQueryResultDto> {
+    return this.http.post<SqlQueryResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks/${taskId}/sql-queries/validate`, { queries, overwrite });
+  }
+
+  /** A lekérdezések mentése a részfeladatok SQL-megoldásaként. */
+  applySqlQueries(taskSetId: number, taskId: number, request: SqlQueryApplyRequest): Observable<SqlQueryApplyResultDto> {
+    return this.http.post<SqlQueryApplyResultDto>(`${this.baseUrl}/task-sets/${taskSetId}/tasks/${taskId}/sql-queries/apply`, request);
+  }
+
+  /** A másolható hivatalos feladatsorok, lapozva és szűrve. */
+  getCatalog(query: CatalogQuery): Observable<CatalogPageDto> {
+    let params = new HttpParams().set('page', query.page).set('pageSize', query.pageSize);
+    if (query.q) params = params.set('q', query.q);
+    if (query.categoryId != null) params = params.set('categoryId', query.categoryId);
+    if (query.levelId != null) params = params.set('levelId', query.levelId);
+    if (query.year != null) params = params.set('year', query.year);
+    return this.http.get<CatalogPageDto>(`${this.baseUrl}/catalog/task-sets`, { params });
+  }
+
+  /** Egy hivatalos feladatsor átmásolása a tanár új, nem publikált feladatsorába (`copyAgain`: a már lemásolt sor újabb példánya). */
+  copyFromCatalog(taskSetId: number, copyAgain = false): Observable<CatalogCopyResultDto> {
+    return this.http.post<CatalogCopyResultDto>(`${this.baseUrl}/catalog/task-sets/${taskSetId}/copy`, copyAgain ? { copyAgain: true } : {});
+  }
+
+  /** Hivatalos feladatsor kiadása a csoportnak egy hívásban: másolás (vagy a meglévő másolat) → publikálás → kiadás. */
+  catalogAssign(groupId: number, request: CatalogAssignRequest): Observable<CatalogAssignResultDto> {
+    return this.http.post<CatalogAssignResultDto>(`${this.baseUrl}/groups/${groupId}/catalog-assign`, request);
   }
 
   getTaskSetAssignments(taskSetId: number): Observable<TaskSetAssignmentDto[]> {

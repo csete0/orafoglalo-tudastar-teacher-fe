@@ -32,6 +32,7 @@ import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, t
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
 import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
+import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
 type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep';
 
@@ -39,7 +40,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent, GyengeTemakJavaslatokComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -476,6 +477,12 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           }
 
           @case ('gyenge-temak') {
+            <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással - csak ha van gyenge téma,
+                 különben egyetlen üres állapot látszik (lent). -->
+            @if (!weakTopicsLoading() && weakTopics().length) {
+              <app-gyenge-temak-javaslatok [groupId]="group.id" />
+              <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-2">Minden gyenge téma</h3>
+            }
             <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
             @if (weakTopicsError(); as err) {
               <p class="text-danger text-sm mb-4">{{ err }}</p>
@@ -492,7 +499,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                       <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
                     }
                     {{ topic.topicName }}
-                    <span class="opacity-70">{{ topic.successRate }}% · {{ topic.studentCount }} tanuló</span>
+                    <span class="opacity-70">{{ pct(topic.successRate) }}% · {{ topic.studentCount }} tanuló</span>
                   </li>
                 }
               </ul>
@@ -577,6 +584,8 @@ export class CsoportReszletekComponent implements OnInit {
   readonly weakTopics = signal<TeacherWeakTopicDto[]>([]);
   readonly weakTopicsLoading = signal(false);
   readonly weakTopicsError = signal<string | null>(null);
+  /** Az összefoglalóval egyező, lefelé kerekített százalék. */
+  readonly pct = floorPercent;
 
   /** Igaz, ha a BE jelezte: a technikumi modul ki van kapcsolva (a fül elrejtve). */
   readonly terkepOff = signal(false);

@@ -8,11 +8,13 @@ import {
   AssignTeacherQuizRequest,
   CreateTeacherQuizQuestionRequest,
   CreateTeacherQuizRequest,
+  GenerateQuizFromSourceRequest,
   GenerateTeacherQuizQuestionsRequest,
   QuizAuthoringScope,
   QuizBankQuestionDto,
   QuizDifficulty,
   QuizResultsMode,
+  QuizSourceResultDto,
   QuizTopicGroupDto,
   TeacherGroupAssignmentDto,
   TeacherQuizResultsDto,
@@ -124,6 +126,21 @@ export class TeacherQuizService {
       `${this.root(scope)}/quizzes/${quizId}/generate-questions`,
       request,
     );
+  }
+
+  /**
+   * „Kérdések szövegből”: a beillesztett tananyagból vagy fájlból (.txt/.docx/.pdf) jóváhagyatlan kérdés-piszkozatok,
+   * forrás-idézettel ellenőrizve (multipart). Csak tanári kvízhez.
+   */
+  generateFromSource(quizId: number, request: GenerateQuizFromSourceRequest): Observable<QuizSourceResultDto> {
+    const form = new FormData();
+    if (request.file) form.append('file', request.file, request.file.name);
+    else form.append('text', request.text ?? '');
+    form.append('topicId', String(request.topicId));
+    form.append('count', String(request.count));
+    form.append('difficulty', request.difficulty);
+    for (const type of request.questionTypes) form.append('questionTypes', type);
+    return this.http.post<QuizSourceResultDto>(`${this.baseUrl}/quizzes/${quizId}/generate-from-source`, form);
   }
 
   /**
