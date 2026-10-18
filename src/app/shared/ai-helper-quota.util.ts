@@ -1,5 +1,5 @@
 /**
- * A rendszer által fizetett tanári MI-segítségek (kérdések szövegből, dolgozat-visszajelzés vázlat): csak Prémium tanárnak,
+ * A rendszer által fizetett tanári MI-segítségek (kérdések szövegből, dolgozat-visszajelzés vázlat, AI-javaslatok a diák kódjára): csak Prémium tanárnak,
  * havi kerettel. A keretet a GET api/teacher/ai-helpers/quota és a két végpont válaszának `quota` mezője adja.
  */
 export interface AiHelperQuotaItemDto {
@@ -15,6 +15,8 @@ export interface AiHelperQuotaDto {
   quizSource: AiHelperQuotaItemDto;
   /** Egy egység = egy diák vázlata. */
   testFeedback: AiHelperQuotaItemDto;
+  /** Egy egység = egy AI-javaslat kérés a diák kódjára. */
+  codeComments: AiHelperQuotaItemDto;
   /** Irodai feladat a megoldott fájlból: egy egység = egy generálás. */
   officeTask?: AiHelperQuotaItemDto;
 }

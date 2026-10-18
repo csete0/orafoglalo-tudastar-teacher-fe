@@ -124,3 +124,25 @@ export interface CodeCommentThreadDto extends CodeCommentDto {
   resolvedAt: string | null;
   replies: CodeCommentDto[];
 }
+
+/** MI-javaslat egy sorra (BE: comment-suggestions) - nem mentett; elfogadáskor a meglévő megjegyzés-végponton lesz belőle megjegyzés. */
+export type CodeSuggestionSeverity = 'hiba' | 'javaslat' | 'dicséret';
+
+export interface CodeCommentSuggestionDto {
+  path: string;
+  line: number;
+  /** A sor szövege a javaslat idején (ugyanaz, amit a megjegyzés tárolna). */
+  lineText: string;
+  severity: CodeSuggestionSeverity;
+  text: string;
+}
+
+export interface CodeCommentSuggestionsResponse {
+  suggestions: CodeCommentSuggestionDto[];
+  reviewedPaths: string[];
+  truncatedPaths: string[];
+  skippedFiles: { path: string; reason: string }[];
+  droppedCount: number;
+  model: string;
+  quota: { used: number; limit: number } | null;
+}

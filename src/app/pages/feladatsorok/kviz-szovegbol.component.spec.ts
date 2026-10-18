@@ -7,7 +7,8 @@ import { QuizSourceResultDto, TeacherQuizQuestionDto } from '../../models/teache
 import { ReportService } from '../../services/report/report.service';
 import { AiHelperQuotaDto } from '../../shared/ai-helper-quota.util';
 
-const QUOTA: AiHelperQuotaDto = { month: '2026-10', premium: true, quizSource: { used: 3, limit: 60 }, testFeedback: { used: 0, limit: 600 } };
+const QUOTA: AiHelperQuotaDto = { month: '2026-10', premium: true, quizSource: { used: 3, limit: 60 }, testFeedback: { used: 0, limit: 600 },
+  codeComments: { used: 0, limit: 200 } };
 
 const TOPICS = [
   { id: 3, name: 'Hálózatok' },
@@ -93,9 +94,9 @@ describe('KvizSzovegbolComponent', () => {
     expect(c.canGenerate()).toBe(false);
     c.topicId.set(3);
     expect(c.canGenerate()).toBe(true);
-    c.count.set(16);
+    c.count.set(13);
     expect(c.canGenerate()).toBe(false);
-    c.count.set(15);
+    c.count.set(12);
     expect(c.canGenerate()).toBe(true);
     c.count.set(4);
     for (const t of ['single', 'multi', 'truefalse', 'cloze'] as const) c.toggleType(t);
