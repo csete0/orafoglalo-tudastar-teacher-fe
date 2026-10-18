@@ -99,6 +99,7 @@ const QUOTA: AiHelperQuotaDto = {
   premium: true,
   quizSource: { used: 0, limit: 60 },
   testFeedback: { used: 0, limit: 600 },
+  codeComments: { used: 0, limit: 100 },
   officeTask: { used: 3, limit: 20 },
 };
 
