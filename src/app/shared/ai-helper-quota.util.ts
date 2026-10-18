@@ -17,6 +17,8 @@ export interface AiHelperQuotaDto {
   testFeedback: AiHelperQuotaItemDto;
   /** Egy egység = egy AI-javaslat kérés a diák kódjára. */
   codeComments: AiHelperQuotaItemDto;
+  /** Irodai feladat a megoldott fájlból: egy egység = egy generálás. */
+  officeTask?: AiHelperQuotaItemDto;
 }
 
 export const AI_HELPER_PREMIUM_REQUIRED = 'AiHelperPremiumRequired';
