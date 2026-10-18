@@ -26,6 +26,7 @@ import { SqlGeneralasComponent } from './sql-generalas.component';
 import { SqlLekerdezesekComponent } from './sql-lekerdezesek.component';
 import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
 import { AiFeladatComponent } from './ai-feladat.component';
+import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -58,6 +59,8 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
+/** Táblázatkezelés - ehhez készíthető feladat a megoldott munkafüzetből (1. fázis: Excel). */
+const EXCEL_TASK_TYPE_ID = 2;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -84,7 +87,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -483,6 +486,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Új feladat AI-val
                           </button>
                         }
+                        @if (section.id === excelTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="officeTaskDialogOpen.set(true)" data-testid="office-task-open">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Excel)
+                          </button>
+                        }
                       </div>
                       <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id"
                         [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
@@ -655,6 +664,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
           @if (aiTaskDialog(); as ai) {
             <app-ai-feladat [taskSetId]="detail.id" [startMode]="ai.mode" [task]="ai.task" [tasks]="detail.tasks"
               (closed)="aiTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
+          }
+          @if (officeTaskDialogOpen()) {
+            <app-irodai-megoldasbol [taskSetId]="detail.id" (closed)="officeTaskDialogOpen.set(false)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
 
           <!--
@@ -1186,6 +1198,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   /** Az „AI programozási feladat” párbeszédablak: meglévő feladat kiegészítése vagy új feladat. */
   readonly aiTaskDialog = signal<{ mode: 'complete' | 'new'; task: TeacherTaskDto | null } | null>(null);
   readonly programmingTypeId = PROGRAMMING_TASK_TYPE_ID;
+  readonly excelTypeId = EXCEL_TASK_TYPE_ID;
+  /** „Irodai feladat a megoldott fájlból (Excel)” párbeszédablak. */
+  readonly officeTaskDialogOpen = signal(false);
 
   /** Csak a Programozás típusú (nem SQL, nem irodai, nem vegyes) feladatokhoz kérhető AI-kiegészítés. */
   isProgrammingTask(task: TeacherTaskDto): boolean {

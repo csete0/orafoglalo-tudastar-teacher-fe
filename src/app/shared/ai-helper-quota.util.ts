@@ -15,6 +15,8 @@ export interface AiHelperQuotaDto {
   quizSource: AiHelperQuotaItemDto;
   /** Egy egység = egy diák vázlata. */
   testFeedback: AiHelperQuotaItemDto;
+  /** Irodai feladat a megoldott fájlból: egy egység = egy generálás. */
+  officeTask?: AiHelperQuotaItemDto;
 }
 
 export const AI_HELPER_PREMIUM_REQUIRED = 'AiHelperPremiumRequired';

@@ -11,6 +11,7 @@ import { GradingQualityDto, TeacherFileDto, TeacherTaskDto, TeacherTaskSetDetail
 import { ToastService } from '../../shared/toast/toast.service';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
+import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -259,6 +260,26 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.componentInstance.onAiTaskSaved(1, 456);
       expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
       expect(fixture.componentInstance.expandedTaskId()).toBe(456);
+    });
+
+    it('a Táblázatkezelés blokk „Új feladat” űrlapja mellől nyílik az „Irodai feladat a megoldott fájlból (Excel)” ablak', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherOfficeTaskService, {
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      if (!fixture.componentInstance.isSectionExpanded(2)) fixture.componentInstance.toggleSection(2);
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('[data-testid="office-task-open"]').length).toBe(1);
+      (el.querySelector('[data-testid="office-task-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Excel)');
+      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
     });
 
     it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
