@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { defer, from, repeat, retry, Subscription, switchMap, takeWhile, throwError, timer } from 'rxjs';
+import { defer, repeat, retry, Subscription, takeWhile, throwError, timer } from 'rxjs';
 import {
   ExcelUndoOpName,
   OfficeFileKind,
@@ -25,9 +25,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { saveBlob } from '../../shared/save-blob.util';
 import { ToastService } from '../../shared/toast/toast.service';
-import { readDocxParagraphs } from './docx-paragraphs.util';
 import {
-  anchorFor,
   canonicalOp,
   canonicalWordOp,
   changeUndoOpKind,
@@ -318,9 +316,12 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                         [attr.data-testid]="'io-undo-message-' + si + '-' + oi">{{ o.message }}</p>
                                       @if (isWord() && mismatch(o); as mm) {
                                         <button type="button" class="text-xs text-primary hover:underline" (click)="fixAnchor(si, oi)"
-                                          [attr.data-testid]="'io-undo-fix-anchor-' + si + '-' + oi">A(z) [{{ mm.index }}] bekezdés valódi szövegének átvétele</button>
+                                          [attr.data-testid]="'io-undo-fix-anchor-' + si + '-' + oi">A(z) [{{ mm.index + 1 }}] bekezdés valódi szövegének átvétele</button>
                                       }
                                     </div>
+                                    @if (isWord() && hasNumber(o.message)) {
+                                      <p class="text-xs text-text-muted" [attr.data-testid]="'io-undo-numbering-' + si + '-' + oi">{{ serverNumbering }}</p>
+                                    }
                                   }
                                   @if (undoError(si, oi); as err) {
                                     <p class="text-xs text-danger" role="alert" [attr.data-testid]="'io-undo-error-' + si + '-' + oi">{{ err }}</p>
@@ -337,9 +338,9 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                       @if (wordHas(o, 'from')) {
                                         <div class="sm:col-span-2">
                                           <app-word-paragraph-picker [testId]="'io-from-' + si + '-' + oi" [anchor]="o.from"
-                                            [label]="canonicalWord(o.op) === 'replaceText' ? 'Bekezdés' : canonicalWord(o.op) === 'removeHyperlinks' ? 'Első bekezdés (elhagyható = az egész dokumentum)' : 'Első bekezdés'"
+                                            [label]="canonicalWord(o.op) === 'replaceText' ? 'Bekezdés' : canonicalWord(o.op) === 'removeHyperlinks' ? 'Első bekezdés (elhagyható = az egész dokumentum, élőfejjel, élőlábbal, jegyzetekkel együtt)' : 'Első bekezdés'"
                                             [optional]="canonicalWord(o.op) === 'removeHyperlinks'" clearLabel="Az egész dokumentum"
-                                            [paragraphs]="paragraphs()" [loading]="paragraphsLoading()" [error]="paragraphsError()"
+                                            [paragraphs]="paragraphs()" [unavailable]="paragraphsUnavailable()"
                                             (anchorChange)="setFrom(si, oi, $event)" />
                                         </div>
                                       }
@@ -347,7 +348,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                         <div class="sm:col-span-2">
                                           <app-word-paragraph-picker [testId]="'io-to-' + si + '-' + oi" [anchor]="o.to" label="Utolsó bekezdés (elhagyható = csak az első)"
                                             [optional]="true" clearLabel="Csak az első bekezdés" [minIndex]="o.from.index ?? 0"
-                                            [paragraphs]="paragraphs()" [loading]="paragraphsLoading()" [error]="paragraphsError()"
+                                            [paragraphs]="paragraphs()" [unavailable]="paragraphsUnavailable()"
                                             (anchorChange)="setUndo(si, oi, { to: $event })" />
                                         </div>
                                       }
@@ -359,7 +360,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                             [attr.data-testid]="'io-find-' + si + '-' + oi"></textarea>
                                         </div>
                                         <div>
-                                          <label [for]="'io-original-' + si + '-' + oi" class="text-xs text-text-muted block">Az eredeti szöveg (ezt kapja a diák; üres = törlés)</label>
+                                          <label [for]="'io-original-' + si + '-' + oi" class="text-xs text-text-muted block">Az eredeti szöveg (ezt kapja a diák; üres = törlés; sortörés megengedett, tabulátor nem)</label>
                                           <textarea [id]="'io-original-' + si + '-' + oi" rows="2" class="input !px-2 !py-1 !text-sm" [maxlength]="maxReplace" [ngModel]="o.original ?? ''"
                                             (ngModelChange)="setUndo(si, oi, { original: $event })" [ngModelOptions]="{ standalone: true }"
                                             [attr.data-testid]="'io-original-' + si + '-' + oi"></textarea>
@@ -367,9 +368,9 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                       }
                                       @if (wordHas(o, 'index')) {
                                         <div>
-                                          <label [for]="'io-index-' + si + '-' + oi" class="text-xs text-text-muted block">A(z) {{ wordIndexOf(o) }} sorszáma (0-tól, a figyelmeztetések számozásával)</label>
-                                          <input [id]="'io-index-' + si + '-' + oi" type="number" min="0" max="999" class="input !px-2 !py-1 !text-sm"
-                                            [ngModel]="o.index" (ngModelChange)="setUndo(si, oi, { index: intOrNull($event) })"
+                                          <label [for]="'io-index-' + si + '-' + oi" class="text-xs text-text-muted block">A(z) {{ wordIndexOf(o) }} sorszáma a dokumentumban (1-től)</label>
+                                          <input [id]="'io-index-' + si + '-' + oi" type="number" min="1" max="1000" class="input !px-2 !py-1 !text-sm"
+                                            [ngModel]="o.index == null ? null : o.index + 1" (ngModelChange)="setChartNumber(si, oi, $event)"
                                             [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-index-' + si + '-' + oi" />
                                         </div>
                                       }
@@ -379,7 +380,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                           <select [id]="'io-section-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.section ?? null"
                                             (ngModelChange)="setUndo(si, oi, { section: $event })" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-section-' + si + '-' + oi">
                                             <option [ngValue]="null">minden szakasz</option>
-                                            @for (n of sectionOptions(o); track n) { <option [ngValue]="n">{{ n }}. szakasz</option> }
+                                            @for (n of sectionOptions(o); track n) { <option [ngValue]="n">{{ n + 1 }}. szakasz</option> }
                                           </select>
                                         </div>
                                       }
@@ -572,6 +573,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                               <ul class="list-disc pl-5 space-y-0.5 break-words">
                                 @for (w of r.warnings; track $index) { <li>{{ w }}</li> }
                               </ul>
+                              @if (isWord()) { <p class="text-xs mt-1" data-testid="io-warnings-numbering">{{ serverNumbering }}</p> }
                             </div>
                           } @else {
                             <p class="text-sm text-text-muted" data-testid="io-no-warnings">Nincs figyelmeztetés.</p>
@@ -792,12 +794,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly kindLabel = computed(() => KIND_LABEL[this.kind()]);
   readonly extension = computed(() => EXTENSION[this.kind()]);
 
-  // ── Word: a megoldás bekezdései a horgony-választóhoz (a megoldásfájlból, jobonként egyszer) ──
-  readonly paragraphs = signal<string[] | null>(null);
-  readonly paragraphsLoading = signal(false);
-  readonly paragraphsError = signal<string | null>(null);
-  private paragraphsJob: number | null = null;
-  private paragraphsSub: Subscription | null = null;
   private startSub: Subscription | null = null;
   private polling: Subscription | null = null;
 
@@ -808,6 +804,20 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   private readonly validated = signal<OfficeTaskProposal | null>(null);
   readonly report = signal<OfficeTaskReport | null>(null);
   readonly notes = computed(() => this.generated()?.notes ?? null);
+  /** Word: a megoldás bekezdései a horgony-választóhoz (a generálás eredményéből; korlát felett / hiányában csak kézi megadás). */
+  readonly paragraphs = computed(() => {
+    const result = this.generated();
+    return result?.paragraphs?.length && !result.paragraphsCapped ? result.paragraphs : null;
+  });
+  readonly paragraphsUnavailable = computed(() => {
+    const result = this.generated();
+    if (!result || this.paragraphs()) return null;
+    return result.paragraphsCapped
+      ? 'A dokumentum túl sok bekezdésből áll a listához - add meg kézzel a sorszámot és a szöveg elejét.'
+      : 'A megoldás bekezdéseinek listája nem érhető el - add meg kézzel a sorszámot és a szöveg elejét.';
+  });
+  /** A szerver üzenetei a Word-sorszámokat 0-tól adják, a felület 1-től. */
+  readonly serverNumbering = 'A szerver üzeneteiben a bekezdés-, táblázat-, rajz- és szakaszsorszámok 0-tól számítanak (a felületen 1-től: a szerver 0. bekezdése itt az 1.).';
   readonly hasOwnSource = signal(false);
   /** A még fel nem küldött saját kiinduló fájl (az Újraellenőrzés viszi fel). */
   readonly pendingOwnSource = signal<File | null>(null);
@@ -960,7 +970,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
 
   private poll(jobId: number): void {
     this.stopPolling();
-    if (this.jobId() !== jobId) this.resetParagraphs();
     this.jobId.set(jobId);
     this.progressText.set(null);
     this.pollError.set(null);
@@ -1003,7 +1012,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   private backToInput(message: string | null): void {
     this.stopPolling();
     this.resetPreview();
-    this.resetParagraphs();
     this.jobId.set(null);
     this.jobKind.set(null);
     this.jobFileName.set(null);
@@ -1042,41 +1050,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.editing.set(null);
     this.saveError.set(null);
     this.revalidateError.set(null);
-  }
-
-  private resetParagraphs(): void {
-    this.paragraphsSub?.unsubscribe();
-    this.paragraphsSub = null;
-    this.paragraphsJob = null;
-    this.paragraphs.set(null);
-    this.paragraphsLoading.set(false);
-    this.paragraphsError.set(null);
-  }
-
-  /** A megoldásfájl bekezdései (Word-jobnál, az első szerkesztéskor) - a szerver számozásával. */
-  private ensureParagraphs(): void {
-    const jobId = this.jobId();
-    if (!this.isWord() || jobId == null || this.paragraphsJob === jobId) return;
-    this.paragraphsJob = jobId;
-    this.paragraphsLoading.set(true);
-    this.paragraphsError.set(null);
-    this.paragraphsSub = this.service
-      .downloadFile(this.taskSetId(), jobId, 'solution')
-      .pipe(
-        switchMap((blob) => from(blob.arrayBuffer().then(readDocxParagraphs))),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (list) => {
-          this.paragraphsLoading.set(false);
-          this.paragraphs.set(list);
-        },
-        error: () => {
-          this.paragraphsLoading.set(false);
-          this.paragraphsJob = null;
-          this.paragraphsError.set('A megoldás bekezdéseit most nem sikerült betölteni - add meg kézzel a sorszámot és a szöveg elejét.');
-        },
-      });
   }
 
   private cancelRevalidation(): void {
@@ -1133,22 +1106,16 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.setUndo(si, oi, anchor ? { from: anchor } : { from: null, to: null });
   }
 
-  intOrNull(value: unknown): number | null {
-    const n = this.toInt(value);
-    return Number.isNaN(n) ? null : n;
-  }
-
   /** Horgony-eltérésnél (szerver) a bekezdés valódi szövegének eleje kerül a horgonyba. */
   fixAnchor(si: number, oi: number): void {
     const op = this.proposal()?.subtasks[si]?.undo[oi];
     const mm = op && parseAnchorMismatch(op.message);
     if (!op || !mm) return;
-    const list = this.paragraphs();
-    const anchor = list && mm.index < list.length ? anchorFor(mm.index, list[mm.index]) : { index: mm.index, startsWith: mm.actual };
+    const anchor = { index: mm.index, startsWith: this.paragraphs()?.find((p) => p.index === mm.index)?.text ?? mm.actual };
     this.setUndo(si, oi, mm.which === 'from' ? { from: anchor } : { to: anchor });
   }
 
-  /** A diagram sorszáma a felületen 1-től, a szerződésben 0-alapú index. */
+  /** A diagram / táblázat / rajz / szakasztörés sorszáma a felületen 1-től, a szerződésben 0-alapú index. */
   setChartNumber(si: number, oi: number, value: unknown): void {
     const n = this.toInt(value);
     this.setUndo(si, oi, { index: Number.isNaN(n) ? null : n - 1 });
@@ -1177,13 +1144,11 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const op = this.isWord() ? newWordUndoOp('clearRunFormatting') : newUndoOp('clearFormulas', sheet);
     this.updateSubtask(si, (st) => ({ ...st, undo: [...st.undo, op] }));
     this.editing.set(`${si}-${s.undo.length}`);
-    this.ensureParagraphs();
   }
 
   toggleEdit(si: number, oi: number): void {
     const key = `${si}-${oi}`;
     this.editing.set(this.editing() === key ? null : key);
-    if (this.editing()) this.ensureParagraphs();
   }
 
   isEditing(si: number, oi: number): boolean {
@@ -1355,7 +1320,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.cancelRevalidation();
     this.discardSub?.unsubscribe();
     this.downloadSub?.unsubscribe();
-    this.paragraphsSub?.unsubscribe();
     this.closed.emit();
   }
 
@@ -1409,10 +1373,14 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     return (name && WORD_PARTS[name]) || [];
   }
 
-  /** 0-9. szakasz (és a művelet saját, nagyobb sorszáma, ha van). */
+  /** 0-9. szakasz (a felületen 1-10.; és a művelet saját, nagyobb sorszáma, ha van). */
   sectionOptions(op: OfficeUndoOp): number[] {
     const count = Math.max(10, (op.section ?? 0) + 1);
     return Array.from({ length: count }, (_, i) => i);
+  }
+
+  hasNumber(message: string | null): boolean {
+    return /\d/.test(message ?? '');
   }
 
   mismatch(op: OfficeUndoOp) {

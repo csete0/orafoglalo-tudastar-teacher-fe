@@ -1,6 +1,6 @@
 import { OfficeUndoOp } from '../../models/office-task.model';
 import {
-  anchorFor,
+  anchorPrefix,
   anchorText,
   canonicalOp,
   canonicalWordOp,
@@ -92,13 +92,13 @@ describe('irodai-undo.util', () => {
       expect(canonicalWordOp('clearFormulas')).toBeNull();
     });
 
-    it('horgony: szóközök összevonva, a választóval kitöltött horgony a szöveg eleje', () => {
+    it('horgony: szóközök összevonva; idézőjelpár és záró rövidítésjel levágva (WordUndo.AnchorPrefix)', () => {
       expect(anchorText('  Az\tindulás \n  2026. ')).toBe('Az indulás 2026.');
-      expect(anchorFor(3, 'Az indulás  2026. május 21-én reggel 7 órakor lesz az iskola előtt.')).toEqual({
-        index: 3,
-        startsWith: 'Az indulás 2026. május 21-én reggel 7 ór',
-      });
-      expect(anchorFor(0, '')).toEqual({ index: 0, startsWith: '' });
+      expect(anchorPrefix(' „Az indulás 2026. május…” ')).toBe('Az indulás 2026. május');
+      expect(anchorPrefix('Az indulás 2026. május...')).toBe('Az indulás 2026. május');
+      expect(anchorPrefix('Az indulás 2026. május …')).toBe('Az indulás 2026. május');
+      expect(anchorPrefix('„Idézet” után')).toBe('„Idézet” után');
+      expect(anchorPrefix(null)).toBe('');
     });
 
     it('ellenőrzés: bekezdés-tartomány', () => {
@@ -107,10 +107,11 @@ describe('irodai-undo.util', () => {
       expect(vw({ op: 'removeHyperlinks' })).toBeNull();
       expect(vw({ op: 'removeHyperlinks', to: a(2) })).toContain('csak az elsővel');
       expect(vw({ from: a(null) })).toContain('hiányzik a bekezdés sorszáma');
-      expect(vw({ from: a(5000) })).toContain('0 és 4999');
+      expect(vw({ from: a(5000) })).toContain('1 és 5000');
       expect(vw({ from: a(1.5) })).toContain('egész');
       expect(vw({ from: a(1, 'x'.repeat(201)) })).toContain('legfeljebb 200');
       expect(vw({ from: a(1, ' ' + 'x'.repeat(200) + '  ') })).toBeNull();
+      expect(vw({ from: a(1, '„' + 'x'.repeat(200) + '…”') })).toBeNull();
       expect(vw({ from: a(5), to: a(3) })).toContain('nem lehet az első');
       expect(vw({ from: a(1), parts: ['bold', 'alignment'] })).toContain('ismeretlen rész: alignment');
       expect(vw({ from: a(1), parts: [] })).toBeNull();
@@ -128,10 +129,10 @@ describe('irodai-undo.util', () => {
 
     it('ellenőrzés: sorszám, szakasz, mező, stílus', () => {
       expect(vw({ op: 'removeTable' })).toContain('hiányzó táblázat-sorszám');
-      expect(vw({ op: 'removeImage', index: 1000 })).toContain('0 és 999');
+      expect(vw({ op: 'removeImage', index: 1000 })).toContain('1 és 1000');
       expect(vw({ op: 'removeSectionBreak', index: 0 })).toBeNull();
       expect(vw({ op: 'removeHeader' })).toBeNull();
-      expect(vw({ op: 'removeFooter', section: 100 })).toContain('0 és 99');
+      expect(vw({ op: 'removeFooter', section: 100 })).toContain('1 és 100');
       expect(vw({ op: 'resetPageSetup', section: 1, parts: ['margins', 'orientation'] })).toBeNull();
       expect(vw({ op: 'resetPageSetup', parts: ['footnotes'] })).toContain('ismeretlen rész');
       expect(vw({ op: 'removeColumns', section: 1 })).toBeNull();
@@ -155,40 +156,47 @@ describe('irodai-undo.util', () => {
       expect(vw({ ...ok, find: 'x'.repeat(501) })).toContain('legfeljebb 500');
       expect(vw({ ...ok, find: 'a\r\n'.repeat(167) })).toBeNull(); // 501 karakter, CRLF → LF után 334
       expect(vw({ op: 'replaceText', find: 'x', original: 'y' })).toContain('hiányzó első bekezdés');
+      expect(vw({ ...ok, original: 'kulacsot\nés' })).toBeNull();
+      expect(vw({ ...ok, original: 'kulacsot\r\nés' })).toBeNull();
+      expect(vw({ ...ok, original: 'kulacsot\tés' })).toContain('vezérlőkaraktert');
+      expect(vw({ ...ok, original: 'kulacsot\u0007' })).toContain('vezérlőkaraktert');
+      expect(vw({ ...ok, original: 'kulacsot\u0085' })).toContain('vezérlőkaraktert');
     });
 
-    it('magyar leírás mind a 18 műveletre', () => {
+    it('magyar leírás mind a 18 műveletre (sorszámok 1-től)', () => {
       expect(dw({ from: a(3, 'Az indulás 2026. május'), to: a(5, 'Kérjük, hogy'), parts: ['bold', 'italic'] })).toBe(
-        '[3]–[5] „Az indulás 2026. május” – „Kérjük, hogy”: karakterformázás törlése (félkövér, dőlt)',
+        '[4]–[6] „Az indulás 2026. május” – „Kérjük, hogy”: karakterformázás törlése (félkövér, dőlt)',
       );
-      expect(dw({ from: a(3, 'x'.repeat(31)) })).toBe(`[3] „${'x'.repeat(30)}…”: karakterformázás törlése (minden közvetlen karakterformázás)`);
+      expect(dw({ from: a(3, 'x'.repeat(31)) })).toBe(`[4] „${'x'.repeat(30)}…”: karakterformázás törlése (minden közvetlen karakterformázás)`);
+      expect(dw({ from: a(3, '„Az indulás…”') })).toBe('[4] „Az indulás”: karakterformázás törlése (minden közvetlen karakterformázás)');
       expect(dw({ op: 'resetParagraphFormatting', from: a(2, ''), to: a(2), parts: ['alignment', 'spacing'] })).toBe(
-        '[2] (üres bekezdés): bekezdésformázás alapra (igazítás, térköz/sorköz)',
+        '[3] (üres bekezdés): bekezdésformázás alapra (igazítás, térköz/sorköz)',
       );
-      expect(dw({ op: 'setParagraphStyle', from: a(0, 'Kirándulás') })).toBe('[0] „Kirándulás”: stílus „Normál”-ra');
-      expect(dw({ op: 'removeNumbering', from: a(5, 'Kulacs'), to: a(7, 'Esőkabát') })).toBe('[5]–[7] „Kulacs” – „Esőkabát”: felsorolás/számozás törlése');
-      expect(dw({ op: 'removeParagraphBorderShading', from: a(4, 'Fontos') })).toBe('[4] „Fontos”: bekezdésszegély és -mintázat törlése');
-      expect(dw({ op: 'removeHyperlinks' })).toBe('az egész dokumentum: hivatkozások törlése');
-      expect(dw({ op: 'removeHyperlinks', from: a(9, 'Bővebben') })).toBe('[9] „Bővebben”: hivatkozások törlése');
+      expect(dw({ op: 'setParagraphStyle', from: a(0, 'Kirándulás') })).toBe('[1] „Kirándulás”: stílus „Normál”-ra');
+      expect(dw({ op: 'removeNumbering', from: a(5, 'Kulacs'), to: a(7, 'Esőkabát') })).toBe('[6]–[8] „Kulacs” – „Esőkabát”: felsorolás/számozás törlése');
+      expect(dw({ op: 'removeParagraphBorderShading', from: a(4, 'Fontos') })).toBe('[5] „Fontos”: bekezdésszegély és -mintázat törlése');
+      expect(dw({ op: 'removeHyperlinks' })).toBe('az egész dokumentum (élőfej, élőláb, láb- és végjegyzetek is): hivatkozások törlése');
+      expect(dw({ op: 'removeHyperlinks', from: a(9, 'Bővebben') })).toBe('[10] „Bővebben”: hivatkozások törlése');
       expect(dw({ op: 'replaceText', from: a(4, 'Hozz'), find: 'kulacsot és esőkabátot', original: 'kulacsot' })).toBe(
-        '[4] „Hozz”: „kulacsot és esőkabátot” → „kulacsot” (szöveg visszaállítása)',
+        '[5] „Hozz”: „kulacsot és esőkabátot” → „kulacsot” (szöveg visszaállítása)',
       );
-      expect(dw({ op: 'replaceText', from: a(4, 'Hozz'), find: ' (kötelező)', original: '' })).toBe('[4] „Hozz”: „ (kötelező)” törlése (szöveg visszaállítása)');
-      expect(dw({ op: 'removeTable', index: 0 })).toBe('táblázat #0 törlése');
-      expect(dw({ op: 'convertTableToText', index: 1 })).toBe('táblázat #1 szöveggé alakítása');
-      expect(dw({ op: 'removeImage', index: 2 })).toBe('rajz #2 törlése (kép/alakzat/szövegdoboz/diagram)');
-      expect(dw({ op: 'removeHeader', section: 0 })).toBe('élőfej törlése (szakasz 0)');
+      expect(dw({ op: 'replaceText', from: a(4, 'Hozz'), find: ' (kötelező)', original: '' })).toBe('[5] „Hozz”: „ (kötelező)” törlése (szöveg visszaállítása)');
+      expect(dw({ op: 'removeTable', index: 0 })).toBe('a(z) 1. táblázat törlése');
+      expect(dw({ op: 'convertTableToText', index: 1 })).toBe('a(z) 2. táblázat szöveggé alakítása');
+      expect(dw({ op: 'removeImage', index: 2 })).toBe('a(z) 3. rajz törlése (kép/alakzat/szövegdoboz/diagram)');
+      expect(dw({ op: 'removeTable' })).toBe('a(z) ?. táblázat törlése');
+      expect(dw({ op: 'removeHeader', section: 0 })).toBe('élőfej törlése (1. szakasz)');
       expect(dw({ op: 'removeFooter' })).toBe('élőláb törlése (minden szakasz)');
       expect(dw({ op: 'removeToc' })).toBe('tartalomjegyzék törlése');
       expect(dw({ op: 'removeField', field: 'page' })).toBe('PAGE mező törlése (oldalszám)');
       expect(dw({ op: 'removeFootnotes' })).toBe('láb- és végjegyzetek törlése');
       expect(dw({ op: 'removeFootnotes', parts: ['footnotes'] })).toBe('lábjegyzetek törlése');
       expect(dw({ op: 'resetPageSetup', section: 1, parts: ['margins', 'orientation'] })).toBe(
-        'oldalbeállítás alapra - A4, álló, 2,5 cm, 1 hasáb (szakasz 1: margók, tájolás)',
+        'oldalbeállítás alapra - A4, álló, 2,5 cm, 1 hasáb (2. szakasz: margók, tájolás)',
       );
       expect(dw({ op: 'resetPageSetup' })).toBe('oldalbeállítás alapra - A4, álló, 2,5 cm, 1 hasáb (minden szakasz: minden rész)');
-      expect(dw({ op: 'removeColumns', section: 1 })).toBe('hasábok megszüntetése (szakasz 1)');
-      expect(dw({ op: 'removeSectionBreak', index: 0 })).toBe('szakasztörés törlése a(z) #0 szakasz végén');
+      expect(dw({ op: 'removeColumns', section: 1 })).toBe('hasábok megszüntetése (2. szakasz)');
+      expect(dw({ op: 'removeSectionBreak', index: 0 })).toBe('szakasztörés törlése a(z) 1. szakasz végén');
       expect(dw({ op: 'nope' })).toBe('ismeretlen művelet: nope');
     });
 
@@ -205,9 +213,15 @@ describe('irodai-undo.util', () => {
 
     it('a szerver horgony-eltérés üzenetéből a valódi szöveg', () => {
       expect(
-        parseAnchorMismatch('a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövege „Az indulás 2026. május 21-én…”, nem „Kérjük”-val kezdődik'),
-      ).toEqual({ which: 'from', index: 3, actual: 'Az indulás 2026. május 21-én' });
-      expect(parseAnchorMismatch('a(z) „to” horgony nem egyezik: a(z) 0. bekezdés szövege „”, nem „X”-val kezdődik')).toEqual({ which: 'to', index: 0, actual: '' });
+        parseAnchorMismatch('a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövegének eleje „Az indulás 2026. május 21-én „reggel”, 7-kor”, nem „Kérjük”'),
+      ).toEqual({ which: 'from', index: 3, actual: 'Az indulás 2026. május 21-én „reggel”, 7-kor' });
+      expect(parseAnchorMismatch('a(z) „to” horgony nem egyezik: a(z) 9. bekezdés üres (a horgony szövege legyen üres), nem „X”')).toEqual({
+        which: 'to',
+        index: 9,
+        actual: '',
+      });
+      // A régi (rövidítésjeles) alak már nem jön.
+      expect(parseAnchorMismatch('a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövege „Az…”, nem „K”-val kezdődik')).toBeNull();
       expect(parseAnchorMismatch('nem talált hivatkozást')).toBeNull();
       expect(parseAnchorMismatch(null)).toBeNull();
     });

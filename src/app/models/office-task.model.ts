@@ -135,6 +135,23 @@ export interface OfficeTaskResultDto {
   model: string;
   notes: string | null;
   reasked: boolean;
+  /** Word: a megoldás bekezdései a horgony-választóhoz (csak a generálás eredményében; olvashatatlan fájlnál és Excelnél hiányzik). */
+  paragraphs?: OfficeWordParagraph[] | null;
+  /** Word: a dokumentumnak több bekezdése van, mint amennyi a listában áll (a horgony kézzel adható meg). */
+  paragraphsCapped?: boolean;
+}
+
+/** A Word-megoldás egy bekezdése a szerver horgony-számozásával. */
+export interface OfficeWordParagraph {
+  /** 0-alapú sorszám (= a horgony „index”-e). */
+  index: number;
+  /** A szöveg eleje szóközök összevonva, ≤ 80 karakter, rövidítésjel nélkül - változtatás nélkül mehet a „startsWith”-be. */
+  text: string;
+  /** A bekezdés hosszabb a „text”-nél. */
+  truncated: boolean;
+  /** Bekezdésstílus neve (pl. „heading 1”). */
+  style?: string | null;
+  inTable: boolean;
 }
 
 export interface OfficeTaskJobDto {

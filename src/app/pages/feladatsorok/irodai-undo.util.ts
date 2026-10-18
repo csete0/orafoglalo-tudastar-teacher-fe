@@ -265,20 +265,27 @@ export const WORD_FIELDS: { key: string; label: string }[] = [
 const MAX_WORD_INDEX = 999;
 const MAX_SECTION = 99;
 /** WordFactExtractor.MaxParagraphs */
-export const MAX_PARAGRAPHS = 5000;
+const MAX_PARAGRAPHS = 5000;
 const MAX_ANCHOR = 200;
 export const MAX_REPLACE = 500;
-/** A választóval kitöltött horgony ennyi karakterrel kezdődik (a szerver bármilyen hosszú elejét elfogadja ≤ 200-ig). */
-const ANCHOR_PREFIX = 40;
+/** .NET char.IsControl (Cc), a \n kivételével. */
+const CONTROL_EXCEPT_NEWLINE = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/;
 
 /** A szerver horgony-alakja (WordUndo.AnchorText): minden szóközszerű karakter egy szóközzé vonva, a szélek nélkül. */
 export function anchorText(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
-/** Horgony a bekezdés sorszámából és (megoldásbeli) szövegéből: a normalizált szöveg eleje. */
-export function anchorFor(index: number, text: string): OfficeParagraphAnchor {
-  return { index, startsWith: Array.from(anchorText(text)).slice(0, ANCHOR_PREFIX).join('').trim() };
+/**
+ * A horgonyszöveg egységes alakja (WordUndo.AnchorPrefix): a köré tett „…” idézőjelpár és a záró rövidítésjel („…” vagy „...”) lekerül,
+ * a szóközök összevonva.
+ */
+export function anchorPrefix(text: string | null | undefined): string {
+  let s = anchorText(text);
+  if (s.length >= 2 && s.startsWith('„') && s.endsWith('”')) s = s.slice(1, -1);
+  if (s.endsWith('…')) s = s.slice(0, -1);
+  else if (s.endsWith('...')) s = s.slice(0, -3);
+  return anchorText(s);
 }
 
 export function canonicalWordOp(op: string | null | undefined): WordUndoOpName | null {
@@ -295,8 +302,8 @@ const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInt
 
 function anchorError(a: OfficeParagraphAnchor, what: 'from' | 'to'): string | null {
   if (a.index == null) return `a(z) „${what}” horgonyból hiányzik a bekezdés sorszáma`;
-  if (!isInt(a.index) || a.index < 0 || a.index >= MAX_PARAGRAPHS) return `a(z) „${what}” bekezdés sorszáma 0 és ${MAX_PARAGRAPHS - 1} közötti egész szám`;
-  if (anchorText(a.startsWith).length > MAX_ANCHOR) return `a(z) „${what}” horgony szövege legfeljebb ${MAX_ANCHOR} karakter`;
+  if (!isInt(a.index) || a.index < 0 || a.index >= MAX_PARAGRAPHS) return `a(z) „${what}” bekezdés sorszáma 1 és ${MAX_PARAGRAPHS} közötti egész szám`;
+  if (anchorPrefix(a.startsWith).length > MAX_ANCHOR) return `a(z) „${what}” horgony szövege legfeljebb ${MAX_ANCHOR} karakter`;
   return null;
 }
 
@@ -336,10 +343,10 @@ export function validateWordUndoOp(op: OfficeUndoOp): string | null {
     if (unknown.length) return `ismeretlen rész: ${unknown.join(', ')}`;
   }
   if (spec.fields.includes('index')) {
-    if (op.index == null) return `hiányzó ${spec.indexOf}-sorszám (0-tól)`;
-    if (!isInt(op.index) || op.index < 0 || op.index > MAX_WORD_INDEX) return `a sorszám 0 és ${MAX_WORD_INDEX} közötti egész szám`;
+    if (op.index == null) return `hiányzó ${spec.indexOf}-sorszám`;
+    if (!isInt(op.index) || op.index < 0 || op.index > MAX_WORD_INDEX) return `a sorszám 1 és ${MAX_WORD_INDEX + 1} közötti egész szám`;
   }
-  if (op.section != null && (!isInt(op.section) || op.section < 0 || op.section > MAX_SECTION)) return `a szakasz sorszáma 0 és ${MAX_SECTION} közötti egész szám`;
+  if (op.section != null && (!isInt(op.section) || op.section < 0 || op.section > MAX_SECTION)) return `a szakasz sorszáma 1 és ${MAX_SECTION + 1} közötti egész szám`;
   switch (name) {
     case 'setParagraphStyle': {
       const style = op.name?.trim().toLowerCase();
@@ -359,6 +366,7 @@ export function validateWordUndoOp(op: OfficeUndoOp): string | null {
       const find = op.find.replace(/\r\n/g, '\n');
       const original = op.original.replace(/\r\n/g, '\n');
       if (find.length > MAX_REPLACE || original.length > MAX_REPLACE) return `a szövegrész és az eredeti szöveg legfeljebb ${MAX_REPLACE} karakter`;
+      if (CONTROL_EXCEPT_NEWLINE.test(original)) return 'az eredeti szöveg nem tartalmazhat vezérlőkaraktert (pl. tabulátort) - csak sortörést';
       if (find === original) return 'a szövegrész és az eredeti szöveg azonos - nincs mit visszacsinálni';
       break;
     }
@@ -371,19 +379,22 @@ const cut = (s: string, max: number) => {
   return chars.length <= max ? s : chars.slice(0, max).join('') + '…';
 };
 
-/** „[3] „Az indulás…”” - a horgony sorszáma és szövegének eleje. */
+/** A felületen minden Word-sorszám 1-től számít (a szerződésben 0-alapú). */
+export const ordinal = (index: number | null | undefined): string => (index != null ? String(index + 1) : '?');
+
+/** „[4] „Az indulás…”” - a horgony sorszáma (1-től) és szövegének eleje. */
 export function describeAnchor(a: OfficeParagraphAnchor | null | undefined): string {
   if (!a) return '[?]';
-  const text = anchorText(a.startsWith);
-  return `[${a.index ?? '?'}] ${text ? `„${cut(text, 30)}”` : '(üres bekezdés)'}`;
+  const text = anchorPrefix(a.startsWith);
+  return `[${ordinal(a.index)}] ${text ? `„${cut(text, 30)}”` : '(üres bekezdés)'}`;
 }
 
 function describeParagraphs(op: OfficeUndoOp): string {
   const { from, to } = op;
   if (!from) return 'a(z) ? bekezdés';
   if (!to || to.index === from.index) return describeAnchor(from);
-  const text = (a: OfficeParagraphAnchor) => (anchorText(a.startsWith) ? `„${cut(anchorText(a.startsWith), 30)}”` : '(üres)');
-  return `[${from.index ?? '?'}]–[${to.index ?? '?'}] ${text(from)} – ${text(to)}`;
+  const text = (a: OfficeParagraphAnchor) => (anchorPrefix(a.startsWith) ? `„${cut(anchorPrefix(a.startsWith), 30)}”` : '(üres)');
+  return `[${ordinal(from.index)}]–[${ordinal(to.index)}] ${text(from)} – ${text(to)}`;
 }
 
 function describeParts(name: WordUndoOpName, parts: string[] | null, all: string): string {
@@ -391,12 +402,12 @@ function describeParts(name: WordUndoOpName, parts: string[] | null, all: string
   return labels.length ? labels.join(', ') : all;
 }
 
-const sectionText = (section: number | null | undefined) => (section != null ? `szakasz ${section}` : 'minden szakasz');
+const sectionText = (section: number | null | undefined) => (section != null ? `${section + 1}. szakasz` : 'minden szakasz');
 
-/** A Word-művelet magyar leírása, pl. „[3]–[5] „Az indulás…” – „Kérjük…”: karakterformázás törlése (félkövér, dőlt)”. */
+/** A Word-művelet magyar leírása (sorszámok 1-től), pl. „[4]–[6] „Az indulás…” – „Kérjük…”: karakterformázás törlése (félkövér, dőlt)”. */
 export function describeWordUndoOp(op: OfficeUndoOp): string {
   const name = canonicalWordOp(op.op);
-  const idx = op.index != null ? `#${op.index}` : '#?';
+  const idx = `${ordinal(op.index)}.`;
   switch (name) {
     case 'clearRunFormatting':
       return `${describeParagraphs(op)}: karakterformázás törlése (${describeParts(name, op.parts, 'minden közvetlen karakterformázás')})`;
@@ -409,7 +420,7 @@ export function describeWordUndoOp(op: OfficeUndoOp): string {
     case 'removeParagraphBorderShading':
       return `${describeParagraphs(op)}: bekezdésszegély és -mintázat törlése`;
     case 'removeHyperlinks':
-      return `${op.from ? describeParagraphs(op) : 'az egész dokumentum'}: hivatkozások törlése`;
+      return `${op.from ? describeParagraphs(op) : 'az egész dokumentum (élőfej, élőláb, láb- és végjegyzetek is)'}: hivatkozások törlése`;
     case 'replaceText': {
       const find = `„${cut(op.find ?? '', 40)}”`;
       return op.original
@@ -417,11 +428,11 @@ export function describeWordUndoOp(op: OfficeUndoOp): string {
         : `${describeAnchor(op.from)}: ${find} törlése (szöveg visszaállítása)`;
     }
     case 'removeTable':
-      return `táblázat ${idx} törlése`;
+      return `a(z) ${idx} táblázat törlése`;
     case 'convertTableToText':
-      return `táblázat ${idx} szöveggé alakítása`;
+      return `a(z) ${idx} táblázat szöveggé alakítása`;
     case 'removeImage':
-      return `rajz ${idx} törlése (kép/alakzat/szövegdoboz/diagram)`;
+      return `a(z) ${idx} rajz törlése (kép/alakzat/szövegdoboz/diagram)`;
     case 'removeHeader':
       return `élőfej törlése (${sectionText(op.section)})`;
     case 'removeFooter':
@@ -477,14 +488,20 @@ export function changeWordUndoOpKind(op: OfficeUndoOp, next: WordUndoOpName): Of
 
 export interface AnchorMismatch {
   which: 'from' | 'to';
+  /** 0-alapú sorszám (a szerver üzenete 0-tól számoz). */
   index: number;
-  /** A bekezdés valódi (normalizált) szövegének eleje a szerver üzenetéből (≤ 60 karakter). */
+  /** A bekezdés valódi (normalizált) szövegének eleje a szerver üzenetéből (≤ 60 karakter, rövidítésjel nélkül; üres bekezdésnél ''). */
   actual: string;
 }
 
-/** A szerver horgony-eltérés üzenete („a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövege „…”, nem „…”-val kezdődik”). */
+/**
+ * A szerver horgony-eltérés üzenete: „a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövegének eleje „…”, nem „…”” vagy
+ * „… a(z) 9. bekezdés üres (a horgony szövege legyen üres), nem „…””.
+ */
 export function parseAnchorMismatch(message: string | null | undefined): AnchorMismatch | null {
-  const m = /a\(z\) „(from|to)” horgony nem egyezik: a\(z\) (\d+)\. bekezdés szövege „([\s\S]*?)”, nem „/.exec(message ?? '');
+  const m = /a\(z\) „(from|to)” horgony nem egyezik: a\(z\) (\d+)\. bekezdés (?:szövegének eleje „([\s\S]*?)”, nem „|üres \(a horgony szövege legyen üres\))/.exec(
+    message ?? '',
+  );
   if (!m) return null;
-  return { which: m[1] as 'from' | 'to', index: +m[2], actual: anchorText(m[3].replace(/…$/, '')) };
+  return { which: m[1] as 'from' | 'to', index: +m[2], actual: anchorText(m[3] ?? '') };
 }
