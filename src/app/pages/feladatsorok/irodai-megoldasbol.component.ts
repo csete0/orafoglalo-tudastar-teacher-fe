@@ -319,9 +319,6 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                           [attr.data-testid]="'io-undo-fix-anchor-' + si + '-' + oi">A(z) [{{ mm.index + 1 }}] bekezdés valódi szövegének átvétele</button>
                                       }
                                     </div>
-                                    @if (isWord() && hasNumber(o.message)) {
-                                      <p class="text-xs text-text-muted" [attr.data-testid]="'io-undo-numbering-' + si + '-' + oi">{{ serverNumbering }}</p>
-                                    }
                                   }
                                   @if (undoError(si, oi); as err) {
                                     <p class="text-xs text-danger" role="alert" [attr.data-testid]="'io-undo-error-' + si + '-' + oi">{{ err }}</p>
@@ -573,7 +570,6 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                               <ul class="list-disc pl-5 space-y-0.5 break-words">
                                 @for (w of r.warnings; track $index) { <li>{{ w }}</li> }
                               </ul>
-                              @if (isWord()) { <p class="text-xs mt-1" data-testid="io-warnings-numbering">{{ serverNumbering }}</p> }
                             </div>
                           } @else {
                             <p class="text-sm text-text-muted" data-testid="io-no-warnings">Nincs figyelmeztetés.</p>
@@ -816,8 +812,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
       ? 'A dokumentum túl sok bekezdésből áll a listához - add meg kézzel a sorszámot és a szöveg elejét.'
       : 'A megoldás bekezdéseinek listája nem érhető el - add meg kézzel a sorszámot és a szöveg elejét.';
   });
-  /** A szerver üzenetei a Word-sorszámokat 0-tól adják, a felület 1-től. */
-  readonly serverNumbering = 'A szerver üzeneteiben a bekezdés-, táblázat-, rajz- és szakaszsorszámok 0-tól számítanak (a felületen 1-től: a szerver 0. bekezdése itt az 1.).';
   readonly hasOwnSource = signal(false);
   /** A még fel nem küldött saját kiinduló fájl (az Újraellenőrzés viszi fel). */
   readonly pendingOwnSource = signal<File | null>(null);
@@ -1377,10 +1371,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   sectionOptions(op: OfficeUndoOp): number[] {
     const count = Math.max(10, (op.section ?? 0) + 1);
     return Array.from({ length: count }, (_, i) => i);
-  }
-
-  hasNumber(message: string | null): boolean {
-    return /\d/.test(message ?? '');
   }
 
   mismatch(op: OfficeUndoOp) {

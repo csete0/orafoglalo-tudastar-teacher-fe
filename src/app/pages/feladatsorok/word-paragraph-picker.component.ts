@@ -40,8 +40,8 @@ function preview(text: string, truncated: boolean): string {
           [attr.data-testid]="testId() + '-list'">
           @for (item of matches(); track item.index) {
             <li role="option" [attr.aria-selected]="item.index === anchor()?.index">
-              <button type="button" class="w-full text-left px-2 py-1 text-sm hover:bg-bg-element disabled:opacity-50 break-words"
-                [class.bg-primary-subtle]="item.index === anchor()?.index" [disabled]="item.index < minIndex()"
+              <button type="button" class="w-full text-left px-2 py-1 text-sm hover:bg-bg-element break-words"
+                [class.bg-primary-subtle]="item.index === anchor()?.index"
                 (click)="choose(item)" [attr.data-testid]="testId() + '-option-' + item.index">
                 <span class="font-mono text-text-muted">[{{ item.index + 1 }}]</span> {{ item.preview }}
                 @if (item.meta) { <span class="text-xs text-text-muted">({{ item.meta }})</span> }
@@ -100,7 +100,8 @@ export class WordParagraphPickerComponent {
   });
 
   private readonly filtered = computed(() => {
-    const list = this.paragraphs() ?? [];
+    // A „to”-nál csak a „from” utáni (vagy azonos) bekezdések - egy késői „from” után nem kell a lista aljára görgetni.
+    const list = (this.paragraphs() ?? []).filter((p) => p.index >= this.minIndex());
     const term = this.search().trim().toLowerCase();
     return term ? list.filter((p) => String(p.index + 1) === term || p.text.toLowerCase().includes(term)) : list;
   });

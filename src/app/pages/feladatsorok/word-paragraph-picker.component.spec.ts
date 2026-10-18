@@ -60,10 +60,10 @@ describe('WordParagraphPickerComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Nincs találat.');
   });
 
-  it('a „to”-nál a „from” előtti bekezdés nem választható; az elhagyható horgony törölhető', () => {
+  it('a „to”-nál csak a „from” utáni bekezdések listázódnak; az elhagyható horgony törölhető', () => {
     const { fixture, emitted } = create({ anchor: { index: 3, startsWith: 'Kérjük' }, minIndex: 2, optional: true, clearLabel: 'Csak az első' });
-    expect((q(fixture, 'pk-option-1') as HTMLButtonElement).disabled).toBe(true);
-    expect((q(fixture, 'pk-option-2') as HTMLButtonElement).disabled).toBe(false);
+    expect(q(fixture, 'pk-option-1')).toBeNull();
+    expect(q(fixture, 'pk-option-2')).not.toBeNull();
     expect(q(fixture, 'pk-clear')!.textContent).toContain('Csak az első');
     q(fixture, 'pk-clear')!.click();
     expect(emitted).toEqual([null]);

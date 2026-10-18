@@ -488,7 +488,7 @@ export function changeWordUndoOpKind(op: OfficeUndoOp, next: WordUndoOpName): Of
 
 export interface AnchorMismatch {
   which: 'from' | 'to';
-  /** 0-alapú sorszám (a szerver üzenete 0-tól számoz). */
+  /** 0-alapú sorszám (a szerver üzenete 1-től számoz, mint a felület - itt már átszámolva). */
   index: number;
   /** A bekezdés valódi (normalizált) szövegének eleje a szerver üzenetéből (≤ 60 karakter, rövidítésjel nélkül; üres bekezdésnél ''). */
   actual: string;
@@ -503,5 +503,5 @@ export function parseAnchorMismatch(message: string | null | undefined): AnchorM
     message ?? '',
   );
   if (!m) return null;
-  return { which: m[1] as 'from' | 'to', index: +m[2], actual: anchorText(m[3] ?? '') };
+  return { which: m[1] as 'from' | 'to', index: +m[2] - 1, actual: anchorText(m[3] ?? '') };
 }

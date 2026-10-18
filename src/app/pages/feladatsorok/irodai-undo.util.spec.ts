@@ -214,10 +214,10 @@ describe('irodai-undo.util', () => {
     it('a szerver horgony-eltérés üzenetéből a valódi szöveg', () => {
       expect(
         parseAnchorMismatch('a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövegének eleje „Az indulás 2026. május 21-én „reggel”, 7-kor”, nem „Kérjük”'),
-      ).toEqual({ which: 'from', index: 3, actual: 'Az indulás 2026. május 21-én „reggel”, 7-kor' });
+      ).toEqual({ which: 'from', index: 2, actual: 'Az indulás 2026. május 21-én „reggel”, 7-kor' });
       expect(parseAnchorMismatch('a(z) „to” horgony nem egyezik: a(z) 9. bekezdés üres (a horgony szövege legyen üres), nem „X”')).toEqual({
         which: 'to',
-        index: 9,
+        index: 8,
         actual: '',
       });
       // A régi (rövidítésjeles) alak már nem jön.

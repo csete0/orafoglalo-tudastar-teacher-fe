@@ -651,7 +651,7 @@ describe('IrodaiMegoldasbolComponent', () => {
     const W_NULLS = { sheet: null, range: null, name: null, index: null, columns: null, parts: null };
     /** A szerver alakja: a Word-paraméterek csak kitöltve jönnek. */
     const wop = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ op: 'removeToc', ...W_NULLS, enabled: true, result: 'ok', message: null, ...o });
-    const MISMATCH = 'a(z) „from” horgony nem egyezik: a(z) 4. bekezdés szövegének eleje „Hozzatok kulacsot és esőkabátot!”, nem „Hozatok”';
+    const MISMATCH = 'a(z) „from” horgony nem egyezik: a(z) 5. bekezdés szövegének eleje „Hozzatok kulacsot és esőkabátot!”, nem „Hozatok”';
     const para = (index: number, text: string, truncated = false): OfficeWordParagraph => ({ index, text, truncated, style: 'Normal', inTable: false });
     const PARAGRAPHS: OfficeWordParagraph[] = [
       para(0, 'Osztálykirándulás'),
@@ -732,9 +732,9 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(q(fixture, 'io-undo-text-1-2')!.textContent).toContain('2. szakasz: margók');
       expect(q(fixture, 'io-undo-result-0-1')!.textContent).toContain('hiba');
       expect(q(fixture, 'io-undo-message-0-1')!.className).toContain('text-danger');
-      // A szerver üzenete változatlan (0-tól számoz) - a jelölés megmondja; a gomb a saját, 1-től számozott sorszámunkat mutatja.
-      expect(q(fixture, 'io-undo-message-0-1')!.textContent).toContain('a(z) 4. bekezdés szövegének eleje');
-      expect(q(fixture, 'io-undo-numbering-0-1')!.textContent).toContain('0-tól');
+      // A szerver üzenete is 1-től számoz, mint a felület (külön jelölés nem kell).
+      expect(q(fixture, 'io-undo-message-0-1')!.textContent).toContain('a(z) 5. bekezdés szövegének eleje');
+      expect(q(fixture, 'io-undo-numbering-0-1')).toBeNull();
       expect(q(fixture, 'io-undo-fix-anchor-0-1')!.textContent).toContain('A(z) [5] bekezdés');
       expect(q(fixture, 'io-undo-fix-anchor-0-0')).toBeNull();
 
@@ -758,7 +758,7 @@ describe('IrodaiMegoldasbolComponent', () => {
 
       expect(q(fixture, 'io-from-0-0-option-3')!.textContent).toContain('[4] Az indulás 2026. május 21-én reggel…');
       expect(q(fixture, 'io-from-0-0-option-2')!.textContent).toContain('(üres bekezdés)');
-      expect((q(fixture, 'io-to-0-0-option-2') as HTMLButtonElement).disabled).toBe(true);
+      expect(q(fixture, 'io-to-0-0-option-2')).toBeNull();
       expect(q(fixture, 'io-op-0-0')!.querySelectorAll('option').length).toBe(18);
       q(fixture, 'io-from-0-0-option-3')!.click();
       fixture.detectChanges();
@@ -800,7 +800,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       const c = fixture.componentInstance;
       c.fixAnchor(0, 1);
       expect(c.proposal()!.subtasks[0].undo[1].from).toEqual({ index: 4, startsWith: 'Hozzatok kulacsot és esőkabátot!' });
-      c.setUndo(0, 1, { result: 'error', message: 'a(z) „from” horgony nem egyezik: a(z) 2. bekezdés üres (a horgony szövege legyen üres), nem „Hozz”' });
+      c.setUndo(0, 1, { result: 'error', message: 'a(z) „from” horgony nem egyezik: a(z) 3. bekezdés üres (a horgony szövege legyen üres), nem „Hozz”' });
       c.fixAnchor(0, 1);
       expect(c.proposal()!.subtasks[0].undo[1].from).toEqual({ index: 2, startsWith: '' });
     });
@@ -884,11 +884,11 @@ describe('IrodaiMegoldasbolComponent', () => {
       return c.describe(c.proposal()!.subtasks[si].undo[oi]);
     }
 
-    it('a szerver figyelmeztetései változatlanok, a jelölés megmondja, hogy 0-tól számoznak', () => {
-      const fixture = previewWord({ warnings: ['1.: a(z) removeTable(#0) nem változtatott semmit (nem talált táblázatot).'] });
+    it('a szerver figyelmeztetései változatlanok (1-től számoznak, külön jelölés nincs)', () => {
+      const fixture = previewWord({ warnings: ['1.: a(z) removeTable(#1) nem változtatott semmit (nem talált táblázatot).'] });
       tab(fixture, 'ellenorzes');
-      expect(q(fixture, 'io-warnings')!.textContent).toContain('removeTable(#0)');
-      expect(q(fixture, 'io-warnings-numbering')!.textContent).toContain('0-tól');
+      expect(q(fixture, 'io-warnings')!.textContent).toContain('removeTable(#1)');
+      expect(q(fixture, 'io-warnings-numbering')).toBeNull();
     });
 
     it('a null Word-mező a szerver hiányzó mezőjével azonos (nem módosítás)', () => {
