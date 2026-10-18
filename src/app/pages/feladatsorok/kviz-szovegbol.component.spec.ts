@@ -94,9 +94,9 @@ describe('KvizSzovegbolComponent', () => {
     expect(c.canGenerate()).toBe(false);
     c.topicId.set(3);
     expect(c.canGenerate()).toBe(true);
-    c.count.set(16);
+    c.count.set(13);
     expect(c.canGenerate()).toBe(false);
-    c.count.set(15);
+    c.count.set(12);
     expect(c.canGenerate()).toBe(true);
     c.count.set(4);
     for (const t of ['single', 'multi', 'truefalse', 'cloze'] as const) c.toggleType(t);

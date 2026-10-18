@@ -27,7 +27,7 @@ import {
 export const SOURCE_MIN_CHARS = 200;
 export const SOURCE_MAX_CHARS = 30_000;
 export const SOURCE_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const SOURCE_MAX_COUNT = 15;
+export const SOURCE_MAX_COUNT = 12;
 const ALLOWED_EXTENSIONS = ['.txt', '.docx', '.pdf'];
 
 type SourceMode = 'text' | 'file';
