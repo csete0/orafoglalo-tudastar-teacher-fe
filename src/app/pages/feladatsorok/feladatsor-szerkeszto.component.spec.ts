@@ -282,6 +282,27 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
     });
 
+    it('a Szövegszerkesztés blokk „Új feladat” űrlapja mellől Word-címmel nyílik ugyanaz az ablak', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherOfficeTaskService, {
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      if (!fixture.componentInstance.isSectionExpanded(1)) fixture.componentInstance.toggleSection(1);
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('[data-testid="office-task-open-word"]').length).toBe(1);
+      (el.querySelector('[data-testid="office-task-open-word"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
+      expect(el.querySelector('[data-testid="io-file"]')!.getAttribute('accept')).toBe('.xlsx,.docx');
+      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
+    });
+
     it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
       configure(makeDetail({ takedownAt: '2026-10-01T00:00:00Z', tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);

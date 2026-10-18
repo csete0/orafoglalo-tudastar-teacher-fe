@@ -1,8 +1,8 @@
-import { ExcelStylePart, ExcelUndoOpName, OfficeUndoOp } from '../../models/office-task.model';
+import { ExcelStylePart, ExcelUndoOpName, OfficeFileKind, OfficeParagraphAnchor, OfficeUndoOp, WordUndoOpName } from '../../models/office-task.model';
 
 /**
- * Az Excel „visszacsinálási” szókészlet a kliensen: magyar leírás, paraméter-szerkezet és ugyanaz az ellenőrzés, mint a szerveren
- * (ExcelUndo.Validate) - hogy a tanár az Újraellenőrzés előtt lássa a hibát, ne egy 400-as választ kapjon.
+ * Az Excel és a Word „visszacsinálási” szókészlete a kliensen: magyar leírás, paraméter-szerkezet és ugyanaz az ellenőrzés, mint a
+ * szerveren (OfficeUndo.Validate → ExcelUndo / WordUndo) - hogy a tanár az Újraellenőrzés előtt lássa a hibát, ne egy 400-as választ kapjon.
  */
 
 type Field = 'range' | 'name' | 'index' | 'columns' | 'parts';
@@ -79,8 +79,15 @@ export function isColumnRange(text: string | null | undefined): boolean {
   return parts.length <= 2 && parts.every((p) => /^[A-Z]{1,3}$/.test(p) && columnNumber(p) <= MAX_COL);
 }
 
-/** A művelet hibája magyarul (a szerver ExcelUndo.Validate-jével egyezően), vagy null. A kikapcsolt műveletet is ellenőrzi a szerver. */
-export function validateUndoOp(op: OfficeUndoOp): string | null {
+const WORD_ONLY_KEYS = ['from', 'to', 'section', 'field', 'find', 'original'] as const;
+
+/**
+ * A művelet hibája magyarul (a szerver OfficeUndo.Validate-jével egyezően, a fájl fajtája szerint), vagy null. A kikapcsolt műveletet
+ * is ellenőrzi a szerver.
+ */
+export function validateUndoOp(op: OfficeUndoOp, kind: OfficeFileKind = 'excel'): string | null {
+  if (kind === 'word') return validateWordUndoOp(op);
+  if (WORD_ONLY_KEYS.some((k) => op[k] != null)) return 'a „from”, „to”, „section”, „field”, „find” és „original” csak Word-dokumentumnál adható meg';
   const name = canonicalOp(op.op);
   if (!name) return 'ismeretlen művelet';
   if ((op.sheet?.trim().length ?? 0) > MAX_SHEET) return `a munkalap neve legfeljebb ${MAX_SHEET} karakter`;
@@ -106,7 +113,8 @@ export function validateUndoOp(op: OfficeUndoOp): string | null {
 }
 
 /** Ember által olvasható leírás, pl. „Adatok!B5: képletek törlése (a formázás marad)”. */
-export function describeUndoOp(op: OfficeUndoOp): string {
+export function describeUndoOp(op: OfficeUndoOp, kind: OfficeFileKind = 'excel'): string {
+  if (kind === 'word') return describeWordUndoOp(op);
   const name = canonicalOp(op.op);
   const sheet = op.sheet?.trim() || null;
   const where = (range: string | null) => {
@@ -161,4 +169,322 @@ export function changeUndoOpKind(op: OfficeUndoOp, next: ExcelUndoOpName): Offic
     columns: allowed.has('columns') ? op.columns : null,
     parts: allowed.has('parts') ? op.parts : null,
   };
+}
+
+// ═════════════════════════════════════════════ Word (WordUndo) ═════════════════════════════════════════════
+
+type WordField = 'from' | 'to' | 'parts' | 'index' | 'section' | 'field' | 'find' | 'original' | 'name';
+
+interface WordOpSpec {
+  label: string;
+  /** A szerver Allowed-listája: a többi paraméter megadása hiba. */
+  fields: WordField[];
+  /** Az „index” mit számoz (a szerkesztő felirata). */
+  indexOf?: 'táblázat' | 'rajz' | 'szakasz';
+}
+
+export const WORD_UNDO_OPS: Record<WordUndoOpName, WordOpSpec> = {
+  clearRunFormatting: { label: 'Karakterformázás törlése', fields: ['from', 'to', 'parts'] },
+  resetParagraphFormatting: { label: 'Bekezdésformázás alapra', fields: ['from', 'to', 'parts'] },
+  setParagraphStyle: { label: 'Stílus „Normál”-ra', fields: ['from', 'to', 'name'] },
+  removeNumbering: { label: 'Felsorolás/számozás törlése', fields: ['from', 'to'] },
+  removeParagraphBorderShading: { label: 'Bekezdésszegély és -mintázat törlése', fields: ['from', 'to'] },
+  removeHyperlinks: { label: 'Hivatkozások törlése', fields: ['from', 'to'] },
+  replaceText: { label: 'Szöveg visszaállítása', fields: ['from', 'to', 'find', 'original'] },
+  removeTable: { label: 'Táblázat törlése', fields: ['index'], indexOf: 'táblázat' },
+  convertTableToText: { label: 'Táblázat szöveggé alakítása', fields: ['index'], indexOf: 'táblázat' },
+  removeImage: { label: 'Rajz törlése (kép/alakzat/szövegdoboz/diagram)', fields: ['index'], indexOf: 'rajz' },
+  removeHeader: { label: 'Élőfej törlése', fields: ['section'] },
+  removeFooter: { label: 'Élőláb törlése', fields: ['section'] },
+  removeToc: { label: 'Tartalomjegyzék törlése', fields: [] },
+  removeField: { label: 'Mező törlése', fields: ['field'] },
+  removeFootnotes: { label: 'Láb-/végjegyzetek törlése', fields: ['parts'] },
+  resetPageSetup: { label: 'Oldalbeállítás alapra (A4, álló, 2,5 cm, 1 hasáb)', fields: ['section', 'parts'] },
+  removeColumns: { label: 'Hasábok megszüntetése', fields: ['section'] },
+  removeSectionBreak: { label: 'Szakasztörés törlése', fields: ['index'], indexOf: 'szakasz' },
+};
+
+export const WORD_UNDO_OP_NAMES = Object.keys(WORD_UNDO_OPS) as WordUndoOpName[];
+
+/** A „parts”-ot elfogadó Word-műveletek részei, a szerver (WordUndo.PartsOf) sorrendjében. */
+export const WORD_PARTS: Partial<Record<WordUndoOpName, { key: string; label: string }[]>> = {
+  clearRunFormatting: [
+    { key: 'bold', label: 'félkövér' },
+    { key: 'italic', label: 'dőlt' },
+    { key: 'underline', label: 'aláhúzás' },
+    { key: 'strike', label: 'áthúzás' },
+    { key: 'caps', label: 'nagybetűs / kiskapitális' },
+    { key: 'font', label: 'betűtípus' },
+    { key: 'size', label: 'betűméret' },
+    { key: 'color', label: 'betűszín' },
+    { key: 'highlight', label: 'kiemelés / háttér' },
+    { key: 'verticalAlign', label: 'felső/alsó index' },
+    { key: 'characterSpacing', label: 'karaktertávolság' },
+    { key: 'characterStyle', label: 'karakterstílus' },
+  ],
+  resetParagraphFormatting: [
+    { key: 'alignment', label: 'igazítás' },
+    { key: 'indent', label: 'behúzás' },
+    { key: 'spacing', label: 'térköz/sorköz' },
+    { key: 'tabs', label: 'tabulátorok' },
+    { key: 'pagination', label: 'tördelés + kézi oldal-/hasábtörés' },
+  ],
+  resetPageSetup: [
+    { key: 'margins', label: 'margók' },
+    { key: 'orientation', label: 'tájolás' },
+    { key: 'size', label: 'papírméret' },
+    { key: 'columns', label: 'hasábok' },
+  ],
+  removeFootnotes: [
+    { key: 'footnotes', label: 'lábjegyzetek' },
+    { key: 'endnotes', label: 'végjegyzetek' },
+  ],
+};
+
+/** A removeField-del törölhető mezők (WordUndo.Fields) magyar magyarázattal. */
+export const WORD_FIELDS: { key: string; label: string }[] = [
+  { key: 'PAGE', label: 'oldalszám' },
+  { key: 'NUMPAGES', label: 'oldalak száma' },
+  { key: 'SECTIONPAGES', label: 'a szakasz oldalainak száma' },
+  { key: 'DATE', label: 'dátum' },
+  { key: 'TIME', label: 'idő' },
+  { key: 'CREATEDATE', label: 'létrehozás dátuma' },
+  { key: 'SAVEDATE', label: 'mentés dátuma' },
+  { key: 'PRINTDATE', label: 'nyomtatás dátuma' },
+  { key: 'FILENAME', label: 'fájlnév' },
+  { key: 'AUTHOR', label: 'szerző' },
+  { key: 'TITLE', label: 'cím' },
+  { key: 'SUBJECT', label: 'tárgy' },
+  { key: 'SEQ', label: 'sorszám (pl. képaláírás)' },
+  { key: 'REF', label: 'kereszthivatkozás' },
+  { key: 'PAGEREF', label: 'oldalszám-hivatkozás' },
+  { key: 'NOTEREF', label: 'jegyzet-hivatkozás' },
+  { key: 'STYLEREF', label: 'stílus-hivatkozás' },
+];
+
+const MAX_WORD_INDEX = 999;
+const MAX_SECTION = 99;
+/** WordFactExtractor.MaxParagraphs */
+export const MAX_PARAGRAPHS = 5000;
+const MAX_ANCHOR = 200;
+export const MAX_REPLACE = 500;
+/** A választóval kitöltött horgony ennyi karakterrel kezdődik (a szerver bármilyen hosszú elejét elfogadja ≤ 200-ig). */
+const ANCHOR_PREFIX = 40;
+
+/** A szerver horgony-alakja (WordUndo.AnchorText): minden szóközszerű karakter egy szóközzé vonva, a szélek nélkül. */
+export function anchorText(text: string | null | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** Horgony a bekezdés sorszámából és (megoldásbeli) szövegéből: a normalizált szöveg eleje. */
+export function anchorFor(index: number, text: string): OfficeParagraphAnchor {
+  return { index, startsWith: Array.from(anchorText(text)).slice(0, ANCHOR_PREFIX).join('').trim() };
+}
+
+export function canonicalWordOp(op: string | null | undefined): WordUndoOpName | null {
+  const t = (op ?? '').trim().toLowerCase();
+  return WORD_UNDO_OP_NAMES.find((n) => n.toLowerCase() === t) ?? null;
+}
+
+export function wordOpSpec(op: string): WordOpSpec | null {
+  const name = canonicalWordOp(op);
+  return name ? WORD_UNDO_OPS[name] : null;
+}
+
+const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
+
+function anchorError(a: OfficeParagraphAnchor, what: 'from' | 'to'): string | null {
+  if (a.index == null) return `a(z) „${what}” horgonyból hiányzik a bekezdés sorszáma`;
+  if (!isInt(a.index) || a.index < 0 || a.index >= MAX_PARAGRAPHS) return `a(z) „${what}” bekezdés sorszáma 0 és ${MAX_PARAGRAPHS - 1} közötti egész szám`;
+  if (anchorText(a.startsWith).length > MAX_ANCHOR) return `a(z) „${what}” horgony szövege legfeljebb ${MAX_ANCHOR} karakter`;
+  return null;
+}
+
+/** A Word-művelet hibája magyarul (a szerver WordUndo.Validate-jével egyezően), vagy null. */
+export function validateWordUndoOp(op: OfficeUndoOp): string | null {
+  const name = canonicalWordOp(op.op);
+  if (!name) return 'ismeretlen művelet (Word-dokumentumnál csak Word-művelet használható)';
+  const spec = WORD_UNDO_OPS[name];
+  const present: string[] = [];
+  if (!blank(op.sheet)) present.push('sheet');
+  if (!blank(op.range)) present.push('range');
+  if (!blank(op.columns)) present.push('columns');
+  if (!blank(op.name)) present.push('name');
+  if (op.index != null) present.push('index');
+  if (op.parts?.length) present.push('parts');
+  if (op.from != null) present.push('from');
+  if (op.to != null) present.push('to');
+  if (op.section != null) present.push('section');
+  if (!blank(op.field)) present.push('field');
+  if (op.find != null) present.push('find');
+  if (op.original != null) present.push('original');
+  const extra = present.find((f) => !(spec.fields as string[]).includes(f));
+  if (extra) return `ennél a műveletnél a(z) „${extra}” nem adható meg`;
+
+  if (spec.fields.includes('from')) {
+    if (op.from == null && name !== 'removeHyperlinks') return 'hiányzó első bekezdés („from” horgony)';
+    if (op.to != null && op.from == null) return 'az utolsó bekezdés („to”) csak az elsővel („from”) együtt adható meg';
+    for (const [what, a] of [['from', op.from], ['to', op.to]] as const) {
+      const err = a ? anchorError(a, what) : null;
+      if (err) return err;
+    }
+    if (op.to != null && op.from != null && op.to.index! < op.from.index!) return 'az utolsó bekezdés („to”) nem lehet az első („from”) előtt';
+  }
+  if (op.parts?.length) {
+    const known = (WORD_PARTS[name] ?? []).map((p) => p.key.toLowerCase());
+    const unknown = op.parts.filter((p) => !known.includes((p ?? '').trim().toLowerCase()));
+    if (unknown.length) return `ismeretlen rész: ${unknown.join(', ')}`;
+  }
+  if (spec.fields.includes('index')) {
+    if (op.index == null) return `hiányzó ${spec.indexOf}-sorszám (0-tól)`;
+    if (!isInt(op.index) || op.index < 0 || op.index > MAX_WORD_INDEX) return `a sorszám 0 és ${MAX_WORD_INDEX} közötti egész szám`;
+  }
+  if (op.section != null && (!isInt(op.section) || op.section < 0 || op.section > MAX_SECTION)) return `a szakasz sorszáma 0 és ${MAX_SECTION} közötti egész szám`;
+  switch (name) {
+    case 'setParagraphStyle': {
+      const style = op.name?.trim().toLowerCase();
+      if (style && style !== 'normal' && style !== 'normál') return 'a stílus csak „Normal” lehet';
+      break;
+    }
+    case 'removeField': {
+      if (blank(op.field)) return 'hiányzó mezőfajta (pl. PAGE)';
+      const field = op.field!.trim().toUpperCase();
+      if (!WORD_FIELDS.some((f) => f.key === field)) return `ismeretlen mezőfajta: „${op.field!.trim()}”`;
+      break;
+    }
+    case 'replaceText': {
+      if (op.to != null && op.to.index !== op.from!.index) return 'a szöveg-visszaállítás egyetlen bekezdésen fut („to” nélkül)';
+      if (!op.find) return 'hiányzó szövegrész (ami a megoldásban áll)';
+      if (op.original == null) return 'hiányzó eredeti szöveg (üres = törlés)';
+      const find = op.find.replace(/\r\n/g, '\n');
+      const original = op.original.replace(/\r\n/g, '\n');
+      if (find.length > MAX_REPLACE || original.length > MAX_REPLACE) return `a szövegrész és az eredeti szöveg legfeljebb ${MAX_REPLACE} karakter`;
+      if (find === original) return 'a szövegrész és az eredeti szöveg azonos - nincs mit visszacsinálni';
+      break;
+    }
+  }
+  return null;
+}
+
+const cut = (s: string, max: number) => {
+  const chars = Array.from(s);
+  return chars.length <= max ? s : chars.slice(0, max).join('') + '…';
+};
+
+/** „[3] „Az indulás…”” - a horgony sorszáma és szövegének eleje. */
+export function describeAnchor(a: OfficeParagraphAnchor | null | undefined): string {
+  if (!a) return '[?]';
+  const text = anchorText(a.startsWith);
+  return `[${a.index ?? '?'}] ${text ? `„${cut(text, 30)}”` : '(üres bekezdés)'}`;
+}
+
+function describeParagraphs(op: OfficeUndoOp): string {
+  const { from, to } = op;
+  if (!from) return 'a(z) ? bekezdés';
+  if (!to || to.index === from.index) return describeAnchor(from);
+  const text = (a: OfficeParagraphAnchor) => (anchorText(a.startsWith) ? `„${cut(anchorText(a.startsWith), 30)}”` : '(üres)');
+  return `[${from.index ?? '?'}]–[${to.index ?? '?'}] ${text(from)} – ${text(to)}`;
+}
+
+function describeParts(name: WordUndoOpName, parts: string[] | null, all: string): string {
+  const labels = (WORD_PARTS[name] ?? []).filter((p) => parts?.some((x) => x.toLowerCase() === p.key.toLowerCase())).map((p) => p.label);
+  return labels.length ? labels.join(', ') : all;
+}
+
+const sectionText = (section: number | null | undefined) => (section != null ? `szakasz ${section}` : 'minden szakasz');
+
+/** A Word-művelet magyar leírása, pl. „[3]–[5] „Az indulás…” – „Kérjük…”: karakterformázás törlése (félkövér, dőlt)”. */
+export function describeWordUndoOp(op: OfficeUndoOp): string {
+  const name = canonicalWordOp(op.op);
+  const idx = op.index != null ? `#${op.index}` : '#?';
+  switch (name) {
+    case 'clearRunFormatting':
+      return `${describeParagraphs(op)}: karakterformázás törlése (${describeParts(name, op.parts, 'minden közvetlen karakterformázás')})`;
+    case 'resetParagraphFormatting':
+      return `${describeParagraphs(op)}: bekezdésformázás alapra (${describeParts(name, op.parts, 'minden közvetlen bekezdésformázás')})`;
+    case 'setParagraphStyle':
+      return `${describeParagraphs(op)}: stílus „Normál”-ra`;
+    case 'removeNumbering':
+      return `${describeParagraphs(op)}: felsorolás/számozás törlése`;
+    case 'removeParagraphBorderShading':
+      return `${describeParagraphs(op)}: bekezdésszegély és -mintázat törlése`;
+    case 'removeHyperlinks':
+      return `${op.from ? describeParagraphs(op) : 'az egész dokumentum'}: hivatkozások törlése`;
+    case 'replaceText': {
+      const find = `„${cut(op.find ?? '', 40)}”`;
+      return op.original
+        ? `${describeAnchor(op.from)}: ${find} → „${cut(op.original, 40)}” (szöveg visszaállítása)`
+        : `${describeAnchor(op.from)}: ${find} törlése (szöveg visszaállítása)`;
+    }
+    case 'removeTable':
+      return `táblázat ${idx} törlése`;
+    case 'convertTableToText':
+      return `táblázat ${idx} szöveggé alakítása`;
+    case 'removeImage':
+      return `rajz ${idx} törlése (kép/alakzat/szövegdoboz/diagram)`;
+    case 'removeHeader':
+      return `élőfej törlése (${sectionText(op.section)})`;
+    case 'removeFooter':
+      return `élőláb törlése (${sectionText(op.section)})`;
+    case 'removeToc':
+      return 'tartalomjegyzék törlése';
+    case 'removeField': {
+      const field = (op.field ?? '').trim().toUpperCase();
+      const label = WORD_FIELDS.find((f) => f.key === field)?.label;
+      return `${field || '?'} mező törlése${label ? ` (${label})` : ''}`;
+    }
+    case 'removeFootnotes':
+      return `${describeParts(name, op.parts, 'láb- és végjegyzetek')} törlése`;
+    case 'resetPageSetup':
+      return `oldalbeállítás alapra - A4, álló, 2,5 cm, 1 hasáb (${sectionText(op.section)}: ${describeParts(name, op.parts, 'minden rész')})`;
+    case 'removeColumns':
+      return `hasábok megszüntetése (${sectionText(op.section)})`;
+    case 'removeSectionBreak':
+      return `szakasztörés törlése a(z) ${idx} szakasz végén`;
+    default:
+      return `ismeretlen művelet: ${op.op}`;
+  }
+}
+
+/** Új Word-művelet (minden paraméter üres - a horgonyt a tanár választja ki). */
+export function newWordUndoOp(op: WordUndoOpName): OfficeUndoOp {
+  return {
+    op, sheet: null, range: null, name: null, index: null, columns: null, parts: null,
+    from: null, to: null, section: null, field: null, find: null, original: null,
+    enabled: true, result: null, message: null,
+  };
+}
+
+/** Word-műveletváltás: csak az új művelet által megengedett paraméterek maradnak (a részek csak, ha az új műveletnek is részei). */
+export function changeWordUndoOpKind(op: OfficeUndoOp, next: WordUndoOpName): OfficeUndoOp {
+  const allowed = new Set<WordField>(WORD_UNDO_OPS[next].fields);
+  const known = new Set((WORD_PARTS[next] ?? []).map((p) => p.key));
+  const parts = allowed.has('parts') && op.parts?.every((p) => known.has(p)) ? op.parts : null;
+  return {
+    ...op,
+    op: next,
+    sheet: null, range: null, columns: null, name: null,
+    index: allowed.has('index') ? op.index : null,
+    parts,
+    from: allowed.has('from') ? op.from ?? null : null,
+    to: allowed.has('to') && next !== 'replaceText' ? op.to ?? null : null,
+    section: allowed.has('section') ? op.section ?? null : null,
+    field: allowed.has('field') ? op.field ?? null : null,
+    find: allowed.has('find') ? op.find ?? '' : null,
+    original: allowed.has('original') ? op.original ?? '' : null,
+  };
+}
+
+export interface AnchorMismatch {
+  which: 'from' | 'to';
+  index: number;
+  /** A bekezdés valódi (normalizált) szövegének eleje a szerver üzenetéből (≤ 60 karakter). */
+  actual: string;
+}
+
+/** A szerver horgony-eltérés üzenete („a(z) „from” horgony nem egyezik: a(z) 3. bekezdés szövege „…”, nem „…”-val kezdődik”). */
+export function parseAnchorMismatch(message: string | null | undefined): AnchorMismatch | null {
+  const m = /a\(z\) „(from|to)” horgony nem egyezik: a\(z\) (\d+)\. bekezdés szövege „([\s\S]*?)”, nem „/.exec(message ?? '');
+  if (!m) return null;
+  return { which: m[1] as 'from' | 'to', index: +m[2], actual: anchorText(m[3].replace(/…$/, '')) };
 }

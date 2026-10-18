@@ -12,6 +12,7 @@ import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
+import { OfficeFileKind } from '../../models/office-task.model';
 import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherSubTaskDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -59,8 +60,9 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
-/** Táblázatkezelés - ehhez készíthető feladat a megoldott munkafüzetből (1. fázis: Excel). */
+/** Táblázatkezelés / Szövegszerkesztés - ezekhez készíthető feladat a megoldott fájlból (1. fázis: Excel, 2. fázis: Word). */
 const EXCEL_TASK_TYPE_ID = 2;
+const WORD_TASK_TYPE_ID = 1;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -488,8 +490,14 @@ type SnippetDraft = Record<number, Record<number, string>>;
                         }
                         @if (section.id === excelTypeId) {
                           <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialogOpen.set(true)" data-testid="office-task-open">
+                            (click)="officeTaskDialog.set('excel')" data-testid="office-task-open">
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Excel)
+                          </button>
+                        }
+                        @if (section.id === wordTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="officeTaskDialog.set('word')" data-testid="office-task-open-word">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Word)
                           </button>
                         }
                       </div>
@@ -665,8 +673,8 @@ type SnippetDraft = Record<number, Record<number, string>>;
             <app-ai-feladat [taskSetId]="detail.id" [startMode]="ai.mode" [task]="ai.task" [tasks]="detail.tasks"
               (closed)="aiTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
-          @if (officeTaskDialogOpen()) {
-            <app-irodai-megoldasbol [taskSetId]="detail.id" (closed)="officeTaskDialogOpen.set(false)" (saved)="onAiTaskSaved(detail.id, $event)" />
+          @if (officeTaskDialog(); as kind) {
+            <app-irodai-megoldasbol [taskSetId]="detail.id" [kindHint]="kind" (closed)="officeTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
 
           <!--
@@ -1199,8 +1207,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly aiTaskDialog = signal<{ mode: 'complete' | 'new'; task: TeacherTaskDto | null } | null>(null);
   readonly programmingTypeId = PROGRAMMING_TASK_TYPE_ID;
   readonly excelTypeId = EXCEL_TASK_TYPE_ID;
-  /** „Irodai feladat a megoldott fájlból (Excel)” párbeszédablak. */
-  readonly officeTaskDialogOpen = signal(false);
+  readonly wordTypeId = WORD_TASK_TYPE_ID;
+  /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
+  readonly officeTaskDialog = signal<OfficeFileKind | null>(null);
 
   /** Csak a Programozás típusú (nem SQL, nem irodai, nem vegyes) feladatokhoz kérhető AI-kiegészítés. */
   isProgrammingTask(task: TeacherTaskDto): boolean {
