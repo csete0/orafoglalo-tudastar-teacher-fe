@@ -6,7 +6,7 @@ import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { LeaderboardCategory, LeaderboardPeriod } from '../../models/leaderboard.model';
-import { SchoolTeacherRole, SchoolType } from '../../models/school.model';
+import { SchoolTeacherRole } from '../../models/school.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
@@ -90,28 +90,6 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
                 <button (click)="regenerateInvite(s.id)" [disabled]="school.loading()" class="text-primary hover:underline">Új kód generálása</button>
               </div>
             }
-
-            <div class="card p-5 mb-6" data-testid="school-type-card">
-              <h2 class="font-bold">Iskolatípus</h2>
-              <p class="text-sm text-text-muted mt-1 mb-3">
-                Technikumnál a tanárok kiadhatják a technikumi projekteket és dolgozatokat, a csoportok diákjai pedig elérik a
-                technikumi szakmai vizsga felkészítőjét.
-              </p>
-              <div class="flex gap-2" role="group" aria-label="Iskolatípus">
-                @for (t of schoolTypes; track t.value) {
-                  <button type="button" [class]="s.schoolType === t.value ? 'btn btn-primary' : 'btn btn-ghost'"
-                    [attr.aria-pressed]="s.schoolType === t.value" [disabled]="s.schoolTypeSetByAdmin || school.loading()"
-                    (click)="setType(s.id, t.value)" [attr.data-testid]="'school-type-' + t.value">{{ t.label }}</button>
-                }
-              </div>
-              @if (s.schoolTypeSetByAdmin) {
-                <p class="text-xs text-text-muted mt-2" data-testid="school-type-locked">
-                  Az iskolatípust a platform adminisztrátora rögzítette, ezért itt nem módosítható. Ha nem stimmel, írj nekünk.
-                </p>
-              } @else if (!s.schoolType) {
-                <p class="text-xs text-text-muted mt-2">Még nincs megadva.</p>
-              }
-            </div>
 
             <ul class="space-y-2 mb-6">
               @for (member of school.members(); track member.teacherProfileId) {
@@ -393,10 +371,6 @@ export class IntezmenyReszletekComponent implements OnInit {
   readonly leaderboard = inject(LeaderboardStore);
 
   readonly tab = signal<Tab>('tanarok');
-  readonly schoolTypes: { value: SchoolType; label: string }[] = [
-    { value: 'gimnazium', label: 'Gimnázium' },
-    { value: 'technikum', label: 'Technikum' },
-  ];
 
   // ── UI-UX-K3: Áttekintés-tábla rendezése ──
   readonly overviewSort = signal<SortState | null>(null);
@@ -526,11 +500,6 @@ export class IntezmenyReszletekComponent implements OnInit {
     this.school.removeMember(schoolId, teacherProfileId, () =>
       this.toastService.success('Tanár eltávolítva az intézményből.'),
     );
-  }
-
-  setType(schoolId: number, type: SchoolType): void {
-    if (this.school.selectedSchool()?.schoolType === type) return;
-    this.school.setType(schoolId, type, () => this.toastService.success('Iskolatípus mentve.'));
   }
 
   saveEdit(schoolId: number): void {

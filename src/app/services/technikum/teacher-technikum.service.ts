@@ -10,6 +10,11 @@ export class TeacherTechnikumService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/teacher/technikum`;
 
+  /** A Fejlesztőműhely láthatósága a tanárnak is: prémium tanár + bekapcsolt modul (BE: GET api/technikum/me; kikapcsolva 404). */
+  me(): Observable<{ visible: boolean; hasPremium: boolean }> {
+    return this.http.get<{ visible: boolean; hasPremium: boolean }>(`${environment.apiUrl}/technikum/me`);
+  }
+
   heatmap(groupId: number): Observable<TechnikumHeatmapDto> {
     return this.http.get<TechnikumHeatmapDto>(`${this.baseUrl}/groups/${groupId}/heatmap`);
   }
