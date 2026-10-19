@@ -45,7 +45,7 @@ export interface HeatmapCellDto {
   gradedAt: string;
   /** Dolgozat-rész, amelynek bírálata végleg sikertelen (vagy végleg hiányzik): 0 pontnak számít. */
   gradingFailed: boolean;
-  /** > 0: a rész MI-szempontjai nem értékeltek (tanári / napi MI-keret, MI-hiba) - ennyi pont 0-val szerepel (kézi pontozás nincs). */
+  /** > 0: a rész MI-szempontjai nem értékeltek (tanári / napi MI-keret, MI-hiba) - ennyi pont 0-val szerepel (dolgozatnál a tanár kézzel pontozhatja). */
   aiNotEvaluatedPoints?: number;
 }
 

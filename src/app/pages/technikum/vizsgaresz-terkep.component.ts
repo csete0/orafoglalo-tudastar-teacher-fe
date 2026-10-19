@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { Observable, finalize, take } from 'rxjs';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
@@ -130,8 +131,8 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
         Részenként a legjobb bírált eredmény; ha a diák írt belőle dolgozatot ebben a csoportban, az számít. Kattints a cellára:
         a dolgozat beadott változata a bírálattal, a gyakorlás a diák kódja megjegyzésekkel. A felkiáltójeles, piros keretes
         dolgozat-rész bírálata végleg sikertelen volt, ezért 0 pontnak számít. A csillagos, szaggatott keretes rész MI-szempontjait
-        nem értékeltük (elfogyott MI-keret vagy MI-hiba): azok 0 pontot kaptak, a gépi tesztek pontja megmaradt - a cellára kattintva
-        látod, mely szempontok ezek (kézi pontozásra nincs lehetőség).
+        nem értékeltük (elfogyott MI-keret vagy MI-hiba): azok 0 pontot kaptak, a gépi tesztek pontja megmaradt - dolgozatnál a
+        cellára kattintva látod, mely szempontok ezek, és kézzel pontozhatod őket.
       </p>
 
       @if (snapshotLoading() || snapshot() || snapshotError()) {
@@ -257,9 +258,10 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
       background: var(--color-bg-element); white-space: pre-wrap; }
   `],
 })
-export class VizsgareszTerkepComponent implements OnInit {
+export class VizsgareszTerkepComponent {
   private readonly api = inject(TeacherTechnikumService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly groupId = input.required<number>();
   /** A technikumi modul ki van kapcsolva (BE: 404 FeatureDisabled) - a szülő elrejti a fület. */
@@ -295,13 +297,27 @@ export class VizsgareszTerkepComponent implements OnInit {
   readonly scoring = signal<number | null>(null);
   readonly rubricError = signal<Record<number, string>>({});
 
-  ngOnInit(): void {
-    this.loadMap();
+  constructor() {
+    // Másik csoportra navigálva (ugyanaz a komponens, új útvonal-paraméter) minden az új csoporté: térkép újra, nyitott dolgozat zárva.
+    effect(() => {
+      this.groupId();
+      untracked(() => {
+        this.closeSnapshot();
+        this.map.set(null);
+        this.error.set(null);
+        this.publishError.set({});
+        this.publishWarning.set({});
+        this.loading.set(true);
+        this.loadMap();
+      });
+    });
   }
 
   private loadMap(): void {
-    this.api.heatmap(this.groupId()).pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
-      next: (m) => this.map.set(m),
+    const groupId = this.groupId();
+    this.api.heatmap(groupId).pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
+      // Közben másik csoportra váltott: a régi válasz eldobva.
+      next: (m) => groupId === this.groupId() && this.map.set(m),
       error: (e) => {
         this.error.set(extractErrorMessage(e, 'A vizsgarész-térkép betöltése sikertelen.'));
         if (e instanceof HttpErrorResponse && e.status === 404 && e.error?.errorType === 'FeatureDisabled') this.unavailable.emit();
@@ -326,7 +342,16 @@ export class VizsgareszTerkepComponent implements OnInit {
     return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%${failed}${ai}`;
   }
 
-  publish(t: HeatmapTestDto): void {
+  /** Közzététel megerősítéssel: hány beadott dolgozat, és hány rész 0 pontos (végleg sikertelen) / nem értékelt MI-szempontú. */
+  async publish(t: HeatmapTestDto): Promise<void> {
+    const cells = (this.map()?.students ?? []).flatMap((s) => s.cells).filter((c) => c.fromClassTest && c.assignmentId === t.assignmentId);
+    const failed = cells.filter((c) => c.gradingFailed).length;
+    const notEvaluated = cells.filter((c) => !!c.aiNotEvaluatedPoints).length;
+    const lines = [`${t.closedSessions} beadott dolgozat eredménye lesz látható a diákoknak (${t.projectTitle}), és értesítést kapnak róla.`];
+    if (failed) lines.push(`${failed} rész bírálata végleg sikertelen – ezek 0 pontot kapnak.`);
+    if (notEvaluated) lines.push(`${notEvaluated} részben nem értékelt MI-szempontok vannak (0 pont) – előbb kézzel is pontozhatod őket a cellára kattintva.`);
+    const ok = await this.confirm.ask({ title: 'Eredmények közzététele', message: lines.join(' '), confirmLabel: 'Közzététel' });
+    if (!ok) return;
     this.publishing.set(t.assignmentId);
     this.publishError.update(({ [t.assignmentId]: _, ...rest }) => rest);
     this.api.publish(t.assignmentId).pipe(take(1), finalize(() => this.publishing.set(null))).subscribe({
@@ -343,8 +368,7 @@ export class VizsgareszTerkepComponent implements OnInit {
   }
 
   openSnapshot(sessionId: number): void {
-    this.snapshot.set(null);
-    this.snapshotError.set(null);
+    this.closeSnapshot();
     this.snapshotLoading.set(true);
     this.api.snapshot(sessionId).pipe(take(1), finalize(() => this.snapshotLoading.set(false))).subscribe({
       next: (sn) => {
@@ -365,6 +389,7 @@ export class VizsgareszTerkepComponent implements OnInit {
 
   setDraft(resultId: number, key: string, value: string): void {
     this.drafts.update((d) => ({ ...d, [resultId]: { ...d[resultId], [key]: value } }));
+    this.rubricError.update(({ [resultId]: _, ...rest }) => rest);
   }
 
   dirty(resultId: number): boolean {
@@ -397,6 +422,7 @@ export class VizsgareszTerkepComponent implements OnInit {
       next: (sn) => {
         this.snapshot.set(sn);
         this.drafts.update(({ [resultId]: _, ...rest }) => rest);
+        this.rubricError.set({}); // a friss pillanatképhez a korábbi hibák már nem tartoznak
         this.toast.success(message);
         this.loadMap();
       },
@@ -407,5 +433,7 @@ export class VizsgareszTerkepComponent implements OnInit {
   closeSnapshot(): void {
     this.snapshot.set(null);
     this.snapshotError.set(null);
+    this.drafts.set({});
+    this.rubricError.set({});
   }
 }

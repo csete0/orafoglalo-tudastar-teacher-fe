@@ -5,6 +5,7 @@ import { of, throwError } from 'rxjs';
 import { VizsgareszTerkepComponent } from './vizsgaresz-terkep.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ExamSessionSnapshotDto, HeatmapCellDto, TechnikumHeatmapDto } from '../../models/technikum.model';
 
 const cell = (over: Partial<HeatmapCellDto>): HeatmapCellDto => ({
@@ -51,19 +52,23 @@ const snapshot: ExamSessionSnapshotDto = {
 };
 
 describe('VizsgareszTerkepComponent', () => {
-  async function setup(publish = vi.fn(() => of({ published: 4, sessionsWithFailedParts: 0 }))) {
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  async function setup(publish = vi.fn(() => of({ published: 4, sessionsWithFailedParts: 0 })), confirmed = true) {
     const api = { heatmap: vi.fn(() => of(structuredClone(heatmap))), snapshot: vi.fn(() => of(snapshot)), publish };
     const toast = { success: vi.fn() };
+    const confirm = { ask: vi.fn(async (_options: { message: string }) => confirmed) };
     TestBed.configureTestingModule({
       imports: [VizsgareszTerkepComponent],
-      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: toast }],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: toast },
+        { provide: ConfirmService, useValue: confirm }],
     });
     const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
     fixture.componentRef.setInput('groupId', 12);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    return { fixture, el: fixture.nativeElement as HTMLElement, api, toast };
+    return { fixture, el: fixture.nativeElement as HTMLElement, api, toast, confirm };
   }
 
   it('diák × öt rész + elméleti teszt, színskála a pontarányból, üres cella eredmény nélkül', async () => {
@@ -227,6 +232,7 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="technikum-test-8"] button')).toBeNull();
     expect(el.querySelector('[data-testid="technikum-test-8"]')!.textContent).toContain('Eredmény közzétéve');
     el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.click();
+    await settle();
     fixture.detectChanges();
     expect(api.publish).toHaveBeenCalledWith(7);
     expect(toast.success).toHaveBeenCalled();
@@ -234,9 +240,43 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="publish-warning"]')).toBeNull();
   });
 
+  it('közzététel előtt megerősítést kér: a beadott dolgozatok száma, a 0 pontos és a nem értékelt részek; mégsem → nem tesz közzé', async () => {
+    const cells = heatmap.students[0].cells;
+    cells.push(cell({ partKey: 'gui', points: 4, maxPoints: 10, ratio: 0.4, aiNotEvaluatedPoints: 6 }));
+    try {
+      const { fixture, el, api, confirm } = await setup(undefined, false);
+      el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.click();
+      await settle();
+      fixture.detectChanges();
+      const message = confirm.ask.mock.calls[0]![0].message;
+      expect(message).toContain('4 beadott dolgozat');
+      expect(message).toContain('1 rész bírálata végleg sikertelen');
+      expect(message).toContain('1 részben nem értékelt MI-szempontok');
+      expect(api.publish).not.toHaveBeenCalled();
+      expect(el.querySelector('[data-testid="technikum-test-7"] button')).not.toBeNull();
+    } finally {
+      cells.pop();
+    }
+  });
+
+  it('másik csoportra váltva újratölt, és a nyitott pillanatkép a vázlatokkal együtt bezárul', async () => {
+    const { fixture, el, api } = await setup();
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    fixture.detectChanges();
+    fixture.componentInstance.setDraft(1, 'k', '3');
+    fixture.componentRef.setInput('groupId', 13);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(api.heatmap).toHaveBeenLastCalledWith(13);
+    expect(el.querySelector('[data-testid="snapshot"]')).toBeNull();
+    expect(fixture.componentInstance.drafts()).toEqual({});
+  });
+
   it('közzététel: ha egyes részek bírálata végleg sikertelen, figyelmeztet (0 pont)', async () => {
     const { fixture, el } = await setup(vi.fn(() => of({ published: 4, sessionsWithFailedParts: 2 })));
     el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.click();
+    await settle();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="publish-warning"]')!.textContent).toContain('2 dolgozat egy vagy több részének bírálata végleg sikertelen');
   });
@@ -246,6 +286,7 @@ describe('VizsgareszTerkepComponent', () => {
     const publish = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 400, error: { errorType: 'Validation', errorMessage: message } })));
     const { fixture, el } = await setup(publish);
     el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.click();
+    await settle();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="publish-error"]')!.textContent!.trim()).toBe(message);
     expect(el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!.disabled).toBe(false);
