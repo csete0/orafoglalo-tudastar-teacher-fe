@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, sign
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
-import { finalize, take } from 'rxjs';
+import { Observable, finalize, take } from 'rxjs';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
@@ -17,6 +17,7 @@ import {
   HeatmapCellDto,
   HeatmapStudentDto,
   HeatmapTestDto,
+  RubricItemOutcomeDto,
   TechnikumHeatmapDto,
 } from '../../models/technikum.model';
 
@@ -189,14 +190,46 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                       }
                       @if (r.detail.ai; as ai) {
                         <p class="text-xs font-semibold mt-2">Szempontlista: {{ ai.points }}/{{ ai.maxPoints }} pont</p>
-                        @if (ai.message) { <p class="text-xs text-text-muted">{{ ai.message }}</p> }
-                        <ul class="text-xs mt-1 space-y-0.5">
-                          @for (it of ai.items; track it.key) {
-                            <li><strong>{{ it.points }}/{{ it.maxPoints }}</strong>
-                              @if (it.notEvaluated) { <span class="badge badge-warning !text-[0.625rem]" data-testid="item-not-evaluated">nem értékelt</span> }
-                              {{ it.reason }}</li>
-                          }
-                        </ul>
+                        @if (ai.message && hasOpenItems(ai.items)) { <p class="text-xs text-text-muted">{{ ai.message }}</p> }
+                        @if (r.status === 'graded' && ai.items.length && (ai.status === 'done' || ai.status === 'unavailable')) {
+                          <!-- Kézi pontozás: bármely szempont felülírható, a „nem értékelt”-ek kiemelve. -->
+                          <ul class="text-xs mt-1 space-y-1" [attr.data-testid]="'rubric-' + r.id">
+                            @for (it of ai.items; track it.key) {
+                              <li class="flex items-start gap-2 rounded-lg px-1 py-0.5" [class.rubric-open]="it.notEvaluated && it.aiPoints == null">
+                                <input type="number" min="0" [max]="it.maxPoints" step="1" class="input !w-14 !px-1.5 !py-0.5 !text-xs shrink-0"
+                                       [value]="draftOf(r.id, it.key, it.points)" [attr.aria-label]="'Pont (0–' + it.maxPoints + '): ' + it.reason"
+                                       [attr.data-testid]="'rubric-input-' + it.key" (input)="setDraft(r.id, it.key, $any($event.target).value)" />
+                                <span class="shrink-0 pt-1">/ {{ it.maxPoints }}</span>
+                                <span class="pt-1">
+                                  @if (it.notEvaluated && it.aiPoints == null) {
+                                    <span class="badge badge-warning !text-[0.625rem]" data-testid="item-not-evaluated">nem értékelt</span>
+                                  } @else if (it.aiPoints != null) {
+                                    <span class="badge badge-primary !text-[0.625rem]" data-testid="item-teacher-scored">tanár pontozta{{ it.notEvaluated ? '' : ' (MI: ' + it.aiPoints + ')' }}</span>
+                                  }
+                                  {{ it.reason }}
+                                </span>
+                              </li>
+                            }
+                          </ul>
+                          <div class="flex flex-wrap items-center gap-2 mt-2">
+                            <button type="button" class="btn btn-primary !px-2 !py-1 !text-xs" [disabled]="scoring() === r.id || !dirty(r.id)"
+                                    [attr.data-testid]="'rubric-save-' + r.id" (click)="saveRubric(r.id, ai.items)">Pontok mentése</button>
+                            @if (r.detail.review) {
+                              <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="scoring() === r.id"
+                                      [attr.data-testid]="'rubric-revert-' + r.id" (click)="revertRubric(r.id)">Vissza az MI pontjaira</button>
+                              <span class="text-text-muted">kézzel pontozva: {{ utc(r.detail.review.reviewedAt) | date: 'yyyy.MM.dd. HH:mm' }}</span>
+                            }
+                          </div>
+                          @if (rubricError()[r.id]; as err) { <p class="text-danger text-xs mt-1" role="alert" data-testid="rubric-error">{{ err }}</p> }
+                        } @else {
+                          <ul class="text-xs mt-1 space-y-0.5">
+                            @for (it of ai.items; track it.key) {
+                              <li><strong>{{ it.points }}/{{ it.maxPoints }}</strong>
+                                @if (it.notEvaluated && it.aiPoints == null) { <span class="badge badge-warning !text-[0.625rem]" data-testid="item-not-evaluated">nem értékelt</span> }
+                                {{ it.reason }}</li>
+                            }
+                          </ul>
+                        }
                       }
                     }
                   </details>
@@ -217,6 +250,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
     a.heat-cell:hover, button.heat-cell:hover, a.heat-cell:focus-visible, button.heat-cell:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
     .heat-cell--failed { box-shadow: inset 0 0 0 2px var(--color-danger); }
     .heat-cell--ai-na { outline: 2px dashed var(--color-warning); outline-offset: -2px; }
+    .rubric-open { background: var(--color-warning-subtle); }
     .heat-cell--empty { color: var(--color-text-muted); background: var(--color-bg-element); }
     .legend-dot { display: inline-block; width: 0.875rem; height: 0.875rem; border-radius: 0.25rem; }
     .compile-output { margin-top: 0.25rem; max-height: 12rem; overflow: auto; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.6875rem;
@@ -256,8 +290,16 @@ export class VizsgareszTerkepComponent implements OnInit {
   readonly snapshotLoading = signal(false);
   readonly snapshotError = signal<string | null>(null);
   readonly snapshotPath = signal<string | null>(null);
+  /** Kézi pontozás: résztenként (bírálat-azonosító) a módosított szempontpontok szövegként, a mentésig. */
+  readonly drafts = signal<Record<number, Record<string, string>>>({});
+  readonly scoring = signal<number | null>(null);
+  readonly rubricError = signal<Record<number, string>>({});
 
   ngOnInit(): void {
+    this.loadMap();
+  }
+
+  private loadMap(): void {
     this.api.heatmap(this.groupId()).pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
       next: (m) => this.map.set(m),
       error: (e) => {
@@ -310,6 +352,55 @@ export class VizsgareszTerkepComponent implements OnInit {
         this.snapshotPath.set(codeFilePaths(sn.files, sn.readOnlyPaths)[0] ?? null);
       },
       error: (e) => this.snapshotError.set(extractErrorMessage(e, 'A beadott dolgozat betöltése sikertelen.')),
+    });
+  }
+
+  hasOpenItems(items: RubricItemOutcomeDto[]): boolean {
+    return items.length === 0 || items.some((i) => i.notEvaluated && i.aiPoints == null);
+  }
+
+  draftOf(resultId: number, key: string, points: number): string {
+    return this.drafts()[resultId]?.[key] ?? String(points);
+  }
+
+  setDraft(resultId: number, key: string, value: string): void {
+    this.drafts.update((d) => ({ ...d, [resultId]: { ...d[resultId], [key]: value } }));
+  }
+
+  dirty(resultId: number): boolean {
+    return Object.keys(this.drafts()[resultId] ?? {}).length > 0;
+  }
+
+  saveRubric(resultId: number, items: RubricItemOutcomeDto[]): void {
+    const draft = this.drafts()[resultId] ?? {};
+    const scores: { key: string; points: number }[] = [];
+    for (const item of items) {
+      if (!(item.key in draft)) continue;
+      const points = Number(draft[item.key]);
+      if (draft[item.key].trim() === '' || !Number.isInteger(points) || points < 0 || points > item.maxPoints) {
+        this.rubricError.update((e) => ({ ...e, [resultId]: `A pont 0 és ${item.maxPoints} közötti egész szám lehet: ${item.reason}` }));
+        return;
+      }
+      scores.push({ key: item.key, points });
+    }
+    this.runRubric(resultId, this.api.scoreRubric(resultId, scores), 'A pontok mentve.');
+  }
+
+  revertRubric(resultId: number): void {
+    this.runRubric(resultId, this.api.revertRubric(resultId), 'Visszaállítva az MI pontjaira.');
+  }
+
+  private runRubric(resultId: number, request: Observable<ExamSessionSnapshotDto>, message: string): void {
+    this.scoring.set(resultId);
+    this.rubricError.update(({ [resultId]: _, ...rest }) => rest);
+    request.pipe(take(1), finalize(() => this.scoring.set(null))).subscribe({
+      next: (sn) => {
+        this.snapshot.set(sn);
+        this.drafts.update(({ [resultId]: _, ...rest }) => rest);
+        this.toast.success(message);
+        this.loadMap();
+      },
+      error: (e) => this.rubricError.update((errs) => ({ ...errs, [resultId]: extractErrorMessage(e, 'A pontok mentése sikertelen.') })),
     });
   }
 

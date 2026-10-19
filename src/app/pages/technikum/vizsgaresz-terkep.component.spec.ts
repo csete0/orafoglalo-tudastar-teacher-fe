@@ -135,6 +135,61 @@ describe('VizsgareszTerkepComponent', () => {
     expect(section.textContent).toContain('Beszédes nevek');
   });
 
+  it('kézi pontozás: a szempont pontja szerkeszthető, mentés után a pillanatkép és a térkép frissül; hibás pont elutasítva; visszavonás', async () => {
+    const part = (points: number, aiPoints: number | null, review: boolean): ExamSessionSnapshotDto => ({ ...snapshot, session: { ...snapshot.session,
+      notEvaluatedPoints: aiPoints === null ? 5 : 0, passed: null, parts: [{ partKey: 'console' as const, title: 'Konzol', maxPoints: 15,
+        result: { id: 77, partKey: 'console' as const, status: 'graded', points: 10 + points, maxPoints: 15, source: 'exam', sessionId: 31, gradedAt: '',
+          detail: { message: null, review: review ? { reviewedAt: '2026-10-19T08:00:00', teacherProfileId: 3 } : null,
+            machine: { status: 'done', points: 10, maxPoints: 10, compileOutput: null, cases: [] },
+            ai: { status: 'unavailable', points, maxPoints: 5, message: 'Nem értékelt (MI-keret)',
+              items: [{ key: 'nevek', points, maxPoints: 5, reason: 'Beszédes nevek', notEvaluated: true, aiPoints }] } } } }] } });
+    const api = {
+      heatmap: vi.fn(() => of(structuredClone(heatmap))),
+      snapshot: vi.fn(() => of(part(0, null, false))),
+      scoreRubric: vi.fn(() => of(part(4, 0, true))),
+      revertRubric: vi.fn(() => of(part(0, null, false))),
+      publish: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      imports: [VizsgareszTerkepComponent],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: { success: vi.fn() } }],
+    });
+    const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+    fixture.componentRef.setInput('groupId', 12);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    fixture.detectChanges();
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="rubric-input-nevek"]')!;
+    expect(input.closest('li')!.className).toContain('rubric-open');
+    const save = el.querySelector<HTMLButtonElement>('[data-testid="rubric-save-77"]')!;
+    expect(save.disabled).toBe(true);
+    input.value = '7';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="rubric-error"]')!.textContent).toContain('0 és 5');
+    expect(api.scoreRubric).not.toHaveBeenCalled();
+
+    input.value = '4';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+    expect(api.scoreRubric).toHaveBeenCalledWith(77, [{ key: 'nevek', points: 4 }]);
+    expect(api.heatmap).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('[data-testid="item-teacher-scored"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="item-not-evaluated"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="rubric-revert-77"]')!.click();
+    fixture.detectChanges();
+    expect(api.revertRubric).toHaveBeenCalledWith(77);
+    expect(el.querySelector('[data-testid="item-not-evaluated"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="rubric-revert-77"]')).toBeNull();
+  });
+
   it('a nem dolgozatból jövő cella a projekt osztály-nézetébe visz a diák kódjához; kiadás nélkül nem kattintható', async () => {
     const { el } = await setup();
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="cell-55-api"]')!;

@@ -18,6 +18,16 @@ export class TeacherTechnikumService {
     return this.http.get<ExamSessionSnapshotDto>(`${this.baseUrl}/sessions/${sessionId}/snapshot`);
   }
 
+  /** A dolgozat-rész MI-szempontjainak kézi pontozása; a frissített beadott dolgozatot adja. */
+  scoreRubric(resultId: number, items: { key: string; points: number }[]): Observable<ExamSessionSnapshotDto> {
+    return this.http.put<ExamSessionSnapshotDto>(`${this.baseUrl}/results/${resultId}/rubric`, { items });
+  }
+
+  /** A kézi pontozás visszavonása (az MI eredeti pontjai). */
+  revertRubric(resultId: number): Observable<ExamSessionSnapshotDto> {
+    return this.http.delete<ExamSessionSnapshotDto>(`${this.baseUrl}/results/${resultId}/rubric`);
+  }
+
   publish(assignmentId: number): Observable<PublishResultDto> {
     return this.http.post<PublishResultDto>(`${this.baseUrl}/sessions/assignment/${assignmentId}/publish`, {});
   }

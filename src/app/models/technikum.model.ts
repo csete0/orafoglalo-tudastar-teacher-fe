@@ -95,12 +95,16 @@ export interface RubricItemOutcomeDto {
   reason: string;
   /** Az MI nem értékelte (keret / MI-hiba): 0 pont. */
   notEvaluated?: boolean;
+  /** A tanár kézzel pontozta: az MI eredeti pontja (a points a tanári pont); null = nincs kézi pontozás. */
+  aiPoints?: number | null;
 }
 
 export interface ExamPartDetailDto {
   machine: { status: string; points: number; maxPoints: number; cases: CaseDetailDto[]; compileOutput: string | null } | null;
   ai: { status: string; points: number; maxPoints: number; items: RubricItemOutcomeDto[]; message: string | null } | null;
   message: string | null;
+  /** A tanári kézi pontozás (ki, mikor); null = nincs. */
+  review?: { reviewedAt: string; teacherProfileId: number } | null;
 }
 
 export interface ExamPartResultDto {
