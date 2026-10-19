@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -32,6 +33,7 @@ import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, t
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
 import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
+import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
 type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep';
@@ -473,7 +475,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
           }
 
           @case ('vizsgaresz-terkep') {
-            <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepOff.set(true); setTab('tagok')" />
+            <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepVisible.set(false); setTab('tagok')" />
           }
 
           @case ('gyenge-temak') {
@@ -587,17 +589,17 @@ export class CsoportReszletekComponent implements OnInit {
   /** Az összefoglalóval egyező, lefelé kerekített százalék. */
   readonly pct = floorPercent;
 
-  /** Igaz, ha a BE jelezte: a technikumi modul ki van kapcsolva (a fül elrejtve). */
-  readonly terkepOff = signal(false);
+  /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium - a visible prémium nélkül is igaz); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
+  readonly terkepVisible = signal(false);
+  private readonly technikumApi = inject(TeacherTechnikumService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  /** A „Vizsgarész-térkép” fül csak technikumként jelölt intézmény tanárának látszik (mint a technikumi projektek). */
   readonly tabs = computed<{ value: Tab; label: string }[]>(() => [
     { value: 'tagok', label: 'Tagok' },
     { value: 'kiadva', label: 'Kiadva' },
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
-    ...(!this.terkepOff() && this.schoolStore.schools().some((s) => s.schoolType === 'technikum')
-      ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
+    ...(this.terkepVisible() ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
     { value: 'ranglista', label: 'Ranglista' },
     { value: 'gyenge-temak', label: 'Gyenge témák' },
     { value: 'meghivo', label: 'Meghívó' },
@@ -748,6 +750,10 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.technikumApi.me().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (me) => this.terkepVisible.set(me.visible && me.hasPremium),
+      error: () => this.terkepVisible.set(false),
+    });
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
     this.loadMockExamBadge(this.groupId);
     if (this.store.groups().length === 0) {

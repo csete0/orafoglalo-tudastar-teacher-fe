@@ -130,6 +130,7 @@ describe('CsoportReszletekComponent', () => {
         { provide: LeaderboardStore, useValue: leaderboardStoreMock },
         { provide: GroupSeatStore, useValue: seatStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
+        { provide: TeacherTechnikumService, useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
       ],
     });
@@ -225,17 +226,24 @@ describe('CsoportReszletekComponent', () => {
     expect(tabByLabel('Eredmények').getAttribute('aria-selected')).toBe('true');
   });
 
-  it('a Vizsgarész-térkép fül csak technikumként jelölt intézmény tanárának látszik, és a térképet mutatja', () => {
-    const school = (schoolType: 'gimnazium' | 'technikum' | null) => ({ id: 5, name: 'Iskola', slug: 'iskola', createdAt: '', groupCount: 1,
-      myRole: 'Teacher' as const, teacherCount: 3, schoolType, schoolTypeSetByAdmin: false });
-    configure(makeGroup(), [school('gimnazium')]);
+  it('a Vizsgarész-térkép fül csak prémium tanárnak (api/technikum/me visible) látszik, és a térképet mutatja', () => {
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
     let fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
 
+    // A diák-menü miatt a visible prémium nélkül is igaz (lakattal) - a tanári térkép-fülhöz a hasPremium kell.
     TestBed.resetTestingModule();
-    configure(makeGroup(), [school('technikum')]);
-    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { heatmap: vi.fn(() => NEVER) } });
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
+    fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
+
+    TestBed.resetTestingModule();
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: true })), heatmap: vi.fn(() => NEVER) } });
     fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
     const tab = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].find((b: Element) => b.textContent?.trim() === 'Vizsgarész-térkép') as HTMLButtonElement;
@@ -244,16 +252,23 @@ describe('CsoportReszletekComponent', () => {
     expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).not.toBeNull();
   });
 
-  it('kikapcsolt technikumi modulnál (404 FeatureDisabled) a Vizsgarész-térkép fül eltűnik és a Tagok marad', () => {
-    const school = { id: 5, name: 'Iskola', slug: 'iskola', createdAt: '', groupCount: 1,
-      myRole: 'Teacher' as const, teacherCount: 3, schoolType: 'technikum' as const, schoolTypeSetByAdmin: false };
-    configure(makeGroup(), [school]);
-    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { heatmap: vi.fn(() => throwError(() => new HttpErrorResponse({
-      status: 404, error: { errorType: 'FeatureDisabled', errorMessage: 'A technikumi modul nincs bekapcsolva.' } }))) } });
-    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+  it('kikapcsolt modulnál (me: 404 FeatureDisabled) nincs fül; a térkép késői 404-ére a fül eltűnik és a Tagok marad', () => {
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: {
+      me: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404, error: { errorType: 'FeatureDisabled' } }))),
+      heatmap: vi.fn(() => NEVER) } });
+    let fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
     const labels = () => [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].map((b: Element) => b.textContent?.trim());
-    expect(labels()).toContain('Vizsgarész-térkép');
+    expect(labels()).not.toContain('Vizsgarész-térkép');
+
+    TestBed.resetTestingModule();
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: {
+      me: vi.fn(() => of({ visible: true, hasPremium: true })),
+      heatmap: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 404, error: { errorType: 'FeatureDisabled' } }))) } });
+    fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
     (([...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[]).find((b) => b.textContent?.trim() === 'Vizsgarész-térkép'))!.click();
     fixture.detectChanges();
     expect(labels()).not.toContain('Vizsgarész-térkép');
@@ -332,7 +347,7 @@ describe('CsoportReszletekComponent', () => {
   // BUG UI-TT-4: az intézmény-<select> a törölt (Mégse-vel elutasított) intézményen maradt,
   // mert a [ngModel] bemenete (group.schoolId) Mégse esetén sosem változott.
   it('BUG UI-TT-4 javítva: Mégse után a displaySchoolId visszaáll az eredeti értékre', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
     configure(makeGroup({ schoolId: undefined }), [school]);
     confirmServiceMock.ask.mockResolvedValue(false);
 
@@ -349,7 +364,7 @@ describe('CsoportReszletekComponent', () => {
   });
 
   it('elfogadott megerősítés esetén a displaySchoolId az új értéken marad és store.update() meghívódik', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
     configure(makeGroup({ schoolId: undefined }), [school]);
 
     const fixture = TestBed.createComponent(CsoportReszletekComponent);
@@ -404,7 +419,7 @@ describe('CsoportReszletekComponent', () => {
   // store.update() hiba-ága korábban csak _error()-t állított be, a displaySchoolId-t nem
   // érintette - a hibás, el nem mentett választáson maradt a <select>, a hibaüzenet mellett.
   it('BUG UI-TT-73 javítva: store.update() sikertelensége esetén a displaySchoolId visszaáll az eredeti (mentett) értékre', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
     configure(makeGroup({ schoolId: undefined }), [school]);
     groupStoreMock.update.mockImplementation((_id, _req, _onSuccess, onError) => {
       groupStoreMock.error.set('A csoport frissítése sikertelen.');
@@ -672,6 +687,7 @@ describe('CsoportReszletekComponent — B4 "Kiadva" fül, feladatsor-kiadások',
         { provide: LeaderboardStore, useValue: { leaderboard: signal(null), error: signal(null), loadGroupLeaderboard: vi.fn() } },
         { provide: GroupSeatStore, useValue: { overview: signal(null), lastReleaseResult: signal(null), loading: signal(false), error: signal(null), load: vi.fn(), releaseSeat: vi.fn(), releaseAll: vi.fn() } },
         { provide: ConfirmService, useValue: { ask: vi.fn().mockResolvedValue(true) } },
+        { provide: TeacherTechnikumService, useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } },
         { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn().mockReturnValue(of(assignments)), getGroupAssignments: vi.fn().mockReturnValue(of([])), assignToGroup: vi.fn(), revokeAssignment: vi.fn() } },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
       ],

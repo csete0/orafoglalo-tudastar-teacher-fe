@@ -9,7 +9,6 @@ import {
   SchoolDto,
   SchoolGroupDto,
   SchoolMemberDto,
-  SchoolType,
 } from '../../models/school.model';
 import { SchoolLicenseOverviewDto } from '../../models/school-license.model';
 
@@ -28,10 +27,6 @@ export class SchoolService {
 
   update(id: number, request: CreateSchoolRequest): Observable<SchoolDto> {
     return this.http.put<SchoolDto>(`${this.baseUrl}/${id}`, request);
-  }
-
-  setType(id: number, type: SchoolType | null): Observable<SchoolDto> {
-    return this.http.put<SchoolDto>(`${this.baseUrl}/${id}/type`, { type });
   }
 
   delete(id: number): Observable<unknown> {
