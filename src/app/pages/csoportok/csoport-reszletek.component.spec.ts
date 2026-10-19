@@ -233,6 +233,14 @@ describe('CsoportReszletekComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
 
+    // A diák-menü miatt a visible prémium nélkül is igaz (lakattal) - a tanári térkép-fülhöz a hasPremium kell.
+    TestBed.resetTestingModule();
+    configure(makeGroup(), []);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
+    fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
+
     TestBed.resetTestingModule();
     configure(makeGroup(), []);
     TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: true })), heatmap: vi.fn(() => NEVER) } });

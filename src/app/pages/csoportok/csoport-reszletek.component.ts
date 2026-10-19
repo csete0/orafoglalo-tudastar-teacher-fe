@@ -589,7 +589,7 @@ export class CsoportReszletekComponent implements OnInit {
   /** Az összefoglalóval egyező, lefelé kerekített százalék. */
   readonly pct = floorPercent;
 
-  /** Prémium tanár + bekapcsolt modul (api/technikum/me); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
+  /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium - a visible prémium nélkül is igaz); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
   readonly terkepVisible = signal(false);
   private readonly technikumApi = inject(TeacherTechnikumService);
   private readonly destroyRef = inject(DestroyRef);
@@ -751,7 +751,7 @@ export class CsoportReszletekComponent implements OnInit {
 
   ngOnInit(): void {
     this.technikumApi.me().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (me) => this.terkepVisible.set(me.visible),
+      next: (me) => this.terkepVisible.set(me.visible && me.hasPremium),
       error: () => this.terkepVisible.set(false),
     });
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
