@@ -131,7 +131,7 @@ describe('CsoportReszletekComponent', () => {
         { provide: GroupSeatStore, useValue: seatStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
         { provide: TeacherTechnikumService, useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' }, queryParamMap: { get: () => null } } } },
       ],
     });
   }
@@ -689,7 +689,7 @@ describe('CsoportReszletekComponent — B4 "Kiadva" fül, feladatsor-kiadások',
         { provide: ConfirmService, useValue: { ask: vi.fn().mockResolvedValue(true) } },
         { provide: TeacherTechnikumService, useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } },
         { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn().mockReturnValue(of(assignments)), getGroupAssignments: vi.fn().mockReturnValue(of([])), assignToGroup: vi.fn(), revokeAssignment: vi.fn() } },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' }, queryParamMap: { get: () => null } } } },
       ],
     });
   }

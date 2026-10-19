@@ -33,16 +33,17 @@ import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, t
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
 import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
+import { CsoportCsapatokComponent } from '../csapatok/csoport-csapatok.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
-type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep';
+type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep' | 'csapatok';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent, GyengeTemakJavaslatokComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent, GyengeTemakJavaslatokComponent, CsoportCsapatokComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -478,6 +479,10 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
             <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepVisible.set(false); setTab('tagok')" />
           }
 
+          @case ('csapatok') {
+            <app-csoport-csapatok [groupId]="group.id" (unavailable)="csapatokVisible.set(false); setTab('tagok')" />
+          }
+
           @case ('gyenge-temak') {
             <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással - csak ha van gyenge téma,
                  különben egyetlen üres állapot látszik (lent). -->
@@ -591,6 +596,8 @@ export class CsoportReszletekComponent implements OnInit {
 
   /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium - a visible prémium nélkül is igaz); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
   readonly terkepVisible = signal(false);
+  /** Vizsgaremek-csapatok fül; a kikapcsolt Git-funkció 404-e (unavailable) elrejti. */
+  readonly csapatokVisible = signal(true);
   private readonly technikumApi = inject(TeacherTechnikumService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -600,6 +607,7 @@ export class CsoportReszletekComponent implements OnInit {
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
     ...(this.terkepVisible() ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
+    ...(this.csapatokVisible() ? [{ value: 'csapatok' as const, label: 'Csapatok' }] : []),
     { value: 'ranglista', label: 'Ranglista' },
     { value: 'gyenge-temak', label: 'Gyenge témák' },
     { value: 'meghivo', label: 'Meghívó' },
@@ -755,6 +763,8 @@ export class CsoportReszletekComponent implements OnInit {
       error: () => this.terkepVisible.set(false),
     });
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
+    // A csapatjavaslat értesítése ide mutat: /csoportok/{id}?tab=csapatok
+    if (this.route.snapshot.queryParamMap.get('tab') === 'csapatok') this.setTab('csapatok');
     this.loadMockExamBadge(this.groupId);
     if (this.store.groups().length === 0) {
       this.store.loadMine();
