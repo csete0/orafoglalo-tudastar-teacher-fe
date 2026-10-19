@@ -21,7 +21,7 @@ const student = (userId: number, name: string, current: number | null, steps: Re
 
 const view: ProjectAssignmentStudentsDto = {
   assignment: { id: 7, projectSlug: 'bufe', projectTitle: 'Büfé-rendelő', groupId: 1, groupName: '11.B', assignedAt: '', opensAt: null, dueAt: null,
-    runtime: null, memberCount: 3, startedCount: 2, completedCount: 0, membersWithoutFullAccess: 1, milestoneCount: 3, freeMilestoneCount: 2 },
+    runtime: null, isTest: false, timeLimitSeconds: null, memberCount: 3, startedCount: 2, completedCount: 0, membersWithoutFullAccess: 1, milestoneCount: 3, freeMilestoneCount: 2 },
   milestones: [1, 2, 3].map((o) => ({ orderNo: o, title: `Lépés ${o}`, kind: 'build', estimatedMinutes: 30, examAreas: [] })),
   students: [
     student(1, 'Anna', 3, [step(1, true, 'onallo'), step(2, true, 'kis-segitseggel'), step(3, false)]),
@@ -40,7 +40,7 @@ const response = (suggestions: CodeCommentSuggestionDto[], over: Partial<CodeCom
      model: 'openai/gpt-4o', quota: { used: 5, limit: 200 }, ...over });
 
 describe('ProjektKiadasComponent (osztály-nézet)', () => {
-  async function setup(opts: { premium?: boolean; quotaUsed?: number; confirm?: boolean } = {}) {
+  async function setup(opts: { premium?: boolean; quotaUsed?: number; confirm?: boolean; diak?: string } = {}) {
     let nextId = 9;
     const api = {
       students: vi.fn(() => of(view)),
@@ -59,6 +59,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       { provide: ReportService, useValue: reports }, { provide: ConfirmService, useValue: confirm }] });
     const fixture = TestBed.createComponent(ProjektKiadasComponent);
     fixture.componentRef.setInput('id', '7');
+    if (opts.diak) fixture.componentRef.setInput('diak', opts.diak);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -92,6 +93,28 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     fixture.detectChanges();
     expect(api.studentCode).toHaveBeenCalledWith(7, 1);
     expect(el.querySelector('[data-testid="code-view"]')?.textContent).toContain('print(1)');
+  });
+
+  it('a „diak” query-paraméter (vizsgarész-térképről) betöltéskor megnyitja a diák kódját', async () => {
+    const { el, api } = await setup({ diak: '1' });
+    expect(api.studentCode).toHaveBeenCalledWith(7, 1);
+    expect(el.querySelector('[data-testid="student-code"]')?.textContent).toContain('Anna kódja');
+  });
+
+  it('a „diak” paraméter olyan diákra, aki még nem kezdte, nem nyit kódot', async () => {
+    const { el, api } = await setup({ diak: '3' });
+    expect(api.studentCode).not.toHaveBeenCalled();
+    expect(el.querySelector('[data-testid="student-code"]')).toBeNull();
+  });
+
+  it('fájlváltás megszünteti a nyitott új megjegyzést', async () => {
+    const { fixture, el } = await setup({ diak: '1' });
+    el.querySelector<HTMLButtonElement>('[aria-label="Megjegyzés a(z) 2. sorhoz"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="new-comment"]')).not.toBeNull();
+    fixture.componentInstance.selectFile('backend/app.py');
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="new-comment"]')).toBeNull();
   });
 
   it('sorszámozott kód a megjegyzés-szálakkal: elavult jelölés, új megjegyzés egy sorra, válasz', async () => {

@@ -10,11 +10,11 @@ import { ProjectAssignmentDto, TeacherProjectDto } from '../../models/teacher-pr
 
 const assignment = (over: Partial<ProjectAssignmentDto> = {}): ProjectAssignmentDto => ({
   id: 7, projectSlug: 'bufe-rendelo', projectTitle: 'Büfé-rendelő', groupId: 1, groupName: '11.B', assignedAt: '2026-10-01T10:00:00',
-  opensAt: null, dueAt: '2026-10-08T16:00:00', runtime: 'browser-python', memberCount: 25, startedCount: 10, completedCount: 2,
+  opensAt: null, dueAt: '2026-10-08T16:00:00', runtime: 'browser-python', isTest: false, timeLimitSeconds: null, memberCount: 25, startedCount: 10, completedCount: 2,
   membersWithoutFullAccess: 3, milestoneCount: 6, freeMilestoneCount: 2, ...over,
 });
 const project = (assignments: ProjectAssignmentDto[] = []): TeacherProjectDto => ({
-  slug: 'bufe-rendelo', title: 'Büfé-rendelő', summary: 'Rendelés a büfében.', level: 'kozephalado', estimatedHours: 7, previewImageUrl: null,
+  slug: 'bufe-rendelo', title: 'Büfé-rendelő', summary: 'Rendelés a büfében.', level: 'kozephalado', kind: 'practice', estimatedHours: 7, previewImageUrl: null,
   runtimes: ['browser-python', 'browser-js'], freeMilestoneCount: 2, examAreas: [{ key: 'adatbazis', name: 'Adatbázis' }],
   milestones: [{ orderNo: 1, title: 'Az adatbázis', kind: 'build', estimatedMinutes: 45, examAreas: [] }], assignments,
 });
@@ -60,9 +60,58 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
     el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
     fixture.detectChanges();
     expect(api['assign']).toHaveBeenCalledWith('bufe-rendelo', {
-      groupId: 2, runtime: 'browser-js', opensAt: null, dueAt: new Date('2026-10-10T18:00').toISOString(),
+      groupId: 2, runtime: 'browser-js', opensAt: null, dueAt: new Date('2026-10-10T18:00').toISOString(), isTest: false, timeLimitSeconds: null,
     });
     expect(el.querySelector('[data-testid="assignment-9"]')?.textContent).toContain('12.A');
+  });
+
+  it('dolgozat (időkorláttal): csak vizsgaprojektnél (kind = exam); kezdés és befejezés kötelező, a perc másodpercben megy', async () => {
+    const exam: TeacherProjectDto = { ...project(), slug: 'konyvtar', title: 'Könyvtár', kind: 'exam' };
+    const { fixture, el } = await setup([project(), exam]);
+    (el.querySelector('[data-testid="assign-open-bufe-rendelo"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="assign-test"]')).toBeNull();
+
+    (el.querySelector('[data-testid="assign-open-konyvtar"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const set = (id: string, value: string) => {
+      const input = el.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-testid="${id}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+    };
+    const toggle = el.querySelector<HTMLInputElement>('[data-testid="assign-test"]')!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="assign-form"]')!.textContent).toContain('Befejezés');
+    set('assign-group', '2');
+    set('assign-minutes', '90');
+    el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(api['assign']).not.toHaveBeenCalled();
+    expect(el.querySelector('[role="alert"]')!.textContent).toContain('kezdés és a befejezés');
+
+    set('assign-opens', '2026-11-03T10:00');
+    set('assign-due', '2026-11-03T08:00');
+    el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alert"]')!.textContent).toContain('A befejezés nem lehet korábbi, mint a kezdés.');
+
+    set('assign-opens', '2026-11-03T08:00');
+    set('assign-due', '2026-11-03T10:00');
+    set('assign-minutes', '600');
+    el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alert"]')!.textContent).toContain('5 és 480 perc');
+
+    set('assign-minutes', '90');
+    el.querySelector<HTMLFormElement>('[data-testid="assign-form"]')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    expect(api['assign']).toHaveBeenCalledWith('konyvtar', {
+      groupId: 2, runtime: null, opensAt: new Date('2026-11-03T08:00').toISOString(), dueAt: new Date('2026-11-03T10:00').toISOString(),
+      isTest: true, timeLimitSeconds: 5400,
+    });
   });
 
   it('visszavonás megerősítés után', async () => {

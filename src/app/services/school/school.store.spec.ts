@@ -12,6 +12,8 @@ function makeSchool(overrides: Partial<SchoolDto> = {}): SchoolDto {
     createdAt: new Date().toISOString(),
     groupCount: 0,
     myRole: 'Teacher',
+    schoolType: null,
+    schoolTypeSetByAdmin: false,
     teacherCount: 1,
     ...overrides,
   };
@@ -28,6 +30,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
     changeMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
     regenerateTeacherInvite: ReturnType<typeof vi.fn>;
+    setType: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -41,6 +44,7 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
       changeMemberRole: vi.fn(),
       removeMember: vi.fn(),
       regenerateTeacherInvite: vi.fn(),
+      setType: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [SchoolStore, { provide: SchoolService, useValue: serviceMock }],
@@ -133,6 +137,27 @@ describe('SchoolStore — MyRole-vezérelt állapot', () => {
 
     expect(store.error()).toBe('A Name mező legfeljebb 255 karakter hosszú lehet.');
     expect(store.error()).not.toContain('sikertelen.');
+  });
+
+  it('setType: a szerver válasza frissíti az intézményt; az admin zárolása (403) után újratölt, és a hiba látszik', async () => {
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1 })]));
+    const store = TestBed.inject(SchoolStore);
+    store.loadMine();
+    store.select(1);
+
+    serviceMock.setType.mockReturnValue(of(makeSchool({ id: 1, schoolType: 'technikum' })));
+    const done = vi.fn();
+    store.setType(1, 'technikum', done);
+    expect(serviceMock.setType).toHaveBeenCalledWith(1, 'technikum');
+    expect(store.selectedSchool()?.schoolType).toBe('technikum');
+    expect(done).toHaveBeenCalled();
+    expect(store.loading()).toBe(false);
+
+    serviceMock.getMine.mockReturnValue(of([makeSchool({ id: 1, schoolType: 'technikum', schoolTypeSetByAdmin: true })]));
+    serviceMock.setType.mockReturnValue(throwError(() => ({ status: 403, error: { errorMessage: 'Az intézmény típusát az adminisztrátor rögzítette, nem módosítható.' } })));
+    store.setType(1, 'gimnazium');
+    expect(store.selectedSchool()?.schoolTypeSetByAdmin).toBe(true);
+    expect(store.error()).toContain('adminisztrátor rögzítette');
   });
 
   it('delete után az intézmény kikerül a listából és a kiválasztás törlődik', async () => {

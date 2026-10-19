@@ -1,4 +1,6 @@
 export type SchoolTeacherRole = 'Admin' | 'Teacher';
+/** Az intézmény típusa (a technikumi modul láthatóságához); null = nincs megadva. */
+export type SchoolType = 'gimnazium' | 'technikum';
 
 export interface CreateSchoolRequest {
   name: string;
@@ -17,6 +19,9 @@ export interface SchoolDto {
   teacherCount: number;
   /** Csak akkor van kitöltve, ha myRole === 'Admin'. */
   teacherInviteCode?: string;
+  schoolType: SchoolType | null;
+  /** A típust a platform-admin rögzítette: a tanár nem módosíthatja. */
+  schoolTypeSetByAdmin: boolean;
 }
 
 export interface JoinSchoolRequest {

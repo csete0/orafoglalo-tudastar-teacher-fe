@@ -16,6 +16,8 @@ function makeSchool(overrides: Partial<SchoolDto> = {}): SchoolDto {
     createdAt: new Date().toISOString(),
     groupCount: 0,
     myRole: 'Teacher',
+    schoolType: null,
+    schoolTypeSetByAdmin: false,
     teacherCount: 2,
     ...overrides,
   };
@@ -41,6 +43,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     clearError: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    setType: ReturnType<typeof vi.fn>;
   };
   let reportStoreMock: {
     schoolActivity: ReturnType<typeof signal<unknown[]>>;
@@ -74,6 +77,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
       clearError: vi.fn(),
       delete: vi.fn(),
       update: vi.fn(),
+      setType: vi.fn(),
     };
     reportStoreMock = {
       schoolActivity: signal([]),
@@ -123,6 +127,33 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     // A közös fülek (Tanárok/Ranglista) mindkét szerepnél megvannak
     expect(nav).toContain('Tanárok');
     expect(nav).toContain('Ranglista');
+  });
+
+  it('iskolatípus: a tanár beállíthatja (gimnázium / technikum), a kiválasztott gomb lenyomott', () => {
+    configure(makeSchool({ myRole: 'Teacher', schoolType: 'gimnazium' }), false);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="school-type-gimnazium"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[data-testid="school-type-locked"]')).toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="school-type-gimnazium"]')!.click();
+    expect(schoolStoreMock.setType).not.toHaveBeenCalled();
+    el.querySelector<HTMLButtonElement>('[data-testid="school-type-technikum"]')!.click();
+    expect(schoolStoreMock.setType).toHaveBeenCalledWith(1, 'technikum', expect.any(Function));
+  });
+
+  it('iskolatípus: az admin által rögzített típus nem módosítható, magyarázattal', () => {
+    configure(makeSchool({ myRole: 'Admin', schoolType: 'technikum', schoolTypeSetByAdmin: true }), true);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="school-type-gimnazium"]')!.disabled).toBe(true);
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="school-type-technikum"]')!.disabled).toBe(true);
+    expect(el.querySelector('[data-testid="school-type-locked"]')!.textContent).toContain('adminisztrátora rögzítette');
   });
 
   it('csak admin esetén jelenik meg a tanári meghívó kód', () => {

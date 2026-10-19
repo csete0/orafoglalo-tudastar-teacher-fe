@@ -2,7 +2,8 @@ import { ReportService } from '../../services/report/report.service';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { NEVER, of, throwError } from 'rxjs';
 import { CsoportReszletekComponent } from './csoport-reszletek.component';
 import { GroupStore } from '../../services/group/group.store';
 import { SchoolStore } from '../../services/school/school.store';
@@ -11,6 +12,7 @@ import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { GroupSeatStore } from '../../services/group/group-seat.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { GroupDto } from '../../models/group.model';
 import { SchoolDto } from '../../models/school.model';
 import { GroupSeatOverviewDto } from '../../models/group-seat.model';
@@ -206,7 +208,7 @@ describe('CsoportReszletekComponent', () => {
     // A fülek számát szándékosan a komponens saját listájából vesszük, nem beégetve:
     // ennek a tesztnek az ARIA-szemantika a tárgya, nem az, hogy hány fül van
     // (egy új fül felvétele nem lehet ok arra, hogy egy akadálymentességi teszt bukjon).
-    expect(tabs.length).toBe(fixture.componentInstance.tabs.length);
+    expect(tabs.length).toBe(fixture.componentInstance.tabs().length);
     tabs.forEach((tab) => expect(tab.getAttribute('role')).toBe('tab'));
 
     const tabByLabel = (label: string) => tabs.find((t) => t.textContent?.trim() === label)!;
@@ -221,6 +223,41 @@ describe('CsoportReszletekComponent', () => {
 
     expect(tabByLabel('Tagok').getAttribute('aria-selected')).toBe('false');
     expect(tabByLabel('Eredmények').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a Vizsgarész-térkép fül csak technikumként jelölt intézmény tanárának látszik, és a térképet mutatja', () => {
+    const school = (schoolType: 'gimnazium' | 'technikum' | null) => ({ id: 5, name: 'Iskola', slug: 'iskola', createdAt: '', groupCount: 1,
+      myRole: 'Teacher' as const, teacherCount: 3, schoolType, schoolTypeSetByAdmin: false });
+    configure(makeGroup(), [school('gimnazium')]);
+    let fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
+
+    TestBed.resetTestingModule();
+    configure(makeGroup(), [school('technikum')]);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { heatmap: vi.fn(() => NEVER) } });
+    fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    const tab = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].find((b: Element) => b.textContent?.trim() === 'Vizsgarész-térkép') as HTMLButtonElement;
+    tab.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).not.toBeNull();
+  });
+
+  it('kikapcsolt technikumi modulnál (404 FeatureDisabled) a Vizsgarész-térkép fül eltűnik és a Tagok marad', () => {
+    const school = { id: 5, name: 'Iskola', slug: 'iskola', createdAt: '', groupCount: 1,
+      myRole: 'Teacher' as const, teacherCount: 3, schoolType: 'technikum' as const, schoolTypeSetByAdmin: false };
+    configure(makeGroup(), [school]);
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { heatmap: vi.fn(() => throwError(() => new HttpErrorResponse({
+      status: 404, error: { errorType: 'FeatureDisabled', errorMessage: 'A technikumi modul nincs bekapcsolva.' } }))) } });
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    const labels = () => [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].map((b: Element) => b.textContent?.trim());
+    expect(labels()).toContain('Vizsgarész-térkép');
+    (([...fixture.nativeElement.querySelectorAll('nav button.tab-btn')] as HTMLButtonElement[]).find((b) => b.textContent?.trim() === 'Vizsgarész-térkép'))!.click();
+    fixture.detectChanges();
+    expect(labels()).not.toContain('Vizsgarész-térkép');
+    expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).toBeNull();
   });
 
   // UI-TT-178: a DateRangeFilterComponent egy @switch/@case ágban él, ezért minden
@@ -295,7 +332,7 @@ describe('CsoportReszletekComponent', () => {
   // BUG UI-TT-4: az intézmény-<select> a törölt (Mégse-vel elutasított) intézményen maradt,
   // mert a [ngModel] bemenete (group.schoolId) Mégse esetén sosem változott.
   it('BUG UI-TT-4 javítva: Mégse után a displaySchoolId visszaáll az eredeti értékre', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
     configure(makeGroup({ schoolId: undefined }), [school]);
     confirmServiceMock.ask.mockResolvedValue(false);
 
@@ -312,7 +349,7 @@ describe('CsoportReszletekComponent', () => {
   });
 
   it('elfogadott megerősítés esetén a displaySchoolId az új értéken marad és store.update() meghívódik', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
     configure(makeGroup({ schoolId: undefined }), [school]);
 
     const fixture = TestBed.createComponent(CsoportReszletekComponent);
@@ -367,7 +404,7 @@ describe('CsoportReszletekComponent', () => {
   // store.update() hiba-ága korábban csak _error()-t állított be, a displaySchoolId-t nem
   // érintette - a hibás, el nem mentett választáson maradt a <select>, a hibaüzenet mellett.
   it('BUG UI-TT-73 javítva: store.update() sikertelensége esetén a displaySchoolId visszaáll az eredeti (mentett) értékre', async () => {
-    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3 };
+    const school = { id: 5, name: 'Teszt Gimnázium', slug: 'teszt-gimnazium', createdAt: new Date().toISOString(), groupCount: 1, myRole: 'Teacher' as const, teacherCount: 3, schoolType: null, schoolTypeSetByAdmin: false };
     configure(makeGroup({ schoolId: undefined }), [school]);
     groupStoreMock.update.mockImplementation((_id, _req, _onSuccess, onError) => {
       groupStoreMock.error.set('A csoport frissítése sikertelen.');

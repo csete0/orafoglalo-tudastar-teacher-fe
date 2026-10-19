@@ -1,6 +1,6 @@
 /** Projektműhely a tanári oldalon (BE: DigitalCulture.Domain/Entities/Projects/ProjectAssignment.cs). */
 
-export type ProjectRuntime = 'browser-python' | 'browser-js' | 'judge0-csharp' | 'judge0-java';
+export type ProjectRuntime = 'browser-python' | 'browser-js' | 'judge0-csharp' | 'judge0-java' | 'judge0-aspnet';
 export type Independence = 'onallo' | 'kis-segitseggel' | 'segitseggel';
 
 export const RUNTIME_LABELS: Record<ProjectRuntime, string> = {
@@ -8,7 +8,12 @@ export const RUNTIME_LABELS: Record<ProjectRuntime, string> = {
   'browser-js': 'JavaScript',
   'judge0-csharp': 'C#',
   'judge0-java': 'Java',
+  'judge0-aspnet': 'C# (ASP.NET Core)',
 };
+
+/** A technikumi dolgozat ideje percben (BE: ProjectAssignmentService.MinTestMinutes/MaxTestMinutes). */
+export const TEST_MINUTES_MIN = 5;
+export const TEST_MINUTES_MAX = 480;
 
 export const INDEPENDENCE_LABELS: Record<Independence, string> = {
   onallo: 'önállóan',
@@ -39,6 +44,10 @@ export interface ProjectAssignmentDto {
   opensAt: string | null;
   dueAt: string | null;
   runtime: ProjectRuntime | null;
+  /** Technikumi dolgozat: vizsga-munkamenetben, időre. */
+  isTest: boolean;
+  /** A dolgozat ideje; null = a projekt ideje. */
+  timeLimitSeconds: number | null;
   memberCount: number;
   startedCount: number;
   completedCount: number;
@@ -53,6 +62,8 @@ export interface TeacherProjectDto {
   title: string;
   summary: string;
   level: string;
+  /** practice | exam (technikumi próbavizsga). */
+  kind: 'practice' | 'exam';
   estimatedHours: number;
   previewImageUrl: string | null;
   runtimes: ProjectRuntime[];
@@ -67,6 +78,10 @@ export interface AssignProjectRequest {
   opensAt: string | null;
   dueAt: string | null;
   runtime: ProjectRuntime | null;
+  /** Dolgozat (csak technikumi próbavizsgánál): kezdés és befejezés kötelező. */
+  isTest: boolean;
+  /** Másodpercben; null = a projekt ideje. */
+  timeLimitSeconds: number | null;
 }
 
 export interface ProjectAssignmentStepDto {

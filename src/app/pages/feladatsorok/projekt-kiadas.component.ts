@@ -10,6 +10,7 @@ import { AI_HELPER_PREMIUM_TEXT, AiHelperBlock, AiHelperQuotaItemDto, aiHelperBl
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
+import { KodOlvasoComponent, codeFilePaths, codeLines } from '../../shared/kod-olvaso/kod-olvaso.component';
 import {
   CodeCommentSuggestionDto,
   CodeCommentSuggestionsResponse,
@@ -45,7 +46,7 @@ type SuggestScope = 'file' | 'all';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-projekt-kiadas',
   standalone: true,
-  imports: [DatePipe, NgTemplateOutlet, RouterLink, LocalSpinnerComponent],
+  imports: [DatePipe, NgTemplateOutlet, RouterLink, LocalSpinnerComponent, KodOlvasoComponent],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
     <div class="max-w-6xl mx-auto px-4 py-10">
@@ -168,17 +169,9 @@ type SuggestScope = 'file' | 'all';
                 }
                 <p class="text-xs text-text-muted mt-1">A javaslatokat a diák nem látja, és nem mentjük el: csak az elfogadottakból lesz megjegyzés.</p>
               </div>
-              <div class="grid gap-3 mt-3 md:grid-cols-[14rem_minmax(0,1fr)]">
-                <div class="min-w-0">
-                <ul class="space-y-0.5 text-xs font-mono">
-                  @for (path of codePaths(); track path) {
-                    <li><button type="button" class="w-full text-left px-2 py-1 rounded" [class.bg-bg-element]="activePath() === path" (click)="selectFile(path)">
-                      {{ path }}{{ c.readOnlyPaths.includes(path) ? ' (keret)' : '' }}
-                      @if (openCountFor(path); as n) { <span class="comment-count" [attr.aria-label]="n + ' nyitott megjegyzés'">{{ n }}</span> }
-                      @if (suggestionCountFor(path); as n) { <span class="suggestion-count" [attr.aria-label]="n + ' AI-javaslat'">{{ n }}</span> }
-                    </button></li>
-                  }
-                </ul>
+              <app-kod-olvaso class="block mt-3" [files]="c.files" [readOnlyPaths]="c.readOnlyPaths" [activePath]="activePath()" (activePathChange)="selectFile($event)"
+                              [commentable]="true" [markedLines]="markedLines()" [badges]="openCounts()" [suggestionBadges]="suggestionCounts()"
+                              [lineExtras]="threadTpl" (lineClick)="startComment($event)">
                 @if (suggestions().length) {
                   <section class="mt-3" aria-labelledby="suggest-list-title" data-testid="suggest-list">
                     <h3 id="suggest-list-title" class="text-xs font-semibold">AI-javaslatok ({{ suggestions().length }})</h3>
@@ -195,69 +188,61 @@ type SuggestScope = 'file' | 'all';
                     </ul>
                   </section>
                 }
-                </div>
-                <div class="code-view" tabindex="0" data-testid="code-view">
-                  @for (text of lines(); track $index; let i = $index) {
-                    <div class="code-line" [class.code-line--commented]="threadsAt(i + 1).length">
-                      <button type="button" class="code-ln" [attr.aria-label]="'Megjegyzés a(z) ' + (i + 1) + '. sorhoz'"
-                              (click)="startComment(i + 1)">{{ i + 1 }}</button>
-                      <span class="code-text">{{ text }}</span>
-                    </div>
-                    @for (t of threadsAt(i + 1); track t.id) {
-                      <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
-                        <p class="text-xs text-text-muted">
-                          <strong class="text-text-default">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
-                          @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
-                          @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
-                        </p>
-                        <p class="thread-body">{{ t.body }}</p>
-                        @for (r of t.replies; track r.id) {
-                          <p class="thread-reply"><strong>{{ r.authorName }}</strong>{{ r.authorIsTeacher ? '' : ' (diák)' }}: {{ r.body }}</p>
-                        }
-                        <form class="flex gap-2 mt-2" (submit)="$event.preventDefault(); reply(t, replyBox)">
-                          <input #replyBox class="form-input !py-1 !text-xs flex-1" maxlength="2000" placeholder="Válasz…" aria-label="Válasz a megjegyzésre" />
-                          <button type="submit" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="commentBusy()">Válasz</button>
-                        </form>
-                      </div>
+              </app-kod-olvaso>
+              <ng-template #threadTpl let-line let-text="text">
+                @for (t of threadsAt(line); track t.id) {
+                  <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
+                    <p class="text-xs text-text-muted">
+                      <strong class="text-text-default">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
+                      @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
+                      @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
+                    </p>
+                    <p class="thread-body">{{ t.body }}</p>
+                    @for (r of t.replies; track r.id) {
+                      <p class="thread-reply"><strong>{{ r.authorName }}</strong>{{ r.authorIsTeacher ? '' : ' (diák)' }}: {{ r.body }}</p>
                     }
-                    @for (sg of suggestionsAt(i + 1); track sg.key) {
-                      <div class="suggestion" tabindex="-1" [id]="'suggestion-' + sg.key" [attr.data-testid]="'suggestion-' + sg.key"
-                           role="group" [attr.aria-label]="'AI-javaslat (' + sg.severity + ') a(z) ' + sg.line + '. sorhoz'">
-                        <p class="text-xs text-text-muted">
-                          <span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
-                          <strong class="text-text-default">AI-javaslat</strong> · még nem megjegyzés
-                          @if (sg.lineText !== text) { · <span class="text-warning">a sor azóta megváltozhatott</span> }
-                        </p>
-                        @if (editingKey() === sg.key) {
-                          <form (submit)="$event.preventDefault(); accept(sg, editBox.value)">
-                            <label class="sr-only" [for]="'suggest-edit-' + sg.key">A javaslat szövege</label>
-                            <textarea #editBox [id]="'suggest-edit-' + sg.key" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
-                                      [value]="sg.text"></textarea>
-                            <div class="flex flex-wrap gap-2 mt-2">
-                              <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="acceptBusy()">Elfogad</button>
-                              <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="editingKey.set(null)">Mégse</button>
-                            </div>
-                          </form>
-                        } @else {
-                          <p class="thread-body">{{ sg.text }}</p>
-                          <ng-container *ngTemplateOutlet="suggestActions; context: { $implicit: sg }" />
-                        }
-                      </div>
-                    }
-                    @if (newCommentLine() === i + 1) {
-                      <form class="thread" data-testid="new-comment" (submit)="$event.preventDefault(); createComment(newBox)">
-                        <label class="text-xs font-semibold" for="new-comment-box">Megjegyzés a(z) {{ i + 1 }}. sorhoz</label>
-                        <textarea #newBox id="new-comment-box" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
-                                  placeholder="Pl.: Itt mi történik, ha üres a rendelés?"></textarea>
-                        <div class="flex gap-2 mt-2">
-                          <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="commentBusy()">Megjegyzés küldése</button>
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="newCommentLine.set(null)">Mégse</button>
+                    <form class="flex gap-2 mt-2" (submit)="$event.preventDefault(); reply(t, replyBox)">
+                      <input #replyBox class="form-input !py-1 !text-xs flex-1" maxlength="2000" placeholder="Válasz…" aria-label="Válasz a megjegyzésre" />
+                      <button type="submit" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="commentBusy()">Válasz</button>
+                    </form>
+                  </div>
+                }
+                @for (sg of suggestionsAt(line); track sg.key) {
+                  <div class="suggestion" tabindex="-1" [id]="'suggestion-' + sg.key" [attr.data-testid]="'suggestion-' + sg.key"
+                       role="group" [attr.aria-label]="'AI-javaslat (' + sg.severity + ') a(z) ' + sg.line + '. sorhoz'">
+                    <p class="text-xs text-text-muted">
+                      <span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
+                      <strong class="text-text-default">AI-javaslat</strong> · még nem megjegyzés
+                      @if (sg.lineText !== text) { · <span class="text-warning">a sor azóta megváltozhatott</span> }
+                    </p>
+                    @if (editingKey() === sg.key) {
+                      <form (submit)="$event.preventDefault(); accept(sg, editBox.value)">
+                        <label class="sr-only" [for]="'suggest-edit-' + sg.key">A javaslat szövege</label>
+                        <textarea #editBox [id]="'suggest-edit-' + sg.key" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
+                                  [value]="sg.text"></textarea>
+                        <div class="flex flex-wrap gap-2 mt-2">
+                          <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="acceptBusy()">Elfogad</button>
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="editingKey.set(null)">Mégse</button>
                         </div>
                       </form>
+                    } @else {
+                      <p class="thread-body">{{ sg.text }}</p>
+                      <ng-container *ngTemplateOutlet="suggestActions; context: { $implicit: sg }" />
                     }
-                  }
-                </div>
-              </div>
+                  </div>
+                }
+                @if (newCommentLine() === line) {
+                  <form class="thread" data-testid="new-comment" (submit)="$event.preventDefault(); createComment(newBox)">
+                    <label class="text-xs font-semibold" for="new-comment-box">Megjegyzés a(z) {{ line }}. sorhoz</label>
+                    <textarea #newBox id="new-comment-box" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
+                              placeholder="Pl.: Itt mi történik, ha üres a rendelés?"></textarea>
+                    <div class="flex gap-2 mt-2">
+                      <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="commentBusy()">Megjegyzés küldése</button>
+                      <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="newCommentLine.set(null)">Mégse</button>
+                    </div>
+                  </form>
+                }
+              </ng-template>
               @if (commentError(); as err) { <p class="text-danger text-sm mt-2" role="alert">{{ err }}</p> }
               <ng-template #suggestActions let-sg>
                 <div class="flex flex-wrap gap-2 mt-2">
@@ -285,20 +270,11 @@ type SuggestScope = 'file' | 'all';
     .cell--folyamatban { border-color: var(--color-text-muted, #6b7280); }
     .cell--nincs { background: var(--color-bg-element, #eaeef2); }
     .drop-col { background: var(--color-warning-subtle, rgba(154, 103, 0, 0.1)); }
-    .code-view { max-height: 60vh; overflow: auto; padding: 0.5rem 0; border-radius: 0.5rem; background: var(--color-bg-element);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; line-height: 1.5; }
-    .code-line { display: flex; }
-    .code-line--commented { background: var(--color-warning-subtle, rgba(154, 103, 0, 0.1)); }
-    .code-ln { flex: none; width: 3rem; padding-right: 0.75rem; text-align: right; color: var(--color-text-muted); user-select: none; }
-    .code-ln:hover, .code-ln:focus-visible { color: var(--color-primary); text-decoration: underline; }
-    .code-text { white-space: pre; padding-right: 0.75rem; }
     .thread { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: var(--color-bg-surface, #fff);
       border: 1px solid var(--color-border-default); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
     .thread--resolved { opacity: 0.7; }
     .thread-body { margin-top: 0.25rem; font-size: 0.8125rem; white-space: pre-wrap; }
     .thread-reply { margin-top: 0.25rem; padding-left: 0.75rem; border-left: 2px solid var(--color-border-default); font-size: 0.75rem; white-space: pre-wrap; }
-    .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
-    .suggestion-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; border: 1px dashed var(--color-primary); color: var(--color-primary); font-size: 0.625rem; }
     .ai-bar { padding: 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary, #0969da); }
     .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary, #0969da);
       background: var(--color-primary-subtle, rgba(9, 105, 218, 0.08)); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
@@ -319,6 +295,8 @@ export class ProjektKiadasComponent implements OnInit {
 
   /** Route-paraméter (withComponentInputBinding). */
   readonly id = input.required<string>();
+  /** Query-paraméter: ennek a diáknak a kódja nyílik meg betöltéskor (a technikumi vizsgarész-térképről). */
+  readonly diak = input<string>();
 
   readonly runtimeLabels = RUNTIME_LABELS;
   readonly utc = parseUtc;
@@ -387,7 +365,7 @@ export class ProjektKiadasComponent implements OnInit {
 
   readonly lines = computed(() => {
     const path = this.activePath();
-    return path ? (this.code()?.files[path] ?? '').split('\n').map((l) => l.replace(/\r$/, '')) : [];
+    return path ? codeLines(this.code()?.files[path]) : [];
   });
 
   /** Az aktív fájl szálai soronként; a fájl végén túli (azóta törölt) sorok az utolsó soron jelennek meg. */
@@ -423,16 +401,29 @@ export class ProjektKiadasComponent implements OnInit {
     return worst?.orderNo ?? null;
   });
 
-  readonly codePaths = computed(() => {
-    const c = this.code();
-    if (!c) return [];
-    const ro = new Set(c.readOnlyPaths);
-    return Object.keys(c.files).sort((a, b) => Number(ro.has(a)) - Number(ro.has(b)) || a.localeCompare(b));
+  readonly markedLines = computed(() => new Set(this.threadsByLine().keys()));
+
+  /** Fájlonként az AI-javaslatok száma. */
+  readonly suggestionCounts = computed(() => {
+    const counts: Record<string, number> = {};
+    for (const sg of this.suggestions()) counts[sg.path] = (counts[sg.path] ?? 0) + 1;
+    return counts;
+  });
+
+  /** Fájlonként a nyitott megjegyzések száma. */
+  readonly openCounts = computed(() => {
+    const counts: Record<string, number> = {};
+    for (const c of this.comments()) if (!c.resolvedAt) counts[c.path] = (counts[c.path] ?? 0) + 1;
+    return counts;
   });
 
   ngOnInit(): void {
     this.api.students(+this.id()).pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
-      next: (v) => this.view.set(v),
+      next: (v) => {
+        this.view.set(v);
+        const s = v.students.find((x) => String(x.userId) === this.diak());
+        if (s?.runtime) this.openCode(s);
+      },
       error: (e) => this.error.set(extractErrorMessage(e, 'Az osztály-nézet betöltése sikertelen.')),
     });
   }
@@ -469,19 +460,11 @@ export class ProjektKiadasComponent implements OnInit {
     return this.suggestionsByLine().get(line) ?? [];
   }
 
-  suggestionCountFor(path: string): number {
-    return this.suggestions().filter((x) => x.path === path).length;
-  }
-
   sevClass(sg: CodeSuggestion): string {
     return sg.severity === 'dicséret' ? 'dicseret' : sg.severity;
   }
 
-  openCountFor(path: string): number {
-    return this.comments().filter((c) => c.path === path && !c.resolvedAt).length;
-  }
-
-  selectFile(path: string): void {
+  selectFile(path: string | null): void {
     // A megnyitott fájlra kért javaslat a fájlváltással okafogyottá válik; az „összes fájl” kérés fut tovább.
     if (path !== this.activePath() && this.suggestScopeInFlight === 'file') this.cancelSuggest();
     this.activePath.set(path);
@@ -712,7 +695,7 @@ export class ProjektKiadasComponent implements OnInit {
     this.api.studentCode(+this.id(), s.userId).pipe(take(1), finalize(() => this.codeLoading.set(false))).subscribe({
       next: (c) => {
         this.code.set(c);
-        this.activePath.set(this.codePaths()[0] ?? null);
+        this.activePath.set(codeFilePaths(c.files, c.readOnlyPaths)[0] ?? null);
       },
       error: (e) => this.codeError.set(extractErrorMessage(e, 'A kód betöltése sikertelen.')),
     });

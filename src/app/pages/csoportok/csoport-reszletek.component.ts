@@ -31,15 +31,16 @@ import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherWeakTopicDto } from '../../models/report.model';
+import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
 import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
 
-type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak';
+type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent, GyengeTemakJavaslatokComponent],
   template: `
     @if (store.selectedGroup(); as group) {
       <div class="max-w-3xl mx-auto px-4 py-10">
@@ -104,7 +105,7 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
              a gombok role="tab" + aria-selected nélkül egy képernyőolvasó-felhasználó
              számára 4 néma, állapot nélküli "gomb"-ként hangzott el. -->
         <nav class="flex gap-4 border-b border-border-default mb-6 overflow-x-auto" role="tablist">
-          @for (option of tabs; track option.value) {
+          @for (option of tabs(); track option.value) {
             <button (click)="setTab(option.value)" class="tab-btn"
               [class.tab-btn-active]="tab() === option.value"
               role="tab" [attr.aria-selected]="tab() === option.value">
@@ -361,7 +362,9 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
               @for (p of projectAssignments(); track p.id) {
                 <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
                   <div class="min-w-0 flex-1">
-                    <p class="font-semibold">{{ p.projectTitle }}</p>
+                    <p class="font-semibold">{{ p.projectTitle }}
+                      @if (p.isTest) { <span class="badge badge-warning ml-1">Dolgozat</span> }
+                    </p>
                     <p class="text-xs text-text-muted">
                       {{ p.startedCount }}/{{ p.memberCount }} elkezdte · {{ p.completedCount }} kész
                       @if (p.runtime) { · csak {{ projectRuntimeLabels[p.runtime] }} }
@@ -467,6 +470,10 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
                 }
               </ol>
             }
+          }
+
+          @case ('vizsgaresz-terkep') {
+            <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepOff.set(true); setTab('tagok')" />
           }
 
           @case ('gyenge-temak') {
@@ -580,15 +587,21 @@ export class CsoportReszletekComponent implements OnInit {
   /** Az összefoglalóval egyező, lefelé kerekített százalék. */
   readonly pct = floorPercent;
 
-  readonly tabs: { value: Tab; label: string }[] = [
+  /** Igaz, ha a BE jelezte: a technikumi modul ki van kapcsolva (a fül elrejtve). */
+  readonly terkepOff = signal(false);
+
+  /** A „Vizsgarész-térkép” fül csak technikumként jelölt intézmény tanárának látszik (mint a technikumi projektek). */
+  readonly tabs = computed<{ value: Tab; label: string }[]>(() => [
     { value: 'tagok', label: 'Tagok' },
     { value: 'kiadva', label: 'Kiadva' },
     { value: 'helyek', label: 'Helyek' },
     { value: 'eredmenyek', label: 'Eredmények' },
+    ...(!this.terkepOff() && this.schoolStore.schools().some((s) => s.schoolType === 'technikum')
+      ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
     { value: 'ranglista', label: 'Ranglista' },
     { value: 'gyenge-temak', label: 'Gyenge témák' },
     { value: 'meghivo', label: 'Meghívó' },
-  ];
+  ]);
 
   readonly tab = signal<Tab>('tagok');
   // ── UI-UX-T3: "Kiadva" fül állapota ──

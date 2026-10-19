@@ -9,7 +9,14 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
-import { ProjectAssignmentDto, ProjectRuntime, RUNTIME_LABELS, TeacherProjectDto } from '../../models/teacher-project.model';
+import {
+  ProjectAssignmentDto,
+  ProjectRuntime,
+  RUNTIME_LABELS,
+  TEST_MINUTES_MAX,
+  TEST_MINUTES_MIN,
+  TeacherProjectDto,
+} from '../../models/teacher-project.model';
 import { TartalomFulekComponent } from './tartalom-fulek.component';
 
 /** Az űrlap állapota egy projekt kiadásához. */
@@ -18,7 +25,13 @@ interface AssignDraft {
   runtime: ProjectRuntime | '';
   opensAt: string;
   dueAt: string;
+  /** Technikumi dolgozat (vizsga-munkamenet, időre). */
+  isTest: boolean;
+  /** Percben; üres = a projekt ideje. */
+  minutes: string;
 }
+
+const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueAt: '', isTest: false, minutes: '' };
 
 /**
  * Projektműhely a tanári oldalon (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G fázis): a kész projektek katalógusa (csak
@@ -86,10 +99,28 @@ interface AssignDraft {
                       @for (r of p.runtimes; track r) { <option [value]="r">Csak {{ runtimeLabels[r] }}</option> }
                     </select>
                   </label>
-                  <label class="text-sm">Nyílik (nem kötelező)
-                    <input type="datetime-local" class="input mt-1" (change)="patch({ opensAt: $any($event.target).value })" />
+                  @if (canBeTest(p)) {
+                    <div class="sm:col-span-2 rounded-xl bg-bg-element p-3">
+                      <label class="flex items-center gap-2 text-sm font-semibold">
+                        <input type="checkbox" role="switch" [checked]="draft().isTest" (change)="patch({ isTest: $any($event.target).checked })" data-testid="assign-test" />
+                        Dolgozat (időkorláttal)
+                      </label>
+                      <p class="text-xs text-text-muted mt-1">
+                        A diákok vizsga-munkamenetben, időre írják; az eredményt a befejezés után a csoport Vizsgarész-térkép fülén teheted közzé.
+                      </p>
+                      @if (draft().isTest) {
+                        <label class="text-sm block mt-3">Időkorlát (perc)
+                          <input type="number" class="input mt-1 !w-32" [min]="minMinutes" [max]="maxMinutes" step="1" placeholder="240"
+                                 (change)="patch({ minutes: $any($event.target).value })" data-testid="assign-minutes" />
+                          <span class="block text-xs text-text-muted mt-1">Üresen a projekt ideje (a szakmai vizsgán 240 perc).</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                  <label class="text-sm">{{ draft().isTest ? 'Kezdés' : 'Nyílik (nem kötelező)' }}
+                    <input type="datetime-local" class="input mt-1" (change)="patch({ opensAt: $any($event.target).value })" data-testid="assign-opens" />
                   </label>
-                  <label class="text-sm">Határidő (nem kötelező)
+                  <label class="text-sm">{{ draft().isTest ? 'Befejezés' : 'Határidő (nem kötelező)' }}
                     <input type="datetime-local" class="input mt-1" (change)="patch({ dueAt: $any($event.target).value })" data-testid="assign-due" />
                   </label>
                   @if (formError(); as err) { <p class="text-danger text-sm sm:col-span-2" role="alert">{{ err }}</p> }
@@ -106,7 +137,9 @@ interface AssignDraft {
                     <li class="rounded-xl border border-border-default p-3 text-sm" [attr.data-testid]="'assignment-' + a.id">
                       <div class="flex items-center gap-3 flex-wrap">
                         <div class="min-w-0 flex-1">
-                          <p class="font-semibold">{{ a.groupName }}</p>
+                          <p class="font-semibold">{{ a.groupName }}
+                            @if (a.isTest) { <span class="badge badge-warning ml-1">Dolgozat{{ a.timeLimitSeconds ? ' · ' + a.timeLimitSeconds / 60 + ' perc' : '' }}</span> }
+                          </p>
                           <p class="text-xs text-text-muted">
                             {{ a.startedCount }}/{{ a.memberCount }} elkezdte · {{ a.completedCount }} kész
                             @if (a.runtime) { · csak {{ runtimeLabels[a.runtime] }} }
@@ -151,7 +184,9 @@ export class ProjektekListaComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly openFor = signal<string | null>(null);
-  readonly draft = signal<AssignDraft>({ groupId: null, runtime: '', opensAt: '', dueAt: '' });
+  readonly draft = signal<AssignDraft>(EMPTY_DRAFT);
+  readonly minMinutes = TEST_MINUTES_MIN;
+  readonly maxMinutes = TEST_MINUTES_MAX;
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
 
@@ -178,12 +213,19 @@ export class ProjektekListaComponent implements OnInit {
 
   toggleForm(slug: string): void {
     this.openFor.set(this.openFor() === slug ? null : slug);
-    this.draft.set({ groupId: null, runtime: '', opensAt: '', dueAt: '' });
+    this.draft.set(EMPTY_DRAFT);
     this.formError.set(null);
   }
 
   patch(change: Partial<AssignDraft>): void {
     this.draft.update((d) => ({ ...d, ...change }));
+  }
+
+  /**
+   * Dolgozat csak technikumi próbavizsgából (`kind === 'exam'`) adható ki (a BE ellenőrzi és 400-zal utasítja el a többit).
+   */
+  canBeTest(p: TeacherProjectDto): boolean {
+    return p.kind === 'exam';
   }
 
   runtimeList(runtimes: ProjectRuntime[]): string {
@@ -195,7 +237,17 @@ export class ProjektekListaComponent implements OnInit {
     const d = this.draft();
     if (!d.groupId) return;
     if (d.opensAt && d.dueAt && new Date(d.opensAt) > new Date(d.dueAt)) {
-      this.formError.set('A határidő nem lehet korábbi, mint a nyitás.');
+      this.formError.set(d.isTest && this.canBeTest(p) ? 'A befejezés nem lehet korábbi, mint a kezdés.' : 'A határidő nem lehet korábbi, mint a nyitás.');
+      return;
+    }
+    const isTest = d.isTest && this.canBeTest(p);
+    const minutes = isTest && d.minutes.trim() ? Number(d.minutes) : null;
+    if (isTest && (!d.opensAt || !d.dueAt)) {
+      this.formError.set('Dolgozatnál a kezdés és a befejezés időpontja kötelező.');
+      return;
+    }
+    if (minutes !== null && !(Number.isInteger(minutes) && minutes >= TEST_MINUTES_MIN && minutes <= TEST_MINUTES_MAX)) {
+      this.formError.set(`A dolgozat időkorlátja ${TEST_MINUTES_MIN} és ${TEST_MINUTES_MAX} perc között lehet.`);
       return;
     }
     this.saving.set(true);
@@ -206,6 +258,8 @@ export class ProjektekListaComponent implements OnInit {
       runtime: d.runtime || null,
       opensAt: d.opensAt ? new Date(d.opensAt).toISOString() : null,
       dueAt: d.dueAt ? new Date(d.dueAt).toISOString() : null,
+      isTest,
+      timeLimitSeconds: minutes === null ? null : minutes * 60,
     }).pipe(take(1), finalize(() => this.saving.set(false))).subscribe({
       next: (assignment) => {
         this.projects.update((list) => list.map((x) => (x.slug === p.slug ? { ...x, assignments: [assignment, ...x.assignments] } : x)));
