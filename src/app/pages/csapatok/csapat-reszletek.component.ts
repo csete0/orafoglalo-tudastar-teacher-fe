@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -11,7 +11,8 @@ import { AiHelperQuotaItemDto } from '../../shared/ai-helper-quota.util';
 import { KodOlvasoComponent } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { HetiAktivitasComponent } from './heti-aktivitas.component';
 import {
-  CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamReviews, TeamTree,
+  CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview, TeamReviews,
+  TeamTree,
 } from '../../models/team.model';
 
 type Fül = 'munka' | 'merfoldkovek' | 'mi' | 'fajlok';
@@ -129,6 +130,7 @@ const MAX_POLLS = 36;
                   }
                   @if (m.testPreset) {
                     @if (m.canEdit) { <button class="btn btn-ghost" type="button" (click)="runTest(m)" [disabled]="busy()">Tesztek futtatása</button> }
+                    <p class="text-xs text-text-muted" data-testid="test-help">A tesztfuttatás a megadott mappa fájljait küldi először, majd a tároló többi fájlját (legfeljebb 150 fájl / 2 MB). Python esetén a szülőmappából importáláshoz csomag-szerkezet kell (__init__.py).</p>
                     @if (testResult()[m.id] ?? m.lastCheck?.test; as tr) {
                       <details class="text-sm" [open]="!tr.passed"><summary class="cursor-pointer" [class.text-danger]="!tr.passed">Tesztek: {{ tr.passed ? 'lefutottak' : 'hibával álltak le' }}
                         ({{ tr.at | date: 'yyyy.MM.dd. HH:mm' }})</summary><pre class="whitespace-pre-wrap max-h-64 overflow-auto text-xs">{{ tr.output }}</pre></details>
@@ -162,14 +164,16 @@ const MAX_POLLS = 36;
                         @for (b of branches(); track b) { <option [ngValue]="b">{{ b }}</option> }
                       </select></label>
                   }
-                  <button class="btn btn-primary" type="button" (click)="requestReview()" [disabled]="busy() || running() || r.used >= r.limit">MI-átnézés kérése</button>
+                  <button class="btn btn-primary" type="button" (click)="requestReview()" [disabled]="busy() || running() || r.used >= r.limit || quotaFull()">MI-átnézés kérése</button>
                 </div>
                 @if (r.used >= r.limit) { <p class="text-xs text-text-muted">A csapat havi kerete elfogyott – a következő hónapban újra kérhető.</p> }
+                @else if (quotaFull()) { <p class="text-xs text-text-muted" data-testid="quota-full">A havi MI-kereted elfogyott – a következő hónapban újra kérhető.</p> }
               }
               @if (stalled()) { <p class="text-sm" role="status">Még fut – <button class="underline" type="button" (click)="refreshReviews()">frissítés</button></p> }
               @for (x of r.items; track x.id) {
                 <article class="card p-3 space-y-2 text-sm min-w-0" [attr.data-testid]="'review-' + x.id">
-                  <h3 class="font-bold break-words">{{ x.createdAt | date: 'yyyy.MM.dd. HH:mm' }} · ág: {{ x.branch }}{{ x.requestedByName ? ' · ' + x.requestedByName : '' }}</h3>
+                  <h3 class="font-bold break-words">{{ x.createdAt | date: 'yyyy.MM.dd. HH:mm' }} · ág: {{ x.branch }}{{ x.requestedByName ? ' · ' + x.requestedByName : '' }}
+                    @if (notCounted(x)) { <span class="badge badge-neutral font-normal">nem számít bele a keretbe</span> }</h3>
                   @if (x.status === 'queued') { <p role="status">Sorban áll…</p> }
                   @else if (x.status === 'running') { <p role="status">Az MI átnézi a tárolót…</p> }
                   @else {
@@ -232,7 +236,8 @@ export class CsapatReszletekComponent implements OnInit {
   readonly fulek: { value: Fül; label: string }[] = [
     { value: 'munka', label: 'Csapatmunka' }, { value: 'merfoldkovek', label: 'Mérföldkövek' }, { value: 'mi', label: 'MI-átnézés' }, { value: 'fajlok', label: 'Fájlok' },
   ];
-  readonly today = new Date().toISOString().slice(0, 10);
+  /** Helyi (nem UTC) mai nap - éjfél körül az ISO-dátum még a tegnapi lenne. */
+  readonly today = formatDate(new Date(), 'yyyy-MM-dd', 'en-US');
   readonly tab = signal<Fül>('munka');
   readonly team = signal<Team | null>(null);
   readonly activity = signal<TeamActivity | null>(null);
@@ -265,6 +270,7 @@ export class CsapatReszletekComponent implements OnInit {
   readonly canTick = computed(() => this.milestones().some((m) => m.canTick));
   readonly branches = computed(() => (this.activity()?.branches ?? []).map((b) => b.name));
   readonly running = computed(() => !!this.reviews()?.items.some((r) => r.status === 'queued' || r.status === 'running'));
+  readonly quotaFull = computed(() => { const q = this.quota(); return !!q && q.used >= q.limit; });
 
   private timer: ReturnType<typeof setTimeout> | undefined;
   private polls = 0;
@@ -290,12 +296,12 @@ export class CsapatReszletekComponent implements OnInit {
   async setTab(tab: Fül): Promise<void> {
     this.tab.set(tab);
     this.error.set(null);
+    clearTimeout(this.timer); // a fülről elnavigálva a frissítés leáll (visszatéréskor újraindul)
+    this.stalled.set(false);
     if (tab === 'merfoldkovek') await this.loadMilestones();
     if (tab === 'mi') {
       this.polls = 0;
-      await this.loadReviews();
-      const q = await firstValueFrom(this.reports.getAiHelperQuota()).catch(() => null);
-      this.quota.set(q?.repoReview ?? null);
+      await Promise.all([this.loadReviews(), this.loadQuota()]);
     }
     if (tab === 'fajlok' && !this.tree()) await this.run(async () => this.tree.set(await firstValueFrom(this.api.tree(this.id, this.fileRef()))));
   }
@@ -303,6 +309,10 @@ export class CsapatReszletekComponent implements OnInit {
   memberLine(t: Team): string { return t.members.map((m) => m.name + (m.role ? ` (${m.role})` : '')).join(', '); }
   kindLabel(kind: TeamMilestone['kind']): string { return MILESTONE_KIND_LABEL[kind]; }
   syncLabel(s: string | null): string { return s ? (SYNC_LABEL[s] ?? s) : 'még nem futott'; }
+  /** A sikertelen / csonka (és a BE szerint nem számolt) befejezett átnézés sem a csapat, sem a tanár keretéből nem fogy. */
+  notCounted(x: TeamRepoReview): boolean {
+    return x.status !== 'queued' && x.status !== 'running' && (x.status === 'failed' || x.status === 'truncated' || !x.counted);
+  }
   severityLabel(s: CodeSuggestion): string { return s.severity === 'hiba' ? 'Hiba' : s.severity === 'dicséret' ? 'Dicséret' : 'Javaslat'; }
 
   // ---- csapatadatok ----
@@ -383,7 +393,7 @@ export class CsapatReszletekComponent implements OnInit {
   async requestReview(): Promise<void> {
     if (await this.run(() => firstValueFrom(this.api.requestReview(this.id, this.reviewBranch())))) {
       this.polls = 0;
-      await this.loadReviews();
+      await Promise.all([this.loadReviews(), this.loadQuota()]);
     }
   }
 
@@ -392,8 +402,9 @@ export class CsapatReszletekComponent implements OnInit {
     return this.loadReviews();
   }
 
-  /** Futó átnézésnél 5 mp-enként frissül (legfeljebb 3 percig, utána kézi frissítés). */
+  /** Futó átnézésnél 5 mp-enként frissül (legfeljebb 3 percig, utána kézi frissítés), csak az MI-fülön; a frissítés végén a tanári keret is. */
   private async loadReviews(): Promise<void> {
+    const wasRunning = this.running();
     try {
       this.reviews.set(await firstValueFrom(this.api.reviews(this.id)));
     } catch (e) {
@@ -401,9 +412,18 @@ export class CsapatReszletekComponent implements OnInit {
     }
     clearTimeout(this.timer);
     this.stalled.set(false);
-    if (this.destroyed || !this.running()) return;
+    if (this.destroyed || this.tab() !== 'mi') return;
+    if (!this.running()) {
+      if (wasRunning) await this.loadQuota(); // a lefutott átnézés után a keret változhatott
+      return;
+    }
     if (this.polls++ < MAX_POLLS) this.timer = setTimeout(() => void this.loadReviews(), POLL_MS);
     else this.stalled.set(true);
+  }
+
+  private async loadQuota(): Promise<void> {
+    const q = await firstValueFrom(this.reports.getAiHelperQuota()).catch(() => null);
+    this.quota.set(q?.repoReview ?? null);
   }
 
   // ---- fájlok ----

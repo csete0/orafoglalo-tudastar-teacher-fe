@@ -76,7 +76,12 @@ describe('CsoportCsapatokComponent', () => {
     fixture.detectChanges();
     const kivetel = (id: number) => [...el.querySelectorAll<HTMLButtonElement>(`[data-testid="team-${id}"] button[aria-label^="Kivétel"]`)];
     expect(kivetel(9).every((b) => b.disabled)).toBe(true);
-    expect(el.querySelector('[data-testid="team-9"] select')).not.toBeNull();
+    // minden csoporttag csapatban van: felvételi lista helyett jelzés
+    expect(el.querySelector('[data-testid="team-9"] select')).toBeNull();
+    expect(el.querySelector('[data-testid="team-9"] [data-testid="no-free-member"]')?.textContent).toContain('Nincs szabad tag');
+    c.members.update((m) => [...m, { userId: 4, name: 'Szabó Dóra', email: 'd@x', joinedAt: '' }]);
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="team-9"] select')?.textContent).toContain('Szabó Dóra');
     expect(kivetel(10).every((b) => !b.disabled)).toBe(true);
     expect(el.querySelector('[data-testid="team-10"] select')).toBeNull();
     await c.removeMember(full, 3, 'Tóth Cili');

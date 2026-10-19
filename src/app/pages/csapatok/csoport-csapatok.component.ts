@@ -61,10 +61,12 @@ const MAX_MEMBERS = 3;
             @if (t.status === 'proposed' || t.status === 'active') {
               <div class="flex flex-wrap gap-2 items-end">
                 @for (m of t.members; track m.userId) {
-                  <button class="btn btn-ghost !py-0.5" type="button" (click)="removeMember(t, m.userId, m.name)" [disabled]="busy() || t.members.length <= minMembers"
+                  <button class="btn btn-ghost min-h-8" type="button" (click)="removeMember(t, m.userId, m.name)" [disabled]="busy() || t.members.length <= minMembers"
                     [attr.aria-label]="'Kivétel a csapatból: ' + m.name">{{ m.name }} ✕</button>
                 }
-                @if (t.members.length < maxMembers) {
+                @if (t.members.length < maxMembers && !freeMembers().length) {
+                  <span class="text-xs text-text-muted" data-testid="no-free-member">Nincs szabad tag</span>
+                } @else if (t.members.length < maxMembers) {
                   <label class="text-sm">Tag felvétele
                     <select class="input" [disabled]="busy()" (change)="addMember(t, +$any($event.target).value); $any($event.target).value = ''">
                       <option value="">Válassz…</option>
