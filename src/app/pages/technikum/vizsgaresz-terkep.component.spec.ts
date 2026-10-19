@@ -94,6 +94,47 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="cell-55-console"]')!.className).not.toContain('heat-cell--failed');
   });
 
+  it('a térkép a saját dobozában görög (390 px-en a lap nem lesz szélesebb): az .sr-only szövegek is a görgető dobozon belül', async () => {
+    const { el } = await setup();
+    const scroll = el.querySelector('[data-testid="heatmap-scroll"]')!;
+    expect(scroll.className).toContain('overflow-x-auto');
+    expect(scroll.className).toContain('relative');
+    expect(scroll.querySelector('[data-testid="heatmap"]')).not.toBeNull();
+  });
+
+  it('nem értékelt MI-szempontok: a cella jelölve, a pillanatképben a szempontok „nem értékelt”-ek, részleges eredmény ítélet nélkül', async () => {
+    const api = {
+      heatmap: vi.fn(() => of({ ...structuredClone(heatmap), students: [{ ...heatmap.students[0],
+        cells: [cell({ points: 10, ratio: 10 / 15, aiNotEvaluatedPoints: 5 })] }] })),
+      snapshot: vi.fn(() => of({ ...snapshot, session: { ...snapshot.session, totalPoints: 25, passed: null, notEvaluatedPoints: 5, parts: [
+        { partKey: 'console' as const, title: 'Konzol', maxPoints: 15, result: { id: 1, partKey: 'console' as const, status: 'graded', points: 10, maxPoints: 15,
+          source: 'exam', sessionId: 31, gradedAt: '', detail: { message: null, machine: { status: 'done', points: 10, maxPoints: 10, compileOutput: null, cases: [] },
+            ai: { status: 'unavailable', points: 0, maxPoints: 5, message: 'Nem értékelt (MI-keret: a tanár havi MI-értékelési kerete elfogyott)',
+              items: [{ key: 'k', points: 0, maxPoints: 5, reason: 'Beszédes nevek', notEvaluated: true }] } } } }] } })),
+      publish: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      imports: [VizsgareszTerkepComponent],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: { success: vi.fn() } }],
+    });
+    const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+    fixture.componentRef.setInput('groupId', 12);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const c = el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!;
+    expect(c.className).toContain('heat-cell--ai-na');
+    expect(c.textContent).toContain('5 pont MI-szempont nem értékelt');
+    expect(c.getAttribute('title')).toContain('MI-szempont nem értékelt');
+    c.click();
+    fixture.detectChanges();
+    const section = el.querySelector('[data-testid="snapshot"]')!;
+    expect(section.querySelector('[data-testid="snapshot-partial"]')).not.toBeNull();
+    expect(section.textContent).not.toContain('nem felelt meg');
+    expect(section.querySelector('[data-testid="snapshot-not-evaluated"]')!.textContent).toContain('5 pontnyi MI-szempont');
+    expect(section.querySelector('[data-testid="item-not-evaluated"]')).not.toBeNull();
+    expect(section.textContent).toContain('Beszédes nevek');
+  });
+
   it('a nem dolgozatból jövő cella a projekt osztály-nézetébe visz a diák kódjához; kiadás nélkül nem kattintható', async () => {
     const { el } = await setup();
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="cell-55-api"]')!;

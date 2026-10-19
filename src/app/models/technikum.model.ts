@@ -45,6 +45,8 @@ export interface HeatmapCellDto {
   gradedAt: string;
   /** Dolgozat-rész, amelynek bírálata végleg sikertelen (vagy végleg hiányzik): 0 pontnak számít. */
   gradingFailed: boolean;
+  /** > 0: a rész MI-szempontjai nem értékeltek (tanári / napi MI-keret, MI-hiba) - ennyi pont 0-val szerepel (kézi pontozás nincs). */
+  aiNotEvaluatedPoints?: number;
 }
 
 /** A közzététel eredménye: közzétett munkamenetek, és ezek közül hánynak van végleg sikertelen (0 pontos) része. */
@@ -89,7 +91,10 @@ export interface RubricItemOutcomeDto {
   key: string;
   points: number;
   maxPoints: number;
+  /** Az MI indoklása; nem értékelt szempontnál a szempont szövege. */
   reason: string;
+  /** Az MI nem értékelte (keret / MI-hiba): 0 pont. */
+  notEvaluated?: boolean;
 }
 
 export interface ExamPartDetailDto {
@@ -131,8 +136,11 @@ export interface ExamSessionDto {
   resultsVisible: boolean;
   totalPoints: number | null;
   maxPoints: number;
+  /** Csak ha az ítélet biztos (nem értékelt MI-szempontok mellett is). */
   passed: boolean | null;
   parts: ExamSessionPartDto[];
+  /** > 0: részleges eredmény - ennyi pontnyi MI-szempont nem értékelt. */
+  notEvaluatedPoints?: number;
 }
 
 /** A beadott dolgozat (lezáráskori pillanatkép) a bírálattal. */

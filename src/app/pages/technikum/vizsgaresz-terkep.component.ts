@@ -75,7 +75,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
         }
       </div>
 
-      <div class="card overflow-x-auto">
+      <!-- relative: a cellák .sr-only (abszolút) szövegei is a görgető dobozon belül maradnak, különben 390 px-en az egész lap
+           vízszintesen görgethető lesz (a táblázat a saját dobozában görög). -->
+      <div class="card relative max-w-full overflow-x-auto" data-testid="heatmap-scroll">
         <table class="w-full text-sm" data-testid="heatmap">
           <thead>
             <tr class="text-left border-b border-border-default">
@@ -94,15 +96,15 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                   <td class="py-1.5 px-1.5 text-center">
                     @if (cellOf(s, p.key); as c) {
                       @if (c.fromClassTest && c.sessionId) {
-                        <button type="button" [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
-                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span aria-hidden="true"> !</span><span class="sr-only"> – bírálat sikertelen</span>}</button>
+                        <button type="button" [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [class.heat-cell--ai-na]="!!c.aiNotEvaluatedPoints" [attr.title]="cellTitle(c)"
+                                [attr.data-testid]="'cell-' + s.userId + '-' + p.key" (click)="openSnapshot(c.sessionId)">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span aria-hidden="true"> !</span><span class="sr-only"> – bírálat sikertelen</span>}@if (c.aiNotEvaluatedPoints) {<span aria-hidden="true">*</span><span class="sr-only"> – {{ c.aiNotEvaluatedPoints }} pont MI-szempont nem értékelt</span>}</button>
                       } @else if (c.assignmentId) {
-                        <a [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
+                        <a [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [class.heat-cell--ai-na]="!!c.aiNotEvaluatedPoints" [attr.title]="cellTitle(c)"
                            [attr.data-testid]="'cell-' + s.userId + '-' + p.key"
-                           [routerLink]="['/feladatsorok/projektek/kiadas', c.assignmentId]" [queryParams]="{ diak: s.userId }">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}</a>
+                           [routerLink]="['/feladatsorok/projektek/kiadas', c.assignmentId]" [queryParams]="{ diak: s.userId }">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}@if (c.aiNotEvaluatedPoints) {<span aria-hidden="true">*</span><span class="sr-only"> – {{ c.aiNotEvaluatedPoints }} pont MI-szempont nem értékelt</span>}</a>
                       } @else {
-                        <span [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [attr.title]="cellTitle(c)"
-                              [attr.data-testid]="'cell-' + s.userId + '-' + p.key">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}</span>
+                        <span [class]="'heat-cell ' + heatClass[heat(c.ratio)]" [class.heat-cell--failed]="c.gradingFailed" [class.heat-cell--ai-na]="!!c.aiNotEvaluatedPoints" [attr.title]="cellTitle(c)"
+                              [attr.data-testid]="'cell-' + s.userId + '-' + p.key">{{ c.points }}/{{ c.maxPoints }}@if (c.gradingFailed) {<span class="sr-only"> – bírálat sikertelen</span>}@if (c.aiNotEvaluatedPoints) {<span aria-hidden="true">*</span><span class="sr-only"> – {{ c.aiNotEvaluatedPoints }} pont MI-szempont nem értékelt</span>}</span>
                       }
                     } @else {
                       <span class="heat-cell heat-cell--empty"><span aria-hidden="true">–</span><span class="sr-only">nincs eredmény</span></span>
@@ -126,7 +128,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
       <p class="text-xs text-text-muted mt-2">
         Részenként a legjobb bírált eredmény; ha a diák írt belőle dolgozatot ebben a csoportban, az számít. Kattints a cellára:
         a dolgozat beadott változata a bírálattal, a gyakorlás a diák kódja megjegyzésekkel. A felkiáltójeles, piros keretes
-        dolgozat-rész bírálata végleg sikertelen volt, ezért 0 pontnak számít.
+        dolgozat-rész bírálata végleg sikertelen volt, ezért 0 pontnak számít. A csillagos, szaggatott keretes rész MI-szempontjait
+        nem értékeltük (elfogyott MI-keret vagy MI-hiba): azok 0 pontot kaptak, a gépi tesztek pontja megmaradt - a cellára kattintva
+        látod, mely szempontok ezek (kézi pontozásra nincs lehetőség).
       </p>
 
       @if (snapshotLoading() || snapshot() || snapshotError()) {
@@ -145,9 +149,16 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
               @if (sn.session.totalPoints !== null) {
                 Összesen: <strong>{{ sn.session.totalPoints }}/{{ sn.session.maxPoints }} pont</strong>
                 @if (sn.session.passed !== null) { · <span [class]="sn.session.passed ? 'text-success' : 'text-danger'">{{ sn.session.passed ? 'megfelelt' : 'nem felelt meg' }}</span> }
+                @else if (sn.session.notEvaluatedPoints) { · <span class="text-warning" data-testid="snapshot-partial">részleges eredmény</span> }
               }
               @if (sn.session.submittedAt) { · beadva: {{ utc(sn.session.submittedAt) | date: 'yyyy.MM.dd. HH:mm' }} }
             </p>
+            @if (sn.session.notEvaluatedPoints) {
+              <p class="text-xs text-warning mt-1" role="note" data-testid="snapshot-not-evaluated">
+                {{ sn.session.notEvaluatedPoints }} pontnyi MI-szempont nem lett értékelve (MI-keret vagy MI-hiba) – ezek 0 pontot kaptak,
+                a gépi pont megmaradt. A megfelelt-ítélet csak akkor látszik, ha ettől függetlenül eldönthető.
+              </p>
+            }
             <ul class="mt-3 space-y-2 text-sm" data-testid="snapshot-parts">
               @for (part of sn.session.parts; track part.partKey) {
                 <li class="rounded-xl border border-border-default p-3">
@@ -181,7 +192,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                         @if (ai.message) { <p class="text-xs text-text-muted">{{ ai.message }}</p> }
                         <ul class="text-xs mt-1 space-y-0.5">
                           @for (it of ai.items; track it.key) {
-                            <li><strong>{{ it.points }}/{{ it.maxPoints }}</strong> {{ it.reason }}</li>
+                            <li><strong>{{ it.points }}/{{ it.maxPoints }}</strong>
+                              @if (it.notEvaluated) { <span class="badge badge-warning !text-[0.625rem]" data-testid="item-not-evaluated">nem értékelt</span> }
+                              {{ it.reason }}</li>
                           }
                         </ul>
                       }
@@ -203,6 +216,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
       font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
     a.heat-cell:hover, button.heat-cell:hover, a.heat-cell:focus-visible, button.heat-cell:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
     .heat-cell--failed { box-shadow: inset 0 0 0 2px var(--color-danger); }
+    .heat-cell--ai-na { outline: 2px dashed var(--color-warning); outline-offset: -2px; }
     .heat-cell--empty { color: var(--color-text-muted); background: var(--color-bg-element); }
     .legend-dot { display: inline-block; width: 0.875rem; height: 0.875rem; border-radius: 0.25rem; }
     .compile-output { margin-top: 0.25rem; max-height: 12rem; overflow: auto; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.6875rem;
@@ -266,7 +280,8 @@ export class VizsgareszTerkepComponent implements OnInit {
   cellTitle(c: HeatmapCellDto): string {
     const source = c.fromClassTest ? 'dolgozat' : c.source === 'exam' ? 'próbavizsga' : 'gyakorlás';
     const failed = c.gradingFailed ? ' – a bírálat végleg sikertelen, 0 pontnak számít' : '';
-    return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%${failed}`;
+    const ai = c.aiNotEvaluatedPoints ? ` – ${c.aiNotEvaluatedPoints} pont MI-szempont nem értékelt (MI-keret / MI-hiba), 0 pontnak számít` : '';
+    return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%${failed}${ai}`;
   }
 
   publish(t: HeatmapTestDto): void {
