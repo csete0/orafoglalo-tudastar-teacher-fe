@@ -305,6 +305,30 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
     });
 
+    it('irodai mentés után újranyitva az ablak jelzi a mentett feladatot; az „Ugrás a feladathoz” bezár és kinyitja a feladatot', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherOfficeTaskService, {
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const c = fixture.componentInstance;
+      const el: HTMLElement = fixture.nativeElement;
+      c.lastOfficeSave.set({ taskSetId: 1, taskId: 456, title: 'Kupa' });
+      c.officeTaskDialog.set('excel');
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-last-saved"]')!.textContent).toContain('Az előző generálás mentve: Kupa');
+      (el.querySelector('[data-testid="io-last-saved-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
+      expect(c.expandedTaskId()).toBe(456);
+      // Másik feladatsor mentése nem látszik ezen.
+      c.lastOfficeSave.set({ taskSetId: 99, taskId: 1, title: 'Más' });
+      c.officeTaskDialog.set('excel');
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="io-last-saved"]')).toBeNull();
+    });
+
     it('a Prezentáció blokk „Új feladat” űrlapja mellől PowerPoint-címmel nyílik ugyanaz az ablak', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, {

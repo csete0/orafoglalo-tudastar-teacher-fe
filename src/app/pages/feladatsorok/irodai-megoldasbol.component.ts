@@ -233,12 +233,12 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                   <p class="text-sm text-text-muted break-words"><span class="font-medium">Az AI megjegyzése:</span> {{ notes() }}</p>
                 }
 
-                <div role="tablist" aria-label="Az elkészült feladat részei" class="flex gap-1 overflow-x-auto border-b border-border-default -mx-1 px-1">
+                <div role="tablist" aria-label="Az elkészült feladat részei" class="flex flex-wrap gap-x-1 border-b border-border-default -mx-1 px-1" data-testid="io-tablist">
                   @for (t of tabs; track t.id; let i = $index) {
                     <button type="button" role="tab" [id]="'io-tab-' + t.id" [attr.aria-selected]="tab() === t.id"
                       [attr.aria-controls]="'io-panel-' + t.id" [attr.tabindex]="tab() === t.id ? 0 : -1"
                       (click)="tab.set(t.id)" (keydown)="onTabKey($event, i)" [attr.data-testid]="'io-tab-' + t.id"
-                      class="px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px"
+                      class="px-2 sm:px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px"
                       [class.border-primary]="tab() === t.id" [class.text-primary]="tab() === t.id" [class.font-semibold]="tab() === t.id"
                       [class.border-transparent]="tab() !== t.id" [class.text-text-muted]="tab() !== t.id">
                       {{ t.label }}
@@ -889,6 +889,14 @@ export function officeFileKind(file: File): OfficeFileKind | null {
           }
           @default {
             <div class="space-y-4" data-testid="io-input">
+              @if (lastSaved(); as ls) {
+                <div class="bg-success-subtle border border-success/40 rounded-xl p-3 text-sm text-success flex flex-wrap items-center gap-2" role="status" data-testid="io-last-saved">
+                  <app-icon name="check" class="w-5 h-5 block shrink-0" />
+                  <span class="flex-1 min-w-0 break-words">Az előző generálás mentve: <span class="font-semibold">{{ ls.title }}</span></span>
+                  <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="openTask.emit(ls.taskId)" data-testid="io-last-saved-open">Ugrás a feladathoz</button>
+                </div>
+                <h3 class="font-semibold text-sm">Új generálás</h3>
+              }
               @if (premiumRequired()) {
                 <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex items-start gap-2" data-testid="io-premium">
                   <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
@@ -986,6 +994,12 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly closed = output<void>();
   /** Sikeres mentés után az új feladat azonosítójával - a szerkesztő újratölt és kinyitja. */
   readonly saved = output<number>();
+  /** Sikeres mentés után a feladat azonosítója és címe - a szerkesztő megjegyzi, és újranyitáskor visszaadja (lastSaved). */
+  readonly savedTask = output<{ taskId: number; title: string }>();
+  /** Az ezen a feladatsoron legutóbb mentett feladat (a mentett job a jobs/active-ban már nem szerepel) - újranyitáskor jelezzük. */
+  readonly lastSaved = input<{ taskId: number; title: string } | null>(null);
+  /** „Ugrás a feladathoz”: a szerkesztő bezárja az ablakot, és a feladathoz görget. */
+  readonly openTask = output<number>();
 
   readonly tabs = TABS;
   readonly levels: { value: OfficeTaskLevel; label: string }[] = [
@@ -1660,6 +1674,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
         this.saving.set(false);
         this.toastService.success(`Elmentve: ${res.saved.join(', ')}.`);
         this.saved.emit(res.taskId);
+        this.savedTask.emit({ taskId: res.taskId, title: proposal.title });
         this.closed.emit();
       },
       error: (err) => {
