@@ -19,6 +19,8 @@ export interface AiHelperQuotaDto {
   codeComments: AiHelperQuotaItemDto;
   /** Irodai feladat a megoldott fájlból: egy egység = egy generálás. */
   officeTask?: AiHelperQuotaItemDto;
+  /** Vizsgaremek-csapat MI-repóátnézése (iskolai csapat): egy egység = egy átnézés. */
+  repoReview?: AiHelperQuotaItemDto;
 }
 
 export const AI_HELPER_PREMIUM_REQUIRED = 'AiHelperPremiumRequired';

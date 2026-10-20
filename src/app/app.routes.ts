@@ -74,6 +74,12 @@ export const routes: Routes = [
     ],
   },
   {
+    // Vizsgaremek-csapat (PATRICKS-FEJLESZTOMUHELY-BC-TERV.md 3.): a csoport „Csapatok” füléről.
+    path: 'csapatok/:id',
+    canActivate: [authGuard, roleGuard('teacher')],
+    loadComponent: () => import('./pages/csapatok/csapat-reszletek.component').then((m) => m.CsapatReszletekComponent),
+  },
+  {
     // Próbaérettségi: a saját csoportok jelentkeztetése és áttekintése (a menüpont csak közzétett eseménynél látszik).
     path: 'probaerettsegi',
     canActivate: [authGuard, roleGuard('teacher')],
