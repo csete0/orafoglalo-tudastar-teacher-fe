@@ -136,13 +136,14 @@ export function stripServerFields(p: OfficeTaskProposal): OfficeTaskProposal {
 const sameProposal = (a: OfficeTaskProposal | null, b: OfficeTaskProposal | null) =>
   a === b || (!!a && !!b && canon(stripServerFields(a)) === canon(stripServerFields(b)));
 
-const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip vagy .html' };
-const ACCEPT: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip,.html' };
-const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word', web: 'Weblap' };
-const KIND_ICON: Record<OfficeFileKind, IconName> = { excel: 'chart', word: 'document', web: 'link' };
+const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip vagy .html', graphics: '.png, .jpg, .gif vagy .svg' };
+const ACCEPT: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip,.html', graphics: '.png,.jpg,.jpeg,.gif,.svg' };
+const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word', web: 'Weblap', graphics: 'Grafika' };
+const KIND_ICON: Record<OfficeFileKind, IconName> = { excel: 'chart', word: 'document', web: 'link', graphics: 'eye' };
 
 /** A fájl fajtája a kiterjesztéséből (mint a szerveren), vagy null. */
 export function officeFileKind(file: File): OfficeFileKind | null {
+  if (/\.(png|jpe?g|gif|svg)$/i.test(file.name)) return 'graphics';
   return /\.xlsx$/i.test(file.name) ? 'excel' : /\.docx$/i.test(file.name) ? 'word' : /\.(zip|html?)$/i.test(file.name) ? 'web' : null;
 }
 
@@ -283,6 +284,9 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                         <div class="space-y-3" data-testid="io-panel-visszacsinalas">
                           <fieldset class="bg-bg-element rounded-xl p-3 space-y-2">
                             <legend class="text-sm font-medium px-1">Kiinduló fájl (ezt kapja a diák)</legend>
+                            @if (isGraphics()) {
+                              <p class="text-sm text-text-muted" data-testid="io-graphics-own">Grafikánál nincs visszacsinálás: a diák a saját kiinduló képedet kapja. Itt lecserélheted.</p>
+                            } @else {
                             <label class="flex items-start gap-2 text-sm">
                               <input type="radio" name="io-source-mode" class="mt-1" [checked]="p.sourceMode === 'derived'" (change)="setSourceMode('derived')"
                                 data-testid="io-source-derived" />
@@ -293,6 +297,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                 data-testid="io-source-own" />
                               <span>Saját kiinduló fájl <span class="text-text-muted">(a visszacsinálás kimarad, csak az ellenőrzés fut)</span></span>
                             </label>
+                            }
                             <div class="flex flex-wrap items-center gap-2 pl-6">
                               <label class="btn btn-ghost !px-2 !py-1 text-sm">
                                 Saját kiinduló fájl feltöltése
@@ -307,7 +312,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                             @if (ownSourceError()) { <p class="text-sm text-danger pl-6" role="alert" data-testid="io-own-error">{{ ownSourceError() }}</p> }
                           </fieldset>
 
-                          @if (p.sourceMode === 'own') {
+                          @if (p.sourceMode === 'own' && !isGraphics()) {
                             <p class="text-sm text-text-muted" data-testid="io-undo-skipped">Saját kiinduló fájlnál az alábbi műveletek nem futnak (a listájuk megmarad).</p>
                           }
 
@@ -680,6 +685,21 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                 <p class="text-sm text-text-muted" role="status">Előnézet betöltése…</p>
                               }
                             </div>
+                          } @else if (isGraphics()) {
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="io-graphics-preview">
+                              @for (f of [{ id: 'source', label: 'Kiinduló kép', url: imagePreview()?.source }, { id: 'solution', label: 'Megoldás', url: imagePreview()?.solution }]; track f.id) {
+                                <div class="min-w-0" [attr.data-testid]="'io-image-' + f.id">
+                                  <h3 class="font-semibold text-sm mb-1">{{ f.label }}</h3>
+                                  @if (f.url) {
+                                    <img [src]="f.url" [alt]="f.label" class="max-w-full h-auto rounded-lg border border-border-default bg-[repeating-conic-gradient(#ddd_0_25%,#fff_0_50%)] bg-[length:16px_16px]" />
+                                  } @else if (imagePreview()) {
+                                    <p class="text-sm text-text-muted">A kép nem tölthető be - töltsd le.</p>
+                                  } @else {
+                                    <p class="text-sm text-text-muted" role="status">Betöltés…</p>
+                                  }
+                                </div>
+                              }
+                            </div>
                           } @else if (r.preview; as pv) {
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div class="min-w-0" data-testid="io-preview-source">
@@ -804,14 +824,24 @@ export function officeFileKind(file: File): OfficeFileKind | null {
               </p>
 
               <div>
-                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip a HTML-, CSS- és képfájlokkal, vagy egyetlen .html), legfeljebb 20 MB</label>
-                <input id="io-file" type="file" accept=".xlsx,.docx,.zip,.html" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
+                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip a HTML-, CSS- és képfájlokkal, vagy egyetlen .html) vagy kép (.png, .jpg, .gif, .svg), legfeljebb 20 MB</label>
+                <input id="io-file" type="file" accept=".xlsx,.docx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
                 @if (fileError()) {
                   <p class="text-sm text-danger mt-1" role="alert" data-testid="io-file-error">{{ fileError() }}</p>
                 } @else if (file()) {
                   <p class="text-sm text-text-muted mt-1" data-testid="io-file-kind">Felismert fájltípus: {{ kindDescription() }}</p>
                 }
               </div>
+
+              @if (isGraphics()) {
+                <div>
+                  <label for="io-source-file" class="text-sm font-medium block mb-1">Kiinduló kép (ezt kapja a diák - grafikánál nincs visszacsinálás): .png, .jpg, .gif vagy .svg, legfeljebb 20 MB</label>
+                  <input id="io-source-file" type="file" accept=".png,.jpg,.jpeg,.gif,.svg" class="text-sm max-w-full" (change)="pickSourceFile($event)" data-testid="io-source-file" />
+                  @if (sourceFileError()) {
+                    <p class="text-sm text-danger mt-1" role="alert" data-testid="io-source-file-error">{{ sourceFileError() }}</p>
+                  }
+                </div>
+              }
 
               <div class="flex flex-wrap gap-4">
                 <fieldset>
@@ -909,6 +939,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   });
   readonly file = signal<File | null>(null);
   readonly fileError = signal<string | null>(null);
+  /** Grafika: a tanár saját kiinduló képe (már az indításkor kell). */
+  readonly sourceFile = signal<File | null>(null);
+  readonly sourceFileError = signal<string | null>(null);
   readonly level = signal<OfficeTaskLevel>('kozep');
   readonly subtaskCount = signal(5);
   readonly notesInput = signal('');
@@ -925,6 +958,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
       !this.quotaExhausted() &&
       !!this.file() &&
       !this.fileError() &&
+      (!this.isGraphics() || (!!this.sourceFile() && !this.sourceFileError())) &&
       this.notesInput().length <= MAX_NOTES,
   );
 
@@ -942,6 +976,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   });
   readonly isWord = computed(() => this.kind() === 'word');
   readonly isWeb = computed(() => this.kind() === 'web');
+  readonly isGraphics = computed(() => this.kind() === 'graphics');
   readonly kindLabel = computed(() => KIND_LABEL[this.kind()]);
   readonly kindIcon = computed(() => KIND_ICON[this.kind()]);
   readonly extension = computed(() => EXTENSION[this.kind()]);
@@ -952,6 +987,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
         excel: 'Excel-munkafüzet - táblázatkezelési feladat',
         word: 'Word-dokumentum - szövegszerkesztési feladat',
         web: 'weblap - weblapkészítési (HTML/CSS) feladat',
+        graphics: 'kép - képszerkesztési / rajzolási (grafika) feladat',
       })[this.kind()],
   );
 
@@ -1001,12 +1037,17 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   private webUrls: string[] = [];
   private readonly sanitizer = inject(DomSanitizer);
   private webPreviewSub: Subscription | null = null;
-  private webPreviewJob: number | null = null;
+  /** Melyik ellenőrzés (jelentés) fájljaiból készült az előnézet - újraellenőrzés után (pl. új kiinduló kép) újratöltődik. */
+  private previewOf: OfficeTaskReport | null = null;
+  /** Grafika: a két kép blob-URL-je (a jogosult letöltésből; az SVG is <img>-ként, így szkript nem fut); null = hiba. */
+  readonly imagePreview = signal<{ solution: string | null; source: string | null } | null>(null);
 
   constructor() {
     this.destroyRef.onDestroy(() => this.releaseWebPreview());
     effect(() => {
-      if (this.step() === 'preview' && this.tab() === 'elonezet' && this.isWeb()) untracked(() => this.loadWebPreview());
+      const report = this.report();
+      if (this.step() === 'preview' && this.tab() === 'elonezet' && (this.isWeb() || this.isGraphics()))
+        untracked(() => (this.isGraphics() ? this.loadImagePreview(report) : this.loadWebPreview(report)));
     });
   }
 
@@ -1015,14 +1056,34 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.webUrls.forEach((u) => URL.revokeObjectURL(u));
     this.webUrls = [];
     this.webPreview.set(null);
-    this.webPreviewJob = null;
+    this.imagePreview.set(null);
+    this.previewOf = null;
   }
 
-  private loadWebPreview(): void {
+  private loadImagePreview(report: OfficeTaskReport | null): void {
     const jobId = this.jobId();
-    if (jobId == null || this.webPreviewJob === jobId) return;
+    if (jobId == null || this.previewOf === report) return;
     this.releaseWebPreview();
-    this.webPreviewJob = jobId;
+    this.previewOf = report;
+    const image = (kind: OfficeTaskFileKind) =>
+      this.service.downloadFile(this.taskSetId(), jobId, kind).pipe(
+        map((blob) => {
+          const url = URL.createObjectURL(blob);
+          this.webUrls.push(url);
+          return url as string | null;
+        }),
+        catchError(() => of(null)),
+      );
+    this.webPreviewSub = forkJoin({ solution: image('solution'), source: image('source') })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((v) => this.imagePreview.set(v));
+  }
+
+  private loadWebPreview(report: OfficeTaskReport | null): void {
+    const jobId = this.jobId();
+    if (jobId == null || this.previewOf === report) return;
+    this.releaseWebPreview();
+    this.previewOf = report;
     const frame = (kind: OfficeTaskFileKind) =>
       this.service.downloadFile(this.taskSetId(), jobId, kind).pipe(
         switchMap((blob) => from(webPreviewFromBlob(blob))),
@@ -1127,12 +1188,22 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   /** `sameKindAs`: a saját kiinduló fájl a megoldással azonos fajtájú legyen. */
   private fileProblem(file: File, sameKindAs?: OfficeFileKind): string | null {
     const kind = officeFileKind(file);
-    if (!kind) return 'Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip / .html) tölthető fel.';
+    if (!kind) return 'Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg) tölthető fel.';
     if (sameKindAs && kind !== sameKindAs)
-      return sameKindAs === 'web' ? 'A saját kiinduló fájl is weblap legyen (.zip vagy .html).' : `A saját kiinduló fájl is ${EXTENSION[sameKindAs]} legyen (mint a megoldás).`;
+      return sameKindAs === 'web'
+        ? 'A saját kiinduló fájl is weblap legyen (.zip vagy .html).'
+        : sameKindAs === 'graphics'
+          ? 'A kiinduló fájl is kép legyen (.png / .jpg / .gif / .svg).'
+          : `A saját kiinduló fájl is ${EXTENSION[sameKindAs]} legyen (mint a megoldás).`;
     if (file.size === 0) return 'A fájl üres.';
     if (file.size > MAX_FILE_BYTES) return 'A fájl túl nagy (legfeljebb 20 MB).';
     return null;
+  }
+
+  pickSourceFile(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+    this.sourceFile.set(file);
+    this.sourceFileError.set(file ? this.fileProblem(file, 'graphics') : null);
   }
 
   start(): void {
@@ -1140,8 +1211,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     if (!this.canStart() || !file) return;
     this.starting.set(true);
     this.startError.set(null);
+    const sourceFile = this.isGraphics() ? this.sourceFile() : null;
     this.startSub = this.service
-      .startJob(this.taskSetId(), { file, level: this.level(), subtaskCount: this.subtaskCount(), notes: this.notesInput().trim() || null })
+      .startJob(this.taskSetId(), { file, level: this.level(), subtaskCount: this.subtaskCount(), notes: this.notesInput().trim() || null, ...(sourceFile ? { sourceFile } : {}) })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
@@ -1201,7 +1273,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
 
   private onJob(job: OfficeTaskJobDto): void {
     this.jobFileName.set(job.fileName || null);
-    this.jobKind.set(job.fileKind === 'word' || job.fileKind === 'web' ? job.fileKind : 'excel');
+    this.jobKind.set(job.fileKind === 'word' || job.fileKind === 'web' || job.fileKind === 'graphics' ? job.fileKind : 'excel');
     this.progressText.set(job.progressText);
     this.hasOwnSource.set(job.hasOwnSource);
     if (job.status === 'failed') {

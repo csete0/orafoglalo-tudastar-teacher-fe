@@ -204,7 +204,7 @@ describe('IrodaiMegoldasbolComponent', () => {
     it('csak .xlsx / .docx / .zip / .html és legfeljebb 20 MB tölthető fel', () => {
       const fixture = create();
       pick(fixture, xlsx('kupa.pptx'));
-      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip / .html)');
+      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg)');
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
       pick(fixture, xlsx('kupa.xlsx', MAX_FILE_BYTES + 1));
       expect(q(fixture, 'io-file-error')!.textContent).toContain('20 MB');
@@ -718,7 +718,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(false);
       pick(fixture, xlsx('kupa.xlsx'));
       expect(q(fixture, 'io-file-kind')!.textContent).toContain('Excel-munkafüzet');
-      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx,.zip,.html');
+      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg');
 
       TestBed.resetTestingModule();
       fixture = create({ kindHint: 'word' });
@@ -1106,6 +1106,70 @@ describe('IrodaiMegoldasbolComponent', () => {
       c.setElementManual(1, 0, { index: 20 });
       c.setElementManual(1, 0, { tag: 'li' });
       expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 19, tag: 'li' });
+    });
+  });
+
+  describe('Grafika', () => {
+    const graphicsJob = () =>
+      job({
+        fileKind: 'graphics',
+        fileName: 'logo_megoldas.png',
+        status: 'done',
+        hasOwnSource: true,
+        result: {
+          proposal: proposal({ sourceMode: 'own', subtasks: proposal().subtasks.map((s) => ({ ...s, undo: [] })) }),
+          report: report({ sourceFileName: 'logo.jpg', solutionFileName: 'logo_megoldas.png', recalculated: false, warnings: [], preview: null }),
+          model: 'm', notes: null, reasked: false,
+        },
+      });
+
+    it('képnél a kiinduló kép is kell az indításhoz; mindkét fájl a kérésben megy', () => {
+      const fixture = create({ jobs: [() => of(graphicsJob())] });
+      const solution = xlsx('logo_megoldas.png');
+      pick(fixture, solution);
+      expect(q(fixture, 'io-file-kind')!.textContent).toContain('grafika');
+      expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
+      const c = fixture.componentInstance;
+      c.pickSourceFile({ target: { files: [xlsx('kupa.xlsx')] } } as unknown as Event);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-source-file-error')!.textContent).toContain('kép legyen');
+      expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
+      const source = xlsx('logo.jpg');
+      c.pickSourceFile({ target: { files: [source] } } as unknown as Event);
+      fixture.detectChanges();
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      expect(service.startJob).toHaveBeenCalledWith(9, { file: solution, level: 'kozep', subtaskCount: 5, notes: null, sourceFile: source });
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(Grafika)');
+    });
+
+    it('a Visszacsinálás fülön csak a kiinduló kép cseréje; az Előnézet a két képet blob-URL-ből <img>-ként mutatja', async () => {
+      const fixture = create({ jobs: [() => of(graphicsJob())] });
+      pick(fixture, xlsx('logo_megoldas.png'));
+      fixture.componentInstance.pickSourceFile({ target: { files: [xlsx('logo.png')] } } as unknown as Event);
+      fixture.detectChanges();
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      tab(fixture, 'visszacsinalas');
+      expect(q(fixture, 'io-graphics-own')).not.toBeNull();
+      expect(q(fixture, 'io-source-derived')).toBeNull();
+      expect(q(fixture, 'io-undo-skipped')).toBeNull();
+      const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:kep');
+      const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+      service.downloadFile.mockImplementation(() => of(new Blob(['<svg/>'], { type: 'image/svg+xml' })));
+      tab(fixture, 'elonezet');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('[data-testid="io-graphics-preview"] img').length).toBe(2);
+      });
+      expect(service.downloadFile.mock.calls.map((a) => a[2]).sort()).toEqual(['solution', 'source']);
+      const imgs = Array.from(fixture.nativeElement.querySelectorAll('[data-testid="io-graphics-preview"] img')) as HTMLImageElement[];
+      expect(imgs.map((i) => [i.alt, i.getAttribute('src')])).toEqual([['Kiinduló kép', 'blob:kep'], ['Megoldás', 'blob:kep']]);
+      expect(fixture.nativeElement.querySelector('[data-testid="io-graphics-preview"] svg')).toBeNull();
+      fixture.destroy();
+      expect(revoke).toHaveBeenCalledTimes(2);
+      createUrl.mockRestore();
+      revoke.mockRestore();
     });
   });
 });
