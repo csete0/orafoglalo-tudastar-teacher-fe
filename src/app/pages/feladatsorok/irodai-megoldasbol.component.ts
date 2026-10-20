@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, OnInit, output, signal, untracked, viewChild } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { defer, repeat, retry, Subscription, takeWhile, throwError, timer } from 'rxjs';
+import { catchError, defer, forkJoin, from, map, of, repeat, retry, Subscription, switchMap, takeWhile, throwError, timer } from 'rxjs';
 import {
   ExcelUndoOpName,
   OfficeFileKind,
@@ -57,6 +58,7 @@ import {
   webOpSpec,
   wordOpSpec,
 } from './irodai-undo.util';
+import { webPreviewFromBlob } from './web-preview.util';
 import { WordParagraphPickerComponent } from './word-paragraph-picker.component';
 
 /** Az állapot-lekérdezés gyakorisága (ms). */
@@ -77,6 +79,11 @@ const ACTIVE_STATUSES = new Set(['queued', 'generating', 'running']);
 
 export const OFFICE_PREMIUM_MESSAGE =
   'Az irodai feladat a megoldott fájlból csak Prémium tanári előfizetéssel érhető el. Prémium előfizetéssel havonta 20 feladatot készíthetsz.';
+
+interface WebFrame {
+  html: SafeHtml | null;
+  error: string | null;
+}
 
 type Step = 'input' | 'running' | 'preview';
 type Tab = 'feladat' | 'visszacsinalas' | 'szempontok' | 'elonezet' | 'ellenorzes';
@@ -643,7 +650,37 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                           @if (dirty()) {
                             <p class="text-sm text-warning">Ez a módosítások előtti állapot - az Újraellenőrzés után frissül.</p>
                           }
-                          @if (r.preview; as pv) {
+                          @if (isWeb()) {
+                            <div class="space-y-3" data-testid="io-web-preview">
+                              <div class="flex flex-wrap items-center gap-2 text-sm">
+                                <span id="io-web-width-label" class="font-medium">Szélesség:</span>
+                                <div role="group" aria-labelledby="io-web-width-label" class="flex gap-1">
+                                  <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" [attr.aria-pressed]="!webPhone()" (click)="webPhone.set(false)" data-testid="io-web-desktop">Asztali</button>
+                                  <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" [attr.aria-pressed]="webPhone()" (click)="webPhone.set(true)" data-testid="io-web-phone">Telefon (390 px)</button>
+                                </div>
+                                <span class="text-text-muted">A szkriptek nem futnak, a külső (internetes) hivatkozások nem töltődnek be.</span>
+                              </div>
+                              @if (webPreview(); as wp) {
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                  @for (f of [{ id: 'solution', label: 'Megoldás', d: wp.solution }, { id: 'source', label: 'Kiinduló oldal', d: wp.source }]; track f.id) {
+                                    <div class="min-w-0" [attr.data-testid]="'io-web-' + f.id">
+                                      <h3 class="font-semibold text-sm mb-1">{{ f.label }}</h3>
+                                      @if (f.d.html; as html) {
+                                        <div class="overflow-x-auto">
+                                          <iframe sandbox="" [srcdoc]="html" [title]="f.label + ' - élő előnézet'" class="h-[28rem] max-w-full rounded-lg border border-border-default bg-white"
+                                            [style.width]="webPhone() ? '390px' : '100%'"></iframe>
+                                        </div>
+                                      } @else {
+                                        <p class="text-sm text-text-muted">{{ f.d.error }}</p>
+                                      }
+                                    </div>
+                                  }
+                                </div>
+                              } @else {
+                                <p class="text-sm text-text-muted" role="status">Előnézet betöltése…</p>
+                              }
+                            </div>
+                          } @else if (r.preview; as pv) {
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div class="min-w-0" data-testid="io-preview-source">
                                 <h3 class="font-semibold text-sm mb-1">Kiinduló fájl</h3>
@@ -661,7 +698,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                           } @else {
                             <p class="text-sm text-text-muted" data-testid="io-preview-unavailable">
                               @if (isWeb()) {
-                                Weblaphoz nincs oldalképes előnézet. Töltsd le a két csomagot, és nyisd meg a HTML-fájlokat böngészőben.
+                                Weblaphoz nincs oldalképes előnézet.
                               } @else {
                                 Az oldalképes előnézet most nem érhető el (a fájl-átalakító nem válaszolt). Töltsd le a két fájlt, és nézd meg {{ isWord() ? 'Wordben' : 'Excelben' }}.
                               }
@@ -959,6 +996,48 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   private discardSub: Subscription | null = null;
   private downloadSub: Subscription | null = null;
 
+  readonly webPhone = signal(false);
+  readonly webPreview = signal<{ solution: WebFrame; source: WebFrame } | null>(null);
+  private webUrls: string[] = [];
+  private readonly sanitizer = inject(DomSanitizer);
+  private webPreviewSub: Subscription | null = null;
+  private webPreviewJob: number | null = null;
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.releaseWebPreview());
+    effect(() => {
+      if (this.step() === 'preview' && this.tab() === 'elonezet' && this.isWeb()) untracked(() => this.loadWebPreview());
+    });
+  }
+
+  private releaseWebPreview(): void {
+    this.webPreviewSub?.unsubscribe();
+    this.webUrls.forEach((u) => URL.revokeObjectURL(u));
+    this.webUrls = [];
+    this.webPreview.set(null);
+    this.webPreviewJob = null;
+  }
+
+  private loadWebPreview(): void {
+    const jobId = this.jobId();
+    if (jobId == null || this.webPreviewJob === jobId) return;
+    this.releaseWebPreview();
+    this.webPreviewJob = jobId;
+    const frame = (kind: OfficeTaskFileKind) =>
+      this.service.downloadFile(this.taskSetId(), jobId, kind).pipe(
+        switchMap((blob) => from(webPreviewFromBlob(blob))),
+        map((p): WebFrame => {
+          this.webUrls.push(...p.urls);
+          // Biztonságos: a sandbox="" iframe-ben nem fut szkript, és nincs same-origin.
+          return { html: this.sanitizer.bypassSecurityTrustHtml(p.srcdoc), error: null };
+        }),
+        catchError(() => of<WebFrame>({ html: null, error: 'Az előnézet nem készíthető el - töltsd le a csomagot.' })),
+      );
+    this.webPreviewSub = forkJoin({ solution: frame('solution'), source: frame('source') })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((v) => this.webPreview.set(v));
+  }
+
   readonly dirty = computed(() => this.pendingOwnSource() !== null || !sameProposal(this.proposal(), this.validated()));
   readonly changedFromGenerated = computed(
     () => !!this.generated() && (this.pendingOwnSource() !== null || !sameProposal(this.proposal(), this.generated()!.proposal)),
@@ -1167,6 +1246,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   private resetPreview(): void {
+    this.releaseWebPreview();
     this.cancelRevalidation();
     this.generated.set(null);
     this.proposal.set(null);

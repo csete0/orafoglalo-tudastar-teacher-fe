@@ -1,3 +1,4 @@
+import { zipSync, strToU8 as encode } from 'fflate';
 import { TestBed } from '@angular/core/testing';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { IrodaiMegoldasbolComponent, MAX_FILE_BYTES, OFFICE_POLL_MS, OFFICE_PREMIUM_MESSAGE } from './irodai-megoldasbol.component';
@@ -111,6 +112,8 @@ const xlsx = (name = 'kupa_megoldas.xlsx', size?: number) => {
   if (size !== undefined) Object.defineProperty(f, 'size', { value: size });
   return f;
 };
+
+const strToU8 = (t: string) => new Uint8Array(encode(t)); // a jsdom-os Uint8Array-realm miatt másolat kell
 
 describe('IrodaiMegoldasbolComponent', () => {
   let service: Record<'getQuota' | 'startJob' | 'getJob' | 'getActiveJob' | 'dismiss' | 'validate' | 'apply' | 'downloadFile', ReturnType<typeof vi.fn>>;
@@ -1026,7 +1029,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(c.proposal()!.subtasks[0].undo[2].element).toEqual({ index: 12, tag: 'img' });
       expect(q(fixture, 'io-own-upload')!.getAttribute('accept')).toBe('.zip,.html');
       tab(fixture, 'elonezet');
-      expect(q(fixture, 'io-preview-unavailable')!.textContent).toContain('Weblaphoz nincs oldalképes előnézet');
+      expect(q(fixture, 'io-web-preview')).not.toBeNull();
       tab(fixture, 'ellenorzes');
       expect(q(fixture, 'io-not-recalculated')).toBeNull();
       q(fixture, 'io-revalidate')!.click();
@@ -1061,6 +1064,45 @@ describe('IrodaiMegoldasbolComponent', () => {
       c.addUndo(0);
       expect(c.proposal()!.subtasks[0].undo[3]).toMatchObject({ op: 'removeCssRule', file: 'stilus.css', selector: '' });
       expect(c.clientErrors().join(' ')).toContain('hiányzó szelektor');
+    });
+
+    it('az előnézet két sandbox="" iframe-et épít: beágyazott CSS, átírt kép-cím, blob-címek visszavonása', async () => {
+      const created: string[] = [];
+      const revoked: string[] = [];
+      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+        created.push(`blob:t/${created.length}`);
+        return created[created.length - 1];
+      });
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation((u) => void revoked.push(u));
+      const zip = new Blob([
+        zipSync({
+          'index.html': strToU8('<html><head><link rel="stylesheet" href="css/stilus.css"><script>alert(1)</script></head><body><img src="img/a.png"><a href="https://x.hu">x</a></body></html>'),
+          'css/stilus.css': strToU8('h1{color:red} p{background:url("../img/a.png")}'),
+          'img/a.png': new Uint8Array([1, 2, 3]),
+        }) as BlobPart,
+      ]);
+      const fixture = previewWeb();
+      service.downloadFile.mockImplementation(() => of(zip));
+      tab(fixture, 'elonezet');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('iframe').length).toBe(2);
+      });
+      const frames = Array.from(fixture.nativeElement.querySelectorAll('[data-testid="io-web-preview"] iframe')) as HTMLIFrameElement[];
+      expect(frames.map((f) => f.title)).toEqual(['Megoldás - élő előnézet', 'Kiinduló oldal - élő előnézet']);
+      for (const f of frames) {
+        expect(f.getAttribute('sandbox')).toBe('');
+        const doc = f.getAttribute('srcdoc')!;
+        expect(doc).toContain('h1{color:red}');
+        expect(doc).not.toContain('<link');
+        expect(doc).not.toContain('alert(1)');
+        expect(doc).toMatch(/<img src="blob:t\/\d">/);
+        expect(doc).toMatch(/url\("blob:t\/\d"\)/);
+        expect(doc).toContain('https://x.hu');
+      }
+      fixture.destroy();
+      expect(revoked.sort()).toEqual([...created].sort());
+      expect(revoked.length).toBeGreaterThan(0);
     });
 
     it('elem-lista nélkül kézi sorszám (1-től) és címke', () => {
