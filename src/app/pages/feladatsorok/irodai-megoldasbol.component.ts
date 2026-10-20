@@ -892,7 +892,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
               @if (lastSaved(); as ls) {
                 <div class="bg-success-subtle border border-success/40 rounded-xl p-3 text-sm text-success flex flex-wrap items-center gap-2" role="status" data-testid="io-last-saved">
                   <app-icon name="check" class="w-5 h-5 block shrink-0" />
-                  <span class="flex-1 min-w-0 break-words">Az előző generálás mentve: <span class="font-semibold">{{ ls.title }}</span></span>
+                  <span class="flex-[1_1_12rem] min-w-0 break-words">Az előző generálás mentve: <span class="font-semibold">{{ ls.title }}</span></span>
                   <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="openTask.emit(ls.taskId)" data-testid="io-last-saved-open">Ugrás a feladathoz</button>
                 </div>
                 <h3 class="font-semibold text-sm">Új generálás</h3>
