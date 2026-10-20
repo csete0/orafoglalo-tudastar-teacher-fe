@@ -59,6 +59,16 @@ describe('TeacherOfficeTaskService', () => {
     expect(result).toEqual({ jobId: 12 });
   });
 
+  it('legutóbb mentett feladat: 204 → null, 200 → a feladat', () => {
+    let result: unknown;
+    service.getLastSaved(9).subscribe((j) => (result = j));
+    httpMock.expectOne(`${base}/last-saved`).flush(null, { status: 204, statusText: 'No Content' });
+    expect(result).toBeNull();
+    service.getLastSaved(9).subscribe((j) => (result = j));
+    httpMock.expectOne(`${base}/last-saved`).flush({ taskId: 5, title: 'Kupa' });
+    expect(result).toEqual({ taskId: 5, title: 'Kupa' });
+  });
+
   it('újraellenőrzés: multipart jobId + proposal JSON-szövegként, opcionális sourceFile', () => {
     service.validate(9, 12, proposal, null).subscribe();
     let body = httpMock.expectOne(`${base}/validate`).request.body as FormData;

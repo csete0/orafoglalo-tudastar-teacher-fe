@@ -6,6 +6,7 @@ import {
   OfficeTaskApplyResult,
   OfficeTaskFileKind,
   OfficeTaskJobDto,
+  OfficeTaskLastSavedDto,
   OfficeTaskProposal,
   OfficeTaskStartRequest,
   OfficeTaskStartResult,
@@ -42,6 +43,13 @@ export class TeacherOfficeTaskService {
   getActiveJob(taskSetId: number): Observable<OfficeTaskJobDto | null> {
     return this.http
       .get<OfficeTaskJobDto>(`${this.taskSetUrl(taskSetId)}/jobs/active`, { observe: 'response' })
+      .pipe(map((res) => (res.status === 204 ? null : res.body)));
+  }
+
+  /** A tanár ezen a feladatsoron legutóbb mentett, még létező irodai feladata (204 = nincs) - oldal-újratöltés után is. */
+  getLastSaved(taskSetId: number): Observable<OfficeTaskLastSavedDto | null> {
+    return this.http
+      .get<OfficeTaskLastSavedDto>(`${this.taskSetUrl(taskSetId)}/last-saved`, { observe: 'response' })
       .pipe(map((res) => (res.status === 204 ? null : res.body)));
   }
 

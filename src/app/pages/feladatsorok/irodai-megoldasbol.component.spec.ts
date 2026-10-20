@@ -117,12 +117,12 @@ const xlsx = (name = 'kupa_megoldas.xlsx', size?: number) => {
 const strToU8 = (t: string) => new Uint8Array(encode(t)); // a jsdom-os Uint8Array-realm miatt másolat kell
 
 describe('IrodaiMegoldasbolComponent', () => {
-  let service: Record<'getQuota' | 'startJob' | 'getJob' | 'getActiveJob' | 'dismiss' | 'validate' | 'apply' | 'downloadFile', ReturnType<typeof vi.fn>>;
+  let service: Record<'getQuota' | 'startJob' | 'getJob' | 'getActiveJob' | 'getLastSaved' | 'dismiss' | 'validate' | 'apply' | 'downloadFile', ReturnType<typeof vi.fn>>;
   let toast: { success: ReturnType<typeof vi.fn> };
   let jobQueue: (() => Observable<OfficeTaskJobDto>)[];
 
   function create(
-    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' | 'powerpoint' | 'web' } = {},
+    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' | 'powerpoint' | 'web'; lastSaved?: Observable<{ taskId: number; title: string } | null> } = {},
   ) {
     jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
@@ -130,6 +130,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       startJob: vi.fn(() => of({ jobId: 12, status: 'queued', quota: { used: 4, limit: 20, month: '2026-10', isPremium: true } })),
       getJob: vi.fn(() => (jobQueue.length > 1 ? jobQueue.shift()! : jobQueue[0])()),
       getActiveJob: vi.fn(() => opts.active ?? of(null)),
+      getLastSaved: vi.fn(() => opts.lastSaved ?? of(null)),
       dismiss: vi.fn(() => of(undefined)),
       validate: vi.fn((_: number, __: number, p: OfficeTaskProposal) => of<OfficeTaskValidateResult>({ proposal: p, report: report() })),
       apply: vi.fn(() => of({ taskId: 345, saved: ['feladat', '2 részfeladat'] })),
@@ -584,6 +585,20 @@ describe('IrodaiMegoldasbolComponent', () => {
       fixture.componentInstance.openTask.subscribe(openTask);
       q(fixture, 'io-last-saved-open')!.click();
       expect(openTask).toHaveBeenCalledWith(345);
+    });
+
+    it('oldal-újratöltés után a szerver adja a legutóbb mentett feladatot; a friss mentés (lastSaved) felülírja', () => {
+      let fixture = create({ lastSaved: of({ taskId: 77, title: 'Régi kupa' }) });
+      expect(service.getLastSaved).toHaveBeenCalledWith(9);
+      expect(q(fixture, 'io-last-saved')!.textContent).toContain('Az előző generálás mentve: Régi kupa');
+      fixture.componentRef.setInput('lastSaved', { taskId: 78, title: 'Új kupa' });
+      fixture.detectChanges();
+      expect(q(fixture, 'io-last-saved')!.textContent).toContain('Új kupa');
+      TestBed.resetTestingModule();
+      // Hiba esetén nincs jelzés, az űrlap használható.
+      fixture = create({ lastSaved: throwError(() => ({ status: 500 })) });
+      expect(q(fixture, 'io-last-saved')).toBeNull();
+      expect(q(fixture, 'io-file')).not.toBeNull();
     });
 
     it('keskeny kijelzőn a fülek tördelődnek (nincs vízszintes görgetés, minden fül látszik)', () => {

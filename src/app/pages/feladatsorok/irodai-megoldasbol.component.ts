@@ -889,7 +889,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
           }
           @default {
             <div class="space-y-4" data-testid="io-input">
-              @if (lastSaved(); as ls) {
+              @if (savedNotice(); as ls) {
                 <div class="bg-success-subtle border border-success/40 rounded-xl p-3 text-sm text-success flex flex-wrap items-center gap-2" role="status" data-testid="io-last-saved">
                   <app-icon name="check" class="w-5 h-5 block shrink-0" />
                   <span class="flex-[1_1_12rem] min-w-0 break-words">Az előző generálás mentve: <span class="font-semibold">{{ ls.title }}</span></span>
@@ -998,6 +998,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly savedTask = output<{ taskId: number; title: string }>();
   /** Az ezen a feladatsoron legutóbb mentett feladat (a mentett job a jobs/active-ban már nem szerepel) - újranyitáskor jelezzük. */
   readonly lastSaved = input<{ taskId: number; title: string } | null>(null);
+  /** A szerver szerint legutóbb mentett feladat (oldal-újratöltés után is); a friss mentés (lastSaved) felülírja. */
+  private readonly serverLastSaved = signal<{ taskId: number; title: string } | null>(null);
+  readonly savedNotice = computed(() => this.lastSaved() ?? this.serverLastSaved());
   /** „Ugrás a feladathoz”: a szerkesztő bezárja az ablakot, és a feladathoz görget. */
   readonly openTask = output<number>();
 
@@ -1255,6 +1258,10 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   ngOnInit(): void {
     this.loadQuota();
     this.reconnect();
+    this.service
+      .getLastSaved(this.taskSetId())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (saved) => this.serverLastSaved.set(saved), error: () => this.serverLastSaved.set(null) });
     setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
