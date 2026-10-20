@@ -64,6 +64,7 @@ const PROGRAMMING_TASK_TYPE_ID = 6;
 const EXCEL_TASK_TYPE_ID = 2;
 const WORD_TASK_TYPE_ID = 1;
 const WEB_TASK_TYPE_ID = 7;
+const GRAPHICS_TASK_TYPE_ID = 4;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -505,6 +506,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
                             (click)="officeTaskDialog.set('web')" data-testid="office-task-open-web">
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott weblapból
+                          </button>
+                        }
+                        @if (section.id === graphicsTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="officeTaskDialog.set('graphics')" data-testid="office-task-open-graphics">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott képből
                           </button>
                         }
                       </div>
@@ -1216,6 +1223,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly excelTypeId = EXCEL_TASK_TYPE_ID;
   readonly wordTypeId = WORD_TASK_TYPE_ID;
   readonly webTypeId = WEB_TASK_TYPE_ID;
+  readonly graphicsTypeId = GRAPHICS_TASK_TYPE_ID;
   /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
   readonly officeTaskDialog = signal<OfficeFileKind | null>(null);
 

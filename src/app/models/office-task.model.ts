@@ -6,8 +6,8 @@
 export type OfficeTaskLevel = 'kozep' | 'emelt';
 export type OfficeTaskStatus = 'queued' | 'generating' | 'running' | 'done' | 'failed';
 export type OfficeSourceMode = 'derived' | 'own';
-/** A feltöltött megoldás fajtája (a kiterjesztésből): ez dönti el a visszacsinálási szókészletet. */
-export type OfficeFileKind = 'excel' | 'word' | 'web';
+/** A feltöltött megoldás fajtája (a kiterjesztésből): ez dönti el a visszacsinálási szókészletet (grafikánál nincs: saját kiinduló kép). */
+export type OfficeFileKind = 'excel' | 'word' | 'web' | 'graphics';
 
 /** A zárt Excel-szókészlet (ExcelUndo.Vocabulary). */
 export type ExcelUndoOpName =
@@ -231,6 +231,8 @@ export interface OfficeTaskStartRequest {
   level: OfficeTaskLevel;
   subtaskCount: number;
   notes: string | null;
+  /** Csak grafika (ott kötelező): a tanár saját kiinduló képe. */
+  sourceFile?: File | null;
 }
 
 export interface OfficeTaskStartResult {

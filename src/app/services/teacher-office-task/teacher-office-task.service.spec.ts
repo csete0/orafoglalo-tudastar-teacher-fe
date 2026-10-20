@@ -37,6 +37,18 @@ describe('TeacherOfficeTaskService', () => {
     req.flush({});
   });
 
+  it('indítás grafikánál: a kiinduló kép is (sourceFile)', () => {
+    const file = new File(['x'], 'logo_megoldas.png');
+    const sourceFile = new File(['y'], 'logo.jpg');
+    service.startJob(9, { file, level: 'kozep', subtaskCount: 3, notes: null, sourceFile }).subscribe();
+    const req = httpMock.expectOne(`${base}/jobs`);
+    const body = req.request.body as FormData;
+    expect((body.get('file') as File).name).toBe('logo_megoldas.png');
+    expect((body.get('sourceFile') as File).name).toBe('logo.jpg');
+    expect(body.get('notes')).toBeNull();
+    req.flush({});
+  });
+
   it('aktív job: 204 → null, 200 → a job', () => {
     let result: OfficeTaskJobDto | null | undefined;
     service.getActiveJob(9).subscribe((j) => (result = j));

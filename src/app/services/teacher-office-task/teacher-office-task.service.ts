@@ -30,6 +30,7 @@ export class TeacherOfficeTaskService {
     form.append('level', request.level);
     form.append('subtaskCount', String(request.subtaskCount));
     if (request.notes) form.append('notes', request.notes);
+    if (request.sourceFile) form.append('sourceFile', request.sourceFile, request.sourceFile.name);
     return this.http.post<OfficeTaskStartResult>(`${this.taskSetUrl(taskSetId)}/jobs`, form);
   }
 
