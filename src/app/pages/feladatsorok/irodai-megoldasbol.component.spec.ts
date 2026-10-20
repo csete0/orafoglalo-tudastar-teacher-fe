@@ -1143,6 +1143,22 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(q(fixture, 'io-dialog')!.textContent).toContain('(Grafika)');
     });
 
+    it('képnél a két kép együtt legfeljebb 25 MB; a 413-at is barátságosan mutatja', () => {
+      const fixture = create();
+      const c = fixture.componentInstance;
+      pick(fixture, xlsx('logo_megoldas.png', 13 * 1024 * 1024));
+      c.pickSourceFile({ target: { files: [xlsx('logo.jpg', 13 * 1024 * 1024)] } } as unknown as Event);
+      fixture.detectChanges();
+      expect(q(fixture, 'io-source-file-error')!.textContent).toContain('A két kép együtt legfeljebb 25 MB lehet');
+      expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
+      pick(fixture, xlsx('logo_megoldas.png', 10 * 1024 * 1024));
+      expect(q(fixture, 'io-source-file-error')).toBeNull();
+      service.startJob.mockReturnValue(throwError(() => ({ status: 413 })));
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'io-error')!.textContent).toContain('A két kép együtt legfeljebb 25 MB lehet');
+    });
+
     it('a Visszacsinálás fülön csak a kiinduló kép cseréje; az Előnézet a két képet blob-URL-ből <img>-ként mutatja', async () => {
       const fixture = create({ jobs: [() => of(graphicsJob())] });
       pick(fixture, xlsx('logo_megoldas.png'));

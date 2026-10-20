@@ -65,6 +65,9 @@ import { WordParagraphPickerComponent } from './word-paragraph-picker.component'
 export const OFFICE_POLL_MS = 2000;
 /** A BE-vel azonos korlátok (TeacherOfficeTaskService / OfficeTaskPrompt). */
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+/** Grafikánál a megoldás + a saját kiinduló kép együtt (az nginx 26 MB-os kérés-korlátja miatt). */
+export const MAX_GRAPHICS_TOTAL_BYTES = 25 * 1024 * 1024;
+const GRAPHICS_TOTAL_MESSAGE = 'A két kép együtt legfeljebb 25 MB lehet – kicsinyítsd vagy tömörítsd őket.';
 const MAX_NOTES = 2000;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 5000;
@@ -1183,6 +1186,14 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
     this.file.set(file);
     this.fileError.set(file ? this.fileProblem(file) : null);
+    const source = this.sourceFile();
+    if (source && this.isGraphics()) this.sourceFileError.set(this.sourceProblem(source));
+  }
+
+  private sourceProblem(source: File): string | null {
+    const own = this.fileProblem(source, 'graphics');
+    if (own) return own;
+    return (this.file()?.size ?? 0) + source.size > MAX_GRAPHICS_TOTAL_BYTES ? GRAPHICS_TOTAL_MESSAGE : null;
   }
 
   /** `sameKindAs`: a saját kiinduló fájl a megoldással azonos fajtájú legyen. */
@@ -1203,7 +1214,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   pickSourceFile(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
     this.sourceFile.set(file);
-    this.sourceFileError.set(file ? this.fileProblem(file, 'graphics') : null);
+    this.sourceFileError.set(file ? this.sourceProblem(file) : null);
   }
 
   start(): void {
@@ -1625,7 +1636,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
         return 'Az irodai feladat a megoldott fájlból most nincs bekapcsolva. Próbáld később.';
     }
     if (e?.status === 429) return 'Túl sok kérés rövid időn belül - várj néhány percet, és próbáld újra.';
-    if (e?.status === 413) return 'A fájl túl nagy (legfeljebb 20 MB).';
+    if (e?.status === 413) return this.isGraphics() ? GRAPHICS_TOTAL_MESSAGE : 'A fájl túl nagy (legfeljebb 20 MB).';
     return extractErrorMessage(err, fallback);
   }
 
