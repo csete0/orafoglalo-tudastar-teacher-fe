@@ -221,7 +221,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
               @if (isSectionExpanded(section.id)) {
                 <div class="px-4 pb-4 space-y-3">
                   @for (task of section.tasks; track task.id) {
-                    <div class="bg-bg-element rounded-xl p-4">
+                    <div class="bg-bg-element rounded-xl p-4 scroll-mt-4" [attr.id]="'task-' + task.id">
                       @if (editingTaskId() === task.id) {
                         <!-- UI-TT-214: inline szerkesztő - a UI-TT-193 részfeladat-mintáját
                              tükrözi (cím/leírás/pont, ITT + sorrend-mező is), ugyanazokra a
@@ -706,7 +706,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
               (closed)="aiTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
           @if (officeTaskDialog(); as kind) {
-            <app-irodai-megoldasbol [taskSetId]="detail.id" [kindHint]="kind" (closed)="officeTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
+            <app-irodai-megoldasbol [taskSetId]="detail.id" [kindHint]="kind" [lastSaved]="lastOfficeSave()?.taskSetId === detail.id ? lastOfficeSave() : null"
+              (closed)="officeTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" (savedTask)="lastOfficeSave.set({ taskSetId: detail.id, taskId: $event.taskId, title: $event.title })"
+              (openTask)="openSavedTask($event)" />
           }
           @if (desktopTaskDialog()) {
             <app-asztali-feladat [taskSetId]="detail.id" (closed)="desktopTaskDialog.set(false)" (saved)="onAiTaskSaved(detail.id, $event)" />
@@ -1251,6 +1253,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly desktopTaskDialog = signal(false);
   /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
   readonly officeTaskDialog = signal<OfficeFileKind | null>(null);
+  /** Az irodai ablakból legutóbb mentett feladat (feladatsoronként) - újranyitáskor az ablak jelzi, és oda lehet ugrani. */
+  readonly lastOfficeSave = signal<{ taskSetId: number; taskId: number; title: string } | null>(null);
 
   /** Csak a Programozás típusú (nem SQL, nem irodai, nem vegyes) feladatokhoz kérhető AI-kiegészítés. */
   isProgrammingTask(task: TeacherTaskDto): boolean {
@@ -1265,6 +1269,13 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   onAiTaskSaved(taskSetId: number, taskId: number): void {
     this.store.loadDetail(taskSetId);
     this.expandedTaskId.set(taskId);
+  }
+
+  /** „Ugrás a feladathoz” az irodai ablakból: bezárás, a feladat kinyílik, és odagörgetünk. */
+  openSavedTask(taskId: number): void {
+    this.officeTaskDialog.set(null);
+    this.expandedTaskId.set(taskId);
+    setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   /** SQL-feladat vagy SQL-fájl esetén kínáljuk fel a hiányzó create.sql / create_lite.sql elkészítését. */

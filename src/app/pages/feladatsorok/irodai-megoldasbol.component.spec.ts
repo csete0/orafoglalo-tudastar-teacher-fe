@@ -566,6 +566,34 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(closed).toHaveBeenCalled();
     });
 
+    it('mentés után a cím is kimegy; újranyitáskor a legutóbb mentett feladat jelzése és az „Ugrás a feladathoz”, alatta az új generálás űrlapja', () => {
+      let fixture = preview();
+      const savedTask = vi.fn();
+      fixture.componentInstance.savedTask.subscribe(savedTask);
+      q(fixture, 'io-save')!.click();
+      expect(savedTask).toHaveBeenCalledWith({ taskId: 345, title: proposal().title });
+
+      TestBed.resetTestingModule();
+      fixture = create();
+      expect(q(fixture, 'io-last-saved')).toBeNull();
+      fixture.componentRef.setInput('lastSaved', { taskId: 345, title: 'Pontverseny' });
+      fixture.detectChanges();
+      expect(q(fixture, 'io-last-saved')!.textContent).toContain('Az előző generálás mentve: Pontverseny');
+      expect(q(fixture, 'io-file')).not.toBeNull();
+      const openTask = vi.fn();
+      fixture.componentInstance.openTask.subscribe(openTask);
+      q(fixture, 'io-last-saved-open')!.click();
+      expect(openTask).toHaveBeenCalledWith(345);
+    });
+
+    it('keskeny kijelzőn a fülek tördelődnek (nincs vízszintes görgetés, minden fül látszik)', () => {
+      const fixture = preview();
+      const list = q(fixture, 'io-tablist')!;
+      expect(list.className).toContain('flex-wrap');
+      expect(list.className).not.toContain('overflow-x-auto');
+      expect(list.querySelectorAll('[role="tab"]').length).toBe(5);
+    });
+
     it('sikertelen mentésnél az előnézet marad, a hiba olvasható; prémium-elutasításnál a prémium-üzenet', () => {
       const fixture = preview();
       service.apply.mockReturnValue(throwError(() => ({ status: 403, error: { errorType: 'AiHelperPremiumRequired' } })));
