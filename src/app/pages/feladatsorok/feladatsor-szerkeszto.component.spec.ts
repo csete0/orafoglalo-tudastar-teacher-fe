@@ -267,7 +267,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('a Táblázatkezelés blokk „Új feladat” űrlapja mellől nyílik az „Irodai feladat a megoldott fájlból (Excel)” ablak', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
       });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -287,7 +287,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('a Szövegszerkesztés blokk „Új feladat” űrlapja mellől Word-címmel nyílik ugyanaz az ablak', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
       });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -308,7 +308,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('irodai mentés után újranyitva az ablak jelzi a mentett feladatot; az „Ugrás a feladathoz” bezár és kinyitja a feladatot', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
       });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -332,7 +332,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('a Prezentáció blokk „Új feladat” űrlapja mellől PowerPoint-címmel nyílik ugyanaz az ablak', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null) },
+        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
       });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();

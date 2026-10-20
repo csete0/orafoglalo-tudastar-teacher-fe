@@ -259,6 +259,12 @@ export interface OfficeTaskJobDto {
   result: OfficeTaskResultDto | null;
 }
 
+/** A tanár ezen a feladatsoron legutóbb mentett irodai feladata (office-task/last-saved). */
+export interface OfficeTaskLastSavedDto {
+  taskId: number;
+  title: string;
+}
+
 export interface OfficeTaskQuotaDto {
   used: number;
   limit: number;
