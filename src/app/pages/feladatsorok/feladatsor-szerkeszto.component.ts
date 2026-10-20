@@ -28,6 +28,7 @@ import { SqlLekerdezesekComponent } from './sql-lekerdezesek.component';
 import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
 import { AiFeladatComponent } from './ai-feladat.component';
 import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
+import { AsztaliFeladatComponent } from './asztali-feladat.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -56,8 +57,10 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
   { id: 3, label: 'Prezentáció', icon: 'academic-cap' },
   { id: 4, label: 'Grafika', icon: 'eye' },
   { id: 7, label: 'Weblap', icon: 'link' },
+  { id: 9, label: 'Asztali alkalmazás', icon: 'code' },
 ];
-const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
+/** Fájlos beadású típusok (az asztali alkalmazás is: zip + képernyőképek, MI-értékelés a szempontlista szerint). */
+const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7, 9]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
 /** Táblázatkezelés / Szövegszerkesztés / Weblap - ezekhez készíthető feladat a megoldott fájlból (Excel, Word, weblap). */
@@ -65,6 +68,8 @@ const EXCEL_TASK_TYPE_ID = 2;
 const WORD_TASK_TYPE_ID = 1;
 const WEB_TASK_TYPE_ID = 7;
 const GRAPHICS_TASK_TYPE_ID = 4;
+/** Asztali alkalmazás (WPF/WinForms) - ehhez készíthető feladatsor témából AI-val. */
+const DESKTOP_TASK_TYPE_ID = 9;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -91,7 +96,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="max-w-4xl mx-auto px-4 py-10">
@@ -514,6 +519,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott képből
                           </button>
                         }
+                        @if (section.id === desktopTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="desktopTaskDialog.set(true)" data-testid="desktop-task-open">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Asztali feladatsor témából (AI)
+                          </button>
+                        }
                       </div>
                       <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id"
                         [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
@@ -689,6 +700,9 @@ type SnippetDraft = Record<number, Record<number, string>>;
           }
           @if (officeTaskDialog(); as kind) {
             <app-irodai-megoldasbol [taskSetId]="detail.id" [kindHint]="kind" (closed)="officeTaskDialog.set(null)" (saved)="onAiTaskSaved(detail.id, $event)" />
+          }
+          @if (desktopTaskDialog()) {
+            <app-asztali-feladat [taskSetId]="detail.id" (closed)="desktopTaskDialog.set(false)" (saved)="onAiTaskSaved(detail.id, $event)" />
           }
 
           <!--
@@ -1224,6 +1238,9 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly wordTypeId = WORD_TASK_TYPE_ID;
   readonly webTypeId = WEB_TASK_TYPE_ID;
   readonly graphicsTypeId = GRAPHICS_TASK_TYPE_ID;
+  readonly desktopTypeId = DESKTOP_TASK_TYPE_ID;
+  /** „Asztali feladatsor témából” párbeszédablak. */
+  readonly desktopTaskDialog = signal(false);
   /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
   readonly officeTaskDialog = signal<OfficeFileKind | null>(null);
 

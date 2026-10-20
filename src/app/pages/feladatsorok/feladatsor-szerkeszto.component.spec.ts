@@ -12,6 +12,8 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
+import { TeacherDesktopTaskService } from '../../services/teacher-desktop-task/teacher-desktop-task.service';
+import { ReportService } from '../../services/report/report.service';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -301,6 +303,29 @@ describe('FeladatsorSzerkesztoComponent', () => {
       (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
+    });
+
+    it('az Asztali alkalmazás blokk „Új feladat” űrlapja mellől nyílik az „Asztali feladatsor témából” ablak', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      TestBed.overrideProvider(TeacherDesktopTaskService, { useValue: { getActiveJob: () => of(null) } });
+      TestBed.overrideProvider(ReportService, {
+        useValue: { getAiHelperQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 },
+          codeComments: { used: 0, limit: 1 }, desktopTask: { used: 0, limit: 20 } }) },
+      });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      expect(fixture.componentInstance.isOfficeType(9)).toBe(true);
+      if (!fixture.componentInstance.isSectionExpanded(9)) fixture.componentInstance.toggleSection(9);
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('[data-testid="desktop-task-open"]').length).toBe(1);
+      (el.querySelector('[data-testid="desktop-task-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="dt-dialog"]')!.textContent).toContain('Asztali feladatsor témából');
+      (el.querySelector('[data-testid="dt-close"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="dt-dialog"]')).toBeNull();
     });
 
     it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
@@ -1972,9 +1997,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const component = fixture.componentInstance;
 
       expect(component.taskTypes.map((t) => t.label)).toEqual([
-        'Programozás', 'SQL', 'Szövegszerkesztés', 'Táblázatkezelés', 'Prezentáció', 'Grafika', 'Weblap',
+        'Programozás', 'SQL', 'Szövegszerkesztés', 'Táblázatkezelés', 'Prezentáció', 'Grafika', 'Weblap', 'Asztali alkalmazás',
       ]);
-      expect(component.taskTypes.map((t) => t.id)).toEqual([6, 5, 1, 2, 3, 4, 7]);
+      expect(component.taskTypes.map((t) => t.id)).toEqual([6, 5, 1, 2, 3, 4, 7, 9]);
       expect(component.isSectionExpanded(1)).toBe(true); // van benne feladat
       expect(component.isSectionExpanded(2)).toBe(false); // üres irodai blokk
       expect(component.isSectionExpanded(6)).toBe(true);
