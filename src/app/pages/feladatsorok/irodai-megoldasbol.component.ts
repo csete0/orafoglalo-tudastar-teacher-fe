@@ -781,13 +781,23 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                               <div class="min-w-0" data-testid="io-preview-source">
                                 <h3 class="font-semibold text-sm mb-1">Kiinduló fájl</h3>
                                 @for (img of pv.source; track $index) {
-                                  <img [src]="img" [alt]="'Kiinduló fájl, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  @if (img) {
+                                    <img [src]="img" [alt]="'Kiinduló fájl, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  } @else {
+                                    <p class="aspect-video flex items-center justify-center text-center text-sm text-text-muted rounded-lg border border-dashed border-border-default mb-2 p-2"
+                                      [attr.data-testid]="'io-preview-missing-source-' + $index">Ez a dia a kiinduló fájlban nincs meg (vagy rejtett).</p>
+                                  }
                                 } @empty { <p class="text-sm text-text-muted">Nincs oldalkép.</p> }
                               </div>
                               <div class="min-w-0" data-testid="io-preview-solution">
                                 <h3 class="font-semibold text-sm mb-1">Megoldás</h3>
                                 @for (img of pv.solution; track $index) {
-                                  <img [src]="img" [alt]="'Megoldás, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  @if (img) {
+                                    <img [src]="img" [alt]="'Megoldás, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  } @else {
+                                    <p class="aspect-video flex items-center justify-center text-center text-sm text-text-muted rounded-lg border border-dashed border-border-default mb-2 p-2"
+                                      [attr.data-testid]="'io-preview-missing-solution-' + $index">Ez a dia a megoldásban nincs meg (vagy rejtett - vetítéskor nem látszik).</p>
+                                  }
                                 } @empty { <p class="text-sm text-text-muted">Nincs oldalkép.</p> }
                               </div>
                             </div>

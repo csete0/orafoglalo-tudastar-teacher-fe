@@ -1233,6 +1233,15 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(c.clientErrors().join(' ')).toContain('hiányzó alakzat');
     });
 
+    it('Előnézet: a diák soronként párban, a hiányzó (rejtett / törölt) dia helyén helykitöltő', () => {
+      const fixture = previewPpt();
+      fixture.componentInstance.report.set(report({ preview: { source: ['data:image/png;base64,K1', 'data:image/png;base64,K3'], solution: ['data:image/png;base64,S1', null] } }));
+      tab(fixture, 'elonezet');
+      expect(q(fixture, 'io-preview-source')!.querySelectorAll('img').length).toBe(2);
+      expect(q(fixture, 'io-preview-solution')!.querySelectorAll('img').length).toBe(1);
+      expect(q(fixture, 'io-preview-missing-solution-1')!.textContent).toContain('nincs meg');
+    });
+
     it('alakzat-lista nélkül kézi azonosító és név', () => {
       const fixture = previewPpt({ shapes: null, slideCount: null });
       const c = fixture.componentInstance;

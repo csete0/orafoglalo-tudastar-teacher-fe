@@ -164,9 +164,10 @@ export interface OfficeTaskProposal {
   subtasks: OfficeProposalSubtask[];
 }
 
+/** PowerPointnál soronként ugyanaz a dia; null: azon az oldalon nincs ilyen (rejtett / törölt / új) dia. */
 export interface OfficeTaskPreview {
-  source: string[];
-  solution: string[];
+  source: (string | null)[];
+  solution: (string | null)[];
 }
 
 export interface OfficeTaskReport {
