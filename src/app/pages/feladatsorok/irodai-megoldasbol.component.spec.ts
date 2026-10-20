@@ -1,3 +1,4 @@
+import { zipSync, strToU8 as encode } from 'fflate';
 import { TestBed } from '@angular/core/testing';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { IrodaiMegoldasbolComponent, MAX_FILE_BYTES, OFFICE_POLL_MS, OFFICE_PREMIUM_MESSAGE } from './irodai-megoldasbol.component';
@@ -11,6 +12,7 @@ import {
   OfficeTaskResultDto,
   OfficeTaskValidateResult,
   OfficeUndoOp,
+  OfficeWebElement,
   OfficeWordParagraph,
 } from '../../models/office-task.model';
 
@@ -111,13 +113,15 @@ const xlsx = (name = 'kupa_megoldas.xlsx', size?: number) => {
   return f;
 };
 
+const strToU8 = (t: string) => new Uint8Array(encode(t)); // a jsdom-os Uint8Array-realm miatt másolat kell
+
 describe('IrodaiMegoldasbolComponent', () => {
   let service: Record<'getQuota' | 'startJob' | 'getJob' | 'getActiveJob' | 'dismiss' | 'validate' | 'apply' | 'downloadFile', ReturnType<typeof vi.fn>>;
   let toast: { success: ReturnType<typeof vi.fn> };
   let jobQueue: (() => Observable<OfficeTaskJobDto>)[];
 
   function create(
-    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' } = {},
+    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' | 'web' } = {},
   ) {
     jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
@@ -197,10 +201,10 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('csak .xlsx / .docx és legfeljebb 20 MB tölthető fel', () => {
+    it('csak .xlsx / .docx / .zip / .html és legfeljebb 20 MB tölthető fel', () => {
       const fixture = create();
       pick(fixture, xlsx('kupa.pptx'));
-      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx) vagy Word-dokumentum (.docx)');
+      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip / .html)');
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
       pick(fixture, xlsx('kupa.xlsx', MAX_FILE_BYTES + 1));
       expect(q(fixture, 'io-file-error')!.textContent).toContain('20 MB');
@@ -714,7 +718,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(false);
       pick(fixture, xlsx('kupa.xlsx'));
       expect(q(fixture, 'io-file-kind')!.textContent).toContain('Excel-munkafüzet');
-      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx');
+      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx,.zip,.html');
 
       TestBed.resetTestingModule();
       fixture = create({ kindHint: 'word' });
@@ -930,6 +934,178 @@ describe('IrodaiMegoldasbolComponent', () => {
       q(fixture, 'io-download-solution')!.click();
       expect(names).toEqual(['kirandulas.docx', 'kirandulas_megoldas.docx']);
       click.mockRestore();
+    });
+  });
+  describe('Weblap', () => {
+    const NULLS = { sheet: null, range: null, name: null, index: null, columns: null, parts: null };
+    /** A szerver alakja: a weblap-paraméterek csak kitöltve jönnek. */
+    const hop = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ op: 'removeFile', ...NULLS, enabled: true, result: 'ok', message: null, ...o });
+    const MISMATCH = 'az elem-horgony nem egyezik: a(z) 13. elem „<img>”, nem „<p>”';
+    const el = (index: number, tag: string, depth: number, o: Partial<OfficeWebElement> = {}): OfficeWebElement => ({ file: 'index.html', index, tag, depth, text: '', ...o });
+    const ELEMENTS: OfficeWebElement[] = [
+      el(0, 'html', 0, { attributes: 'lang="hu"' }),
+      el(3, 'title', 2, { text: 'Kockafilm Filmklub' }),
+      el(11, 'a', 3, { attributes: 'href="oldal.html"' }),
+      el(12, 'img', 4, { class: 'plakat', attributes: 'src="plakat1.png" alt="A Pál utcai fiúk"' }),
+      el(0, 'html', 0, { file: 'oldal.html' }),
+    ];
+
+    const webProposal = (): OfficeTaskProposal => ({
+      title: 'Kockafilm',
+      description: 'A filmklub weblapja…',
+      sourceMode: 'derived',
+      subtasks: [
+        {
+          label: '1.',
+          text: 'Formázd a fejlécet!',
+          points: 3,
+          undo: [
+            hop({ op: 'removeCssDeclaration', file: 'stilus.css', selector: 'th', property: 'padding' }),
+            hop({ op: 'removeCssRule', file: 'stilus.css', selector: '#fejlec', media: '(max-width: 600px)' }),
+            hop({ op: 'removeAttribute', file: 'index.html', element: { index: 12, tag: 'p' }, attribute: 'alt', result: 'error', message: MISMATCH }),
+          ],
+          rubric: [{ key: 'r1', text: 'A fejléc háttere.', points: 3, machine: true, gate: 'ok', gateReason: null }],
+        },
+        {
+          label: '2.',
+          text: 'Hivatkozás és cím.',
+          points: 2,
+          undo: [
+            hop({ op: 'unwrapElement', file: 'index.html', element: { index: 11, tag: 'a' } }),
+            hop({ op: 'renameElement', file: 'index.html', element: { index: 15, tag: 'th' }, original: 'td' }),
+            hop({ op: 'replaceText', file: 'index.html', element: { index: 3, tag: 'title' }, find: 'Kockafilm Filmklub', original: '' }),
+            hop({ op: 'removeFile', file: 'oldal.html' }),
+          ],
+          rubric: [{ key: 'r2', text: 'Hivatkozás.', points: 2, machine: false, gate: null, gateReason: null }],
+        },
+      ],
+    });
+
+    function previewWeb(r: Partial<OfficeTaskReport> = {}, extra: Partial<OfficeTaskResultDto> = { elements: ELEMENTS, files: ['index.html', 'oldal.html', 'plakat1.png', 'stilus.css'] }) {
+      const done = job({
+        fileKind: 'web',
+        fileName: 'filmklub_megoldas.zip',
+        status: 'done',
+        result: {
+          proposal: webProposal(),
+          report: report({ sourceFileName: 'filmklub.zip', solutionFileName: 'filmklub_megoldas.zip', recalculated: false, warnings: [], preview: null, ...r }),
+          model: 'm', notes: null, reasked: false, ...extra,
+        },
+      });
+      const fixture = create({ jobs: [() => of(done)] });
+      pick(fixture, xlsx('filmklub_megoldas.zip'));
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('.zip és .html is feltölthető (weblap); a Weblap blokkból nyitva Weblap a cím', () => {
+      let fixture = create();
+      pick(fixture, xlsx('filmklub_megoldas.ZIP'));
+      expect(q(fixture, 'io-file-error')).toBeNull();
+      expect(q(fixture, 'io-file-kind')!.textContent).toContain('weblapkészítési');
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(Weblap)');
+      pick(fixture, xlsx('index.html'));
+      expect(q(fixture, 'io-file-error')).toBeNull();
+      TestBed.resetTestingModule();
+      fixture = create({ kindHint: 'web' });
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(Weblap)');
+    });
+
+    it('a weblap-műveletek magyarul (elem 1-től); elem-eltérésnél a valódi címke átvehető; az előnézet és a letöltés weblapra utal', () => {
+      const fixture = previewWeb();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      expect(q(fixture, 'io-undo-text-0-0')!.textContent).toContain('stilus.css: „th” { padding } deklaráció törlése');
+      expect(q(fixture, 'io-undo-text-0-1')!.textContent).toContain('stilus.css: a(z) „#fejlec” CSS-szabály törlése (@media (max-width: 600px))');
+      expect(q(fixture, 'io-undo-text-0-2')!.textContent).toContain('index.html [13] <p>: a(z) „alt” attribútum törlése');
+      expect(q(fixture, 'io-undo-text-1-0')!.textContent).toContain('index.html [12] <a>: kibontás');
+      expect(q(fixture, 'io-undo-text-1-1')!.textContent).toContain('index.html [16] <th> → <td>');
+      expect(q(fixture, 'io-undo-text-1-2')!.textContent).toContain('index.html [4] <title>: „Kockafilm Filmklub” törlése');
+      expect(q(fixture, 'io-undo-text-1-3')!.textContent).toContain('oldal.html: a fájl kimarad');
+      expect(c.clientErrors()).toEqual([]);
+      q(fixture, 'io-undo-fix-element-0-2')!.click();
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[2].element).toEqual({ index: 12, tag: 'img' });
+      expect(q(fixture, 'io-own-upload')!.getAttribute('accept')).toBe('.zip,.html');
+      tab(fixture, 'elonezet');
+      expect(q(fixture, 'io-web-preview')).not.toBeNull();
+      tab(fixture, 'ellenorzes');
+      expect(q(fixture, 'io-not-recalculated')).toBeNull();
+      q(fixture, 'io-revalidate')!.click();
+      const sent = service.validate.mock.calls[0][2] as OfficeTaskProposal;
+      expect(sent.subtasks[0].undo[2]).toMatchObject({ op: 'removeAttribute', file: 'index.html', element: { index: 12, tag: 'img' }, attribute: 'alt' });
+    });
+
+    it('szerkesztés: elem a listából (fájlonként), fájlváltás törli az elemet, szelektor/tulajdonság; lista nélkül kézi megadás; az új művelet weblap-művelet', () => {
+      const fixture = previewWeb();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-edit-1-0')!.click();
+      fixture.detectChanges();
+      const select = q(fixture, 'io-element-1-0') as HTMLSelectElement;
+      expect(Array.from(select.options).map((o) => o.textContent!.trim())).toEqual([
+        'válassz…', '[1] <html> lang="hu"', '[4] <title> „Kockafilm Filmklub”', '[12] <a> href="oldal.html"', '[13] <img.plakat> src="plakat1.png" alt="A Pál utcai fiúk"',
+      ]);
+      c.setElement(1, 0, 12);
+      expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 12, tag: 'img' });
+      expect(c.webFiles(c.proposal()!.subtasks[1].undo[0])).toEqual(['index.html', 'oldal.html']);
+      c.setWebFile(1, 0, 'oldal.html');
+      expect(c.proposal()!.subtasks[1].undo[0]).toMatchObject({ file: 'oldal.html', element: { index: null, tag: null } });
+      expect(c.clientErrors().join(' ')).toContain('hiányzik az elem sorszáma');
+
+      c.changeWebKind(1, 0, 'removeCssDeclaration');
+      const changed = c.proposal()!.subtasks[1].undo[0];
+      expect(changed).toMatchObject({ op: 'removeCssDeclaration', element: null, selector: '', property: '' });
+      expect(c.webFiles(changed)).toEqual(['index.html', 'oldal.html', 'stilus.css']);
+      c.setUndo(1, 0, { selector: 'h2', property: 'color' });
+      expect(c.clientErrors()).toEqual([]);
+
+      c.addUndo(0);
+      expect(c.proposal()!.subtasks[0].undo[3]).toMatchObject({ op: 'removeCssRule', file: 'stilus.css', selector: '' });
+      expect(c.clientErrors().join(' ')).toContain('hiányzó szelektor');
+    });
+
+    it('az előnézet két sandbox="" iframe-et épít: beágyazott CSS, data: kép-címek', async () => {
+      const zip = new Blob([
+        zipSync({
+          'index.html': strToU8('<html><head><link rel="stylesheet" href="css/stilus.css"><script>alert(1)</script></head><body><img src="img/a.png"><a href="https://x.hu">x</a></body></html>'),
+          'css/stilus.css': strToU8('h1{color:red} p{background:url("../img/a.png")}'),
+          'img/a.png': new Uint8Array([1, 2, 3]),
+        }) as BlobPart,
+      ]);
+      const fixture = previewWeb();
+      service.downloadFile.mockImplementation(() => of(zip));
+      tab(fixture, 'elonezet');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelectorAll('iframe').length).toBe(2);
+      });
+      const frames = Array.from(fixture.nativeElement.querySelectorAll('[data-testid="io-web-preview"] iframe')) as HTMLIFrameElement[];
+      expect(frames.map((f) => f.title)).toEqual(['Megoldás - élő előnézet', 'Kiinduló oldal - élő előnézet']);
+      for (const f of frames) {
+        expect(f.getAttribute('sandbox')).toBe('');
+        const doc = f.getAttribute('srcdoc')!;
+        expect(doc).toContain('h1{color:red}');
+        expect(doc).not.toContain('<link');
+        expect(doc).not.toContain('alert(1)');
+        expect(doc).toContain('<img src="data:image/png;base64,AQID">');
+        expect(doc).toContain('url("data:image/png;base64,AQID")');
+        expect(doc).toContain('https://x.hu');
+      }
+      fixture.destroy();
+    });
+
+    it('elem-lista nélkül kézi sorszám (1-től) és címke', () => {
+      const fixture = previewWeb({}, { files: ['index.html'] });
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-edit-1-0')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'io-element-1-0')).toBeNull();
+      c.setElementManual(1, 0, { index: 20 });
+      c.setElementManual(1, 0, { tag: 'li' });
+      expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 19, tag: 'li' });
     });
   });
 });
