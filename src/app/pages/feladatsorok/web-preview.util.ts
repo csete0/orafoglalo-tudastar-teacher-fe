@@ -3,7 +3,7 @@ import { unzipSync } from 'fflate';
 export interface WebPreview {
   /** Szkriptmentes, önálló HTML a sandbox="" iframe-hez. */
   srcdoc: string;
-  /** A képekhez létrehozott blob: címek; a hívó felel a visszavonásukról. */
+  /** Régi blob:-címek listája - data: címekre váltva üres marad (a hívó visszavonása no-op). */
   urls: string[];
 }
 
@@ -46,9 +46,12 @@ export function buildWebPreview(files: Record<string, Uint8Array>): WebPreview {
     if (!path || !files[path] || !MIME[ext]) return null;
     let url = cache.get(path);
     if (!url) {
-      url = URL.createObjectURL(new Blob([files[path] as BlobPart], { type: MIME[ext] }));
+      // data: cím, nem blob: - a sandbox="" iframe átlátszatlan eredetű, a szülő blob: címeit a böngésző nem tölti be.
+      const bytes = files[path];
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      url = `data:${MIME[ext]};base64,${btoa(bin)}`;
       cache.set(path, url);
-      urls.push(url);
     }
     return url;
   };

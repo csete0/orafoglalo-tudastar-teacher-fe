@@ -1066,14 +1066,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(c.clientErrors().join(' ')).toContain('hiányzó szelektor');
     });
 
-    it('az előnézet két sandbox="" iframe-et épít: beágyazott CSS, átírt kép-cím, blob-címek visszavonása', async () => {
-      const created: string[] = [];
-      const revoked: string[] = [];
-      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
-        created.push(`blob:t/${created.length}`);
-        return created[created.length - 1];
-      });
-      vi.spyOn(URL, 'revokeObjectURL').mockImplementation((u) => void revoked.push(u));
+    it('az előnézet két sandbox="" iframe-et épít: beágyazott CSS, data: kép-címek', async () => {
       const zip = new Blob([
         zipSync({
           'index.html': strToU8('<html><head><link rel="stylesheet" href="css/stilus.css"><script>alert(1)</script></head><body><img src="img/a.png"><a href="https://x.hu">x</a></body></html>'),
@@ -1096,13 +1089,11 @@ describe('IrodaiMegoldasbolComponent', () => {
         expect(doc).toContain('h1{color:red}');
         expect(doc).not.toContain('<link');
         expect(doc).not.toContain('alert(1)');
-        expect(doc).toMatch(/<img src="blob:t\/\d">/);
-        expect(doc).toMatch(/url\("blob:t\/\d"\)/);
+        expect(doc).toContain('<img src="data:image/png;base64,AQID">');
+        expect(doc).toContain('url("data:image/png;base64,AQID")');
         expect(doc).toContain('https://x.hu');
       }
       fixture.destroy();
-      expect(revoked.sort()).toEqual([...created].sort());
-      expect(revoked.length).toBeGreaterThan(0);
     });
 
     it('elem-lista nélkül kézi sorszám (1-től) és címke', () => {
