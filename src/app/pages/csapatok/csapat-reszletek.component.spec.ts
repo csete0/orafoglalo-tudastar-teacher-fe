@@ -73,7 +73,7 @@ describe('CsapatReszletekComponent', () => {
     await c.requestReview();
     expect(api.requestReview).toHaveBeenCalledWith(3, null);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('most 2/40');
+    expect(fixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain('is fogy (most 2/40); a sikertelen');
   });
 
   it('csapatmunka: a törölt felhasználó és az import külön sor és külön heti kulcs (deleted / import)', async () => {

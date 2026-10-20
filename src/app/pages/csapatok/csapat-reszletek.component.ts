@@ -153,8 +153,8 @@ const MAX_POLLS = 36;
           }
           @case ('mi') {
             @if (reviews(); as r) {
-              <p class="text-sm">A csapat ebben a hónapban {{ r.used }}/{{ r.limit }} átnézést használt. Minden átnézés a te havi MI-keretedből is fogy
-                @if (quota(); as q) { (most {{ q.used }}/{{ q.limit }}) }; a sikertelen vagy csonka átnézés egyikbe sem számít bele.</p>
+              <p class="text-sm">A csapat ebben a hónapban {{ r.used }}/{{ r.limit }} átnézést használt. Minden átnézés a te havi MI-keretedből is
+                fogy@if (quota(); as q) { (most {{ q.used }}/{{ q.limit }})}; a sikertelen vagy csonka átnézés egyikbe sem számít bele.</p>
               @if (t.status === 'active') {
                 <div class="flex flex-wrap gap-2 items-end">
                   @if (branches().length > 1) {
