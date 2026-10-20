@@ -9,6 +9,7 @@ import {
   OfficeParagraphAnchor,
   OfficeProposalSubtask,
   OfficeRubricItem,
+  OfficeSlideShape,
   OfficeSourceMode,
   OfficeTaskFileKind,
   OfficeTaskJobDto,
@@ -18,6 +19,7 @@ import {
   OfficeTaskResultDto,
   OfficeUndoOp,
   OfficeWebElement,
+  PptUndoOpName,
   WebUndoOpName,
   WordUndoOpName,
 } from '../../models/office-task.model';
@@ -30,9 +32,11 @@ import { saveBlob } from '../../shared/save-blob.util';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
   canonicalOp,
+  canonicalPptOp,
   canonicalWebOp,
   canonicalWordOp,
   changeUndoOpKind,
+  changePptUndoOpKind,
   changeWebUndoOpKind,
   changeWordUndoOpKind,
   describeUndoOp,
@@ -42,11 +46,17 @@ import {
   newUndoOp,
   isCssFile,
   isHtmlFile,
+  newPptUndoOp,
   newWebUndoOp,
   newWordUndoOp,
   opSpec,
   parseAnchorMismatch,
   parseElementMismatch,
+  parseShapeMismatch,
+  PPT_FONT_PARTS,
+  PPT_UNDO_OP_NAMES,
+  PPT_UNDO_OPS,
+  pptOpSpec,
   STYLE_PARTS,
   validateUndoOp,
   WORD_FIELDS,
@@ -139,20 +149,22 @@ export function stripServerFields(p: OfficeTaskProposal): OfficeTaskProposal {
 const sameProposal = (a: OfficeTaskProposal | null, b: OfficeTaskProposal | null) =>
   a === b || (!!a && !!b && canon(stripServerFields(a)) === canon(stripServerFields(b)));
 
-const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip vagy .html', graphics: '.png, .jpg, .gif vagy .svg' };
-const ACCEPT: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip,.html', graphics: '.png,.jpg,.jpeg,.gif,.svg' };
-const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word', web: 'Weblap', graphics: 'Grafika' };
-const KIND_ICON: Record<OfficeFileKind, IconName> = { excel: 'chart', word: 'document', web: 'link', graphics: 'eye' };
+const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', powerpoint: '.pptx', web: '.zip vagy .html', graphics: '.png, .jpg, .gif vagy .svg' };
+const ACCEPT: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', powerpoint: '.pptx', web: '.zip,.html', graphics: '.png,.jpg,.jpeg,.gif,.svg' };
+const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word', powerpoint: 'PowerPoint', web: 'Weblap', graphics: 'Grafika' };
+const KIND_ICON: Record<OfficeFileKind, IconName> = { excel: 'chart', word: 'document', powerpoint: 'academic-cap', web: 'link', graphics: 'eye' };
+const KINDS: OfficeFileKind[] = ['excel', 'word', 'powerpoint', 'web', 'graphics'];
 
 /** A fájl fajtája a kiterjesztéséből (mint a szerveren), vagy null. */
 export function officeFileKind(file: File): OfficeFileKind | null {
   if (/\.(png|jpe?g|gif|svg)$/i.test(file.name)) return 'graphics';
+  if (/\.pptx$/i.test(file.name)) return 'powerpoint';
   return /\.xlsx$/i.test(file.name) ? 'excel' : /\.docx$/i.test(file.name) ? 'word' : /\.(zip|html?)$/i.test(file.name) ? 'web' : null;
 }
 
 /**
  * „Irodai feladat a megoldott fájlból” párbeszédablak a feladatsor-szerkesztőben (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md,
- * 1. fázis: Excel, 2. fázis: Word - a fajta a feltöltött fájlból). A tanár a kész fájlt tölti fel; a háttérben az MI megírja a
+ * Excel, Word, PowerPoint, weblap, grafika - a fajta a feltöltött fájlból). A tanár a kész fájlt tölti fel; a háttérben az MI megírja a
  * feladatot, a részfeladatonkénti visszacsinálást és a szempontlistát, a szerver előállítja a kiinduló fájlt és lefuttatja a kettős
  * kaput. Szerkesztés után Újraellenőrzés (MI nélkül), csak az utoljára ellenőrzött változat menthető.
  */
@@ -346,6 +358,10 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                         <button type="button" class="text-xs text-primary hover:underline" (click)="fixAnchor(si, oi)"
                                           [attr.data-testid]="'io-undo-fix-anchor-' + si + '-' + oi">A(z) [{{ mm.index + 1 }}] bekezdés valódi szövegének átvétele</button>
                                       }
+                                      @if (isPpt() && shapeMismatch(o); as sm) {
+                                        <button type="button" class="text-xs text-primary hover:underline" (click)="fixShape(si, oi)"
+                                          [attr.data-testid]="'io-undo-fix-shape-' + si + '-' + oi">Az alakzat valódi nevének („{{ sm.name }}”) átvétele</button>
+                                      }
                                       @if (isWeb() && elementMismatch(o); as em) {
                                         <button type="button" class="text-xs text-primary hover:underline" (click)="fixElement(si, oi)"
                                           [attr.data-testid]="'io-undo-fix-element-' + si + '-' + oi">A(z) [{{ em.index + 1 }}] elem valódi címkéjének (&lt;{{ em.tag }}&gt;) átvétele</button>
@@ -448,6 +464,63 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                             (ngModelChange)="setUndo(si, oi, { original: $event })" [ngModelOptions]="{ standalone: true }"
                                             [attr.data-testid]="'io-original-' + si + '-' + oi"></textarea>
                                         </div>
+                                      }
+                                    </div>
+                                  } @else if (isEditing(si, oi) && isPpt()) {
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" [attr.data-testid]="'io-undo-editor-' + si + '-' + oi">
+                                      <div class="sm:col-span-2">
+                                        <label [for]="'io-op-' + si + '-' + oi" class="text-xs text-text-muted block">Művelet</label>
+                                        <select [id]="'io-op-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="canonicalPpt(o.op)"
+                                          (ngModelChange)="changePptKind(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-op-' + si + '-' + oi">
+                                          @for (n of pptOpNames; track n) { <option [ngValue]="n">{{ pptOpLabel(n) }}</option> }
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label [for]="'io-slide-' + si + '-' + oi" class="text-xs text-text-muted block">Dia (a megoldás szerinti sorszám)</label>
+                                        <select [id]="'io-slide-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.slide ?? null"
+                                          (ngModelChange)="setSlide(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-slide-' + si + '-' + oi">
+                                          @if (pptSpec(o)?.allSlides) { <option [ngValue]="null">minden dia</option> } @else { <option [ngValue]="null" disabled>válassz…</option> }
+                                          @for (n of slideOptions(o); track n) { <option [ngValue]="n">{{ n }}. dia</option> }
+                                        </select>
+                                      </div>
+                                      @if (pptHas(o, 'shape')) {
+                                        @if (shapeOptions(o.slide).length > 0) {
+                                          <div class="sm:col-span-2">
+                                            <label [for]="'io-shape-' + si + '-' + oi" class="text-xs text-text-muted block">Alakzat{{ pptSpec(o)?.needsShape ? '' : ' (elhagyható = a dia összes animációja)' }}</label>
+                                            <select [id]="'io-shape-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.shape?.id ?? null"
+                                              (ngModelChange)="setShape(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-shape-' + si + '-' + oi">
+                                              <option [ngValue]="null" [disabled]="pptSpec(o)?.needsShape">{{ pptSpec(o)?.needsShape ? 'válassz…' : 'a dia összes animációja' }}</option>
+                                              @for (sh of shapeOptions(o.slide); track sh.id) { <option [ngValue]="sh.id">{{ shapeLabel(sh) }}</option> }
+                                            </select>
+                                          </div>
+                                        } @else {
+                                          <div>
+                                            <label [for]="'io-shape-id-' + si + '-' + oi" class="text-xs text-text-muted block">Az alakzat azonosítója</label>
+                                            <input [id]="'io-shape-id-' + si + '-' + oi" type="number" min="0" class="input !px-2 !py-1 !text-sm"
+                                              [ngModel]="o.shape?.id ?? null" (ngModelChange)="setShapeManual(si, oi, { id: $event })"
+                                              [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-shape-id-' + si + '-' + oi" />
+                                          </div>
+                                          <div>
+                                            <label [for]="'io-shape-name-' + si + '-' + oi" class="text-xs text-text-muted block">Az alakzat neve (pontosan)</label>
+                                            <input [id]="'io-shape-name-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" maxlength="255" [ngModel]="o.shape?.name ?? ''"
+                                              (ngModelChange)="setShapeManual(si, oi, { name: $event })" [ngModelOptions]="{ standalone: true }"
+                                              [attr.data-testid]="'io-shape-name-' + si + '-' + oi" />
+                                          </div>
+                                        }
+                                      }
+                                      @if (pptHas(o, 'parts')) {
+                                        <fieldset class="sm:col-span-2">
+                                          <legend class="text-xs text-text-muted">Mit állítson alapra? (semmi bejelölve = mindent)</legend>
+                                          <div class="flex flex-wrap gap-x-4 gap-y-1">
+                                            @for (part of pptFontParts; track part.key) {
+                                              <label class="flex items-center gap-1.5 text-sm">
+                                                <input type="checkbox" [checked]="!!o.parts?.includes(part.key)" (change)="togglePart(si, oi, part.key)"
+                                                  [attr.data-testid]="'io-part-' + si + '-' + oi + '-' + part.key" />
+                                                {{ part.label }}
+                                              </label>
+                                            }
+                                          </div>
+                                        </fieldset>
                                       }
                                     </div>
                                   } @else if (isEditing(si, oi) && isWord()) {
@@ -708,13 +781,23 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                               <div class="min-w-0" data-testid="io-preview-source">
                                 <h3 class="font-semibold text-sm mb-1">Kiinduló fájl</h3>
                                 @for (img of pv.source; track $index) {
-                                  <img [src]="img" [alt]="'Kiinduló fájl, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  @if (img) {
+                                    <img [src]="img" [alt]="'Kiinduló fájl, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  } @else {
+                                    <p class="aspect-video flex items-center justify-center text-center text-sm text-text-muted rounded-lg border border-dashed border-border-default mb-2 p-2"
+                                      [attr.data-testid]="'io-preview-missing-source-' + $index">Ez a dia a kiinduló fájlban nincs meg (vagy rejtett).</p>
+                                  }
                                 } @empty { <p class="text-sm text-text-muted">Nincs oldalkép.</p> }
                               </div>
                               <div class="min-w-0" data-testid="io-preview-solution">
                                 <h3 class="font-semibold text-sm mb-1">Megoldás</h3>
                                 @for (img of pv.solution; track $index) {
-                                  <img [src]="img" [alt]="'Megoldás, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  @if (img) {
+                                    <img [src]="img" [alt]="'Megoldás, ' + ($index + 1) + '. oldal'" class="w-full h-auto rounded-lg border border-border-default mb-2 bg-white" />
+                                  } @else {
+                                    <p class="aspect-video flex items-center justify-center text-center text-sm text-text-muted rounded-lg border border-dashed border-border-default mb-2 p-2"
+                                      [attr.data-testid]="'io-preview-missing-solution-' + $index">Ez a dia a megoldásban nincs meg (vagy rejtett - vetítéskor nem látszik).</p>
+                                  }
                                 } @empty { <p class="text-sm text-text-muted">Nincs oldalkép.</p> }
                               </div>
                             </div>
@@ -723,7 +806,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                               @if (isWeb()) {
                                 Weblaphoz nincs oldalképes előnézet.
                               } @else {
-                                Az oldalképes előnézet most nem érhető el (a fájl-átalakító nem válaszolt). Töltsd le a két fájlt, és nézd meg {{ isWord() ? 'Wordben' : 'Excelben' }}.
+                                Az oldalképes előnézet most nem érhető el (a fájl-átalakító nem válaszolt). Töltsd le a két fájlt, és nézd meg {{ isWord() ? 'Wordben' : isPpt() ? 'PowerPointban' : 'Excelben' }}.
                               }
                             </p>
                           }
@@ -822,13 +905,13 @@ export function officeFileKind(file: File): OfficeFileKind | null {
               }
 
               <p class="text-sm text-text-muted">
-                Töltsd fel a kész, megoldott munkafüzetet, dokumentumot vagy weblapot. Az AI érettségi stílusban megírja a feladatot és a részfeladatokat pontokkal, a rendszer a
+                Töltsd fel a kész, megoldott munkafüzetet, dokumentumot, bemutatót vagy weblapot. Az AI érettségi stílusban megírja a feladatot és a részfeladatokat pontokkal, a rendszer a
                 megoldásból „visszacsinálja” a kiinduló fájlt, és szempontlistát készít gépi szabályokkal. Mentés előtt mindent átnézhetsz és módosíthatsz.
               </p>
 
               <div>
-                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip a HTML-, CSS- és képfájlokkal, vagy egyetlen .html) vagy kép (.png, .jpg, .gif, .svg), legfeljebb 20 MB</label>
-                <input id="io-file" type="file" accept=".xlsx,.docx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
+                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), PowerPoint-bemutató (.pptx), weblap (.zip a HTML-, CSS- és képfájlokkal, vagy egyetlen .html) vagy kép (.png, .jpg, .gif, .svg), legfeljebb 20 MB</label>
+                <input id="io-file" type="file" accept=".xlsx,.docx,.pptx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
                 @if (fileError()) {
                   <p class="text-sm text-danger mt-1" role="alert" data-testid="io-file-error">{{ fileError() }}</p>
                 } @else if (file()) {
@@ -898,7 +981,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly taskSetId = input.required<number>();
-  /** A megnyitó blokk fajtája (Táblázatkezelés → Excel, Szövegszerkesztés → Word) - amíg nincs fájl / job, ez látszik a címben. */
+  /** A megnyitó blokk fajtája (Táblázatkezelés → Excel, Szövegszerkesztés → Word, Prezentáció → PowerPoint…) - amíg nincs fájl / job, ez látszik a címben. */
   readonly kindHint = input<OfficeFileKind>('excel');
   readonly closed = output<void>();
   /** Sikeres mentés után az új feladat azonosítójával - a szerkesztő újratölt és kinyitja. */
@@ -914,6 +997,8 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly wordOpNames = WORD_UNDO_OP_NAMES;
   readonly wordFields = WORD_FIELDS;
   readonly webOpNames = WEB_UNDO_OP_NAMES;
+  readonly pptOpNames = PPT_UNDO_OP_NAMES;
+  readonly pptFontParts = PPT_FONT_PARTS;
   readonly maxReplace = MAX_REPLACE;
   readonly styleParts = STYLE_PARTS;
   readonly maxNotes = MAX_NOTES;
@@ -980,6 +1065,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly isWord = computed(() => this.kind() === 'word');
   readonly isWeb = computed(() => this.kind() === 'web');
   readonly isGraphics = computed(() => this.kind() === 'graphics');
+  readonly isPpt = computed(() => this.kind() === 'powerpoint');
   readonly kindLabel = computed(() => KIND_LABEL[this.kind()]);
   readonly kindIcon = computed(() => KIND_ICON[this.kind()]);
   readonly extension = computed(() => EXTENSION[this.kind()]);
@@ -989,6 +1075,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
       ({
         excel: 'Excel-munkafüzet - táblázatkezelési feladat',
         word: 'Word-dokumentum - szövegszerkesztési feladat',
+        powerpoint: 'PowerPoint-bemutató - prezentációkészítési feladat',
         web: 'weblap - weblapkészítési (HTML/CSS) feladat',
         graphics: 'kép - képszerkesztési / rajzolási (grafika) feladat',
       })[this.kind()],
@@ -1019,6 +1106,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   /** Weblap: a megoldás HTML-elemei az elem-választóhoz és a csomag fájljai. */
   private readonly webElements = computed(() => this.generated()?.elements ?? []);
   private readonly webFileNames = computed(() => this.generated()?.files ?? []);
+  /** PowerPoint: a megoldás alakzatai az alakzat-választóhoz és a diák száma. */
+  private readonly slideShapes = computed(() => this.generated()?.shapes ?? []);
+  private readonly slideCount = computed(() => this.generated()?.slideCount ?? 0);
   readonly hasOwnSource = signal(false);
   /** A még fel nem küldött saját kiinduló fájl (az Újraellenőrzés viszi fel). */
   readonly pendingOwnSource = signal<File | null>(null);
@@ -1199,7 +1289,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   /** `sameKindAs`: a saját kiinduló fájl a megoldással azonos fajtájú legyen. */
   private fileProblem(file: File, sameKindAs?: OfficeFileKind): string | null {
     const kind = officeFileKind(file);
-    if (!kind) return 'Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg) tölthető fel.';
+    if (!kind) return 'Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), PowerPoint-bemutató (.pptx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg) tölthető fel.';
     if (sameKindAs && kind !== sameKindAs)
       return sameKindAs === 'web'
         ? 'A saját kiinduló fájl is weblap legyen (.zip vagy .html).'
@@ -1284,7 +1374,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
 
   private onJob(job: OfficeTaskJobDto): void {
     this.jobFileName.set(job.fileName || null);
-    this.jobKind.set(job.fileKind === 'word' || job.fileKind === 'web' || job.fileKind === 'graphics' ? job.fileKind : 'excel');
+    this.jobKind.set(KINDS.includes(job.fileKind) ? job.fileKind : 'excel');
     this.progressText.set(job.progressText);
     this.hasOwnSource.set(job.hasOwnSource);
     if (job.status === 'failed') {
@@ -1416,7 +1506,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const current = new Set(op.parts ?? []);
     if (current.has(part)) current.delete(part);
     else current.add(part);
-    const order = this.isWord() ? this.wordParts(op).map((p) => p.key) : STYLE_PARTS.map((p) => p.key);
+    const order = (this.isWord() ? this.wordParts(op) : this.isPpt() ? PPT_FONT_PARTS : STYLE_PARTS).map((p) => p.key);
     const parts = order.filter((k) => current.has(k));
     this.setUndo(si, oi, { parts: parts.length === 0 ? null : parts });
   }
@@ -1432,6 +1522,8 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const sheet = s.undo.find((o) => o.sheet)?.sheet ?? null;
     const op = this.isWeb()
       ? newWebUndoOp('removeCssRule', this.webFileNames().find(isCssFile) ?? this.webFileNames().find(isHtmlFile) ?? null)
+      : this.isPpt()
+        ? newPptUndoOp('removeShape', s.undo.find((o) => o.slide != null)?.slide ?? 1)
       : this.isWord()
         ? newWordUndoOp('clearRunFormatting')
         : newUndoOp('clearFormulas', sheet);
@@ -1716,6 +1808,77 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const em = op && parseElementMismatch(op.message);
     if (!op || !em) return;
     this.setUndo(si, oi, { element: { index: em.index, tag: em.tag } });
+  }
+
+  canonicalPpt(op: string): PptUndoOpName | null {
+    return canonicalPptOp(op);
+  }
+
+  pptOpLabel(name: PptUndoOpName): string {
+    return PPT_UNDO_OPS[name].label;
+  }
+
+  pptSpec(op: OfficeUndoOp) {
+    return pptOpSpec(op.op);
+  }
+
+  pptHas(op: OfficeUndoOp, field: 'shape' | 'parts'): boolean {
+    return !!pptOpSpec(op.op)?.fields.includes(field);
+  }
+
+  changePptKind(si: number, oi: number, next: PptUndoOpName): void {
+    this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? changePptUndoOpKind(o, next) : o)) }));
+  }
+
+  /** A választható diák (1-től; és a művelet saját, nagyobb sorszáma, ha van). */
+  slideOptions(op: OfficeUndoOp): number[] {
+    const count = Math.max(this.slideCount(), op.slide ?? 0);
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }
+
+  /** Diaváltáskor az alakzat törlődik (az azonosító dián belüli). */
+  setSlide(si: number, oi: number, slide: number | null): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    if (!op) return;
+    this.setUndo(si, oi, op.slide === slide ? {} : { slide, shape: null });
+  }
+
+  shapeOptions(slide: number | null | undefined): OfficeSlideShape[] {
+    return slide == null ? [] : this.slideShapes().filter((s) => s.slide === slide);
+  }
+
+  shapeLabel(s: OfficeSlideShape): string {
+    return `#${s.id} „${s.name}” (${s.kind})${s.text ? ` - ${s.text}` : ''}`;
+  }
+
+  /** Az alakzat a listából: a név a megoldás szerinti. */
+  setShape(si: number, oi: number, id: number | null): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    const shape = op && this.shapeOptions(op.slide).find((s) => s.id === id);
+    this.setUndo(si, oi, { shape: shape ? { id: shape.id, name: shape.name } : null });
+  }
+
+  /** Kézi megadás (nincs lista). */
+  setShapeManual(si: number, oi: number, patch: { id?: unknown; name?: string }): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    if (!op) return;
+    const current = op.shape ?? { id: null, name: null };
+    const n = patch.id === undefined ? null : this.toInt(patch.id);
+    this.setUndo(si, oi, {
+      shape: { id: patch.id === undefined ? current.id : Number.isNaN(n!) ? null : n, name: patch.name === undefined ? current.name : patch.name },
+    });
+  }
+
+  shapeMismatch(op: OfficeUndoOp) {
+    return op.result === 'error' ? parseShapeMismatch(op.message) : null;
+  }
+
+  /** Alakzat-eltérésnél (szerver) a valódi név kerül a horgonyba. */
+  fixShape(si: number, oi: number): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    const sm = op && parseShapeMismatch(op.message);
+    if (!op || !sm) return;
+    this.setUndo(si, oi, { shape: { id: sm.id, name: sm.name } });
   }
 
   canonicalWord(op: string): WordUndoOpName | null {

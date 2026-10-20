@@ -1,5 +1,5 @@
 /**
- * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel, 2. fázis: Word, majd weblap) - a backend
+ * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel, 2. fázis: Word, majd weblap, grafika, PowerPoint) - a backend
  * `OfficeTaskModels.cs` tükre. A ★ mezőket a szerver tölti minden ellenőrzéskor, a kliens értéke nem számít.
  */
 
@@ -7,7 +7,7 @@ export type OfficeTaskLevel = 'kozep' | 'emelt';
 export type OfficeTaskStatus = 'queued' | 'generating' | 'running' | 'done' | 'failed';
 export type OfficeSourceMode = 'derived' | 'own';
 /** A feltöltött megoldás fajtája (a kiterjesztésből): ez dönti el a visszacsinálási szókészletet (grafikánál nincs: saját kiinduló kép). */
-export type OfficeFileKind = 'excel' | 'word' | 'web' | 'graphics';
+export type OfficeFileKind = 'excel' | 'word' | 'powerpoint' | 'web' | 'graphics';
 
 /** A zárt Excel-szókészlet (ExcelUndo.Vocabulary). */
 export type ExcelUndoOpName =
@@ -55,6 +55,24 @@ export type WebUndoOpName =
   | 'renameElement'
   | 'replaceText'
   | 'removeFile';
+
+/** A zárt PowerPoint-szókészlet (PptxUndo.Vocabulary). */
+export type PptUndoOpName =
+  | 'removeShape'
+  | 'removePicture'
+  | 'clearText'
+  | 'resetFont'
+  | 'unhideSlide'
+  | 'removeSlide'
+  | 'removeTransition'
+  | 'removeAnimation'
+  | 'resetBackground';
+
+/** PowerPoint-alakzat horgonya: az azonosító (cNvPr id) + a neve (a megoldásban). */
+export interface OfficeShapeAnchor {
+  id: number | null;
+  name: string | null;
+}
 
 /** Weblap-elem horgonya: a fájlon belüli 0-alapú elem-sorszám (a nyitó címkék sorrendjében) + a címke neve (a megoldásban). */
 export interface OfficeElementAnchor {
@@ -106,6 +124,11 @@ export interface OfficeUndoOp {
   element?: OfficeElementAnchor | null;
   /** removeAttribute: az attribútum neve. */
   attribute?: string | null;
+  // ── Csak PowerPoint (a szerver csak kitöltve küldi) ──
+  /** A dia sorszáma (1-től); removeTransition / resetBackground: elhagyva = minden dia. */
+  slide?: number | null;
+  /** Az alakzat horgonya. */
+  shape?: OfficeShapeAnchor | null;
   enabled: boolean;
   /** ★ ok | noop | error | null (kikapcsolva / saját kiinduló fájl). */
   result: 'ok' | 'noop' | 'error' | null;
@@ -141,9 +164,10 @@ export interface OfficeTaskProposal {
   subtasks: OfficeProposalSubtask[];
 }
 
+/** PowerPointnál soronként ugyanaz a dia; null: azon az oldalon nincs ilyen (rejtett / törölt / új) dia. */
 export interface OfficeTaskPreview {
-  source: string[];
-  solution: string[];
+  source: (string | null)[];
+  solution: (string | null)[];
 }
 
 export interface OfficeTaskReport {
@@ -173,6 +197,22 @@ export interface OfficeTaskResultDto {
   elements?: OfficeWebElement[] | null;
   /** Weblap: a csomag fájljai (név szerint). */
   files?: string[] | null;
+  /** PowerPoint: a diák alakzatai az alakzat-választóhoz (a horgonyok azonosítóival). */
+  shapes?: OfficeSlideShape[] | null;
+  /** PowerPoint: a diák száma. */
+  slideCount?: number | null;
+}
+
+/** A PowerPoint-megoldás egy alakzata a szerver horgony-azonosítójával. */
+export interface OfficeSlideShape {
+  /** A dia sorszáma (1-től). */
+  slide: number;
+  id: number;
+  name: string;
+  /** title | body | textbox | shape | picture | group | table | chart | connector … */
+  kind: string;
+  /** A szöveg eleje (≤ 80 karakter). */
+  text?: string | null;
 }
 
 /** A weblap-megoldás egy HTML-eleme a szerver horgony-számozásával. */
