@@ -16,34 +16,45 @@ import {
   OfficeTaskReport,
   OfficeTaskResultDto,
   OfficeUndoOp,
+  OfficeWebElement,
+  WebUndoOpName,
   WordUndoOpName,
 } from '../../models/office-task.model';
 import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 import { AiHelperQuotaItemDto, aiHelperBlock, aiHelperErrorMessage } from '../../shared/ai-helper-quota.util';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
-import { IconComponent } from '../../shared/icon/icon.component';
+import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { saveBlob } from '../../shared/save-blob.util';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
   canonicalOp,
+  canonicalWebOp,
   canonicalWordOp,
   changeUndoOpKind,
+  changeWebUndoOpKind,
   changeWordUndoOpKind,
   describeUndoOp,
   EXCEL_UNDO_OP_NAMES,
   EXCEL_UNDO_OPS,
   MAX_REPLACE,
   newUndoOp,
+  isCssFile,
+  isHtmlFile,
+  newWebUndoOp,
   newWordUndoOp,
   opSpec,
   parseAnchorMismatch,
+  parseElementMismatch,
   STYLE_PARTS,
   validateUndoOp,
   WORD_FIELDS,
   WORD_PARTS,
   WORD_UNDO_OP_NAMES,
   WORD_UNDO_OPS,
+  WEB_UNDO_OP_NAMES,
+  WEB_UNDO_OPS,
+  webOpSpec,
   wordOpSpec,
 } from './irodai-undo.util';
 import { WordParagraphPickerComponent } from './word-paragraph-picker.component';
@@ -118,12 +129,14 @@ export function stripServerFields(p: OfficeTaskProposal): OfficeTaskProposal {
 const sameProposal = (a: OfficeTaskProposal | null, b: OfficeTaskProposal | null) =>
   a === b || (!!a && !!b && canon(stripServerFields(a)) === canon(stripServerFields(b)));
 
-const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx' };
-const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word' };
+const EXTENSION: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip vagy .html' };
+const ACCEPT: Record<OfficeFileKind, string> = { excel: '.xlsx', word: '.docx', web: '.zip,.html' };
+const KIND_LABEL: Record<OfficeFileKind, string> = { excel: 'Excel', word: 'Word', web: 'Weblap' };
+const KIND_ICON: Record<OfficeFileKind, IconName> = { excel: 'chart', word: 'document', web: 'link' };
 
 /** A fájl fajtája a kiterjesztéséből (mint a szerveren), vagy null. */
 export function officeFileKind(file: File): OfficeFileKind | null {
-  return /\.xlsx$/i.test(file.name) ? 'excel' : /\.docx$/i.test(file.name) ? 'word' : null;
+  return /\.xlsx$/i.test(file.name) ? 'excel' : /\.docx$/i.test(file.name) ? 'word' : /\.(zip|html?)$/i.test(file.name) ? 'web' : null;
 }
 
 /**
@@ -144,7 +157,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
         class="card relative w-full max-w-4xl p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none min-w-0">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="icon-tile icon-tile-secondary shrink-0"><app-icon [name]="isWord() ? 'document' : 'chart'" class="w-5 h-5 block" /></div>
+            <div class="icon-tile icon-tile-secondary shrink-0"><app-icon [name]="kindIcon()" class="w-5 h-5 block" /></div>
             <div class="min-w-0">
               <h2 id="io-title" class="font-bold text-lg">Irodai feladat a megoldott fájlból ({{ kindLabel() }})</h2>
               @if (jobFileName()) {
@@ -276,7 +289,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                             <div class="flex flex-wrap items-center gap-2 pl-6">
                               <label class="btn btn-ghost !px-2 !py-1 text-sm">
                                 Saját kiinduló fájl feltöltése
-                                <input type="file" [accept]="extension()" class="sr-only" (change)="loadOwnSource($event)" data-testid="io-own-upload" />
+                                <input type="file" [accept]="accept()" class="sr-only" (change)="loadOwnSource($event)" data-testid="io-own-upload" />
                               </label>
                               @if (pendingOwnSource(); as f) {
                                 <span class="text-sm break-all" data-testid="io-own-pending">{{ f.name }} (az Újraellenőrzéssel kerül fel)</span>
@@ -318,12 +331,111 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                         <button type="button" class="text-xs text-primary hover:underline" (click)="fixAnchor(si, oi)"
                                           [attr.data-testid]="'io-undo-fix-anchor-' + si + '-' + oi">A(z) [{{ mm.index + 1 }}] bekezdés valódi szövegének átvétele</button>
                                       }
+                                      @if (isWeb() && elementMismatch(o); as em) {
+                                        <button type="button" class="text-xs text-primary hover:underline" (click)="fixElement(si, oi)"
+                                          [attr.data-testid]="'io-undo-fix-element-' + si + '-' + oi">A(z) [{{ em.index + 1 }}] elem valódi címkéjének (&lt;{{ em.tag }}&gt;) átvétele</button>
+                                      }
                                     </div>
                                   }
                                   @if (undoError(si, oi); as err) {
                                     <p class="text-xs text-danger" role="alert" [attr.data-testid]="'io-undo-error-' + si + '-' + oi">{{ err }}</p>
                                   }
-                                  @if (isEditing(si, oi) && isWord()) {
+                                  @if (isEditing(si, oi) && isWeb()) {
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" [attr.data-testid]="'io-undo-editor-' + si + '-' + oi">
+                                      <div class="sm:col-span-2">
+                                        <label [for]="'io-op-' + si + '-' + oi" class="text-xs text-text-muted block">Művelet</label>
+                                        <select [id]="'io-op-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="canonicalWeb(o.op)"
+                                          (ngModelChange)="changeWebKind(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-op-' + si + '-' + oi">
+                                          @for (n of webOpNames; track n) { <option [ngValue]="n">{{ webOpLabel(n) }}</option> }
+                                        </select>
+                                      </div>
+                                      <div class="sm:col-span-2">
+                                        <label [for]="'io-file-' + si + '-' + oi" class="text-xs text-text-muted block">Fájl</label>
+                                        <select [id]="'io-file-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.file ?? null"
+                                          (ngModelChange)="setWebFile(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-file-' + si + '-' + oi">
+                                          <option [ngValue]="null" disabled>válassz…</option>
+                                          @for (f of webFiles(o); track f) { <option [ngValue]="f">{{ f }}</option> }
+                                        </select>
+                                      </div>
+                                      @if (webHas(o, 'element')) {
+                                        @if (elementOptions(o.file).length > 0) {
+                                          <div class="sm:col-span-2">
+                                            <label [for]="'io-element-' + si + '-' + oi" class="text-xs text-text-muted block">Elem (a megoldásban; a behúzás a beágyazást mutatja)</label>
+                                            <select [id]="'io-element-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" [ngModel]="o.element?.index ?? null"
+                                              (ngModelChange)="setElement(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-element-' + si + '-' + oi">
+                                              <option [ngValue]="null" disabled>válassz…</option>
+                                              @for (e of elementOptions(o.file); track e.index) { <option [ngValue]="e.index">{{ elementLabel(e) }}</option> }
+                                            </select>
+                                          </div>
+                                        } @else {
+                                          <div>
+                                            <label [for]="'io-element-index-' + si + '-' + oi" class="text-xs text-text-muted block">Az elem sorszáma a fájlban (1-től)</label>
+                                            <input [id]="'io-element-index-' + si + '-' + oi" type="number" min="1" max="3000" class="input !px-2 !py-1 !text-sm"
+                                              [ngModel]="o.element?.index == null ? null : o.element!.index! + 1" (ngModelChange)="setElementManual(si, oi, { index: $event })"
+                                              [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-element-index-' + si + '-' + oi" />
+                                          </div>
+                                          <div>
+                                            <label [for]="'io-element-tag-' + si + '-' + oi" class="text-xs text-text-muted block">Az elem címkéje (pl. img)</label>
+                                            <input [id]="'io-element-tag-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="20" [ngModel]="o.element?.tag ?? ''"
+                                              (ngModelChange)="setElementManual(si, oi, { tag: $event })" [ngModelOptions]="{ standalone: true }"
+                                              [attr.data-testid]="'io-element-tag-' + si + '-' + oi" />
+                                          </div>
+                                        }
+                                      }
+                                      @if (webHas(o, 'selector')) {
+                                        <div>
+                                          <label [for]="'io-selector-' + si + '-' + oi" class="text-xs text-text-muted block">CSS-szelektor (pontosan, ahogy a stíluslapban áll)</label>
+                                          <input [id]="'io-selector-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="300" [ngModel]="o.selector ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { selector: $event })" [ngModelOptions]="{ standalone: true }" placeholder="pl. #fejlec h1"
+                                            [attr.data-testid]="'io-selector-' + si + '-' + oi" />
+                                        </div>
+                                        <div>
+                                          <label [for]="'io-media-' + si + '-' + oi" class="text-xs text-text-muted block">@media-feltétel (elhagyható = a @media blokkokon kívül)</label>
+                                          <input [id]="'io-media-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="200" [ngModel]="o.media ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { media: emptyToNull($event) })" [ngModelOptions]="{ standalone: true }" placeholder="pl. (max-width: 600px)"
+                                            [attr.data-testid]="'io-media-' + si + '-' + oi" />
+                                        </div>
+                                      }
+                                      @if (webHas(o, 'property')) {
+                                        <div>
+                                          <label [for]="'io-property-' + si + '-' + oi" class="text-xs text-text-muted block">CSS-tulajdonság</label>
+                                          <input [id]="'io-property-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="60" [ngModel]="o.property ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { property: $event })" [ngModelOptions]="{ standalone: true }" placeholder="pl. background-color"
+                                            [attr.data-testid]="'io-property-' + si + '-' + oi" />
+                                        </div>
+                                      }
+                                      @if (webHas(o, 'attribute')) {
+                                        <div>
+                                          <label [for]="'io-attribute-' + si + '-' + oi" class="text-xs text-text-muted block">Attribútum</label>
+                                          <input [id]="'io-attribute-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="60" [ngModel]="o.attribute ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { attribute: $event })" [ngModelOptions]="{ standalone: true }" placeholder="pl. alt"
+                                            [attr.data-testid]="'io-attribute-' + si + '-' + oi" />
+                                        </div>
+                                      }
+                                      @if (canonicalWeb(o.op) === 'renameElement') {
+                                        <div>
+                                          <label [for]="'io-original-tag-' + si + '-' + oi" class="text-xs text-text-muted block">Az eredeti címke (ezt kapja a diák)</label>
+                                          <input [id]="'io-original-tag-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" maxlength="20" [ngModel]="o.original ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { original: $event })" [ngModelOptions]="{ standalone: true }" placeholder="pl. td"
+                                            [attr.data-testid]="'io-original-tag-' + si + '-' + oi" />
+                                        </div>
+                                      }
+                                      @if (webHas(o, 'find')) {
+                                        <div>
+                                          <label [for]="'io-find-' + si + '-' + oi" class="text-xs text-text-muted block">Az elem szövegében álló szövegrész (pontosan, címke nélkül)</label>
+                                          <textarea [id]="'io-find-' + si + '-' + oi" rows="2" class="input !px-2 !py-1 !text-sm" [maxlength]="maxReplace" [ngModel]="o.find ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { find: $event })" [ngModelOptions]="{ standalone: true }"
+                                            [attr.data-testid]="'io-find-' + si + '-' + oi"></textarea>
+                                        </div>
+                                        <div>
+                                          <label [for]="'io-original-' + si + '-' + oi" class="text-xs text-text-muted block">Az eredeti szöveg (ezt kapja a diák; üres = törlés)</label>
+                                          <textarea [id]="'io-original-' + si + '-' + oi" rows="2" class="input !px-2 !py-1 !text-sm" [maxlength]="maxReplace" [ngModel]="o.original ?? ''"
+                                            (ngModelChange)="setUndo(si, oi, { original: $event })" [ngModelOptions]="{ standalone: true }"
+                                            [attr.data-testid]="'io-original-' + si + '-' + oi"></textarea>
+                                        </div>
+                                      }
+                                    </div>
+                                  } @else if (isEditing(si, oi) && isWord()) {
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" [attr.data-testid]="'io-undo-editor-' + si + '-' + oi">
                                       <div class="sm:col-span-2">
                                         <label [for]="'io-op-' + si + '-' + oi" class="text-xs text-text-muted block">Művelet</label>
@@ -548,7 +660,11 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                             </div>
                           } @else {
                             <p class="text-sm text-text-muted" data-testid="io-preview-unavailable">
-                              Az oldalképes előnézet most nem érhető el (a fájl-átalakító nem válaszolt). Töltsd le a két fájlt, és nézd meg {{ isWord() ? 'Wordben' : 'Excelben' }}.
+                              @if (isWeb()) {
+                                Weblaphoz nincs oldalképes előnézet. Töltsd le a két csomagot, és nyisd meg a HTML-fájlokat böngészőben.
+                              } @else {
+                                Az oldalképes előnézet most nem érhető el (a fájl-átalakító nem válaszolt). Töltsd le a két fájlt, és nézd meg {{ isWord() ? 'Wordben' : 'Excelben' }}.
+                              }
                             </p>
                           }
                         </div>
@@ -560,7 +676,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                           }
                           <p class="text-sm">{{ r.machineItems }} gépi és {{ r.aiItems }} AI-szempont.
                             Kiinduló fájl: <span class="font-mono break-all">{{ r.sourceFileName }}</span>, megoldás: <span class="font-mono break-all">{{ r.solutionFileName }}</span>.</p>
-                          @if (!r.recalculated && !isWord()) {
+                          @if (!r.recalculated && kind() === 'excel') {
                             <p class="text-sm text-warning" data-testid="io-not-recalculated">A kiinduló fájl képletértékeit most nem sikerült újraszámolni - a kapu a megoldás
                               tárolt értékeivel futott (emiatt több szempont lehet AI-szempont).</p>
                           }
@@ -646,17 +762,17 @@ export function officeFileKind(file: File): OfficeFileKind | null {
               }
 
               <p class="text-sm text-text-muted">
-                Töltsd fel a kész, megoldott munkafüzetet vagy dokumentumot. Az AI érettségi stílusban megírja a feladatot és a részfeladatokat pontokkal, a rendszer a
+                Töltsd fel a kész, megoldott munkafüzetet, dokumentumot vagy weblapot. Az AI érettségi stílusban megírja a feladatot és a részfeladatokat pontokkal, a rendszer a
                 megoldásból „visszacsinálja” a kiinduló fájlt, és szempontlistát készít gépi szabályokkal. Mentés előtt mindent átnézhetsz és módosíthatsz.
               </p>
 
               <div>
-                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx) vagy Word-dokumentum (.docx), legfeljebb 20 MB</label>
-                <input id="io-file" type="file" accept=".xlsx,.docx" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
+                <label for="io-file" class="text-sm font-medium block mb-1">Megoldott fájl: Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip a HTML-, CSS- és képfájlokkal, vagy egyetlen .html), legfeljebb 20 MB</label>
+                <input id="io-file" type="file" accept=".xlsx,.docx,.zip,.html" class="text-sm max-w-full" (change)="pickFile($event)" data-testid="io-file" />
                 @if (fileError()) {
                   <p class="text-sm text-danger mt-1" role="alert" data-testid="io-file-error">{{ fileError() }}</p>
                 } @else if (file()) {
-                  <p class="text-sm text-text-muted mt-1" data-testid="io-file-kind">Felismert fájltípus: {{ isWord() ? 'Word-dokumentum - szövegszerkesztési feladat' : 'Excel-munkafüzet - táblázatkezelési feladat' }}</p>
+                  <p class="text-sm text-text-muted mt-1" data-testid="io-file-kind">Felismert fájltípus: {{ kindDescription() }}</p>
                 }
               </div>
 
@@ -727,6 +843,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   readonly opNames = EXCEL_UNDO_OP_NAMES;
   readonly wordOpNames = WORD_UNDO_OP_NAMES;
   readonly wordFields = WORD_FIELDS;
+  readonly webOpNames = WEB_UNDO_OP_NAMES;
   readonly maxReplace = MAX_REPLACE;
   readonly styleParts = STYLE_PARTS;
   readonly maxNotes = MAX_NOTES;
@@ -787,8 +904,19 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     return this.jobKind() ?? (file && officeFileKind(file)) ?? this.kindHint();
   });
   readonly isWord = computed(() => this.kind() === 'word');
+  readonly isWeb = computed(() => this.kind() === 'web');
   readonly kindLabel = computed(() => KIND_LABEL[this.kind()]);
+  readonly kindIcon = computed(() => KIND_ICON[this.kind()]);
   readonly extension = computed(() => EXTENSION[this.kind()]);
+  readonly accept = computed(() => ACCEPT[this.kind()]);
+  readonly kindDescription = computed(
+    () =>
+      ({
+        excel: 'Excel-munkafüzet - táblázatkezelési feladat',
+        word: 'Word-dokumentum - szövegszerkesztési feladat',
+        web: 'weblap - weblapkészítési (HTML/CSS) feladat',
+      })[this.kind()],
+  );
 
   private startSub: Subscription | null = null;
   private polling: Subscription | null = null;
@@ -812,6 +940,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
       ? 'A dokumentum túl sok bekezdésből áll a listához - add meg kézzel a sorszámot és a szöveg elejét.'
       : 'A megoldás bekezdéseinek listája nem érhető el - add meg kézzel a sorszámot és a szöveg elejét.';
   });
+  /** Weblap: a megoldás HTML-elemei az elem-választóhoz és a csomag fájljai. */
+  private readonly webElements = computed(() => this.generated()?.elements ?? []);
+  private readonly webFileNames = computed(() => this.generated()?.files ?? []);
   readonly hasOwnSource = signal(false);
   /** A még fel nem küldött saját kiinduló fájl (az Újraellenőrzés viszi fel). */
   readonly pendingOwnSource = signal<File | null>(null);
@@ -917,8 +1048,9 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   /** `sameKindAs`: a saját kiinduló fájl a megoldással azonos fajtájú legyen. */
   private fileProblem(file: File, sameKindAs?: OfficeFileKind): string | null {
     const kind = officeFileKind(file);
-    if (!kind) return 'Csak Excel-munkafüzet (.xlsx) vagy Word-dokumentum (.docx) tölthető fel.';
-    if (sameKindAs && kind !== sameKindAs) return `A saját kiinduló fájl is ${EXTENSION[sameKindAs]} legyen (mint a megoldás).`;
+    if (!kind) return 'Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx) vagy weblap (.zip / .html) tölthető fel.';
+    if (sameKindAs && kind !== sameKindAs)
+      return sameKindAs === 'web' ? 'A saját kiinduló fájl is weblap legyen (.zip vagy .html).' : `A saját kiinduló fájl is ${EXTENSION[sameKindAs]} legyen (mint a megoldás).`;
     if (file.size === 0) return 'A fájl üres.';
     if (file.size > MAX_FILE_BYTES) return 'A fájl túl nagy (legfeljebb 20 MB).';
     return null;
@@ -990,7 +1122,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
 
   private onJob(job: OfficeTaskJobDto): void {
     this.jobFileName.set(job.fileName || null);
-    this.jobKind.set(job.fileKind === 'word' ? 'word' : 'excel');
+    this.jobKind.set(job.fileKind === 'word' || job.fileKind === 'web' ? job.fileKind : 'excel');
     this.progressText.set(job.progressText);
     this.hasOwnSource.set(job.hasOwnSource);
     if (job.status === 'failed') {
@@ -1135,7 +1267,11 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     const s = this.proposal()?.subtasks[si];
     if (!s || s.undo.length >= MAX_UNDO) return;
     const sheet = s.undo.find((o) => o.sheet)?.sheet ?? null;
-    const op = this.isWord() ? newWordUndoOp('clearRunFormatting') : newUndoOp('clearFormulas', sheet);
+    const op = this.isWeb()
+      ? newWebUndoOp('removeCssRule', this.webFileNames().find(isCssFile) ?? this.webFileNames().find(isHtmlFile) ?? null)
+      : this.isWord()
+        ? newWordUndoOp('clearRunFormatting')
+        : newUndoOp('clearFormulas', sheet);
     this.updateSubtask(si, (st) => ({ ...st, undo: [...st.undo, op] }));
     this.editing.set(`${si}-${s.undo.length}`);
   }
@@ -1344,6 +1480,79 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   // ── Megjelenítés ──
   describe(op: OfficeUndoOp): string {
     return describeUndoOp(op, this.kind());
+  }
+
+  canonicalWeb(op: string): WebUndoOpName | null {
+    return canonicalWebOp(op);
+  }
+
+  webOpLabel(name: WebUndoOpName): string {
+    return WEB_UNDO_OPS[name].label;
+  }
+
+  webHas(op: OfficeUndoOp, field: 'selector' | 'property' | 'media' | 'element' | 'attribute' | 'find' | 'original'): boolean {
+    return !!webOpSpec(op.op)?.fields.includes(field);
+  }
+
+  changeWebKind(si: number, oi: number, next: WebUndoOpName): void {
+    this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? changeWebUndoOpKind(o, next) : o)) }));
+  }
+
+  /** A művelethez választható fájlok: elem-művelethez a HTML-ek, CSS-hez és fájl-elhagyáshoz a HTML-ek és a stíluslapok (+ a művelet saját fájlja). */
+  webFiles(op: OfficeUndoOp): string[] {
+    const htmlOnly = webOpSpec(op.op)?.on === 'html';
+    const files = this.webFileNames().filter((f) => isHtmlFile(f) || (!htmlOnly && isCssFile(f)));
+    return op.file && !files.includes(op.file) ? [...files, op.file] : files;
+  }
+
+  /** Fájlváltáskor az elem-horgony törlődik (a sorszám fájlon belüli). */
+  setWebFile(si: number, oi: number, file: string): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    if (!op) return;
+    this.setUndo(si, oi, op.element ? { file, element: { index: null, tag: null } } : { file });
+  }
+
+  elementOptions(file: string | null | undefined): OfficeWebElement[] {
+    return file ? this.webElements().filter((e) => e.file === file) : [];
+  }
+
+  elementLabel(e: OfficeWebElement): string {
+    const name = e.tag + (e.id ? `#${e.id}` : '') + (e.class ? '.' + e.class.trim().split(/\s+/).join('.') : '');
+    const detail = e.text ? ` „${e.text}”` : e.attributes ? ` ${e.attributes}` : '';
+    return `${'\u00a0\u00a0'.repeat(Math.min(e.depth, 8))}[${e.index + 1}] <${name}>${detail}`;
+  }
+
+  /** Az elem a listából: a címke a megoldás szerinti. */
+  setElement(si: number, oi: number, index: number | null): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    const el = op && this.elementOptions(op.file).find((e) => e.index === index);
+    this.setUndo(si, oi, { element: el ? { index: el.index, tag: el.tag } : { index: null, tag: null } });
+  }
+
+  /** Kézi megadás (nincs lista): a sorszám a felületen 1-től. */
+  setElementManual(si: number, oi: number, patch: { index?: unknown; tag?: string }): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    if (!op) return;
+    const current = op.element ?? { index: null, tag: null };
+    const n = patch.index === undefined ? null : this.toInt(patch.index);
+    this.setUndo(si, oi, {
+      element: {
+        index: patch.index === undefined ? current.index : Number.isNaN(n!) ? null : n! - 1,
+        tag: patch.tag === undefined ? current.tag : patch.tag,
+      },
+    });
+  }
+
+  elementMismatch(op: OfficeUndoOp) {
+    return op.result === 'error' ? parseElementMismatch(op.message) : null;
+  }
+
+  /** Elem-eltérésnél (szerver) a valódi címke kerül a horgonyba. */
+  fixElement(si: number, oi: number): void {
+    const op = this.proposal()?.subtasks[si]?.undo[oi];
+    const em = op && parseElementMismatch(op.message);
+    if (!op || !em) return;
+    this.setUndo(si, oi, { element: { index: em.index, tag: em.tag } });
   }
 
   canonicalWord(op: string): WordUndoOpName | null {

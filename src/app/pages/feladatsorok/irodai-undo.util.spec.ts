@@ -14,6 +14,10 @@ import {
   parseAnchorMismatch,
   validateUndoOp,
   WORD_UNDO_OP_NAMES,
+  changeWebUndoOpKind,
+  newWebUndoOp,
+  parseElementMismatch,
+  WEB_UNDO_OP_NAMES,
 } from './irodai-undo.util';
 
 const op = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ ...newUndoOp('clearFormulas', null), ...o });
@@ -225,5 +229,49 @@ describe('irodai-undo.util', () => {
       expect(parseAnchorMismatch('nem talált hivatkozást')).toBeNull();
       expect(parseAnchorMismatch(null)).toBeNull();
     });
+  });
+});
+
+describe('weblap-szókészlet (WebUndo tükre)', () => {
+  const h = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ ...newWebUndoOp('removeFile', 'index.html'), ...o });
+  const v = (o: Partial<OfficeUndoOp>) => validateUndoOp(h(o), 'web');
+
+  it('érvényes műveletek és a szerverrel azonos hibák', () => {
+    expect(WEB_UNDO_OP_NAMES).toEqual(['removeCssRule', 'removeCssDeclaration', 'removeElement', 'unwrapElement', 'removeAttribute', 'renameElement', 'replaceText', 'removeFile']);
+    expect(v({})).toBeNull();
+    expect(v({ op: 'REMOVECSSRULE', file: 'stilus.css', selector: '#fejlec h1', media: '(max-width: 600px)' })).toBeNull();
+    expect(v({ op: 'removeCssRule', file: 'index.html', selector: 'p' })).toBeNull(); // <style> blokk
+    expect(v({ op: 'removeElement', file: 'index.html', element: { index: 0, tag: '<IMG>' } })).toBeNull();
+    expect(v({ op: 'clearFormulas' })).toContain('ismeretlen művelet');
+    expect(v({ sheet: 'A' })).toContain('„sheet” nem adható meg');
+    expect(v({ file: null })).toContain('hiányzó fájl');
+    expect(v({ file: 'kep.png' })).toContain('nem HTML- vagy CSS-fájl');
+    expect(v({ file: 'a/index.html' })).toContain('mappa nélküli');
+    expect(v({ op: 'removeElement', file: 'stilus.css', element: { index: 1, tag: 'p' } })).toContain('csak HTML-fájlon');
+    expect(v({ op: 'removeElement', element: null })).toContain('hiányzó elem');
+    expect(v({ op: 'removeElement', element: { index: null, tag: 'p' } })).toContain('hiányzik az elem sorszáma');
+    expect(v({ op: 'removeElement', element: { index: 3000, tag: 'p' } })).toContain('1 és 3000');
+    expect(v({ op: 'removeElement', element: { index: 1, tag: '' } })).toContain('címkéje');
+    expect(v({ op: 'removeCssRule', file: 'stilus.css', selector: '' })).toContain('hiányzó szelektor');
+    expect(v({ op: 'removeCssRule', file: 'stilus.css', selector: 'th, td' })).toContain('vessző nélküli');
+    expect(v({ op: 'removeCssDeclaration', file: 'stilus.css', selector: 'p', property: '' })).toContain('hiányzó tulajdonság');
+    expect(v({ op: 'removeCssDeclaration', file: 'stilus.css', selector: 'p', property: 'co lor' })).toContain('hibás CSS-tulajdonság');
+    expect(v({ op: 'removeAttribute', element: { index: 1, tag: 'p' }, attribute: '' })).toContain('hiányzó attribútum');
+    expect(v({ op: 'renameElement', element: { index: 1, tag: 'th' }, original: '' })).toContain('eredeti címke');
+    expect(v({ op: 'renameElement', element: { index: 1, tag: 'th' }, original: 'TH' })).toContain('azonos');
+    expect(v({ op: 'replaceText', element: { index: 1, tag: 'p' }, find: 'a<b', original: '' })).toContain('címke nélkül');
+    expect(v({ op: 'replaceText', element: { index: 1, tag: 'p' }, find: 'a', original: 'b\tc' })).toContain('vezérlőkaraktert');
+    // A weblap-paraméter Excelben / Wordben hiba.
+    expect(validateUndoOp(op({ range: 'B5', file: 'x.css' }), 'excel')).toContain('csak weblapnál');
+    expect(validateUndoOp(w({ from: { index: 0, startsWith: '' }, selector: 'p' }), 'word')).toContain('csak weblapnál');
+  });
+
+  it('leírás, műveletváltás, elem-eltérés', () => {
+    expect(describeUndoOp(h({ op: 'removeAttribute', element: { index: 12, tag: 'img' }, attribute: 'alt' }), 'web')).toBe('index.html [13] <img>: a(z) „alt” attribútum törlése');
+    const changed = changeWebUndoOpKind(h({ op: 'removeAttribute', element: { index: 12, tag: 'img' }, attribute: 'alt' }), 'renameElement');
+    expect(changed).toMatchObject({ op: 'renameElement', element: { index: 12, tag: 'img' }, attribute: null, original: '', selector: null });
+    expect(changeWebUndoOpKind(changed, 'removeFile')).toMatchObject({ element: null, original: null });
+    expect(parseElementMismatch('az elem-horgony nem egyezik: a(z) 13. elem „<img>”, nem „<p>”')).toEqual({ index: 12, tag: 'img' });
+    expect(parseElementMismatch('valami más')).toBeNull();
   });
 });

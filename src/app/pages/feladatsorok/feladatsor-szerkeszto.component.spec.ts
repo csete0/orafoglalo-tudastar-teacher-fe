@@ -297,7 +297,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       (el.querySelector('[data-testid="office-task-open-word"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
-      expect(el.querySelector('[data-testid="io-file"]')!.getAttribute('accept')).toBe('.xlsx,.docx');
+      expect(el.querySelector('[data-testid="io-file"]')!.getAttribute('accept')).toBe('.xlsx,.docx,.zip,.html');
       (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();

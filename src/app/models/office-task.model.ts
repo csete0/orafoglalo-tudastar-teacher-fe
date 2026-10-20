@@ -1,5 +1,5 @@
 /**
- * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel, 2. fázis: Word) - a backend
+ * „Irodai feladat a megoldott fájlból” (PATRICKS-IRODAI-FELADAT-MEGOLDASBOL-TERV.md, 1. fázis: Excel, 2. fázis: Word, majd weblap) - a backend
  * `OfficeTaskModels.cs` tükre. A ★ mezőket a szerver tölti minden ellenőrzéskor, a kliens értéke nem számít.
  */
 
@@ -7,7 +7,7 @@ export type OfficeTaskLevel = 'kozep' | 'emelt';
 export type OfficeTaskStatus = 'queued' | 'generating' | 'running' | 'done' | 'failed';
 export type OfficeSourceMode = 'derived' | 'own';
 /** A feltöltött megoldás fajtája (a kiterjesztésből): ez dönti el a visszacsinálási szókészletet. */
-export type OfficeFileKind = 'excel' | 'word';
+export type OfficeFileKind = 'excel' | 'word' | 'web';
 
 /** A zárt Excel-szókészlet (ExcelUndo.Vocabulary). */
 export type ExcelUndoOpName =
@@ -45,6 +45,23 @@ export type WordUndoOpName =
   | 'removeColumns'
   | 'removeSectionBreak';
 
+/** A zárt weblap-szókészlet (WebUndo.Vocabulary) - szövegszintű visszacsinálás a HTML- és CSS-fájlokon. */
+export type WebUndoOpName =
+  | 'removeCssRule'
+  | 'removeCssDeclaration'
+  | 'removeElement'
+  | 'unwrapElement'
+  | 'removeAttribute'
+  | 'renameElement'
+  | 'replaceText'
+  | 'removeFile';
+
+/** Weblap-elem horgonya: a fájlon belüli 0-alapú elem-sorszám (a nyitó címkék sorrendjében) + a címke neve (a megoldásban). */
+export interface OfficeElementAnchor {
+  index: number | null;
+  tag: string | null;
+}
+
 /** Word-bekezdés horgonya: 0-alapú sorszám (a törzs bekezdései dokumentum-sorrendben, a szövegdobozokéi nélkül) + a szöveg eleje. */
 export interface OfficeParagraphAnchor {
   index: number | null;
@@ -74,8 +91,21 @@ export interface OfficeUndoOp {
   field?: string | null;
   /** replaceText: a megoldásban álló szövegrész. */
   find?: string | null;
-  /** replaceText: az eredeti szöveg (üres = törlés). */
+  /** replaceText: az eredeti szöveg (üres = törlés); weblap renameElement: az eredeti címke (pl. „td”). */
   original?: string | null;
+  // ── Csak weblap (a szerver csak kitöltve küldi) ──
+  /** A fájl neve a csomagban (pl. „index.html”, „stilus.css”). */
+  file?: string | null;
+  /** removeCssRule / removeCssDeclaration: egyetlen CSS-szelektor. */
+  selector?: string | null;
+  /** removeCssDeclaration: a CSS-tulajdonság. */
+  property?: string | null;
+  /** A @media feltétele; elhagyva = a @media blokkokon kívüli szabályok. */
+  media?: string | null;
+  /** HTML-elem horgonya. */
+  element?: OfficeElementAnchor | null;
+  /** removeAttribute: az attribútum neve. */
+  attribute?: string | null;
   enabled: boolean;
   /** ★ ok | noop | error | null (kikapcsolva / saját kiinduló fájl). */
   result: 'ok' | 'noop' | 'error' | null;
@@ -139,6 +169,26 @@ export interface OfficeTaskResultDto {
   paragraphs?: OfficeWordParagraph[] | null;
   /** Word: a dokumentumnak több bekezdése van, mint amennyi a listában áll (a horgony kézzel adható meg). */
   paragraphsCapped?: boolean;
+  /** Weblap: a HTML-fájlok elemei az elem-választóhoz (legfeljebb 3000; a többi horgonya kézzel adható meg). */
+  elements?: OfficeWebElement[] | null;
+  /** Weblap: a csomag fájljai (név szerint). */
+  files?: string[] | null;
+}
+
+/** A weblap-megoldás egy HTML-eleme a szerver horgony-számozásával. */
+export interface OfficeWebElement {
+  file: string;
+  /** 0-alapú, fájlon belüli sorszám (= a horgony „index”-e). */
+  index: number;
+  tag: string;
+  /** Beágyazási mélység (0 = legkülső). */
+  depth: number;
+  id?: string | null;
+  class?: string | null;
+  /** A többi attribútum röviden (pl. „src="a.png" alt="…"”). */
+  attributes?: string | null;
+  /** Levélelemnél a szöveg eleje (≤ 80 karakter), egyébként üres. */
+  text: string;
 }
 
 /** A Word-megoldás egy bekezdése a szerver horgony-számozásával. */

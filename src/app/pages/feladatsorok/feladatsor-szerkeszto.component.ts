@@ -60,9 +60,10 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
-/** Táblázatkezelés / Szövegszerkesztés - ezekhez készíthető feladat a megoldott fájlból (1. fázis: Excel, 2. fázis: Word). */
+/** Táblázatkezelés / Szövegszerkesztés / Weblap - ezekhez készíthető feladat a megoldott fájlból (Excel, Word, weblap). */
 const EXCEL_TASK_TYPE_ID = 2;
 const WORD_TASK_TYPE_ID = 1;
+const WEB_TASK_TYPE_ID = 7;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -498,6 +499,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
                             (click)="officeTaskDialog.set('word')" data-testid="office-task-open-word">
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Word)
+                          </button>
+                        }
+                        @if (section.id === webTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="officeTaskDialog.set('web')" data-testid="office-task-open-web">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott weblapból
                           </button>
                         }
                       </div>
@@ -1208,6 +1215,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly programmingTypeId = PROGRAMMING_TASK_TYPE_ID;
   readonly excelTypeId = EXCEL_TASK_TYPE_ID;
   readonly wordTypeId = WORD_TASK_TYPE_ID;
+  readonly webTypeId = WEB_TASK_TYPE_ID;
   /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
   readonly officeTaskDialog = signal<OfficeFileKind | null>(null);
 
