@@ -63,9 +63,10 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7, 9]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
-/** Táblázatkezelés / Szövegszerkesztés / Weblap - ezekhez készíthető feladat a megoldott fájlból (Excel, Word, weblap). */
+/** Táblázatkezelés / Szövegszerkesztés / Prezentáció / Weblap / Grafika - ezekhez készíthető feladat a megoldott fájlból. */
 const EXCEL_TASK_TYPE_ID = 2;
 const WORD_TASK_TYPE_ID = 1;
+const PPT_TASK_TYPE_ID = 3;
 const WEB_TASK_TYPE_ID = 7;
 const GRAPHICS_TASK_TYPE_ID = 4;
 /** Asztali alkalmazás (WPF/WinForms) - ehhez készíthető feladatsor témából AI-val. */
@@ -505,6 +506,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
                             (click)="officeTaskDialog.set('word')" data-testid="office-task-open-word">
                             <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Word)
+                          </button>
+                        }
+                        @if (section.id === pptTypeId) {
+                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
+                            (click)="officeTaskDialog.set('powerpoint')" data-testid="office-task-open-ppt">
+                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (PowerPoint)
                           </button>
                         }
                         @if (section.id === webTypeId) {
@@ -1238,6 +1245,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly wordTypeId = WORD_TASK_TYPE_ID;
   readonly webTypeId = WEB_TASK_TYPE_ID;
   readonly graphicsTypeId = GRAPHICS_TASK_TYPE_ID;
+  readonly pptTypeId = PPT_TASK_TYPE_ID;
   readonly desktopTypeId = DESKTOP_TASK_TYPE_ID;
   /** „Asztali feladatsor témából” párbeszédablak. */
   readonly desktopTaskDialog = signal(false);

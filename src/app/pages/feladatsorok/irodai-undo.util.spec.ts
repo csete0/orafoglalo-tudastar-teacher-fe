@@ -18,6 +18,10 @@ import {
   newWebUndoOp,
   parseElementMismatch,
   WEB_UNDO_OP_NAMES,
+  changePptUndoOpKind,
+  newPptUndoOp,
+  parseShapeMismatch,
+  PPT_UNDO_OP_NAMES,
 } from './irodai-undo.util';
 
 const op = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ ...newUndoOp('clearFormulas', null), ...o });
@@ -273,5 +277,46 @@ describe('weblap-szókészlet (WebUndo tükre)', () => {
     expect(changeWebUndoOpKind(changed, 'removeFile')).toMatchObject({ element: null, original: null });
     expect(parseElementMismatch('az elem-horgony nem egyezik: a(z) 13. elem „<img>”, nem „<p>”')).toEqual({ index: 12, tag: 'img' });
     expect(parseElementMismatch('valami más')).toBeNull();
+  });
+});
+
+describe('PowerPoint-szókészlet (PptxUndo tükre)', () => {
+  const p = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ ...newPptUndoOp('removeShape', 2), shape: { id: 4, name: 'Kép 3' }, ...o });
+  const v = (o: Partial<OfficeUndoOp>) => validateUndoOp(p(o), 'powerpoint');
+
+  it('érvényes műveletek és a szerverrel azonos hibák', () => {
+    expect(PPT_UNDO_OP_NAMES).toEqual(['removeShape', 'removePicture', 'clearText', 'resetFont', 'unhideSlide', 'removeSlide', 'removeTransition', 'removeAnimation', 'resetBackground']);
+    expect(v({})).toBeNull();
+    expect(v({ op: 'REMOVEPICTURE' })).toBeNull();
+    expect(v({ op: 'resetFont', parts: ['size', 'color'] })).toBeNull();
+    expect(v({ op: 'removeAnimation', shape: null })).toBeNull();
+    expect(v({ op: 'removeTransition', slide: null, shape: null })).toBeNull();
+    expect(v({ op: 'unhideSlide', slide: 6, shape: null })).toBeNull();
+    expect(v({ op: 'deleteSlide' })).toContain('ismeretlen művelet');
+    expect(v({ op: 'unhideSlide', slide: null, shape: null })).toContain('hiányzó dia');
+    expect(v({ slide: 0 })).toContain('1 és 999');
+    expect(v({ shape: null })).toContain('hiányzó alakzat');
+    expect(v({ shape: { id: null, name: 'Kép 3' } })).toContain('azonosítója');
+    expect(v({ shape: { id: 4, name: null } })).toContain('neve');
+    expect(v({ op: 'unhideSlide', slide: 6 })).toContain('„shape” nem adható meg');
+    expect(v({ parts: ['size'] })).toContain('„parts” nem adható meg');
+    expect(v({ op: 'resetFont', parts: ['shadow'] })).toContain('ismeretlen rész');
+    expect(v({ range: 'A1' })).toContain('„range” nem adható meg');
+    // PowerPoint-paraméter más fájlfajtánál hiba.
+    expect(validateUndoOp(op({ slide: 1 }), 'excel')).toContain('csak PowerPoint-bemutatónál');
+    expect(validateUndoOp(w({ from: { index: 0, startsWith: '' }, shape: { id: 1, name: '' } }), 'word')).toContain('csak PowerPoint-bemutatónál');
+  });
+
+  it('leírás, műveletváltás, alakzat-eltérés', () => {
+    expect(describeUndoOp(p({ op: 'removePicture' }), 'powerpoint')).toBe('2. dia #4 „Kép 3”: kép törlése (a diák külön fájlként kapja)');
+    expect(describeUndoOp(p({ op: 'resetFont', parts: ['color', 'size'] }), 'powerpoint')).toBe('2. dia #4 „Kép 3”: betűformázás alapra (betűméret, betűszín)');
+    expect(describeUndoOp(p({ op: 'removeTransition', slide: null, shape: null }), 'powerpoint')).toBe('minden dia: áttűnés törlése');
+    expect(describeUndoOp(p({ op: 'removeAnimation', shape: null }), 'powerpoint')).toBe('2. dia: a dia összes animációjának törlése');
+    expect(newPptUndoOp('resetBackground', 3)).toMatchObject({ slide: null, shape: null });
+    const changed = changePptUndoOpKind(p({ op: 'resetFont', parts: ['size'] }), 'unhideSlide');
+    expect(changed).toMatchObject({ op: 'unhideSlide', slide: 2, shape: null, parts: null });
+    expect(changePptUndoOpKind(p({}), 'removeAnimation')).toMatchObject({ shape: { id: 4, name: 'Kép 3' } });
+    expect(parseShapeMismatch('az alakzat-horgony nem egyezik: a(z) 2. dia 4 azonosítójú alakzata „Kép 3”, nem „Kép 4”')).toEqual({ slide: 2, id: 4, name: 'Kép 3' });
+    expect(parseShapeMismatch('valami más')).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import {
   OfficeTaskResultDto,
   OfficeTaskValidateResult,
   OfficeUndoOp,
+  OfficeSlideShape,
   OfficeWebElement,
   OfficeWordParagraph,
 } from '../../models/office-task.model';
@@ -121,7 +122,7 @@ describe('IrodaiMegoldasbolComponent', () => {
   let jobQueue: (() => Observable<OfficeTaskJobDto>)[];
 
   function create(
-    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' | 'web' } = {},
+    opts: { quota?: AiHelperQuotaDto; active?: Observable<OfficeTaskJobDto | null>; jobs?: (() => Observable<OfficeTaskJobDto>)[]; kindHint?: 'excel' | 'word' | 'powerpoint' | 'web' } = {},
   ) {
     jobQueue = opts.jobs ?? [() => of(doneJob())];
     service = {
@@ -201,10 +202,10 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('csak .xlsx / .docx / .zip / .html és legfeljebb 20 MB tölthető fel', () => {
+    it('csak .xlsx / .docx / .pptx / .zip / .html / kép és legfeljebb 20 MB tölthető fel', () => {
       const fixture = create();
-      pick(fixture, xlsx('kupa.pptx'));
-      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg)');
+      pick(fixture, xlsx('kupa.odp'));
+      expect(q(fixture, 'io-file-error')!.textContent).toContain('Csak Excel-munkafüzet (.xlsx), Word-dokumentum (.docx), PowerPoint-bemutató (.pptx), weblap (.zip / .html) vagy kép (.png / .jpg / .gif / .svg)');
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(true);
       pick(fixture, xlsx('kupa.xlsx', MAX_FILE_BYTES + 1));
       expect(q(fixture, 'io-file-error')!.textContent).toContain('20 MB');
@@ -718,7 +719,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect((q(fixture, 'io-start') as HTMLButtonElement).disabled).toBe(false);
       pick(fixture, xlsx('kupa.xlsx'));
       expect(q(fixture, 'io-file-kind')!.textContent).toContain('Excel-munkafüzet');
-      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg');
+      expect(q(fixture, 'io-file')!.getAttribute('accept')).toBe('.xlsx,.docx,.pptx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg');
 
       TestBed.resetTestingModule();
       fixture = create({ kindHint: 'word' });
@@ -1106,6 +1107,145 @@ describe('IrodaiMegoldasbolComponent', () => {
       c.setElementManual(1, 0, { index: 20 });
       c.setElementManual(1, 0, { tag: 'li' });
       expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 19, tag: 'li' });
+    });
+  });
+
+  describe('PowerPoint', () => {
+    const NULLS = { sheet: null, range: null, name: null, index: null, columns: null, parts: null };
+    /** A szerver alakja: a PowerPoint-paraméterek csak kitöltve jönnek. */
+    const pop = (o: Partial<OfficeUndoOp>): OfficeUndoOp => ({ op: 'unhideSlide', ...NULLS, enabled: true, result: 'ok', message: null, ...o });
+    const MISMATCH = 'az alakzat-horgony nem egyezik: a(z) 2. dia 4 azonosítójú alakzata „Kép 3”, nem „Kép 4”';
+    const SHAPES: OfficeSlideShape[] = [
+      { slide: 1, id: 2, name: 'Cím 1', kind: 'title', text: 'Tavaszi koncert' },
+      { slide: 2, id: 3, name: 'Szövegdoboz 2', kind: 'textbox', text: 'Program: 18 óra' },
+      { slide: 2, id: 4, name: 'Kép 3', kind: 'picture' },
+    ];
+
+    const pptProposal = (): OfficeTaskProposal => ({
+      title: 'Tavaszi koncert',
+      description: 'A koncert.pptx…',
+      sourceMode: 'derived',
+      subtasks: [
+        {
+          label: '1.',
+          text: 'Szúrd be a képet!',
+          points: 2,
+          undo: [
+            pop({ op: 'removePicture', slide: 2, shape: { id: 4, name: 'Kép 4' }, result: 'error', message: MISMATCH }),
+            pop({ op: 'resetFont', slide: 1, shape: { id: 2, name: 'Cím 1' }, parts: ['size'] }),
+          ],
+          rubric: [{ key: 'r1', text: 'Kép a 2. dián.', points: 2, machine: true, gate: 'ok', gateReason: null }],
+        },
+        {
+          label: '2.',
+          text: 'Rejtsd el a 3. diát, áttűnés!',
+          points: 2,
+          undo: [pop({ op: 'unhideSlide', slide: 3 }), pop({ op: 'removeTransition' })],
+          rubric: [{ key: 'r2', text: 'Rejtett dia.', points: 2, machine: true, gate: 'ok', gateReason: null }],
+        },
+      ],
+    });
+
+    function previewPpt(extra: Partial<OfficeTaskResultDto> = { shapes: SHAPES, slideCount: 3 }) {
+      const done = job({
+        fileKind: 'powerpoint',
+        fileName: 'koncert_megoldas.pptx',
+        status: 'done',
+        result: {
+          proposal: pptProposal(),
+          report: report({ sourceFileName: 'koncert.pptx', solutionFileName: 'koncert_megoldas.pptx', recalculated: false, warnings: [], preview: null }),
+          model: 'm', notes: null, reasked: false, ...extra,
+        },
+      });
+      const fixture = create({ jobs: [() => of(done)] });
+      pick(fixture, xlsx('koncert_megoldas.pptx'));
+      q(fixture, 'io-start')!.click();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('.pptx is feltölthető (prezentáció); a Prezentáció blokkból nyitva PowerPoint a cím', () => {
+      let fixture = create();
+      pick(fixture, xlsx('Koncert_megoldas.PPTX'));
+      expect(q(fixture, 'io-file-error')).toBeNull();
+      expect(q(fixture, 'io-file-kind')!.textContent).toContain('prezentációkészítési');
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(PowerPoint)');
+      TestBed.resetTestingModule();
+      fixture = create({ kindHint: 'powerpoint' });
+      expect(q(fixture, 'io-dialog')!.textContent).toContain('(PowerPoint)');
+    });
+
+    it('a PowerPoint-műveletek magyarul; alakzat-eltérésnél a valódi név átvehető; saját fájl csak .pptx; az előnézet PowerPointra utal', () => {
+      const fixture = previewPpt();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      expect(q(fixture, 'io-undo-text-0-0')!.textContent).toContain('2. dia #4 „Kép 4”: kép törlése');
+      expect(q(fixture, 'io-undo-text-0-1')!.textContent).toContain('1. dia #2 „Cím 1”: betűformázás alapra (betűméret)');
+      expect(q(fixture, 'io-undo-text-1-0')!.textContent).toContain('3. dia: rejtett dia felfedése');
+      expect(q(fixture, 'io-undo-text-1-1')!.textContent).toContain('minden dia: áttűnés törlése');
+      expect(c.clientErrors()).toEqual([]);
+      expect(q(fixture, 'io-undo-fix-shape-0-0')!.textContent).toContain('„Kép 3”');
+      q(fixture, 'io-undo-fix-shape-0-0')!.click();
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[0].shape).toEqual({ id: 4, name: 'Kép 3' });
+      expect(q(fixture, 'io-own-upload')!.getAttribute('accept')).toBe('.pptx');
+      tab(fixture, 'elonezet');
+      expect(q(fixture, 'io-preview-unavailable')!.textContent).toContain('PowerPointban');
+      tab(fixture, 'ellenorzes');
+      expect(q(fixture, 'io-not-recalculated')).toBeNull();
+      q(fixture, 'io-revalidate')!.click();
+      const sent = service.validate.mock.calls[0][2] as OfficeTaskProposal;
+      expect(sent.subtasks[0].undo[0]).toMatchObject({ op: 'removePicture', slide: 2, shape: { id: 4, name: 'Kép 3' } });
+    });
+
+    it('szerkesztés: dia és alakzat a listából (diánként), diaváltás törli az alakzatot, betű-részek; lista nélkül kézi megadás; az új művelet PowerPoint-művelet', () => {
+      const fixture = previewPpt();
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-edit-0-1')!.click();
+      fixture.detectChanges();
+      const slides = q(fixture, 'io-slide-0-1') as HTMLSelectElement;
+      expect(Array.from(slides.options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '1. dia', '2. dia', '3. dia']);
+      const shapes = q(fixture, 'io-shape-0-1') as HTMLSelectElement;
+      expect(Array.from(shapes.options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '#2 „Cím 1” (title) - Tavaszi koncert']);
+      c.togglePart(0, 1, 'color');
+      expect(c.proposal()!.subtasks[0].undo[1].parts).toEqual(['size', 'color']);
+      c.setSlide(0, 1, 2);
+      expect(c.proposal()!.subtasks[0].undo[1]).toMatchObject({ slide: 2, shape: null });
+      expect(c.clientErrors().join(' ')).toContain('hiányzó alakzat');
+      c.setShape(0, 1, 3);
+      expect(c.proposal()!.subtasks[0].undo[1].shape).toEqual({ id: 3, name: 'Szövegdoboz 2' });
+      expect(c.clientErrors()).toEqual([]);
+
+      c.changePptKind(0, 1, 'removeAnimation');
+      fixture.detectChanges();
+      expect(c.proposal()!.subtasks[0].undo[1]).toMatchObject({ op: 'removeAnimation', slide: 2, shape: { id: 3 }, parts: null });
+      expect((q(fixture, 'io-shape-0-1') as HTMLSelectElement).options[0].textContent!.trim()).toBe('a dia összes animációja');
+      c.setShape(0, 1, null);
+      expect(c.clientErrors()).toEqual([]);
+      c.changePptKind(0, 1, 'removeTransition');
+      fixture.detectChanges();
+      expect((q(fixture, 'io-slide-0-1') as HTMLSelectElement).options[0].textContent!.trim()).toBe('minden dia');
+      expect(q(fixture, 'io-shape-0-1')).toBeNull();
+
+      c.addUndo(1);
+      expect(c.proposal()!.subtasks[1].undo[2]).toMatchObject({ op: 'removeShape', slide: 3, shape: null });
+      expect(c.clientErrors().join(' ')).toContain('hiányzó alakzat');
+    });
+
+    it('alakzat-lista nélkül kézi azonosító és név', () => {
+      const fixture = previewPpt({ shapes: null, slideCount: null });
+      const c = fixture.componentInstance;
+      tab(fixture, 'visszacsinalas');
+      q(fixture, 'io-undo-edit-0-1')!.click();
+      fixture.detectChanges();
+      expect(q(fixture, 'io-shape-0-1')).toBeNull();
+      // A lista nélkül is választható a művelet saját diája.
+      expect(Array.from((q(fixture, 'io-slide-0-1') as HTMLSelectElement).options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '1. dia']);
+      c.setShapeManual(0, 1, { id: '7' });
+      c.setShapeManual(0, 1, { name: 'Téglalap 6' });
+      expect(c.proposal()!.subtasks[0].undo[1].shape).toEqual({ id: 7, name: 'Téglalap 6' });
+      expect(q(fixture, 'io-shape-id-0-1')).not.toBeNull();
     });
   });
 
