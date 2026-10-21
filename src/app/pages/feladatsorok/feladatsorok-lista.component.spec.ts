@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { signal } from '@angular/core';
 import { of, throwError } from 'rxjs';
 import { FeladatsorokListaComponent } from './feladatsorok-lista.component';
@@ -409,6 +409,30 @@ describe('FeladatsorokListaComponent', () => {
     expect(getCatalog).toHaveBeenCalled();
 
     (fixture.nativeElement.querySelector('[data-testid="catalog-close"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).toBeNull();
+  });
+
+  it('a ?katalogus=1 (a szerkesztő MI-segítő paneljéről) nyitva indítja a katalógust; bezáráskor a paraméter lekerül', () => {
+    configure();
+    TestBed.overrideProvider(TeacherTaskSetService, {
+      useValue: { getSkills: () => of([]), getCatalog: () => of({ page: 1, pageSize: 20, totalCount: 0, items: [], categories: [] }) },
+    });
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fixture.componentRef.setInput('katalogus', '1');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).not.toBeNull();
+
+    (fixture.nativeElement.querySelector('[data-testid="catalog-close"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(['/feladatsorok'], { replaceUrl: true });
+  });
+
+  it('paraméter nélkül a katalógus zárva indul', () => {
+    configure();
+    const fixture = TestBed.createComponent(FeladatsorokListaComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="catalog-dialog"]')).toBeNull();
   });

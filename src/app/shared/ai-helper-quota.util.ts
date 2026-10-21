@@ -28,6 +28,7 @@ export interface AiHelperQuotaDto {
 export const AI_HELPER_PREMIUM_REQUIRED = 'AiHelperPremiumRequired';
 export const AI_HELPER_QUOTA_EXCEEDED = 'AiHelperQuotaExceeded';
 export const AI_HELPER_PREMIUM_TEXT = 'Ez az MI-segítség Prémium tanári előfizetéssel érhető el.';
+export const AI_HELPER_QUOTA_EXHAUSTED_TEXT = 'Elfogyott a havi kereted - a következő hónapban újra kérhetsz.';
 
 export type AiHelperBlock = 'premium' | 'quota';
 
@@ -45,7 +46,7 @@ export function aiHelperErrorMessage(err: unknown): string | null {
   if (block === 'premium') return AI_HELPER_PREMIUM_TEXT;
   if (block === 'quota') {
     const message = (err as { error?: { errorMessage?: string } })?.error?.errorMessage;
-    return message?.trim() || 'Elfogyott a havi kereted - a következő hónapban újra kérhetsz.';
+    return message?.trim() || AI_HELPER_QUOTA_EXHAUSTED_TEXT;
   }
   return null;
 }

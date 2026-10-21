@@ -29,6 +29,8 @@ import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.u
 import { AiFeladatComponent } from './ai-feladat.component';
 import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
 import { AsztaliFeladatComponent } from './asztali-feladat.component';
+import { FeladatVazlatComponent, FeladatVazlatSection } from './feladat-vazlat.component';
+import { MiSegitoPanelComponent, MiSegitoSelection } from './mi-segito-panel.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -63,14 +65,6 @@ const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
 const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7, 9]);
 const SQL_TASK_TYPE_ID = 5;
 const PROGRAMMING_TASK_TYPE_ID = 6;
-/** Táblázatkezelés / Szövegszerkesztés / Prezentáció / Weblap / Grafika - ezekhez készíthető feladat a megoldott fájlból. */
-const EXCEL_TASK_TYPE_ID = 2;
-const WORD_TASK_TYPE_ID = 1;
-const PPT_TASK_TYPE_ID = 3;
-const WEB_TASK_TYPE_ID = 7;
-const GRAPHICS_TASK_TYPE_ID = 4;
-/** Asztali alkalmazás (WPF/WinForms) - ehhez készíthető feladatsor témából AI-val. */
-const DESKTOP_TASK_TYPE_ID = 9;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -97,14 +91,19 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, MiSegitoPanelComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
-      <div class="max-w-4xl mx-auto px-4 py-10">
+      <div class="page-wide max-w-[100rem] mx-auto">
         <!-- Mobilon a műveletek a cím alá törnek (platform-teszt D, 2026-10-08): a shrink-0 gombsor 375 px-en a címet
              teljesen kiszorította, és a sor 160 px-szel kilógott. -->
         <div class="flex flex-wrap justify-between items-start mb-6 gap-3" data-testid="taskset-header">
           <div class="min-w-0 flex-[1_1_16rem]">
+            <nav aria-label="Morzsa" class="text-xs text-text-muted">
+              <a routerLink="/feladatsorok" class="hover:underline">Feladatsorok</a>
+              <span aria-hidden="true"> › </span>
+              <span aria-current="page">{{ detail.title }}</span>
+            </nav>
             <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-black tracking-tight truncate min-w-0" data-testid="taskset-title">{{ detail.title }}</h1>
               <span class="badge" [class]="taskSetBadgeClass(detail)">
@@ -198,6 +197,12 @@ type SnippetDraft = Record<number, Record<number, string>>;
           </p>
         }
 
+        <!-- Háromhasábos szerkesztő xl-től (vázlat · tartalom · MI-segítő); alatta egy oszlop, a vázlat felül. -->
+        <div class="grid gap-6 xl:grid-cols-[15rem_minmax(0,1fr)_18rem] xl:items-start">
+        <app-feladat-vazlat [sections]="typeSections()" [selectedTaskId]="expandedTaskId()"
+          (taskSelected)="selectTask($event)" (addTaskRequested)="focusNewTask($event)" />
+
+        <div class="min-w-0">
         <!-- ── Feladatok, típusonként összecsukható blokkokban ─────── -->
         <section class="mb-8">
           <h2 class="font-bold mb-3">Feladatok</h2>
@@ -325,31 +330,11 @@ type SnippetDraft = Record<number, Record<number, string>>;
                           <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
                           <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
                             (stdinRequested)="openRunInput(task.id)" />
-                          @if (isProgrammingTask(task)) {
-                            <div class="flex flex-wrap items-center justify-between gap-2 bg-bg-panel rounded-xl p-3" data-testid="ai-complete-entry">
-                              <span class="text-sm text-text-muted min-w-0 flex-[1_1_14rem]">Hiányzik a mintamegoldás, a pontozás vagy az adatfájl? Az AI elkészíti, mentés előtt átnézed.</span>
-                              <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                                (click)="openAiTask('complete', task)" data-testid="ai-complete-open">
-                                <app-icon name="sparkles" class="w-4 h-4 block" /> AI-val kiegészítés
-                              </button>
-                            </div>
-                          }
-
-                          @if (isSqlTask(task)) {
-                            <!-- SQL-feladat: a részfeladatok megoldó lekérdezései MI-vel (előnézet + futtatás, majd mentés). -->
-                            <div class="bg-bg-panel rounded-xl p-3 flex flex-wrap items-center justify-between gap-3" [attr.data-testid]="'sql-queries-entry-' + task.id">
-                              <span class="flex items-start gap-2 text-sm text-text-muted min-w-0 flex-[1_1_14rem]">
-                                <app-icon name="database" class="w-4 h-4 block shrink-0 mt-0.5" />
-                                A részfeladatok megoldó lekérdezéseit megírhatja az MI - lefuttatva, mentés előtt átnézheted.
-                              </span>
-                              <button type="button" class="btn btn-primary shrink-0" [disabled]="store.loading() || !!detail.takedownAt"
-                                (click)="sqlQueriesTaskId.set(task.id)" [attr.data-testid]="'sql-queries-open-' + task.id">SQL megoldó lekérdezések MI-vel</button>
-                            </div>
-                            @if (sqlQueriesTaskId() === task.id) {
-                              <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
-                                (closed)="sqlQueriesTaskId.set(null)" (saved)="onSqlQueriesSaved(detail.id, $event)"
-                                (openSqlFiles)="sqlQueriesTaskId.set(null); openSqlGeneration(task.id)" />
-                            }
+                          <!-- SQL-feladat megoldó lekérdezései MI-vel: a MI-segítő panelről nyílik. -->
+                          @if (sqlQueriesTaskId() === task.id) {
+                            <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
+                              (closed)="sqlQueriesTaskId.set(null)" (saved)="onSqlQueriesSaved(detail.id, $event)"
+                              (openSqlFiles)="sqlQueriesTaskId.set(null); openSqlGeneration(task.id)" />
                           }
 
                           <!-- Részfeladatok -->
@@ -487,53 +472,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   }
 
                   @if (!section.isOther) {
-                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2">
-                      <div class="flex flex-wrap items-center justify-between gap-2">
-                        <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
-                        @if (section.id === programmingTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="openAiTask('new', null)" data-testid="ai-new-open">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Új feladat AI-val
-                          </button>
-                        }
-                        @if (section.id === excelTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialog.set('excel')" data-testid="office-task-open">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Excel)
-                          </button>
-                        }
-                        @if (section.id === wordTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialog.set('word')" data-testid="office-task-open-word">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (Word)
-                          </button>
-                        }
-                        @if (section.id === pptTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialog.set('powerpoint')" data-testid="office-task-open-ppt">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Irodai feladat a megoldott fájlból (PowerPoint)
-                          </button>
-                        }
-                        @if (section.id === webTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialog.set('web')" data-testid="office-task-open-web">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott weblapból
-                          </button>
-                        }
-                        @if (section.id === graphicsTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="officeTaskDialog.set('graphics')" data-testid="office-task-open-graphics">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Feladat a megoldott képből
-                          </button>
-                        }
-                        @if (section.id === desktopTypeId) {
-                          <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm inline-flex items-center gap-1.5" [disabled]="!!detail.takedownAt"
-                            (click)="desktopTaskDialog.set(true)" data-testid="desktop-task-open">
-                            <app-icon name="sparkles" class="w-4 h-4 block" /> Asztali feladatsor témából (AI)
-                          </button>
-                        }
-                      </div>
-                      <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id"
+                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2 scroll-mt-4"
+                      [attr.id]="'new-task-' + section.id">
+                      <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
+                      <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id" [attr.id]="'new-task-title-' + section.id"
                         [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
                       <textarea [(ngModel)]="newTaskDrafts[section.id].description" [attr.name]="'newTaskDescription-' + section.id"
                         [ngModelOptions]="{standalone: true}" placeholder="Leírás" rows="2" class="input !bg-bg-panel !px-2 !py-1.5"></textarea>
@@ -871,6 +813,13 @@ type SnippetDraft = Record<number, Record<number, string>>;
             </form>
           }
         </section>
+        </div>
+
+        <app-mi-segito-panel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()"
+          (rubricRequested)="openRubric()" (aiTaskRequested)="openAiTask($event, $event === 'complete' ? selectedTask() : null)"
+          (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(null)"
+          (officeTaskRequested)="officeTaskDialog.set($event)" (desktopTaskRequested)="desktopTaskDialog.set(true)" />
+        </div>
       </div>
     } @else if (store.loading()) {
       <app-local-spinner />
@@ -1069,7 +1018,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
    *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
    *  (pl. a checkbox→radio váltás előtti adatok) — ezekhez nincs típus-scope-olt hozzáadó űrlap. */
-  readonly typeSections = computed(() => {
+  readonly typeSections = computed<FeladatVazlatSection[]>(() => {
     const detail = this.store.selectedDetail();
     if (!detail) return [];
 
@@ -1242,13 +1191,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   /** Az „AI programozási feladat” párbeszédablak: meglévő feladat kiegészítése vagy új feladat. */
   readonly aiTaskDialog = signal<{ mode: 'complete' | 'new'; task: TeacherTaskDto | null } | null>(null);
-  readonly programmingTypeId = PROGRAMMING_TASK_TYPE_ID;
-  readonly excelTypeId = EXCEL_TASK_TYPE_ID;
-  readonly wordTypeId = WORD_TASK_TYPE_ID;
-  readonly webTypeId = WEB_TASK_TYPE_ID;
-  readonly graphicsTypeId = GRAPHICS_TASK_TYPE_ID;
-  readonly pptTypeId = PPT_TASK_TYPE_ID;
-  readonly desktopTypeId = DESKTOP_TASK_TYPE_ID;
   /** „Asztali feladatsor témából” párbeszédablak. */
   readonly desktopTaskDialog = signal(false);
   /** „Irodai feladat a megoldott fájlból” párbeszédablak; az érték a megnyitó blokk fajtája (a feltöltött fájl dönt). */
@@ -1274,8 +1216,61 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   /** „Ugrás a feladathoz” az irodai ablakból: bezárás, a feladat kinyílik, és odagörgetünk. */
   openSavedTask(taskId: number): void {
     this.officeTaskDialog.set(null);
+    this.selectTask(taskId);
+  }
+
+  /** A vázlatban kijelölt feladat = a kinyitott feladat; a MI-segítő panel feladatszintű segítségei erre vonatkoznak. */
+  readonly selectedTask = computed(() => this.store.selectedDetail()?.tasks.find((t) => t.id === this.expandedTaskId()) ?? null);
+
+  readonly panelSelection = computed<MiSegitoSelection | null>(() => {
+    const task = this.selectedTask();
+    if (!task) return null;
+    return { label: `${task.taskOrder}. ${task.title}`, programming: this.isProgrammingTask(task), sql: this.isSqlTask(task) };
+  });
+
+  /** Nyitva van-e valamelyik MI-dialógus - a panel a bezáráskor újratölti a kereteket. */
+  readonly aiDialogOpen = computed(
+    () =>
+      this.aiTaskDialog() !== null ||
+      this.officeTaskDialog() !== null ||
+      this.desktopTaskDialog() ||
+      this.sqlGenerationOpen() ||
+      this.sqlQueriesTaskId() !== null,
+  );
+
+  /** Kijelölés a vázlatból: a típus-blokk és a feladat kinyílik, és odagörgetünk. */
+  selectTask(taskId: number): void {
+    const section = this.typeSections().find((s) => s.tasks.some((t) => t.id === taskId));
+    if (section) this.sectionToggles.update((current) => ({ ...current, [section.id]: true }));
     this.expandedTaskId.set(taskId);
-    setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    this.scrollTo(`task-${taskId}`);
+  }
+
+  /** „+ Új feladat” a vázlatból: a típus-blokk kinyílik, a blokk „Új feladat” űrlapjához görgetünk, és a címre fókuszálunk. */
+  focusNewTask(sectionId: number): void {
+    this.sectionToggles.update((current) => ({ ...current, [sectionId]: true }));
+    this.scrollTo(`new-task-${sectionId}`, `new-task-title-${sectionId}`);
+  }
+
+  /** Szempontlista-vázlat a panelről: a kijelölt (már kinyitott) feladat szempontlista-blokkjához görgetünk. */
+  openRubric(): void {
+    const task = this.selectedTask();
+    if (task) this.scrollTo(`task-${task.id}`, null, 'app-szempontlista');
+  }
+
+  openSqlQueries(): void {
+    const task = this.selectedTask();
+    if (task && this.isSqlTask(task)) this.sqlQueriesTaskId.set(task.id);
+  }
+
+  /** A görgetés a következő renderelés után fut (a blokk / feladat épp most nyílt ki). */
+  private scrollTo(elementId: string, focusId: string | null = null, inner: string | null = null): void {
+    setTimeout(() => {
+      const container = document.getElementById(elementId);
+      const target = (inner ? container?.querySelector(inner) : null) ?? container;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+    });
   }
 
   /** SQL-feladat vagy SQL-fájl esetén kínáljuk fel a hiányzó create.sql / create_lite.sql elkészítését. */
