@@ -89,6 +89,17 @@ describe('KatalogusMasolasComponent', () => {
     expect(q(fixture, 'catalog-count')!.textContent).toContain('2 feladatsor');
   });
 
+  it('szűrősáv: a kereső saját sort kap, a selectek egyenlő, zsugorodó oszlopokban (1280 px-en nem nyomják össze a keresőt)', () => {
+    const fixture = create();
+    const filters = q(fixture, 'catalog-filters')!;
+    expect(filters.className).toContain('sm:grid-cols-3');
+    expect(filters.className).not.toContain('auto');
+    expect(q(fixture, 'catalog-search')!.className).toContain('sm:col-span-3');
+    for (const id of ['catalog-category', 'catalog-level', 'catalog-year']) {
+      expect(q(fixture, id)!.className).toContain('min-w-0');
+    }
+  });
+
   it('fizetős (nem prémium) sornál az előfizetést nevezi meg', () => {
     const fixture = create(of(page([row({ isFree: false, canCopy: false })])));
     expect(q(fixture, 'catalog-item-15')!.textContent).toContain('Fizetős tartalom - a másolásához előfizetés kell.');

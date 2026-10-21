@@ -68,20 +68,22 @@ type LoadResult = { page: CatalogPageDto } | { error: string };
           piszkozatként (feladatokkal, megoldásokkal, fájlokkal és szempontlistával), és utána szabadon szerkesztheted.
         </p>
 
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 mb-3" data-testid="catalog-filters">
-          <input type="search" class="input" placeholder="Keresés cím vagy kategória szerint…" aria-label="Keresés cím vagy kategória szerint"
+        <!-- A keresőmező saját sort kap, a három szűrő alatta egyenlő, zsugorodó oszlopokban: korábban a selectek a leghosszabb
+             opciójuk szélességét foglalták (auto), és 1280 px-en a keresőnek szinte semmi nem maradt. -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3" data-testid="catalog-filters">
+          <input type="search" class="input sm:col-span-3" placeholder="Keresés cím vagy kategória szerint…" aria-label="Keresés cím vagy kategória szerint"
             [ngModel]="searchText()" (ngModelChange)="onSearch($event)" [ngModelOptions]="{ standalone: true }" data-testid="catalog-search" />
-          <select class="input" aria-label="Kategória" [ngModel]="categoryId()" (ngModelChange)="setCategory($event)" [ngModelOptions]="{ standalone: true }"
+          <select class="input min-w-0 truncate" aria-label="Kategória" [ngModel]="categoryId()" (ngModelChange)="setCategory($event)" [ngModelOptions]="{ standalone: true }"
             data-testid="catalog-category">
             <option [ngValue]="null">Minden kategória</option>
             @for (c of categories(); track c.id) { <option [ngValue]="c.id">{{ c.name }}</option> }
           </select>
-          <select class="input" aria-label="Szint" [ngModel]="levelId()" (ngModelChange)="setLevel($event)" [ngModelOptions]="{ standalone: true }"
+          <select class="input min-w-0 truncate" aria-label="Szint" [ngModel]="levelId()" (ngModelChange)="setLevel($event)" [ngModelOptions]="{ standalone: true }"
             data-testid="catalog-level">
             <option [ngValue]="null">Minden szint</option>
             @for (l of levels; track l.id) { <option [ngValue]="l.id">{{ l.label }}</option> }
           </select>
-          <select class="input" aria-label="Év" [ngModel]="year()" (ngModelChange)="setYear($event)" [ngModelOptions]="{ standalone: true }"
+          <select class="input min-w-0 truncate" aria-label="Év" [ngModel]="year()" (ngModelChange)="setYear($event)" [ngModelOptions]="{ standalone: true }"
             data-testid="catalog-year">
             <option [ngValue]="null">Minden év</option>
             @for (y of years; track y) { <option [ngValue]="y">{{ y }}</option> }
