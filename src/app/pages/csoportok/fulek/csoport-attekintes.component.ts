@@ -80,21 +80,21 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
     }
 
     <section aria-label="Összesítő" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-      <div class="card p-4" data-testid="tile-active">
+      <div class="card p-4 min-w-0" data-testid="tile-active">
         <p class="text-xs text-text-muted">Aktív ezen a héten</p>
         <p class="text-2xl font-bold tabular-nums">
           @if (activity7(); as rows) { {{ activeThisWeek() }} <span class="text-base font-normal text-text-muted">/ {{ rows.length }}</span> } @else { – }
         </p>
       </div>
-      <div class="card p-4" data-testid="tile-average">
+      <div class="card p-4 min-w-0" data-testid="tile-average">
         <p class="text-xs text-text-muted">Átlag (utolsó 30 nap)</p>
         <p class="text-2xl font-bold tabular-nums">{{ average() === null ? '–' : average() + '%' }}</p>
       </div>
-      <div class="card p-4" data-testid="tile-running">
+      <div class="card p-4 min-w-0" data-testid="tile-running">
         <p class="text-xs text-text-muted">Futó kiadások</p>
         <p class="text-2xl font-bold tabular-nums">{{ runningCount() ?? '–' }}</p>
       </div>
-      <div class="card p-4" data-testid="tile-todo">
+      <div class="card p-4 min-w-0" data-testid="tile-todo">
         <p class="text-xs text-text-muted">Teendő</p>
         @if (pendingTests(); as pending) {
           @if (pending.length) {
@@ -113,7 +113,7 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
       </div>
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-[1fr_20rem] items-start">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] items-start">
       <section aria-labelledby="diakok-attekintes" class="min-w-0">
         <h2 id="diakok-attekintes" class="text-lg font-bold mb-3">Diákok - ki hol tart</h2>
         <div class="card overflow-hidden">

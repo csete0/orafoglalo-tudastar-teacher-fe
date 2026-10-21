@@ -68,7 +68,7 @@ const MAX_POLLS = 36;
 
         <nav class="flex gap-4 border-b border-border-default overflow-x-auto" role="tablist" aria-label="Csapat nézetei">
           @for (f of fulek; track f.value) {
-            <button class="tab-btn whitespace-nowrap" [class.tab-btn-active]="tab() === f.value" role="tab" [id]="'csapat-tab-' + f.value"
+            <button class="tab-btn" [class.tab-btn-active]="tab() === f.value" role="tab" [id]="'csapat-tab-' + f.value"
               [attr.aria-selected]="tab() === f.value" aria-controls="csapat-panel" type="button" (click)="setTab(f.value)">{{ f.label }}</button>
           }
         </nav>

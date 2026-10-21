@@ -49,7 +49,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
         <!-- UI-TT-179: valódi, tartalom-váltó tab-widget - a wrapper role="tablist",
              a gombok role="tab" + aria-selected nélkül egy képernyőolvasó-felhasználó
              számára 4 néma, állapot nélküli "gomb"-ként hangzott el. -->
-        <nav class="flex gap-4 border-b border-border-default mb-6" role="tablist">
+        <nav class="flex gap-4 border-b border-border-default mb-6 overflow-x-auto" role="tablist" aria-label="Intézmény nézetek">
           <button (click)="setTab('tanarok')" class="tab-btn" [class.tab-btn-active]="tab() === 'tanarok'"
             role="tab" [attr.aria-selected]="tab() === 'tanarok'">
             Tanárok

@@ -149,7 +149,7 @@ import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../shared
 
           <ul class="space-y-3">
             @for (q of sortedQuestions(); track q.questionId) {
-              <li class="border border-border rounded p-3">
+              <li class="border border-border-default rounded p-3">
                 <div class="flex items-start gap-3">
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-semibold">{{ q.questionText }}</span>

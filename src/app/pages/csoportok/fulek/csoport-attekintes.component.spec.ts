@@ -151,6 +151,13 @@ describe('CsoportAttekintesComponent', () => {
     expect(el.querySelector('[data-testid="tile-todo"] a')!.getAttribute('href')).toBe('/dolgozatok/7');
   });
 
+  it('375 px: a 2 hasábos csempe-rács elemei zsugorodhatnak (min-w-0), így egy hosszú, levágott feladatsor-cím nem tolja szét az oldalt', () => {
+    const { el } = setup();
+    for (const id of ['tile-active', 'tile-average', 'tile-running', 'tile-todo']) {
+      expect(el.querySelector(`[data-testid="${id}"]`)!.classList).toContain('min-w-0');
+    }
+  });
+
   it('diák-táblázat: jelzéssel rendelkezők elöl, profil-link, százalékok', () => {
     const { el } = setup();
     const rows = [...el.querySelectorAll('tbody tr')];

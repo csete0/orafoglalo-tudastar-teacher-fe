@@ -18,39 +18,12 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   standalone: true,
   imports: [RouterLink, RouterLinkActive],
   template: `
-    <nav class="flex gap-1 mt-4 border-b border-border" aria-label="Tartalom típusa">
-      <a
-        routerLink="/feladatsorok"
-        routerLinkActive="tab-active"
-        [routerLinkActiveOptions]="{ exact: true }"
-        class="tab-link"
-      >
-        Feladatsorok
-      </a>
-      <a routerLink="/feladatsorok/kvizek" routerLinkActive="tab-active" class="tab-link"> Kvízek </a>
-      <a routerLink="/feladatsorok/projektek" routerLinkActive="tab-active" class="tab-link"> Projektek </a>
+    <nav class="flex gap-4 mt-4 border-b border-border-default overflow-x-auto" aria-label="Tartalom típusa">
+      <a routerLink="/feladatsorok" routerLinkActive="tab-btn-active" [routerLinkActiveOptions]="{ exact: true }"
+         ariaCurrentWhenActive="page" class="tab-btn">Feladatsorok</a>
+      <a routerLink="/feladatsorok/kvizek" routerLinkActive="tab-btn-active" ariaCurrentWhenActive="page" class="tab-btn">Kvízek</a>
+      <a routerLink="/feladatsorok/projektek" routerLinkActive="tab-btn-active" ariaCurrentWhenActive="page" class="tab-btn">Projektek</a>
     </nav>
   `,
-  styles: [
-    `
-      .tab-link {
-        padding: 0.5rem 1rem;
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: var(--color-text-muted, #6b7280);
-        border-bottom: 2px solid transparent;
-        margin-bottom: -1px;
-      }
-
-      .tab-link:hover {
-        color: inherit;
-      }
-
-      .tab-active {
-        color: inherit;
-        border-bottom-color: currentColor;
-      }
-    `,
-  ],
 })
 export class TartalomFulekComponent {}

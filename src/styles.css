@@ -108,6 +108,11 @@ body {
   button:disabled {
     cursor: not-allowed;
   }
+  /* Egységes, token-színű billentyűzet-fókusz; a saját fókusz-gyűrűs elemek (utility / .input) felülírják. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 }
 
 /* Közös komponens-osztályok — a diák-app vizuális idiómáinak világos-téma
@@ -241,8 +246,11 @@ body {
   }
 
   /* Fül-navigáció */
+  /* A fülsáv overflow-x-auto görgetőjében a fül nem törik és nem zsugorodik; a fókusz-keret befelé,
+     mert a görgető konténer a kifelé rajzolt keretet levágná. */
   .tab-btn {
-    @apply pb-2 border-b-2 border-transparent text-sm text-text-muted transition-colors;
+    @apply pb-2 border-b-2 border-transparent text-sm text-text-muted transition-colors shrink-0 whitespace-nowrap rounded-t;
+    outline-offset: -2px;
   }
   .tab-btn-active {
     @apply border-primary text-text-primary font-semibold;

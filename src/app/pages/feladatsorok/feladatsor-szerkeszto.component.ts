@@ -198,7 +198,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         }
 
         <!-- Háromhasábos szerkesztő xl-től (vázlat · tartalom · MI-segítő); alatta egy oszlop, a vázlat felül. -->
-        <div class="grid gap-6 xl:grid-cols-[15rem_minmax(0,1fr)_18rem] xl:items-start">
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-[15rem_minmax(0,1fr)_18rem] xl:items-start">
         <app-feladat-vazlat [sections]="typeSections()" [selectedTaskId]="expandedTaskId()"
           (taskSelected)="selectTask($event)" (addTaskRequested)="focusNewTask($event)" />
 
@@ -723,7 +723,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
           @if (!detail.isPublished) {
             <p class="text-sm text-text-muted">Előbb publikáld a feladatsort, utána adhatod ki csoportoknak.</p>
           } @else {
-            <form [formGroup]="assignForm" (ngSubmit)="assign(detail.id)" class="space-y-3 border-t border-border pt-4">
+            <form [formGroup]="assignForm" (ngSubmit)="assign(detail.id)" class="space-y-3 border-t border-border-default pt-4">
               <label class="block">
                 <span class="text-sm text-text-muted">Csoport</span>
                 <select formControlName="groupId" class="input mt-1">

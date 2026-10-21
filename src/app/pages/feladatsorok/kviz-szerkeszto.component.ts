@@ -158,7 +158,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
 
           <ul class="space-y-3 mb-5">
             @for (question of quiz.questions; track question.id) {
-              <li class="border border-border rounded p-3">
+              <li class="border border-border-default rounded p-3">
                 <!-- UI-UX-T8: alapból összecsukva - 10+ kérdésnél a részletek
                      (megoldás, gombsor) csak kibontásra látszanak. -->
                 <button type="button" (click)="toggleQuestion(question.id)"
@@ -227,7 +227,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
           </ul>
 
           <!-- Kérdés-űrlap -->
-          <form [formGroup]="questionForm" (ngSubmit)="saveQuestion()" class="space-y-3 border-t border-border pt-4">
+          <form [formGroup]="questionForm" (ngSubmit)="saveQuestion()" class="space-y-3 border-t border-border-default pt-4">
             <h3 class="font-semibold">{{ editingId() ? 'Kérdés szerkesztése' : 'Új kérdés' }}</h3>
 
             <label class="block">
@@ -330,7 +330,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
             </label>
 
             <!-- ── C6: kvízkép-feltöltés ──────────────────────────── -->
-            <div class="border border-dashed border-border rounded-lg p-3 space-y-2">
+            <div class="border border-dashed border-border-default rounded-lg p-3 space-y-2">
               <span class="text-sm text-text-muted">Kép a kérdéshez (jpg/png/webp, max 2 MB, opcionális)</span>
               @if (questionImagePreview()) {
                 <img [src]="questionImagePreview()" alt="Kérdéskép előnézet" class="max-h-32 rounded" />
@@ -363,7 +363,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
           </form>
 
           <!-- ── Meglévő kérdés hozzáadása a közös bankból ─────── -->
-          <div class="border-t border-border pt-4 mt-4">
+          <div class="border-t border-border-default pt-4 mt-4">
             <button type="button" (click)="toggleBankSearch()"
                     class="w-full flex items-center justify-between text-left cursor-pointer"
                     [attr.aria-expanded]="bankSearchExpanded()">
@@ -414,7 +414,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
 
               <ul class="space-y-2 mt-3">
                 @for (bq of store.bankResults(); track bq.id) {
-                  <li class="border border-border rounded p-3 flex items-start gap-2">
+                  <li class="border border-border-default rounded p-3 flex items-start gap-2">
                     <span class="min-w-0 flex-1">
                       <span class="block font-semibold">{{ bq.questionText }}</span>
                       <span class="text-xs text-text-muted">
@@ -604,7 +604,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
           @if (!quiz.isPublished) {
             <p class="text-sm text-text-muted">Előbb publikáld a kvízt, utána adhatod ki csoportoknak.</p>
           } @else {
-            <form [formGroup]="assignForm" (ngSubmit)="assign()" class="space-y-3 border-t border-border pt-4">
+            <form [formGroup]="assignForm" (ngSubmit)="assign()" class="space-y-3 border-t border-border-default pt-4">
               <label class="block">
                 <span class="text-sm text-text-muted">Csoport</span>
                 <select formControlName="groupId" class="input mt-1">
@@ -641,7 +641,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
             </form>
           }
 
-          <div class="border-t border-border mt-6 pt-4">
+          <div class="border-t border-border-default mt-6 pt-4">
             <button
               type="button"
               class="btn btn-ghost text-danger"
