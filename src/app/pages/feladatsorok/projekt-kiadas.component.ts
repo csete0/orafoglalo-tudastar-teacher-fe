@@ -68,23 +68,24 @@ type SuggestScope = 'file' | 'all';
           }
         </div>
 
-        <div class="card overflow-x-auto mt-4">
-          <table class="w-full text-sm" data-testid="project-matrix">
+        <div class="card overflow-hidden mt-4">
+        <div class="data-table-scroll">
+          <table class="data-table" data-testid="project-matrix">
             <thead>
-              <tr class="text-left border-b border-border-default">
-                <th class="py-2 px-3">Diák</th>
+              <tr>
+                <th class="sticky-col">Diák</th>
                 @for (m of v.milestones; track m.orderNo) {
-                  <th class="py-2 px-2 text-center" [class.drop-col]="m.orderNo === worstDrop()" [attr.title]="m.title">{{ m.orderNo }}.</th>
+                  <th class="!px-2 text-center" [class.drop-col]="m.orderNo === worstDrop()" [attr.title]="m.title">{{ m.orderNo }}.</th>
                 }
-                <th class="py-2 px-3 text-right">Ellenőrzés</th>
-                <th class="py-2 px-3 text-right">AI-token (30 nap)</th>
-                <th class="py-2 px-3">Utoljára</th>
+                <th class="text-right">Ellenőrzés</th>
+                <th class="text-right">AI-token (30 nap)</th>
+                <th>Utoljára</th>
               </tr>
             </thead>
             <tbody>
               @for (s of v.students; track s.userId) {
-                <tr class="border-b border-border-default last:border-b-0" [attr.data-testid]="'student-' + s.userId">
-                  <td class="py-2 px-3">
+                <tr [attr.data-testid]="'student-' + s.userId">
+                  <td class="sticky-col">
                     @if (s.runtime) {
                       <button type="button" class="font-semibold text-left underline-offset-2 hover:underline" (click)="openCode(s)">{{ s.name }}</button>
                     } @else {
@@ -96,29 +97,30 @@ type SuggestScope = 'file' | 'all';
                     </span>
                   </td>
                   @for (step of s.steps; track step.orderNo) {
-                    <td class="py-2 px-2 text-center" [class.drop-col]="step.orderNo === worstDrop()">
+                    <td class="!px-2 text-center" [class.drop-col]="step.orderNo === worstDrop()">
                       <span class="cell-dot" [class]="'cell-dot cell--' + cell(s, step)" [attr.title]="cellTitle(s, step)"
                             [attr.aria-label]="step.orderNo + '. lépés: ' + cellLabel(s, step)"></span>
                     </td>
                   }
-                  <td class="py-2 px-3 text-right tabular-nums">{{ checks(s) }}</td>
-                  <td class="py-2 px-3 text-right tabular-nums">{{ s.aiTokens30 }}</td>
-                  <td class="py-2 px-3 text-xs text-text-muted">{{ s.lastActivityAt ? (utc(s.lastActivityAt) | date: 'MM.dd. HH:mm') : '–' }}</td>
+                  <td class="num text-right">{{ checks(s) }}</td>
+                  <td class="num text-right">{{ s.aiTokens30 }}</td>
+                  <td class="num whitespace-nowrap text-xs text-text-muted">{{ s.lastActivityAt ? (utc(s.lastActivityAt) | date: 'MM.dd. HH:mm') : '–' }}</td>
                 </tr>
               } @empty {
-                <tr><td class="py-3 px-3 text-text-muted" [attr.colspan]="v.milestones.length + 4">A csoportnak még nincs tagja.</td></tr>
+                <tr><td class="!py-6 text-text-muted text-center" [attr.colspan]="v.milestones.length + 4">A csoportnak még nincs tagja.</td></tr>
               }
             </tbody>
             <tfoot>
-              <tr class="border-t border-border-default text-xs text-text-muted">
-                <td class="py-2 px-3 font-semibold">Teljesítette</td>
+              <tr class="text-xs">
+                <td>Teljesítette</td>
                 @for (c of passedCounts(); track c.orderNo) {
-                  <td class="py-2 px-2 text-center tabular-nums" [class.drop-col]="c.orderNo === worstDrop()">{{ c.passed }}/{{ v.students.length }}</td>
+                  <td class="num !px-2 text-center" [class.drop-col]="c.orderNo === worstDrop()">{{ c.passed }}/{{ v.students.length }}</td>
                 }
                 <td colspan="3"></td>
               </tr>
             </tfoot>
           </table>
+        </div>
         </div>
         @if (worstDrop(); as order) {
           <p class="text-sm mt-3" data-testid="worst-drop">A legtöbben a(z) <strong>{{ order }}. lépésnél</strong> akadnak el ({{ milestoneTitle(order) }}).</p>
