@@ -159,4 +159,37 @@ export interface ExamSessionSnapshotDto {
   files: Record<string, string>;
   readOnlyPaths: string[];
   session: ExamSessionDto;
+  /** A grafikus rész beadott feltöltése (a zip szűrt forrásfájljai + a képernyőképek száma); null, ha nem töltött fel. */
+  gui?: ExamSnapshotGuiDto | null;
+  /** A részek gyökérmappái a munkaterületen (a GUI-résznek nincs: az külön feltöltés). */
+  partRoots?: Partial<Record<ExamPartKey, string>> | null;
+}
+
+export interface ExamSnapshotGuiDto {
+  uploadId: number;
+  uploadedAt: string;
+  files: Record<string, string>;
+  /** A képek a GET sessions/{id}/gui/images/{index} végponton (0-tól). */
+  imageCount: number;
+}
+
+/** A részek gyökérmappái (BE: ExamParts.StudentRoots) - ha a pillanatkép nem hozza. */
+export const EXAM_PART_ROOTS: Partial<Record<ExamPartKey, string>> = {
+  console: 'console/',
+  api: 'backend/',
+  web: 'frontend/web/',
+  client: 'frontend/client/',
+};
+
+/** Soronkénti tanári megjegyzés a beadott dolgozaton (BE: ExamCodeCommentDto). */
+export interface ExamCodeCommentDto {
+  id: number;
+  partKey: ExamPartKey;
+  path: string;
+  line: number;
+  lineText: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string | null;
 }

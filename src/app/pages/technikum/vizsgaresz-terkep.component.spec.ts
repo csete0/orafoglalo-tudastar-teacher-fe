@@ -55,7 +55,7 @@ describe('VizsgareszTerkepComponent', () => {
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
   async function setup(publish = vi.fn(() => of({ published: 4, sessionsWithFailedParts: 0 })), confirmed = true) {
-    const api = { heatmap: vi.fn(() => of(structuredClone(heatmap))), snapshot: vi.fn(() => of(snapshot)), publish };
+    const api = { heatmap: vi.fn(() => of(structuredClone(heatmap))), snapshot: vi.fn(() => of(snapshot)), publish, comments: vi.fn(() => of([])) };
     const toast = { success: vi.fn() };
     const confirm = { ask: vi.fn(async (_options: { message: string }) => confirmed) };
     TestBed.configureTestingModule({
@@ -109,6 +109,7 @@ describe('VizsgareszTerkepComponent', () => {
 
   it('nem értékelt MI-szempontok: a cella jelölve, a pillanatképben a szempontok „nem értékelt”-ek, részleges eredmény ítélet nélkül', async () => {
     const api = {
+      comments: vi.fn(() => of([])),
       heatmap: vi.fn(() => of({ ...structuredClone(heatmap), students: [{ ...heatmap.students[0],
         cells: [cell({ points: 10, ratio: 10 / 15, aiNotEvaluatedPoints: 5 })] }] })),
       snapshot: vi.fn(() => of({ ...snapshot, session: { ...snapshot.session, totalPoints: 25, passed: null, notEvaluatedPoints: 5, parts: [
@@ -149,6 +150,7 @@ describe('VizsgareszTerkepComponent', () => {
             ai: { status: 'unavailable', points, maxPoints: 5, message: 'Nem értékelt (MI-keret)',
               items: [{ key: 'nevek', points, maxPoints: 5, reason: 'Beszédes nevek', notEvaluated: true, aiPoints }] } } } }] } });
     const api = {
+      comments: vi.fn(() => of([])),
       heatmap: vi.fn(() => of(structuredClone(heatmap))),
       snapshot: vi.fn(() => of(part(0, null, false))),
       scoreRubric: vi.fn(() => of(part(4, 0, true))),
@@ -207,7 +209,7 @@ describe('VizsgareszTerkepComponent', () => {
     expect(nav).toHaveBeenCalled();
   });
 
-  it('a dolgozat-cella a beadott pillanatképet nyitja: bírálat részenként és a kód csak olvasva', async () => {
+  it('a dolgozat-cella a beadott pillanatképet nyitja: bírálat részenként és a kód vizsgarészenként, megjegyezhetően', async () => {
     const { fixture, el, api } = await setup();
     el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
     fixture.detectChanges();
@@ -221,7 +223,10 @@ describe('VizsgareszTerkepComponent', () => {
     expect(parts).toContain('Hibás átlag');
     expect(parts).toContain('bírálat folyamatban');
     expect(section.querySelector('[data-testid="code-view"]')!.textContent).toContain('// BEADOTT');
-    expect(section.querySelector('.code-ln--action')).toBeNull();
+    // A diák saját fájlja megjegyezhető (sorszám-gomb); a fülek a vizsgarészek.
+    expect(section.querySelector('.code-ln--action')).not.toBeNull();
+    expect(section.querySelector('[data-testid="part-tab-console"]')!.getAttribute('aria-selected')).toBe('true');
+    expect(api.comments).toHaveBeenCalledWith(31);
     [...section.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.trim() === 'Bezárás')!.click();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="snapshot"]')).toBeNull();
