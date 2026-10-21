@@ -26,7 +26,7 @@ import { TeacherProjectService } from '../../services/teacher-project/teacher-pr
 import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../models/teacher-project.model';
 import { parseUtc } from '../../shared/utc-date.util';
 import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
-import { finalize, of, switchMap, take } from 'rxjs';
+import { finalize, map, of, switchMap, take } from 'rxjs';
 import { MockExamService } from '../../services/mock-exam/mock-exam.service';
 import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
@@ -594,7 +594,10 @@ export class CsoportReszletekComponent implements OnInit {
   /** Az összefoglalóval egyező, lefelé kerekített százalék. */
   readonly pct = floorPercent;
 
-  /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium - a visible prémium nélkül is igaz); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
+  /**
+   * Bekapcsolt modul (api/technikum/me visible) és prémium tanár, vagy prémium nélkül a csoportnak kiadott technikumi dolgozata van
+   * (a térkép akkor csak a dolgozatok eredményét adja); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti.
+   */
   readonly terkepVisible = signal(false);
   /** Vizsgaremek-csapatok fül; a kikapcsolt Git-funkció 404-e (unavailable) elrejti. */
   readonly csapatokVisible = signal(true);
@@ -758,11 +761,16 @@ export class CsoportReszletekComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.technikumApi.me().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (me) => this.terkepVisible.set(me.visible && me.hasPremium),
+    this.groupId = Number(this.route.snapshot.paramMap.get('id'));
+    this.technikumApi.me().pipe(
+      // Prémium nélkül (lejárt próba / előfizetés) a fül csak a már kiadott technikumi dolgozatok eredményéért marad: megnyitás, pontozás, közzététel.
+      switchMap((me) => !me.visible ? of(false) : me.hasPremium ? of(true)
+        : this.teacherProjectService.forGroup(this.groupId).pipe(map((assignments) => assignments.some((a) => a.isTest)))),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: (visible) => this.terkepVisible.set(visible),
       error: () => this.terkepVisible.set(false),
     });
-    this.groupId = Number(this.route.snapshot.paramMap.get('id'));
     // A csapatjavaslat értesítése ide mutat: /csoportok/{id}?tab=csapatok
     if (this.route.snapshot.queryParamMap.get('tab') === 'csapatok') this.setTab('csapatok');
     this.loadMockExamBadge(this.groupId);
