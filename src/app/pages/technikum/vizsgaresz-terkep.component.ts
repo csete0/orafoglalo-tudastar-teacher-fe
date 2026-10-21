@@ -7,7 +7,7 @@ import { TeacherTechnikumService } from '../../services/technikum/teacher-techni
 import { ToastService } from '../../shared/toast/toast.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
-import { KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
+import { PillanatkepKodComponent } from './pillanatkep-kod.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import {
@@ -27,14 +27,15 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
 
 /**
  * A csoport vizsgarész-térképe (PATRICKS-TECHNIKUM-MODUL-TERV.md 3.8): diák × az öt gyakorlati rész + az elméleti teszt, a
- * legjobb eredmény pontarányával. A dolgozatból jövő cella a beadott változatot (pillanatkép + bírálat) nyitja meg, a többi
+ * legjobb eredmény pontarányával. A dolgozatból jövő cella a beadott változatot (pillanatkép + bírálat, vizsgarészenként
+ * soronkénti megjegyzésekkel és a grafikus rész képernyőképeivel) nyitja meg, a többi
  * a projekt osztály-nézetében a diák élő kódját (megjegyzésekkel). Fölötte a csoport technikumi dolgozatai a közzététellel.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-vizsgaresz-terkep',
   standalone: true,
-  imports: [DatePipe, RouterLink, LocalSpinnerComponent, KodOlvasoComponent],
+  imports: [DatePipe, RouterLink, LocalSpinnerComponent, PillanatkepKodComponent],
   template: `
     @if (error(); as err) { <p class="text-danger text-sm mb-4" role="alert">{{ err }}</p> }
     @if (loading()) {
@@ -129,7 +130,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
       </div>
       <p class="text-xs text-text-muted mt-2">
         Részenként a legjobb bírált eredmény; ha a diák írt belőle dolgozatot ebben a csoportban, az számít. Kattints a cellára:
-        a dolgozat beadott változata a bírálattal, a gyakorlás a diák kódja megjegyzésekkel. A felkiáltójeles, piros keretes
+        a dolgozat beadott változata a bírálattal (soronként megjegyzést írhatsz, a diák a közzététel után látja), a gyakorlás a diák kódja megjegyzésekkel. A felkiáltójeles, piros keretes
         dolgozat-rész bírálata végleg sikertelen volt, ezért 0 pontnak számít. A csillagos, szaggatott keretes rész MI-szempontjait
         nem értékeltük (elfogyott MI-keret vagy MI-hiba): azok 0 pontot kaptak, a gépi tesztek pontja megmaradt - dolgozatnál a
         cellára kattintva látod, mely szempontok ezek, és kézzel pontozhatod őket.
@@ -140,7 +141,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
           <div class="flex items-center justify-between gap-3">
             <h2 id="snapshot-title" class="font-bold">
               @if (snapshot(); as sn) { {{ sn.studentName }} – {{ sn.projectTitle }} } @else { Beadott dolgozat }
-              <span class="text-xs font-normal text-text-muted">(a beadott változat, csak olvasás)</span>
+              <span class="text-xs font-normal text-text-muted">(a beadott változat - a sorszámra kattintva megjegyzést írhatsz)</span>
             </h2>
             <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="closeSnapshot()">Bezárás</button>
           </div>
@@ -237,7 +238,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                 </li>
               }
             </ul>
-            <app-kod-olvaso class="block mt-4" [files]="sn.files" [readOnlyPaths]="sn.readOnlyPaths" [(activePath)]="snapshotPath" />
+            <app-pillanatkep-kod [snapshot]="sn" />
           } @else if (snapshotError(); as err) {
             <p class="text-danger text-sm mt-2" role="alert">{{ err }}</p>
           }
@@ -291,7 +292,6 @@ export class VizsgareszTerkepComponent {
   readonly snapshot = signal<ExamSessionSnapshotDto | null>(null);
   readonly snapshotLoading = signal(false);
   readonly snapshotError = signal<string | null>(null);
-  readonly snapshotPath = signal<string | null>(null);
   /** Kézi pontozás: résztenként (bírálat-azonosító) a módosított szempontpontok szövegként, a mentésig. */
   readonly drafts = signal<Record<number, Record<string, string>>>({});
   readonly scoring = signal<number | null>(null);
@@ -371,10 +371,7 @@ export class VizsgareszTerkepComponent {
     this.closeSnapshot();
     this.snapshotLoading.set(true);
     this.api.snapshot(sessionId).pipe(take(1), finalize(() => this.snapshotLoading.set(false))).subscribe({
-      next: (sn) => {
-        this.snapshot.set(sn);
-        this.snapshotPath.set(codeFilePaths(sn.files, sn.readOnlyPaths)[0] ?? null);
-      },
+      next: (sn) => this.snapshot.set(sn),
       error: (e) => this.snapshotError.set(extractErrorMessage(e, 'A beadott dolgozat betöltése sikertelen.')),
     });
   }
