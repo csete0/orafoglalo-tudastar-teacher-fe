@@ -135,7 +135,7 @@ import {
             <tbody>
               @for (row of results.students; track row.userId) {
                 <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors"
-                  [class.opacity-50]="!row.hasSession">
+                  [class.opacity-50]="!row.hasSession && !row.hasPractice">
                   <td class="py-2.5 px-4">
                     <a [routerLink]="['/diakok', row.userId]" class="text-primary hover:underline">{{ row.name }}</a>
                   </td>
@@ -153,12 +153,17 @@ import {
                           </span>
                         }
                       </span>
+                    } @else if (row.hasPractice) {
+                      <!-- A gyakorló értékelés nem vizsga-teljesítés, de a „nem kezdte el” hamis lenne. -->
+                      <span class="badge badge-secondary !text-[10px] !px-1.5 !py-0.5"
+                        title="A feladatsort nem írta meg, de gyakorló módban értékelést kért rá.">csak gyakorolt</span>
                     } @else {
                       nem kezdte el
                     }
                   </td>
                   @for (cell of row.taskResults; track cell.taskId) {
                     <td class="py-2.5 px-4">
+                      <div class="flex flex-col items-start gap-1">
                       @if (cell.attemptId != null) {
                         <!-- Valódi <button>, nem (click) a <td>-n: billentyűzettel is
                              elérhetőnek kell lennie. -->
@@ -174,9 +179,16 @@ import {
                               title="A pontszámot tanár bírálta felül.">tanári</span>
                           }
                         </button>
-                      } @else {
+                      } @else if (cell.practicePoints == null) {
                         <span class="text-text-muted">–</span>
                       }
+                      @if (cell.practicePoints != null) {
+                        <span class="badge badge-secondary !text-[10px] !px-1.5 !py-0.5 whitespace-nowrap" data-testid="practice-badge"
+                          [title]="practiceTitle(cell)">
+                          gyakorlás {{ cell.practicePoints }}/{{ cell.practiceMaxPoints }}
+                        </span>
+                      }
+                      </div>
                     </td>
                   }
                 </tr>
@@ -303,6 +315,12 @@ export class FeladatsorEredmenyekComponent implements OnInit {
     if (cell.attemptId == null) return;
     // A panel (AttemptReviewPanelComponent) maga tölti be a beadást a megnyitott attemptId-re.
     this.openAttemptId.set(this.openAttemptId() === cell.attemptId ? null : cell.attemptId);
+  }
+
+  /** A gyakorló jelzés magyarázata: legjobb értékelés, mikor - és hogy a vizsgapontba nem számít. */
+  practiceTitle(cell: TaskResultCellDto): string {
+    const when = cell.practiceGradedAt ? ` (${new Date(cell.practiceGradedAt).toLocaleDateString('hu-HU')})` : '';
+    return `Legjobb gyakorló MI-értékelés${when} - nem számít bele a feladatsor pontszámába.`;
   }
 
   closeReview(): void {

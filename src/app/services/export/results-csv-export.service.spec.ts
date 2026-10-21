@@ -206,4 +206,26 @@ describe('ResultsCsvExportService', () => {
     expect(cells[3]).toBe('10/10');
     expect(cells[4]).toBe('5/10');
   });
+  it('gyakorló értékelés nélkül nincs gyakorló oszlop (a megszokott import-alak nem változik)', () => {
+    const header = service.buildCsv(makeResults()).split('\r\n')[0];
+    expect(header).not.toContain('gyakorlás');
+  });
+
+  it('a gyakorló értékelés külön oszlopba kerül, az összesítő és a vizsga-cella nem változik; vizsga nélkül "csak gyakorolt"', () => {
+    const results = makeResults();
+    results.students[0].taskResults[1].practicePoints = 9;
+    results.students[0].taskResults[1].practiceMaxPoints = 10;
+    results.students.push({
+      userId: 2, name: 'Nagy Béla', hasSession: false, isCompleted: false, hasPractice: true,
+      taskResults: [
+        { taskId: 1, isCompleted: false, isOverridden: false, practicePoints: 4, practiceMaxPoints: 10 },
+        { taskId: 2, isCompleted: false, isOverridden: false },
+      ],
+    });
+    const lines = service.buildCsv(results).split('\r\n');
+    const header = lines[0].split(';');
+    expect(header.slice(5)).toEqual(['1. Első feladat – gyakorlás (legjobb)', '2. Második feladat – gyakorlás (legjobb)']);
+    expect(lines[1].split(';')).toEqual(['Kiss Anna', '15 / 20', '75', '10/10', '5/10*', '–', '9/10']);
+    expect(lines[2].split(';')).toEqual(['Nagy Béla', 'csak gyakorolt', '–', '–', '–', '4/10', '–']);
+  });
 });

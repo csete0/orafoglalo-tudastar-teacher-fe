@@ -156,6 +156,7 @@ body {
     @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border;
   }
   .badge-primary { @apply bg-primary-subtle text-primary border-primary/30; }
+  .badge-secondary { @apply bg-secondary-subtle text-secondary border-secondary/30; }
   .badge-success { @apply bg-success-subtle text-success border-success/30; }
   .badge-warning { @apply bg-warning-subtle text-warning border-warning/30; }
   .badge-danger { @apply bg-danger-subtle text-danger border-danger/30; }

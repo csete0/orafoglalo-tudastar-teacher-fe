@@ -31,6 +31,9 @@ const NO_VALUE = '–';
  */
 const IN_PROGRESS = 'folyamatban';
 
+/** Vizsga nélkül, csak gyakorló értékeléssel - a mátrix badge-ével azonos szó. */
+const PRACTICE_ONLY = 'csak gyakorolt';
+
 @Injectable({ providedIn: 'root' })
 export class ResultsCsvExportService {
   /** Letölti az eredmény-mátrixot CSV-ként. */
@@ -86,6 +89,8 @@ export class ResultsCsvExportService {
       'Összesen',
       'Százalék',
       ...results.tasks.map((t) => `${t.taskOrder}. ${t.title} (max ${t.maxPoints})`),
+      // A gyakorló értékelések külön oszlopokban, a vizsgapontok UTÁN - csak ha bárkinek van, hogy a megszokott import-alak ne változzon.
+      ...(this.hasPractice(results) ? results.tasks.map((t) => `${t.taskOrder}. ${t.title} – gyakorlás (legjobb)`) : []),
     ];
 
     const rows = results.students.map((student) => this.buildRow(student, results));
@@ -97,7 +102,7 @@ export class ResultsCsvExportService {
     const cells: string[] = [student.name];
 
     if (!student.hasSession) {
-      cells.push('nem kezdte el', NO_VALUE);
+      cells.push(student.hasPractice ? PRACTICE_ONLY : 'nem kezdte el', NO_VALUE);
     } else if (!student.isCompleted) {
       // A még folyamatban lévő diák összesítője FÉLKÉSZ: a mátrix ezért ír mellé
       // "folyamatban" badge-et (UI-TT-49). A képernyőn a szám és a figyelmeztetés
@@ -129,7 +134,18 @@ export class ResultsCsvExportService {
       cells.push(`${earned}/${max}${cell.isOverridden ? OVERRIDE_MARKER : ''}`);
     }
 
+    if (this.hasPractice(results)) {
+      for (const task of results.tasks) {
+        const cell = student.taskResults.find((c) => c.taskId === task.taskId);
+        cells.push(cell?.practicePoints != null ? `${cell.practicePoints}/${cell.practiceMaxPoints ?? NO_VALUE}` : NO_VALUE);
+      }
+    }
+
     return cells;
+  }
+
+  private hasPractice(results: TeacherTaskSetResultsDto): boolean {
+    return results.students.some((s) => s.taskResults.some((c) => c.practicePoints != null));
   }
 
   /** Magyar tizedesvessző, hogy az Excel valódi számként olvassa. */
