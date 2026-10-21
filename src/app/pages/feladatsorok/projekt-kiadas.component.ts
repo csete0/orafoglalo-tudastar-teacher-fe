@@ -49,7 +49,7 @@ type SuggestScope = 'file' | 'all';
   imports: [DatePipe, NgTemplateOutlet, RouterLink, LocalSpinnerComponent, KodOlvasoComponent],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
-    <div class="max-w-6xl mx-auto px-4 py-10">
+    <div class="page-wide">
       <a routerLink="/feladatsorok/projektek" class="text-sm text-text-muted">← Projektek</a>
       @if (error(); as err) { <p class="text-danger text-sm mt-4">{{ err }}</p> }
       @if (loading()) {

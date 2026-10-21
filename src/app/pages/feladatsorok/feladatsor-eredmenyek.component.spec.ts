@@ -667,6 +667,33 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Leggyengébben teljesített feladatok');
   });
 
+  it('a szűrősorban „Leggyengébb: N. feladat (x%)” jelzés, a láblécben feladatonkénti átlag', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="weakest-indicator"]')?.textContent).toContain('Leggyengébb: 2. feladat (40%)');
+    const cells = [...el.querySelectorAll('[data-testid="task-average-row"] td')] as HTMLElement[];
+    expect(cells.map((c) => c.textContent!.trim())).toEqual(['Feladatonkénti átlag', '100%', '40%']);
+    expect(cells[2].classList.contains('text-warning')).toBe(true);
+  });
+
+  it('értékelt beadás nélkül nincs leggyengébb-jelzés és átlag-lábléc', () => {
+    const results = makeResults();
+    results.students = results.students.map((s) => ({
+      ...s,
+      taskResults: s.taskResults.map((c) => ({ ...c, isCompleted: false })),
+    }));
+    configure(results);
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="weakest-indicator"]')).toBeNull();
+    expect(el.querySelector('[data-testid="task-average-row"]')).toBeNull();
+  });
+
   it('a leggyengébb feladat oszlopa kiemelést kap a mátrix fejlécében', () => {
     configure(makeResults());
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);

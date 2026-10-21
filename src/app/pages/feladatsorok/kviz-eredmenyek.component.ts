@@ -33,7 +33,7 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
   standalone: true,
   imports: [RouterLink, DatePipe, FormsModule],
   template: `
-    <div class="max-w-3xl mx-auto px-4 py-10">
+    <div class="page-wide">
       <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'szerkesztes']"
          class="text-sm text-text-muted hover:underline">← Vissza a szerkesztőhöz</a>
 

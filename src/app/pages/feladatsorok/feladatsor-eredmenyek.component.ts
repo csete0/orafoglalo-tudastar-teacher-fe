@@ -12,7 +12,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
-import { weakestTasks, WEAK_THRESHOLD_PERCENT } from '../../shared/task-analysis/task-weakness';
+import { computeTaskWeakness, weakestTasks, WEAK_THRESHOLD_PERCENT } from '../../shared/task-analysis/task-weakness';
 import { GroupStore } from '../../services/group/group.store';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import {
@@ -36,27 +36,30 @@ import {
   `],
   template: `
     @if (report.taskSetResults(); as results) {
-      <div class="max-w-5xl mx-auto px-4 py-10">
-        <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="page-wide">
+        <header class="flex items-end justify-between gap-4 flex-wrap mb-4">
           <div class="min-w-0">
-            <h1 class="page-title truncate">{{ results.title }} — eredmények</h1>
-            <p class="text-sm text-text-muted mt-1">Tagonkénti eredmény-mátrix (diákok × feladatok)</p>
+            <nav aria-label="Morzsa" class="text-xs text-text-muted print:hidden">
+              <a routerLink="/feladatsorok" class="hover:underline">Feladatsorok</a>
+              <span aria-hidden="true"> › </span>
+              <a [routerLink]="['/feladatsorok', taskSetId, 'szerkesztes']" class="hover:underline">{{ results.title }}</a>
+            </nav>
+            <h1 class="text-2xl font-bold truncate">{{ results.title }} — eredmények</h1>
           </div>
           <div class="flex gap-2 print:hidden">
-            <button type="button" (click)="exportCsv(results)" class="btn shrink-0"
+            <button type="button" (click)="exportCsv(results)" class="btn btn-ghost shrink-0"
               title="Az eredmények letöltése CSV-ben, osztálynaplóba importálható formában.">
               Exportálás CSV-be
             </button>
-            <button type="button" (click)="print()" class="btn shrink-0"
+            <button type="button" (click)="print()" class="btn btn-ghost shrink-0"
               title="Cél: Mentés PDF-ként">
               Nyomtatás / PDF
             </button>
           </div>
-        </div>
-        <div class="hairline"></div>
+        </header>
 
-        <!-- C7: szűrősáv — a nyomtatott nézeten nem jelenik meg -->
-        <div class="flex flex-wrap items-end gap-4 mb-6 print:hidden">
+        <!-- C7: szűrősáv egy sorban — a nyomtatott nézeten nem jelenik meg -->
+        <div class="flex flex-wrap items-end gap-3 mb-4 print:hidden">
           <div>
             <label class="text-xs text-text-muted block mb-1" for="filter-group">Csoport</label>
             <select id="filter-group"
@@ -86,6 +89,11 @@ import {
               <option value="notStarted">Nem kezdte el</option>
             </select>
           </div>
+          @if (weakest()[0]; as w) {
+            <span class="badge badge-warning ml-auto mb-1.5" data-testid="weakest-indicator">
+              Leggyengébb: {{ w.taskOrder }}. feladat ({{ w.averagePercent }}%)
+            </span>
+          }
         </div>
 
         <!-- ── Leggyengébben teljesített feladatok ──
@@ -118,14 +126,14 @@ import {
         }
 
         <div class="card overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm border-collapse">
+        <div class="data-table-scroll">
+          <table class="data-table">
             <thead>
-              <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                <th class="py-3 px-4">Diák</th>
-                <th class="py-3 px-4">Összesen</th>
+              <tr>
+                <th class="sticky-col">Diák</th>
+                <th>Összesen</th>
                 @for (task of results.tasks; track task.taskId) {
-                  <th class="py-3 px-4 whitespace-nowrap"
+                  <th class="whitespace-nowrap"
                     [class.text-warning]="task.taskId === weakestTaskId()">
                     {{ task.taskOrder }}. {{ task.title }}
                   </th>
@@ -134,12 +142,11 @@ import {
             </thead>
             <tbody>
               @for (row of results.students; track row.userId) {
-                <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors"
-                  [class.opacity-50]="!row.hasSession && !row.hasPractice">
-                  <td class="py-2.5 px-4">
+                <tr [class.opacity-50]="!row.hasSession && !row.hasPractice">
+                  <td class="sticky-col whitespace-nowrap">
                     <a [routerLink]="['/diakok', row.userId]" class="text-primary hover:underline">{{ row.name }}</a>
                   </td>
-                  <td class="py-2.5 px-4">
+                  <td class="num whitespace-nowrap">
                     @if (row.hasSession) {
                       <span class="inline-flex items-center gap-1.5">
                         {{ row.totalEarnedPoints ?? '–' }} / {{ row.totalMaxPoints ?? '–' }}
@@ -162,7 +169,7 @@ import {
                     }
                   </td>
                   @for (cell of row.taskResults; track cell.taskId) {
-                    <td class="py-2.5 px-4">
+                    <td class="num">
                       <div class="flex flex-col items-start gap-1">
                       @if (cell.attemptId != null) {
                         <!-- Valódi <button>, nem (click) a <td>-n: billentyűzettel is
@@ -194,16 +201,30 @@ import {
                 </tr>
 
                 @if (openAttemptId() !== null && rowContainsOpenAttempt(row)) {
-                  <tr>
-                    <td [attr.colspan]="results.tasks.length + 2" class="px-4 pb-4">
+                  <tr class="detail-row">
+                    <td [attr.colspan]="results.tasks.length + 2" class="!px-4 !pb-4">
                       <app-attempt-review-panel [attemptId]="openAttemptId()!" [taskSetId]="taskSetId" (closed)="closeReview()" />
                     </td>
                   </tr>
                 }
               } @empty {
-                <tr><td [attr.colspan]="results.tasks.length + 2" class="py-6 px-4 text-text-muted text-center">Nincs elérhető diák.</td></tr>
+                <tr><td [attr.colspan]="results.tasks.length + 2" class="!py-6 text-text-muted text-center">Nincs elérhető diák.</td></tr>
               }
             </tbody>
+            <!-- Feladatonkénti átlag: ugyanazzal a nevező-szabállyal, mint a gyengepont-elemzés;
+                 értékelt beadás nélkül nincs lábléc (a „0%” hamis lenne). -->
+            @if (weakest().length > 0) {
+              <tfoot>
+                <tr data-testid="task-average-row">
+                  <td colspan="2">Feladatonkénti átlag</td>
+                  @for (avg of taskAverages(); track avg.taskId) {
+                    <td class="num" [class.text-warning]="avg.taskId === weakestTaskId()">
+                      {{ avg.percent ?? '–' }}{{ avg.percent != null ? '%' : '' }}
+                    </td>
+                  }
+                </tr>
+              </tfoot>
+            }
           </table>
         </div>
         </div>
@@ -256,6 +277,16 @@ export class FeladatsorEredmenyekComponent implements OnInit {
    * pont-felülbírálás mentése) után magától újraszámol.
    */
   readonly weakest = computed(() => weakestTasks(this.report.taskSetResults()));
+
+  /** Feladatonkénti átlag a mátrix láblécéhez (null = nincs értékelt beadás a feladatra). */
+  readonly taskAverages = computed(() => {
+    const results = this.report.taskSetResults();
+    if (!results) return [];
+    return results.tasks.map((task) => ({
+      taskId: task.taskId,
+      percent: computeTaskWeakness(task, results)?.averagePercent ?? null,
+    }));
+  });
 
   /** A leggyengébb feladat oszlopát halványan kiemeljük a mátrix fejlécében is. */
   readonly weakestTaskId = computed(() => this.weakest()[0]?.taskId ?? null);

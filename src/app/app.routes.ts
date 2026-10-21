@@ -3,6 +3,10 @@ import { authGuard } from './guards/auth.guard';
 import { guestGuard } from './guards/guest.guard';
 import { roleGuard } from './guards/role.guard';
 
+/**
+ * `data: { wide: true }` = teljes szélességű adatoldal (széles táblázat): az oldal `.page-wide`
+ * konténert használ, és az oldalsáv itt alapból összecsukva indul (AppSidebarComponent).
+ */
 export const routes: Routes = [
   {
     path: 'login',
@@ -83,6 +87,7 @@ export const routes: Routes = [
     // Próbaérettségi: a saját csoportok jelentkeztetése és áttekintése (a menüpont csak közzétett eseménynél látszik).
     path: 'probaerettsegi',
     canActivate: [authGuard, roleGuard('teacher')],
+    data: { wide: true },
     loadComponent: () =>
       import('./pages/probaerettsegi/probaerettsegi-page.component').then((m) => m.ProbaerettsegiPageComponent),
   },
@@ -90,6 +95,7 @@ export const routes: Routes = [
     // Dolgozat mód: a kiadott dolgozat élő áttekintője (a csoport "Kiadva" füléről / a feladatsor-szerkesztőből).
     path: 'dolgozatok/:assignmentId',
     canActivate: [authGuard, roleGuard('teacher')],
+    data: { wide: true },
     loadComponent: () =>
       import('./pages/dolgozatok/dolgozat-attekintes.component').then((m) => m.DolgozatAttekintesComponent),
   },
@@ -117,6 +123,7 @@ export const routes: Routes = [
       },
       {
         path: 'projektek/kiadas/:id',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/projekt-kiadas.component').then((m) => m.ProjektKiadasComponent),
         // El nem fogadott AI-javaslatok (csak a böngészőben élnek) elhagyás előtt megerősítést kérnek.
@@ -129,6 +136,7 @@ export const routes: Routes = [
       },
       {
         path: 'kvizek/:id/eredmenyek',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/kviz-eredmenyek.component').then((m) => m.KvizEredmenyekComponent),
       },
@@ -146,6 +154,7 @@ export const routes: Routes = [
       },
       {
         path: ':id/eredmenyek',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-eredmenyek.component').then((m) => m.FeladatsorEredmenyekComponent),
       },

@@ -21,7 +21,7 @@ import {
   standalone: true,
   imports: [RouterLink, DatePipe, DecimalPipe, LocalSpinnerComponent],
   template: `
-    <div class="max-w-6xl mx-auto px-4 py-6">
+    <div class="page-wide">
       @if (loading()) {
         <app-local-spinner />
       } @else if (event(); as ev) {
