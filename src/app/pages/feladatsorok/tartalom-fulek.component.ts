@@ -4,9 +4,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 /**
  * Fülsáv a tanári tartalom fajtái között (feladatsorok, kvízek, Projektműhely-projektek).
  *
- * Ez a komponens a fejléc-navigáció mérethatárának a következménye: a nav pontosan 6
- * linkre van méretezve (UI-TT-181/192/177), egy 7. "Kvízek" link visszanyitná a mért
- * túlcsordulást. A két tartalomtípus ezért egy oldalon, füleken osztozik.
+ * A bal oldali menüben mindhárom saját menüpontot kap; a fülsáv azért marad, mert a
+ * tartalom-oldalakon belül egy kattintással vált a rokon listák között (összecsukott
+ * ikonsávnál és mobilon, a drawer megnyitása nélkül is).
  *
  * A `routerLinkActive` a feladatsor-fülön `[routerLinkActiveOptions]="{ exact: true }"`-t
  * használ: enélkül a `/feladatsorok` prefix a `/feladatsorok/kvizek` útvonalon is aktívnak

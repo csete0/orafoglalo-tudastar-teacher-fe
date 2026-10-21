@@ -54,16 +54,16 @@ export class HeaderDropdownCoordinatorService {
     // KIZÁRÓLAG akkor sül el, ha egy MÁSIK bell-példány ténylegesen meghívja a
     // saját `open()`-jét - egy puszta viewport-váltás (kattintás NÉLKÜL), ami a
     // CSS-sel elrejtett, korábban nyitva hagyott példányt egyszerűen újra
-    // láthatóvá teszi, ezt sosem triggereli. Az `app.component.ts` a Tailwind
-    // `hidden md:flex`/`md:hidden flex` osztályokkal (768px, az alapértelmezett
-    // `md` breakpoint) dönt a desktop/mobil harang-wrapper láthatóságáról -
+    // láthatóvá teszi, ezt sosem triggereli. Az `app-sidebar.component.ts` a Tailwind
+    // `hidden lg:flex`/`lg:hidden` osztályokkal (1024px, az alapértelmezett
+    // `lg` breakpoint) dönt az oldalsáv/mobil harang láthatóságáról -
     // ugyanezt a breakpointot figyelve MINDEN átlépéskor bezárjuk az ÖSSZES
     // regisztrált bell-példányt, függetlenül attól, hívott-e bárki `open()`-t
     // közben. Ez a szolgáltatás `providedIn: 'root'`, egyetlen példánya él az
     // app teljes élettartama alatt - a listenernek nincs explicit leiratkozása,
     // ahogy a többi itteni állapotnak sincs.
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-      window.matchMedia('(min-width: 768px)').addEventListener('change', () => {
+      window.matchMedia('(min-width: 1024px)').addEventListener('change', () => {
         for (const onForceClose of this.bellCloseCallbacks.values()) onForceClose();
       });
     }

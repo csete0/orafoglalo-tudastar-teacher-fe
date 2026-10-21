@@ -102,16 +102,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsorok-lista.component').then((m) => m.FeladatsorokListaComponent),
       },
-      // A kvíz-útvonalak SZÁNDÉKOSAN a ':id/...' minták ELŐTT állnak, és szándékosan a
-      // 'feladatsorok' alatt: a fejléc-navigáció 6 linkre van méretezve
-      // (UI-TT-181/192/177), ezért a kvízkezelés nem kap külön menüpontot, hanem a
-      // Feladatsorok oldal fülén él.
+      // A kvíz-útvonalak SZÁNDÉKOSAN a ':id/...' minták ELŐTT állnak; a 'feladatsorok' alatt
+      // élnek, mert a Feladatsorok oldal fülsávja (TartalomFulekComponent) is ide visz.
       {
         path: 'kvizek',
         loadComponent: () =>
           import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
       },
-      // Projektműhely (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G): ugyanazért a fülsávban, mint a kvízek.
+      // Projektműhely (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G): a kvízekhez hasonlóan a fülsávban is.
       {
         path: 'projektek',
         loadComponent: () =>
@@ -166,8 +164,8 @@ export const routes: Routes = [
   // a backend repóban), és ez a route ugyanazokat a tanári kvíz-lista/-szerkesztő
   // komponenseket használja admin-scope-ban, nem saját admin/*.ts oldalt.
   // C5: platform-kvízek ("Hivatalos kvízek") - a tanári kvíz-lista és -szerkesztő
-  // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap fejléc-linket
-  // (6-linkes nav-korlát, ld. fent) - a belépési pont a vezérlőpult admin-kártyája.
+  // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap menüpontot -
+  // a belépési pont a vezérlőpult admin-kártyája.
   {
     path: 'admin/kvizek',
     canActivate: [authGuard, roleGuard('admin')],

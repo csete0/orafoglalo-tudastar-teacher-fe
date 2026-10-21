@@ -88,7 +88,7 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
         <!-- ── UI-UX-T8: ragadós szekció-navigáció - 10+ kérdésnél a lap hosszú,
              a lap alji Kiadás/Élő szekciók e nélkül "eltűnnek". A sorrend a
              munkafolyamatot követi: tartalom → publikálás → kiadás. -->
-        <nav class="sticky top-[57px] z-20 -mx-4 px-4 py-2 mb-6 flex gap-1 overflow-x-auto
+        <nav class="sticky top-14 lg:top-0 z-20 -mx-4 px-4 py-2 mb-6 flex gap-1 overflow-x-auto
                     bg-bg-panel/95 backdrop-blur border-b border-border-default text-sm"
              aria-label="Szekciók">
           @for (anchor of sectionAnchors; track anchor.id) {

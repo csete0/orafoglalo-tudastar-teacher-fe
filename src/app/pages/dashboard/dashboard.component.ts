@@ -42,8 +42,7 @@ const CARDS: DashboardCard[] = [
     accent: 'accent-2',
     tile: 'icon-tile-success',
   },
-  // UI-UX-T2: a Kvízek felület a 6-linkes nav-korlát miatt csak a Feladatsorok
-  // fülén él - a vezérlőpultról viszont közvetlenül elérhetőnek kell lennie.
+  // UI-UX-T2: a Kvízek felület a vezérlőpultról is közvetlenül elérhető.
   {
     path: '/feladatsorok/kvizek',
     title: 'Kvízeim',
@@ -54,8 +53,8 @@ const CARDS: DashboardCard[] = [
   },
 ];
 
-// C5: a platform-kvízek admin-oldala ugyanazon 6-linkes nav-korlát miatt nem kap
-// menüpontot, mint a Kvízeim - a vezérlőpult kártyája a belépési pont, csak platform-adminnak.
+// C5: a platform-kvízek admin-oldala nem kap menüpontot - a vezérlőpult kártyája a
+// belépési pont, csak platform-adminnak.
 // §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a kuponok/AI-költés admin-fe-be
 // költöztek - ez a kártya SZÁNDÉKOSAN maradt itt, mert az AdminQuizController (a mögötte
 // álló backend) egyelőre a publikus API-ban maradt (ld. AdminQuizController doc-kommentje
