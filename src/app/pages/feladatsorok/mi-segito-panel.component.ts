@@ -34,7 +34,7 @@ export function quotaState(quota: AiHelperQuotaItemDto | null | undefined, premi
   if (premium === false) return { usage: null, blocked: AI_HELPER_PREMIUM_TEXT };
   if (!quota) return { usage: null, blocked: null };
   return {
-    usage: `Havi keret: ${quota.used}/${quota.limit}`,
+    usage: `havi keret: ${quota.used}/${quota.limit}`,
     blocked: quota.used >= quota.limit ? AI_HELPER_QUOTA_EXHAUSTED_TEXT : null,
   };
 }
@@ -50,7 +50,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
 /**
  * A feladatsor-szerkesztő jobb oldali MI-segítő panelje: a meglévő MI-dialógusok egyetlen belépési pontja,
  * a meglévő keret-végpontok (ai-helpers, rubric, ai-code-task) számaival. A dialógusokat a szerkesztő hosztolja,
- * a panel csak jelez; a keretek a dialógusok bezárása után újratöltődnek.
+ * a panel csak jelez; a keretek a dialógusok bezárása után (és a szerkesztő `reload()` hívására) újratöltődnek.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,9 +62,12 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
   template: `
     <aside aria-labelledby="ai-panel-title" class="card !rounded-xl p-4 space-y-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
       data-testid="ai-panel">
-      <h2 id="ai-panel-title" class="font-bold flex items-center gap-2">
-        <app-icon name="sparkles" class="w-5 h-5 block text-primary" /> MI-segítő
-      </h2>
+      <div>
+        <h2 id="ai-panel-title" class="font-bold flex items-center gap-2">
+          <app-icon name="sparkles" class="w-5 h-5 block text-primary" /> MI-segítő
+        </h2>
+        <p class="text-xs text-text-muted mt-1">Minden MI-funkció egy helyen. A javaslatot mindig átnézheted, mielőtt mented.</p>
+      </div>
       @if (takedown()) {
         <p class="text-xs text-danger" data-testid="ai-panel-takedown">Visszavont feladatsoron az MI-segítségek nem használhatók.</p>
       }
@@ -82,7 +85,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
             [disabled]="takedown() || !selection() || !!rubric().blocked" (click)="rubricRequested.emit()" data-testid="ai-rubric-open">
             Szempontlista-vázlat
           </button>
-          <ng-container *ngTemplateOutlet="quotaLine; context: { $implicit: rubric(), id: 'rubric' }" />
+          <ng-container *ngTemplateOutlet="hint; context: { $implicit: rubric(), id: 'rubric', text: 'a feladatszövegből és a megoldásból' }" />
         </div>
 
         @if (selection()?.programming) {
@@ -91,15 +94,18 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
               [disabled]="takedown() || !!code().blocked" (click)="aiTaskRequested.emit('complete')" data-testid="ai-complete-open">
               Hiányzó részek pótlása
             </button>
-            <ng-container *ngTemplateOutlet="quotaLine; context: { $implicit: code(), id: 'complete' }" />
+            <ng-container *ngTemplateOutlet="hint; context: { $implicit: code(), id: 'complete', text: 'mintamegoldás, kódrészletek, bemenet' }" />
           </div>
         }
 
         @if (selection()?.sql) {
-          <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-            [disabled]="takedown()" (click)="sqlQueriesRequested.emit()" data-testid="sql-queries-open">
-            SQL megoldó lekérdezések
-          </button>
+          <div>
+            <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
+              [disabled]="takedown()" (click)="sqlQueriesRequested.emit()" data-testid="sql-queries-open">
+              SQL megoldó lekérdezések
+            </button>
+            <ng-container *ngTemplateOutlet="hint; context: { $implicit: null, id: 'sql-queries', text: 'részfeladatonként, SQLite-on futtatva' }" />
+          </div>
         }
       </section>
 
@@ -111,7 +117,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
             [disabled]="takedown() || !!code().blocked" (click)="aiTaskRequested.emit('new')" data-testid="ai-new-open">
             Új programozási feladat
           </button>
-          <ng-container *ngTemplateOutlet="quotaLine; context: { $implicit: code(), id: 'new' }" />
+          <ng-container *ngTemplateOutlet="hint; context: { $implicit: code(), id: 'new', text: 'mintamegoldással, lefuttatva' }" />
         </div>
 
         <div>
@@ -128,7 +134,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
               Megnyitás
             </button>
           </div>
-          <ng-container *ngTemplateOutlet="quotaLine; context: { $implicit: office(), id: 'office' }" />
+          <ng-container *ngTemplateOutlet="hint; context: { $implicit: office(), id: 'office', text: 'Excel, Word, PowerPoint, weblap, kép' }" />
         </div>
 
         <div>
@@ -136,24 +142,36 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
             [disabled]="takedown() || !!desktop().blocked" (click)="desktopTaskRequested.emit()" data-testid="desktop-task-open">
             Asztali feladatsor témából
           </button>
-          <ng-container *ngTemplateOutlet="quotaLine; context: { $implicit: desktop(), id: 'desktop' }" />
+          <ng-container *ngTemplateOutlet="hint; context: { $implicit: desktop(), id: 'desktop', text: 'WPF / WinForms' }" />
         </div>
 
-        <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-          [disabled]="takedown()" (click)="sqlFilesRequested.emit()" data-testid="ai-sql-files-open">
-          Hiányzó SQL-fájl elkészítése
-        </button>
+        @if (sqlAvailable()) {
+          <div>
+            <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
+              [disabled]="takedown()" (click)="sqlFilesRequested.emit()" data-testid="ai-sql-files-open">
+              Hiányzó SQL-fájl elkészítése
+            </button>
+            <ng-container *ngTemplateOutlet="hint; context: { $implicit: null, id: 'sql-files', text: 'create.sql ↔ create_lite.sql vagy az adatfájlokból' }" />
+          </div>
+        }
 
-        <a routerLink="/feladatsorok" [queryParams]="{ katalogus: 1 }" class="block text-sm text-primary hover:underline px-3"
-          data-testid="ai-catalog-link">Másolás a katalógusból</a>
+        <div>
+          <a routerLink="/feladatsorok" [queryParams]="{ katalogus: 1 }" class="block text-sm text-primary hover:underline px-3"
+            data-testid="ai-catalog-link">Másolás a katalógusból</a>
+          <ng-container *ngTemplateOutlet="hint; context: { $implicit: null, id: 'catalog', text: 'hivatalos sor piszkozatként' }" />
+        </div>
       </section>
     </aside>
 
-    <ng-template #quotaLine let-state let-id="id">
-      @if (state.blocked) {
+    <!-- Egy sor alatti rövid leírás, mellette a keret („leírás · havi keret: x/y”); tiltásnál az ok külön sorban. -->
+    <ng-template #hint let-state let-id="id" let-text="text">
+      <p class="text-xs text-text-muted mt-1 px-3" [attr.data-testid]="'ai-hint-' + id">
+        {{ text }}@if (state?.usage && !state?.blocked) {
+          · <span [attr.data-testid]="'ai-quota-' + id">{{ state.usage }}</span>
+        }
+      </p>
+      @if (state?.blocked) {
         <p class="text-xs text-danger mt-1 px-3" [attr.data-testid]="'ai-quota-blocked-' + id">{{ state.blocked }}</p>
-      } @else if (state.usage) {
-        <p class="text-xs text-text-muted mt-1 px-3" [attr.data-testid]="'ai-quota-' + id">{{ state.usage }}</p>
       }
     </ng-template>
   `,
@@ -165,6 +183,8 @@ export class MiSegitoPanelComponent {
 
   readonly takedown = input(false);
   readonly selection = input<MiSegitoSelection | null>(null);
+  /** Van-e SQL a feladatsorban (a szerkesztő `showSqlGeneration()`-je) - csak ekkor kínáljuk a hiányzó SQL-fájlt. */
+  readonly sqlAvailable = input(false);
   /** Nyitva van-e valamelyik MI-dialógus - bezáráskor a keretek újratöltődnek. */
   readonly dialogOpen = input(false);
 
@@ -193,12 +213,13 @@ export class MiSegitoPanelComponent {
     // Első futáskor (init) és minden dialógus-bezáráskor (true → false) egyszer töltjük a három keretet.
     effect(() => {
       const open = this.dialogOpen();
-      if (!open && this.lastDialogOpen !== false) this.loadQuotas();
+      if (!open && this.lastDialogOpen !== false) this.reload();
       this.lastDialogOpen = open;
     });
   }
 
-  private loadQuotas(): void {
+  /** A három keret újratöltése - a szerkesztő hívja a nem dialógusos MI-használat után is (inline szempontlista-vázlat). */
+  reload(): void {
     this.reportService.getAiHelperQuota().subscribe({ next: (q) => this.helperQuota.set(q), error: () => this.helperQuota.set(null) });
     this.rubricService.getRubricQuota().subscribe({ next: (q) => this.rubricQuota.set(q), error: () => this.rubricQuota.set(null) });
     this.aiCodeTaskService.getQuota().subscribe({ next: (q) => this.codeQuota.set(q), error: () => this.codeQuota.set(null) });

@@ -12,9 +12,18 @@ export interface FeladatVazlatSection {
   tasks: TeacherTaskDto[];
 }
 
-/** A részfeladatok pontösszege eltér a feladat pontszámától (vagy nincs részfeladat) - beadáskor ez számít. */
-export function hasPointMismatch(task: TeacherTaskDto): boolean {
-  return task.subTasks.length === 0 || task.subTasks.reduce((sum, s) => sum + (s.points ?? 0), 0) !== task.maxPoints;
+/** A részfeladatok pontösszege - beadáskor ez a feladat pontszáma (a `maxPoints` csak felső korlát). */
+export function allocatedPoints(task: TeacherTaskDto): number {
+  return task.subTasks.reduce((sum, s) => sum + (s.points ?? 0), 0);
+}
+
+/** Pontozási gond a vázlat pöttyéhez: nincs részfeladat (nem pontozható), vagy a pontösszeg eltér; `null` = rendben. */
+export function pointIssue(task: TeacherTaskDto): { label: string; title: string } | null {
+  if (task.subTasks.length === 0) return { label: 'Nincs részfeladat – nem pontozható', title: 'Nincs részfeladat – beadáskor nem pontozható' };
+  if (allocatedPoints(task) !== task.maxPoints) {
+    return { label: 'A részfeladatok pontjai eltérnek', title: 'A részfeladatok pontösszege eltér a feladat pontszámától' };
+  }
+  return null;
 }
 
 /**
@@ -55,9 +64,9 @@ export function hasPointMismatch(task: TeacherTaskDto): boolean {
                     [attr.data-testid]="'outline-task-' + task.id">
                     <span class="min-w-0 flex-1 truncate">{{ task.taskOrder }}. {{ task.title }}</span>
                     <span class="shrink-0 text-xs text-text-muted">{{ task.maxPoints }} p</span>
-                    @if (pointMismatch(task)) {
-                      <span class="w-2 h-2 rounded-full bg-warning shrink-0" role="img" aria-label="A részfeladatok pontjai eltérnek"
-                        title="A részfeladatok pontösszege eltér a feladat pontszámától" data-testid="outline-points-warning"></span>
+                    @if (pointIssue(task); as issue) {
+                      <span class="w-2 h-2 rounded-full bg-warning shrink-0" role="img" [attr.aria-label]="issue.label"
+                        [title]="issue.title" data-testid="outline-points-warning"></span>
                     }
                   </button>
                 </li>
@@ -84,5 +93,5 @@ export class FeladatVazlatComponent {
   /** Csak `xl` alatt számít (ott összecsukható blokk); alapból nyitva. */
   readonly open = signal(true);
 
-  readonly pointMismatch = hasPointMismatch;
+  readonly pointIssue = pointIssue;
 }

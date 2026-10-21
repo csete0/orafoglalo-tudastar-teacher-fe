@@ -42,6 +42,8 @@ describe('app.routes - teljes szélességű adatoldalak (data.wide)', () => {
     'feladatsorok/kvizek/:id/eredmenyek',
     'probaerettsegi',
     'feladatsorok/projektek/kiadas/:id',
+    // A háromhasábos szerkesztő is: az oldalsáv összecsukva indul.
+    'feladatsorok/:id/szerkesztes',
   ];
 
   it.each(widePaths)('"%s" teljes szélességű', (path) => {

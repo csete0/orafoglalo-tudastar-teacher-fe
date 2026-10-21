@@ -1,8 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { FeladatsorSzerkesztoComponent } from './feladatsor-szerkeszto.component';
+import { AutomatikusJavitasComponent } from './automatikus-javitas.component';
+import { MiSegitoPanelComponent } from './mi-segito-panel.component';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
@@ -207,7 +210,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
-    (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('[data-testid="ai-panel"] [data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
   });
@@ -224,7 +227,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('[data-testid="sql-files-warning-generate"]') as HTMLButtonElement).disabled).toBe(true);
-    expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
   describe('MI-segítő panel belépési pontjai', () => {
@@ -378,6 +381,16 @@ describe('FeladatsorSzerkesztoComponent', () => {
       }
     });
 
+    it('a szempontlista változásakor (inline MI-vázlat) a panel újratölti a kereteket', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.selectTask(2);
+      fixture.detectChanges();
+      const reload = vi.spyOn(fixture.debugElement.query(By.directive(MiSegitoPanelComponent)).componentInstance as MiSegitoPanelComponent, 'reload');
+      (fixture.debugElement.query(By.directive(AutomatikusJavitasComponent)).componentInstance as AutomatikusJavitasComponent).rubricChanged.emit();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
     it('visszavont (takedown) feladatsoron minden MI-gomb tiltott', () => {
       configure(makeDetail({ takedownAt: '2026-10-01T00:00:00Z', tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
@@ -423,7 +436,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     configure(makeDetail({ tasks: [], files: [] }));
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-entry"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]')).toBeNull();
   });
 
   // UI-TT-30: az "Összevont megoldás" mező a részfeladatonkénti kódrészletektől teljesen
@@ -2348,14 +2361,30 @@ describe('FeladatsorSzerkesztoComponent', () => {
       configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+      // Választás nélkül a panel gombja nem nyit, csak figyelmeztet.
+      const warning = vi.spyOn(TestBed.inject(ToastService), 'warning');
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(warning).toHaveBeenCalled();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
 
       fixture.componentInstance.schemaTaskChoice.set(7);
       fixture.detectChanges();
-      (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(7);
       expect(fixture.componentInstance.sqlGenerationFiles().map((f) => f.id)).toEqual(['a']);
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+    });
+
+    it('a vázlatban kijelölt SQL-feladattal a panel gombja annak a feladatnak nyitja a generátort', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.selectTask(8);
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(8);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
 

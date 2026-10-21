@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { TeacherTaskDto } from '../../models/teacher-content.model';
-import { FeladatVazlatComponent, FeladatVazlatSection, hasPointMismatch } from './feladat-vazlat.component';
+import { allocatedPoints, FeladatVazlatComponent, FeladatVazlatSection, pointIssue } from './feladat-vazlat.component';
 
 const task = (overrides: Partial<TeacherTaskDto> = {}): TeacherTaskDto => ({
   id: 1, title: 'Lekérdezések', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [],
@@ -27,7 +27,8 @@ describe('FeladatVazlatComponent', () => {
     expect(el.querySelector('[data-testid="outline-task-1"]')!.textContent).toContain('1. Lekérdezések');
     expect(el.querySelector('[data-testid="outline-task-1"]')!.textContent).toContain('10 p');
     expect(el.querySelector('[data-testid="outline-task-1"] [data-testid="outline-points-warning"]')).toBeNull();
-    expect(el.querySelector('[data-testid="outline-task-2"] [data-testid="outline-points-warning"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="outline-task-2"] [data-testid="outline-points-warning"]')!.getAttribute('aria-label'))
+      .toBe('A részfeladatok pontjai eltérnek');
     expect(el.querySelector('[data-testid="outline-section-0"]')!.textContent).toContain('Egyéb');
   });
 
@@ -61,9 +62,10 @@ describe('FeladatVazlatComponent', () => {
     expect(el.querySelector('#task-outline-list')!.classList).toContain('hidden');
   });
 
-  it('pont-eltérés: részfeladat nélkül vagy ha a részpontok összege eltér', () => {
-    expect(hasPointMismatch(task())).toBe(false);
-    expect(hasPointMismatch(task({ subTasks: [] }))).toBe(true);
-    expect(hasPointMismatch(task({ maxPoints: 12 }))).toBe(true);
+  it('pont-gond: részfeladat nélkül saját felirattal, eltérő részpont-összegnél az eltérés-felirattal', () => {
+    expect(allocatedPoints(task())).toBe(task().maxPoints);
+    expect(pointIssue(task())).toBeNull();
+    expect(pointIssue(task({ subTasks: [] }))!.label).toBe('Nincs részfeladat – nem pontozható');
+    expect(pointIssue(task({ maxPoints: 12 }))!.label).toBe('A részfeladatok pontjai eltérnek');
   });
 });

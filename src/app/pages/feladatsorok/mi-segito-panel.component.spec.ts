@@ -47,10 +47,13 @@ describe('MiSegitoPanelComponent', () => {
     expect(getRubricQuota).toHaveBeenCalledTimes(1);
     expect(getQuota).toHaveBeenCalledTimes(1);
 
-    expect(text(el, 'ai-quota-rubric')).toBe('Havi keret: 2/30');
-    expect(text(el, 'ai-quota-new')).toBe('Havi keret: 1/30');
-    expect(text(el, 'ai-quota-complete')).toBe('Havi keret: 1/30');
-    expect(text(el, 'ai-quota-office')).toBe('Havi keret: 3/20');
+    expect(text(el, 'ai-quota-rubric')).toBe('havi keret: 2/30');
+    expect(text(el, 'ai-quota-new')).toBe('havi keret: 1/30');
+    expect(text(el, 'ai-quota-complete')).toBe('havi keret: 1/30');
+    expect(text(el, 'ai-quota-office')).toBe('havi keret: 3/20');
+    // Leírás · keret, a terv szerint; elfogyott keretnél a leírás marad, a szám helyén az ok.
+    expect(text(el, 'ai-hint-rubric')!.replace(/\s+/g, ' ')).toBe('a feladatszövegből és a megoldásból · havi keret: 2/30');
+    expect(text(el, 'ai-hint-desktop')).toBe('WPF / WinForms');
     expect(text(el, 'ai-quota-blocked-desktop')).toBe(AI_HELPER_QUOTA_EXHAUSTED_TEXT);
     expect(button(el, 'desktop-task-open').disabled).toBe(true);
     expect(button(el, 'office-task-open').disabled).toBe(false);
@@ -87,7 +90,7 @@ describe('MiSegitoPanelComponent', () => {
   });
 
   it('SQL-feladat kijelölésekor a lekérdezés-segítség látszik; a gombok a megfelelő eseményt jelzik', () => {
-    const { fixture, el } = render({ selection: { label: '2. SQL', programming: false, sql: true } });
+    const { fixture, el } = render({ selection: { label: '2. SQL', programming: false, sql: true }, sqlAvailable: true });
     const events: string[] = [];
     const c = fixture.componentInstance;
     c.rubricRequested.subscribe(() => events.push('rubric'));
@@ -107,6 +110,22 @@ describe('MiSegitoPanelComponent', () => {
     expect(el.querySelector('[data-testid="ai-complete-open"]')).toBeNull();
   });
 
+  it('a hiányzó SQL-fájl sora csak SQL-es feladatsoron látszik', () => {
+    expect(render().el.querySelector('[data-testid="ai-sql-files-open"]')).toBeNull();
+    TestBed.resetTestingModule();
+    expect(render({ sqlAvailable: true }).el.querySelector('[data-testid="ai-sql-files-open"]')).not.toBeNull();
+  });
+
+  it('reload() (pl. inline szempontlista-vázlat után) újratölti a kereteket, és elfogyott keretnél tilt', () => {
+    const { fixture, el } = render({ selection: { label: '1. Prog', programming: true, sql: false } });
+    getRubricQuota.mockReturnValue(of({ used: 30, limit: 30, month: '2026-10' }));
+    fixture.componentInstance.reload();
+    fixture.detectChanges();
+    expect(getRubricQuota).toHaveBeenCalledTimes(2);
+    expect(button(el, 'ai-rubric-open').disabled).toBe(true);
+    expect(text(el, 'ai-quota-blocked-rubric')).toBe(AI_HELPER_QUOTA_EXHAUSTED_TEXT);
+  });
+
   it('dialógus bezárása után (true → false) újratölti a kereteket', () => {
     const { fixture } = render();
     fixture.componentRef.setInput('dialogOpen', true);
@@ -120,7 +139,7 @@ describe('MiSegitoPanelComponent', () => {
   });
 
   it('takedown alatt minden MI-gomb tiltott, a katalógus-link a ?katalogus=1-re mutat', () => {
-    const { el } = render({ takedown: true, selection: { label: '1. Prog', programming: true, sql: true } });
+    const { el } = render({ takedown: true, selection: { label: '1. Prog', programming: true, sql: true }, sqlAvailable: true });
     el.querySelectorAll('button').forEach((b) => expect(b.disabled, b.dataset['testid']).toBe(true));
     expect(el.querySelector('[data-testid="ai-panel-takedown"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="ai-catalog-link"]')!.getAttribute('href')).toBe('/feladatsorok?katalogus=1');

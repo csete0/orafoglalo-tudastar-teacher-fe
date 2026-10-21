@@ -148,7 +148,9 @@ export const routes: Routes = [
           import('./pages/feladatsorok/kahoot-host.component').then((m) => m.KahootHostComponent),
       },
       {
+        // Háromhasábos szerkesztő (vázlat · tartalom · MI-segítő): az oldalsáv összecsukva indul, hogy a középső hasáb elférjen.
         path: ':id/szerkesztes',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-szerkeszto.component').then((m) => m.FeladatsorSzerkesztoComponent),
       },

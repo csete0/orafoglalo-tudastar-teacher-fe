@@ -29,7 +29,7 @@ import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.u
 import { AiFeladatComponent } from './ai-feladat.component';
 import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
 import { AsztaliFeladatComponent } from './asztali-feladat.component';
-import { FeladatVazlatComponent, FeladatVazlatSection } from './feladat-vazlat.component';
+import { allocatedPoints, FeladatVazlatComponent, FeladatVazlatSection } from './feladat-vazlat.component';
 import { MiSegitoPanelComponent, MiSegitoSelection } from './mi-segito-panel.component';
 
 const LEVELS: { id: number; label: string }[] = [
@@ -329,7 +329,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                         <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
                           <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
                           <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
-                            (stdinRequested)="openRunInput(task.id)" />
+                            (stdinRequested)="openRunInput(task.id)" (rubricChanged)="aiPanel.reload()" />
                           <!-- SQL-feladat megoldó lekérdezései MI-vel: a MI-segítő panelről nyílik. -->
                           @if (sqlQueriesTaskId() === task.id) {
                             <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
@@ -620,25 +620,6 @@ type SnippetDraft = Record<number, Record<number, string>>;
             }
           </div>
 
-          <!-- Hiányzó create.sql / create_lite.sql: a meglévő párjából vagy az érettségi adatfájlokból (előnézet, majd mentés). -->
-          @if (showSqlGeneration()) {
-            <div class="mt-3 card !rounded-xl p-3 flex flex-wrap items-center justify-between gap-3" data-testid="sql-generation-entry">
-              <span class="flex items-start gap-2 text-sm text-text-muted min-w-0 flex-[1_1_16rem]">
-                <app-icon name="database" class="w-4 h-4 block shrink-0 mt-0.5" />
-                Csak a create.sql vagy csak a create_lite.sql van meg, esetleg csak az adatfájlok? A hiányzót elkészítjük, mentés előtt átnézheted.
-              </span>
-              @if (taskBoundSchema() && sqlTasks().length > 1) {
-                <select class="input !w-auto !px-2 !py-1 shrink-0" aria-label="Melyik feladathoz?" [ngModel]="schemaTaskId()"
-                  (ngModelChange)="schemaTaskChoice.set($event)" [ngModelOptions]="{ standalone: true }" data-testid="sql-generation-task">
-                  <option [ngValue]="null" disabled>Melyik feladathoz?</option>
-                  @for (t of sqlTasks(); track t.id) { <option [ngValue]="t.id">{{ t.taskOrder }}. {{ t.title }}</option> }
-                </select>
-              }
-              <button type="button" class="btn btn-primary shrink-0"
-                [disabled]="store.loading() || !!detail.takedownAt || (taskBoundSchema() && sqlTasks().length > 1 && schemaTaskId() === null)"
-                (click)="openSqlGeneration(null)" data-testid="sql-generation-open">Hiányzó SQL-fájl elkészítése</button>
-            </div>
-          }
           @if (sqlGenerationOpen()) {
             <app-sql-generalas [taskSetId]="detail.id" [files]="sqlGenerationFiles()" [taskId]="sqlGenerationTaskId()"
               (closed)="sqlGenerationOpen.set(false)" (saved)="store.loadDetail(detail.id)" />
@@ -815,9 +796,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
         </section>
         </div>
 
-        <app-mi-segito-panel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()"
+        <app-mi-segito-panel #aiPanel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()"
+          [sqlAvailable]="showSqlGeneration()"
           (rubricRequested)="openRubric()" (aiTaskRequested)="openAiTask($event, $event === 'complete' ? selectedTask() : null)"
-          (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(null)"
+          (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(panelSelection()?.sql ? expandedTaskId() : null)"
           (officeTaskRequested)="officeTaskDialog.set($event)" (desktopTaskRequested)="desktopTaskDialog.set(true)" />
         </div>
       </div>
@@ -1155,7 +1137,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     } else {
       const taskId = contextTaskId ?? this.schemaTaskId();
       if (taskId === null) {
-        this.toastService.warning('Ebben a feladatsorban feladatonként külön séma van - előbb válaszd ki a Fájlok résznél, melyik feladathoz készüljön.');
+        this.toastService.warning('Ebben a feladatsorban feladatonként külön séma van - előbb jelöld ki az SQL-feladatot a vázlatban, vagy válaszd ki a Fájlok résznél, melyik feladathoz készüljön.');
         return;
       }
       this.sqlGenerationTaskId.set(taskId);
@@ -1583,12 +1565,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.store.deleteTask(taskSetId, taskId, () => this.toastService.success('Feladat törölve.'));
   }
 
+  readonly allocatedPoints = allocatedPoints;
+
   /** Lazy-létrehozott, task.id-vel kulcsolt draft — így a "Új részfeladat szövege" mező
    *  sosem "szivárog át" egy másik feladatra task-váltáskor (UI-TT-66). */
-  allocatedPoints(task: TeacherTaskDto): number {
-    return task.subTasks.reduce((sum, s) => sum + (s.points ?? 0), 0);
-  }
-
   newSolutionDraft(taskId: number): { description: string; points: number } {
     return (this.newSolutionDrafts[taskId] ??= { description: '', points: 5 });
   }
