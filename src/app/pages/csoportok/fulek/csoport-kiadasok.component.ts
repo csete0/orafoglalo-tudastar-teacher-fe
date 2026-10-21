@@ -37,7 +37,7 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
       } @else {
         <ul class="space-y-2 mb-6">
           @for (assignment of groupAssignments(); track assignment.assignmentId) {
-            <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+            <li class="card !rounded-xl px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
               <div class="min-w-0 flex-1">
                 <p class="font-medium truncate">{{ assignment.quizTitle }}</p>
                 <p class="text-xs text-text-muted">
@@ -85,7 +85,7 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
       } @else {
         <ul class="space-y-2">
           @for (a of groupTaskSetAssignments(); track a.assignmentId) {
-            <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+            <li class="card !rounded-xl px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
               <div class="min-w-0 flex-1">
                 <p class="font-medium truncate">
                   {{ a.taskSetTitle }}
@@ -124,7 +124,7 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
       }
       <ul class="space-y-2" data-testid="group-project-assignments">
         @for (p of projectAssignments(); track p.id) {
-          <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
+          <li class="card !rounded-xl px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
             <div class="min-w-0 flex-1">
               <p class="font-semibold">{{ p.projectTitle }}
                 @if (p.isTest) { <span class="badge badge-warning ml-1">Dolgozat</span> }

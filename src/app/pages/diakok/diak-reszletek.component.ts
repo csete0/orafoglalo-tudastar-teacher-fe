@@ -55,27 +55,27 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
 
         <h2 class="font-bold mb-3">Legutóbbi vizsgák</h2>
         <div class="card overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+        <div class="data-table-scroll">
+          <table class="data-table">
             <thead>
-              <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                <th class="py-3 px-4">Feladatsor</th>
-                <th class="py-3 px-4">Dátum</th>
-                <th class="py-3 px-4">Eredmény</th>
+              <tr>
+                <th>Feladatsor</th>
+                <th>Dátum</th>
+                <th class="text-right">Eredmény</th>
               </tr>
             </thead>
             <tbody>
               @for (exam of detail.recentExams; track exam.sessionId) {
-                <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                  <td class="py-2.5 px-4">{{ exam.taskSetTitle }}</td>
+                <tr>
+                  <td>{{ exam.taskSetTitle }}</td>
                   <!-- BE-STUDENTACTIVITY-FILTER-DISPLAY-DATE-MISMATCH: az "Egyéni időszak"
                        szűrő a befejezés (submittedAt) idejére szűr - a kijelzett dátumnak
                        ezzel kell egyeznie, különben egy hosszan elhúzódó session a kért
                        tartományon messze kívül eső dátummal jelenne meg. submittedAt csak
                        befejezetlen (folyamatban lévő) sessionnél lehetne null - ilyenkor
                        startedAt-ra esik vissza. -->
-                  <td class="py-2.5 px-4">{{ (exam.submittedAt ?? exam.startedAt) | date: 'yyyy.MM.dd' }}</td>
-                  <td class="py-2.5 px-4">
+                  <td class="num whitespace-nowrap">{{ (exam.submittedAt ?? exam.startedAt) | date: 'yyyy.MM.dd' }}</td>
+                  <td class="num text-right whitespace-nowrap">
                     @if (exam.isCompleted) {
                       <!-- UI-TT-37 (mis-triage correction): a százalékjel korábban a
                            nullish-coalescing fallback-jén KÍVÜL volt - egy befejezett,
@@ -88,7 +88,7 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
                   </td>
                 </tr>
               } @empty {
-                <tr><td colspan="3" class="py-6 px-4 text-text-muted text-center">Nincs vizsga-előzmény.</td></tr>
+                <tr><td colspan="3" class="!py-6 text-text-muted text-center">Nincs vizsga-előzmény.</td></tr>
               }
             </tbody>
           </table>
@@ -100,19 +100,19 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
              előzmény-szinten is megérdemli a választ. -->
         <h2 class="font-bold mb-3 mt-8">Legutóbbi kvízek</h2>
         <div class="card overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+        <div class="data-table-scroll">
+          <table class="data-table">
             <thead>
-              <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                <th class="py-3 px-4">Kvíz / témák</th>
-                <th class="py-3 px-4">Dátum</th>
-                <th class="py-3 px-4">Eredmény</th>
+              <tr>
+                <th>Kvíz / témák</th>
+                <th>Dátum</th>
+                <th class="text-right">Eredmény</th>
               </tr>
             </thead>
             <tbody>
               @for (quiz of detail.recentQuizzes; track quiz.sessionId) {
-                <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                  <td class="py-2.5 px-4">
+                <tr>
+                  <td>
                     <span class="flex items-center gap-2 flex-wrap">
                       {{ quiz.quizTitle ?? quiz.topics.join(', ') }}
                       @if (quiz.mode === 'live') {
@@ -121,8 +121,8 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
                       }
                     </span>
                   </td>
-                  <td class="py-2.5 px-4">{{ quiz.completedAt | date: 'yyyy.MM.dd' }}</td>
-                  <td class="py-2.5 px-4">
+                  <td class="num whitespace-nowrap">{{ quiz.completedAt | date: 'yyyy.MM.dd' }}</td>
+                  <td class="num text-right whitespace-nowrap">
                     {{ quiz.correctAnswers }} / {{ quiz.totalQuestions }} ({{ quiz.successRate }}%)
                     @if (quiz.mode === 'live' && quiz.totalPoints > 0) {
                       <span class="text-text-muted">· ⚡ {{ quiz.totalPoints }} pont</span>
@@ -130,7 +130,7 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
                   </td>
                 </tr>
               } @empty {
-                <tr><td colspan="3" class="py-6 px-4 text-text-muted text-center">Nincs kvíz-előzmény.</td></tr>
+                <tr><td colspan="3" class="!py-6 text-text-muted text-center">Nincs kvíz-előzmény.</td></tr>
               }
             </tbody>
           </table>
@@ -143,28 +143,28 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
           <h2 class="font-bold mb-1 mt-8">Gyakorló értékelések</h2>
           <p class="text-xs text-text-muted mb-3">Gyakorlás közben kért MI-értékelések – nem vizsgaeredmények.</p>
           <div class="card overflow-hidden" data-testid="practice-grades">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+          <div class="data-table-scroll">
+            <table class="data-table">
               <thead>
-                <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                  <th class="py-3 px-4">Feladat</th>
-                  <th class="py-3 px-4">Pont</th>
-                  <th class="py-3 px-4">Dátum</th>
-                  <th class="py-3 px-4">Javulás</th>
+                <tr>
+                  <th>Feladat</th>
+                  <th class="text-right">Pont</th>
+                  <th>Dátum</th>
+                  <th class="text-right">Javulás</th>
                 </tr>
               </thead>
               <tbody>
                 @for (grade of grades; track $index) {
-                  <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                    <td class="py-2.5 px-4">
+                  <tr>
+                    <td>
                       {{ grade.taskTitle }}
                       <span class="block text-xs text-text-muted">{{ grade.taskSetTitle }}</span>
                     </td>
-                    <td class="py-2.5 px-4 tabular-nums whitespace-nowrap">
+                    <td class="num text-right whitespace-nowrap">
                       {{ grade.points != null && grade.max != null ? grade.points + ' / ' + grade.max : '–' }}
                     </td>
-                    <td class="py-2.5 px-4 whitespace-nowrap">{{ grade.createdAt | date: 'yyyy.MM.dd' }}</td>
-                    <td class="py-2.5 px-4 tabular-nums whitespace-nowrap">
+                    <td class="num whitespace-nowrap">{{ grade.createdAt | date: 'yyyy.MM.dd' }}</td>
+                    <td class="num text-right whitespace-nowrap">
                       @if (improvement(grade); as change) {
                         <span [class.text-success]="change.delta > 0" [class.text-danger]="change.delta < 0">{{ change.label }}</span>
                       } @else {

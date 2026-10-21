@@ -34,25 +34,25 @@ import {
         </p>
 
         <div class="card overflow-hidden mb-6">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+          <div class="data-table-scroll">
+            <table class="data-table">
               <thead>
-                <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                  <th class="py-3 px-4">Csoport</th>
-                  <th class="py-3 px-4">Tagok</th>
-                  <th class="py-3 px-4">Alapszint</th>
-                  <th class="py-3 px-4">Jelentkezett</th>
-                  <th class="py-3 px-4"></th>
+                <tr>
+                  <th class="sticky-col">Csoport</th>
+                  <th class="text-right">Tagok</th>
+                  <th>Alapszint</th>
+                  <th class="text-right">Jelentkezett</th>
+                  <th><span class="sr-only">Műveletek</span></th>
                 </tr>
               </thead>
               <tbody>
                 @for (g of ev.groups; track g.groupId) {
-                  <tr class="border-b border-border-default last:border-b-0" data-testid="mock-group-row">
-                    <td class="py-2.5 px-4">
+                  <tr data-testid="mock-group-row">
+                    <td class="sticky-col whitespace-nowrap">
                       <a [routerLink]="['/csoportok', g.groupId]" class="text-primary hover:underline">{{ g.name }}</a>
                       @if (g.registered) { <span class="badge badge-success ml-2">jelentkeztetve</span> }
                     </td>
-                    <td class="py-2.5 px-4 tabular-nums">
+                    <td class="num text-right whitespace-nowrap">
                       {{ g.memberCount }}
                       @if (g.unconfirmedMembers) {
                         <span class="badge badge-warning ml-1" title="Megerősítetlen e-mail-címmel nem indíthatnak, amíg meg nem erősítik">
@@ -60,15 +60,15 @@ import {
                         </span>
                       }
                     </td>
-                    <td class="py-2.5 px-4">
+                    <td>
                       <select class="input !py-1" [attr.aria-label]="g.name + ' alapszintje'" [value]="levelOf(g)"
                               [disabled]="!ev.registrationOpen" (change)="setLevel(g, $any($event.target).value)">
                         <option value="kozep">közép</option>
                         <option value="emelt">emelt</option>
                       </select>
                     </td>
-                    <td class="py-2.5 px-4 tabular-nums">{{ g.registeredMembers }} / {{ g.memberCount }}</td>
-                    <td class="py-2.5 px-4 whitespace-nowrap text-right">
+                    <td class="num text-right">{{ g.registeredMembers }} / {{ g.memberCount }}</td>
+                    <td class="whitespace-nowrap text-right">
                       @if (ev.registrationOpen) {
                         <button type="button" class="btn btn-primary !py-1" [disabled]="busy()" (click)="register(ev, g)">
                           {{ g.registered ? 'Szint mentése' : 'Jelentkeztetés' }}
@@ -85,7 +85,7 @@ import {
                     </td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="5" class="py-6 px-4 text-text-muted">Még nincs csoportod. <a routerLink="/csoportok" class="text-primary hover:underline">Csoport létrehozása</a></td></tr>
+                  <tr><td colspan="5" class="!py-6 text-text-muted">Még nincs csoportod. <a routerLink="/csoportok" class="text-primary hover:underline">Csoport létrehozása</a></td></tr>
                 }
               </tbody>
             </table>
@@ -109,35 +109,35 @@ import {
             } @else {
               <p class="text-sm text-text-muted mb-3">A közzétételig csak az látszik, ki kezdte el és ki adta be - pontszám nincs.</p>
             }
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm border-collapse">
+            <div class="data-table-scroll">
+              <table class="data-table">
                 <thead>
-                  <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                    <th class="py-2 px-3">Diák</th><th class="py-2 px-3">Szint</th><th class="py-2 px-3">Állapot</th>
+                  <tr>
+                    <th class="sticky-col">Diák</th><th>Szint</th><th>Állapot</th>
                     @if (r.resultsPublished) {
-                      <th class="py-2 px-3">Pont</th><th class="py-2 px-3">%</th><th class="py-2 px-3">Jegy</th><th class="py-2 px-3">Hely</th>
-                      <th class="py-2 px-3">Percentilis</th><th class="py-2 px-3">Fül / beill.</th>
+                      <th class="text-right">Pont</th><th class="text-right">%</th><th class="text-right">Jegy</th><th class="text-right">Hely</th>
+                      <th class="text-right">Percentilis</th><th class="text-right">Fül / beill.</th>
                     }
                   </tr>
                 </thead>
                 <tbody>
                   @for (m of r.members; track m.userId) {
-                    <tr class="border-b border-border-default last:border-b-0" [class.opacity-60]="m.status === 'notRegistered' || m.status === 'notStarted'">
-                      <td class="py-2 px-3 whitespace-nowrap">
+                    <tr [class.opacity-60]="m.status === 'notRegistered' || m.status === 'notStarted'">
+                      <td class="sticky-col whitespace-nowrap">
                         {{ m.name }}
                         @if (!m.emailConfirmed) {
                           <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Nem indíthat, amíg meg nem erősíti az e-mail-címét">megerősítetlen e-mail</span>
                         }
                       </td>
-                      <td class="py-2 px-3">{{ m.level ? levelLabel[m.level] : '–' }}</td>
-                      <td class="py-2 px-3 whitespace-nowrap">{{ statusLabel[m.status] }}</td>
+                      <td>{{ m.level ? levelLabel[m.level] : '–' }}</td>
+                      <td class="whitespace-nowrap">{{ statusLabel[m.status] }}</td>
                       @if (r.resultsPublished) {
-                        <td class="py-2 px-3 tabular-nums whitespace-nowrap" [title]="taskTitle(m)">{{ m.points != null ? m.points + ' / ' + m.maxPoints : '–' }}</td>
-                        <td class="py-2 px-3 tabular-nums">{{ m.percent != null ? (m.percent | number: '1.0-1') + '%' : '–' }}</td>
-                        <td class="py-2 px-3 tabular-nums">{{ m.grade ?? '–' }}</td>
-                        <td class="py-2 px-3 tabular-nums">{{ m.rank ?? '–' }}</td>
-                        <td class="py-2 px-3 tabular-nums">{{ m.percentile != null ? m.percentile + '%' : '–' }}</td>
-                        <td class="py-2 px-3 tabular-nums">{{ m.focusLossCount ?? '–' }} / {{ m.pasteCount ?? '–' }}</td>
+                        <td class="num text-right whitespace-nowrap" [title]="taskTitle(m)">{{ m.points != null ? m.points + ' / ' + m.maxPoints : '–' }}</td>
+                        <td class="num text-right">{{ m.percent != null ? (m.percent | number: '1.0-1') + '%' : '–' }}</td>
+                        <td class="num text-right">{{ m.grade ?? '–' }}</td>
+                        <td class="num text-right">{{ m.rank ?? '–' }}</td>
+                        <td class="num text-right">{{ m.percentile != null ? m.percentile + '%' : '–' }}</td>
+                        <td class="num text-right">{{ m.focusLossCount ?? '–' }} / {{ m.pasteCount ?? '–' }}</td>
                       }
                     </tr>
                   }

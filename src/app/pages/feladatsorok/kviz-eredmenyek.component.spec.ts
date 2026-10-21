@@ -180,3 +180,72 @@ describe('KvizEredmenyekComponent - "Diákonként" lista élő/önálló pontsz�
     expect(fixture.nativeElement.querySelector('.badge-primary')).toBeTruthy();
   });
 });
+
+// 5. feladat (kompakt táblák): a „Diákonként” lista rendezhető fejlécű .data-table lett -
+// a régi legördülő három rendezése (név / legjobb arány / utolsó kitöltés) fejlécre költözött.
+describe('KvizEredmenyekComponent - „Diákonként” rendezhető tábla', () => {
+  function configure(students: TeacherQuizStudentResultDto[]) {
+    TestBed.configureTestingModule({
+      imports: [KvizEredmenyekComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } },
+        },
+        { provide: TeacherQuizService, useValue: { getResults: () => of(makeResults({ students })) } },
+        { provide: KahootHostService, useValue: { getGames: () => of([]) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(KvizEredmenyekComponent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const names = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('table.data-table tbody td.sticky-col')).map((td) => td.textContent!.trim());
+
+  const students = [
+    makeStudent({ userId: 1, name: 'Cecil', bestScore: 4, totalQuestions: 8, lastCompletedAt: '2026-10-01T10:00:00Z' }),
+    makeStudent({ userId: 2, name: 'Anna', bestScore: null, attemptCount: 0, lastCompletedAt: null }),
+    makeStudent({ userId: 3, name: 'Béla', bestScore: 3, totalQuestions: 3, lastCompletedAt: '2026-10-05T10:00:00Z' }),
+    makeStudent({ userId: 4, name: 'Dóra', bestScore: 4, totalQuestions: 8, lastCompletedAt: '2026-09-01T10:00:00Z' }),
+  ];
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('alapból név szerint növekvő, a Diák fejléc aria-sort="ascending"', () => {
+    const fixture = configure(students);
+    const el: HTMLElement = fixture.nativeElement;
+    expect(names(el)).toEqual(['Anna', 'Béla', 'Cecil', 'Dóra']);
+    expect(el.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('ascending');
+  });
+
+  it('a Legjobb eredmény fejléc arány szerint csökkenőre rendez, holtversenyben név szerint, a nem próbálkozó a végén', () => {
+    const fixture = configure(students);
+    const el: HTMLElement = fixture.nativeElement;
+    const scoreButton = Array.from(el.querySelectorAll<HTMLButtonElement>('th button'))
+      .find((b) => b.textContent!.includes('Legjobb eredmény'))!;
+    scoreButton.click();
+    fixture.detectChanges();
+    expect(names(el)).toEqual(['Béla', 'Cecil', 'Dóra', 'Anna']);
+    expect(scoreButton.closest('th')!.getAttribute('aria-sort')).toBe('descending');
+    expect(el.querySelectorAll('th[aria-sort]').length).toBe(1);
+  });
+
+  it('az Utolsó kitöltés fejléc a legfrissebbel kezd, kitöltés nélküli a végén', () => {
+    const fixture = configure(students);
+    const el: HTMLElement = fixture.nativeElement;
+    Array.from(el.querySelectorAll<HTMLButtonElement>('th button'))
+      .find((b) => b.textContent!.includes('Utolsó kitöltés'))!.click();
+    fixture.detectChanges();
+    expect(names(el)).toEqual(['Béla', 'Cecil', 'Dóra', 'Anna']);
+  });
+
+  it('üres listánál egy teljes szélességű üzenet-sor', () => {
+    const fixture = configure([]);
+    const cell: HTMLTableCellElement = fixture.nativeElement.querySelector('table.data-table tbody td');
+    expect(cell.colSpan).toBe(6);
+    expect(cell.textContent).toContain('Még nincs kinek eredményt mutatni.');
+  });
+});

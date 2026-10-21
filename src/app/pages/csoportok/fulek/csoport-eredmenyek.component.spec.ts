@@ -73,10 +73,10 @@ describe('CsoportEredmenyekComponent', () => {
     expect(el.textContent).not.toContain('Nincs adat.');
   });
 
-  // UI-TT-54: a táblázat wrapperje vízszintesen görgethető.
-  it('UI-TT-54: az összesítő tábla wrapperje overflow-x-auto', () => {
+  // UI-TT-54: a táblázat wrapperje vízszintesen görgethető (.data-table-scroll = overflow-auto).
+  it('UI-TT-54: az összesítő tábla görgethető .data-table-scroll-ban van', () => {
     const { el } = setup();
-    expect(el.querySelector('table')!.closest('.overflow-x-auto')).not.toBeNull();
+    expect(el.querySelector('table.data-table')!.closest('.data-table-scroll')).not.toBeNull();
   });
 
   it('gyenge téma nélkül csak egy üres állapot látszik (nincs összefoglaló, nincs külön lista-címsor)', () => {

@@ -10,10 +10,10 @@ import {
   TeacherQuizQuestionStatDto,
   TeacherQuizResultsDto,
 } from '../../models/teacher-quiz.model';
-import { FormsModule } from '@angular/forms';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
+import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 
 /**
  * Egy kiadott kvíz eredményei.
@@ -31,7 +31,7 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-eredmenyek',
   standalone: true,
-  imports: [RouterLink, DatePipe, FormsModule],
+  imports: [RouterLink, DatePipe, SortHeaderComponent],
   template: `
     <div class="page-wide">
       <a [routerLink]="['/feladatsorok', 'kvizek', quizId, 'szerkesztes']"
@@ -176,72 +176,81 @@ import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.ser
           </ul>
         </section>
 
-        <!-- Diákonként -->
-        <section class="card p-5">
-          <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
-            <h2 class="font-bold">Diákonként</h2>
-            <!-- UI-UX-T5: 25+ fős osztálynál a "ki a leggyengébb" kérdésre ne
-                 szemmel-kereséssel jöjjön a válasz. -->
-            <select [ngModel]="studentSort()" (ngModelChange)="studentSort.set($event)"
-              class="input !w-auto !py-1 !text-sm" aria-label="Diák-lista rendezése">
-              <option value="name">Név szerint</option>
-              <option value="score">Legjobb eredmény szerint</option>
-              <option value="last">Utolsó kitöltés szerint</option>
-            </select>
-          </div>
-
-          <ul class="space-y-2">
-            @for (s of sortedStudents(r); track s.userId) {
-              <li class="flex items-center gap-3 text-sm border-b border-border pb-2 last:border-0">
-                <span class="min-w-0 flex-1">
-                  <span class="block font-medium truncate">{{ s.name }}</span>
-                  <span class="text-xs text-text-muted">
-                    {{ s.groupName }}
-                    @if (s.lastCompletedAt) {
-                      · {{ s.lastCompletedAt | date: 'yyyy.MM.dd. HH:mm' }}
-                    }
-                    @if (s.attemptCount > 1) {
-                      · {{ s.attemptCount }} kitöltés
-                    }
-                    @if (s.liveAttemptCount > 0 && s.attemptCount !== s.liveAttemptCount) {
-                      · ebből {{ s.liveAttemptCount }} élő
-                    }
-                    <!-- UI-TT-223: a "⚡ N pont" csak akkor mehet EBBE a sorba, ha a kiírt
-                         fő arány (bestScore / totalQuestions) UGYANABBÓL az élő session-ből
-                         jön (bestScoreMode === 'live') - máskülönben egy sosem megtörtént
-                         kombinációt (idegen session arányát idegen session pontjával)
-                         sugallna. Ha a legjobb élő próbálkozás nem a legjobb arányú, külön,
-                         egyértelműen jelölt sorban jelenik meg (ld. lent). -->
-                    @if (s.bestScoreMode === 'live' && s.bestLivePoints != null) {
-                      · ⚡ {{ s.bestLivePoints }} pont
-                    }
-                  </span>
-                  @if (s.bestScoreMode !== 'live' && s.bestLivePoints != null) {
-                    <span class="block text-xs text-text-muted">
-                      Legjobb élő menet: {{ s.bestLiveCorrectAnswers }} / {{ s.bestLiveTotalQuestions }}
-                      · ⚡ {{ s.bestLivePoints }} pont
-                    </span>
+        <!-- Diákonként: kompakt, oszloponként rendezhető tábla (UI-UX-T5: 25+ fős osztálynál a
+             "ki a leggyengébb" kérdésre ne szemmel-kereséssel jöjjön a válasz). -->
+        <section aria-labelledby="diakonkent">
+          <h2 id="diakonkent" class="font-bold mb-3">Diákonként</h2>
+          <div class="card overflow-hidden">
+            <div class="data-table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="sticky-col" [attr.aria-sort]="ariaSort('name')">
+                      <app-sort-header key="name" [state]="studentSort()" (sortChange)="studentSort.set($event)">Diák</app-sort-header>
+                    </th>
+                    <th [attr.aria-sort]="ariaSort('group')">
+                      <app-sort-header key="group" [state]="studentSort()" (sortChange)="studentSort.set($event)">Csoport</app-sort-header>
+                    </th>
+                    <th [attr.aria-sort]="ariaSort('last')">
+                      <app-sort-header key="last" [state]="studentSort()" (sortChange)="studentSort.set($event)">Utolsó kitöltés</app-sort-header>
+                    </th>
+                    <th class="text-right" [attr.aria-sort]="ariaSort('attempts')">
+                      <app-sort-header key="attempts" [state]="studentSort()" (sortChange)="studentSort.set($event)">Kitöltés</app-sort-header>
+                    </th>
+                    <th class="text-right" [attr.aria-sort]="ariaSort('score')">
+                      <app-sort-header key="score" [state]="studentSort()" (sortChange)="studentSort.set($event)">Legjobb eredmény</app-sort-header>
+                    </th>
+                    <th>Jelzés</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (s of sortedStudents(); track s.userId) {
+                    <tr>
+                      <td class="sticky-col whitespace-nowrap font-medium">{{ s.name }}</td>
+                      <td class="text-text-muted">{{ s.groupName }}</td>
+                      <td class="num whitespace-nowrap">{{ s.lastCompletedAt ? (s.lastCompletedAt | date: 'yyyy.MM.dd. HH:mm') : '–' }}</td>
+                      <td class="num text-right whitespace-nowrap">
+                        {{ s.attemptCount }}
+                        @if (s.liveAttemptCount > 0 && s.attemptCount !== s.liveAttemptCount) {
+                          <span class="text-text-muted">(ebből {{ s.liveAttemptCount }} élő)</span>
+                        }
+                      </td>
+                      <td class="num text-right whitespace-nowrap">
+                        <strong>{{ s.bestScore != null ? s.bestScore + ' / ' + s.totalQuestions : '–' }}</strong>
+                        <!-- UI-TT-223: a "⚡ N pont" csak akkor mehet a fő arány mellé, ha az
+                             UGYANABBÓL az élő session-ből jön (bestScoreMode === 'live') - máskülönben
+                             egy sosem megtörtént kombinációt sugallna. Ha a legjobb élő próbálkozás
+                             nem a legjobb arányú, külön, egyértelműen jelölt sorban jelenik meg. -->
+                        @if (s.bestScoreMode === 'live' && s.bestLivePoints != null) {
+                          <span class="text-text-muted"> · ⚡ {{ s.bestLivePoints }} pont</span>
+                        }
+                        @if (s.bestScoreMode !== 'live' && s.bestLivePoints != null) {
+                          <span class="block text-xs text-text-muted">
+                            Legjobb élő menet: {{ s.bestLiveCorrectAnswers }} / {{ s.bestLiveTotalQuestions }}
+                            · ⚡ {{ s.bestLivePoints }} pont
+                          </span>
+                        }
+                      </td>
+                      <td class="whitespace-nowrap">
+                        @if (s.bestScoreMode === 'live') {
+                          <span class="badge badge-primary"
+                                title="A beszámított legjobb eredmény élő játékból származik">Élő</span>
+                        }
+                        @if (s.completedLate) {
+                          <span class="badge badge-warning">Késett</span>
+                        }
+                        @if (s.hasInProgress) {
+                          <span class="badge">Folyamatban</span>
+                        }
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="6" class="!py-6 text-text-muted text-center">Még nincs kinek eredményt mutatni.</td></tr>
                   }
-                </span>
-
-                @if (s.bestScoreMode === 'live') {
-                  <span class="badge badge-primary shrink-0"
-                        title="A beszámított legjobb eredmény élő játékból származik">Élő</span>
-                }
-                @if (s.completedLate) {
-                  <span class="badge badge-warning shrink-0">Késett</span>
-                }
-                @if (s.hasInProgress) {
-                  <span class="badge shrink-0">Folyamatban</span>
-                }
-                <span class="shrink-0 font-bold">
-                  {{ s.bestScore != null ? s.bestScore + ' / ' + s.totalQuestions : '–' }}
-                </span>
-              </li>
-            } @empty {
-              <li class="text-sm text-text-muted">Még nincs kinek eredményt mutatni.</li>
-            }
-          </ul>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
       } @else {
         <div class="space-y-2 mt-6">
@@ -313,31 +322,27 @@ export class KvizEredmenyekComponent {
     ),
   );
 
-  readonly studentSort = signal<'name' | 'score' | 'last'>('name');
+  readonly studentSort = signal<SortState | null>({ key: 'name', dir: 'asc' });
 
   /**
    * UI-UX-T5: kliens-oldali rendezés - az adat már mind itt van. A "legjobb eredmény"
    * arány szerint rendez (a nyers pont két eltérő kérdésszámú kvíz-változat között
-   * hazudna), a még nem próbálkozók (null) mindig a lista végére kerülnek.
+   * hazudna); a még nem próbálkozók (null) mindig a lista végére kerülnek. Az előzetes
+   * név szerinti rendezés (stabil sort) adja az egyenlő értékek sorrendjét.
    */
-  sortedStudents(r: TeacherQuizResultsDto): TeacherQuizResultsDto['students'] {
-    const students = [...r.students];
-    switch (this.studentSort()) {
-      case 'score':
-        return students.sort((a, b) => {
-          const ratio = (x: (typeof students)[number]) =>
-            x.bestScore == null || x.totalQuestions === 0 ? -1 : x.bestScore / x.totalQuestions;
-          return ratio(b) - ratio(a) || a.name.localeCompare(b.name, 'hu');
-        });
-      case 'last':
-        return students.sort((a, b) => {
-          const time = (x: (typeof students)[number]) =>
-            x.lastCompletedAt ? new Date(x.lastCompletedAt).getTime() : 0;
-          return time(b) - time(a) || a.name.localeCompare(b.name, 'hu');
-        });
-      default:
-        return students.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
-    }
+  readonly sortedStudents = computed(() => {
+    const byName = [...(this.results()?.students ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    return sortRows(byName, this.studentSort(), {
+      name: (s) => s.name,
+      group: (s) => s.groupName,
+      last: (s) => (s.lastCompletedAt ? new Date(s.lastCompletedAt).getTime() : null),
+      attempts: (s) => s.attemptCount,
+      score: (s) => (s.bestScore == null || s.totalQuestions === 0 ? null : s.bestScore / s.totalQuestions),
+    });
+  });
+
+  ariaSort(key: string): string | null {
+    return ariaSort(this.studentSort(), key);
   }
 
   /** UI-UX-T5: az aktuálisan SZŰRT nézet megy a CSV-be - amit a tanár lát, azt kapja. */

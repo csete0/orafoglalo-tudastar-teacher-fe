@@ -53,6 +53,12 @@ export class SortHeaderComponent {
   }
 }
 
+/** A rendezett oszlop <th>-jának aria-sort értéke (más oszlopon nincs attribútum). */
+export function ariaSort(state: SortState | null, key: string): 'ascending' | 'descending' | null {
+  if (state?.key !== key) return null;
+  return state.dir === 'asc' ? 'ascending' : 'descending';
+}
+
 /** Közös rendező-segéd: null értékek mindig a lista végére. */
 export function sortRows<T>(rows: T[], state: SortState | null,
   selectors: Record<string, (row: T) => string | number | null | undefined>): T[] {

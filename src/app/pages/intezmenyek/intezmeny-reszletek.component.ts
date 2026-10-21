@@ -13,7 +13,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
-import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
+import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
 type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
@@ -196,36 +196,36 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
                 <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
               } @else {
                 <div class="card overflow-hidden">
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                  <div class="data-table-scroll">
+                    <table class="data-table">
                       <thead>
-                        <tr class="text-left border-b border-border-default">
-                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('name')">
+                        <tr>
+                          <th class="sticky-col" [attr.aria-sort]="ariaSort('name')">
                             <app-sort-header key="name" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Diák</app-sort-header>
                           </th>
-                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('exams')">
+                          <th class="text-right" [attr.aria-sort]="ariaSort('exams')">
                             <app-sort-header key="exams" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Vizsgák</app-sort-header>
                           </th>
-                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('avg')">
+                          <th class="text-right" [attr.aria-sort]="ariaSort('avg')">
                             <app-sort-header key="avg" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Átlag %</app-sort-header>
                           </th>
-                          <th class="py-3 px-4" [attr.aria-sort]="ariaSort('streak')">
+                          <th class="text-right" [attr.aria-sort]="ariaSort('streak')">
                             <app-sort-header key="streak" [state]="overviewSort()" (sortChange)="overviewSort.set($event)">Sorozat</app-sort-header>
                           </th>
                         </tr>
                       </thead>
                       <tbody>
                         @for (student of sortedSchoolActivity(); track student.userId) {
-                          <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                            <td class="py-2.5 px-4">
+                          <tr>
+                            <td class="sticky-col whitespace-nowrap">
                               <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
                             </td>
-                            <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                            <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                            <td class="py-2.5 px-4">{{ student.currentStreak }}</td>
+                            <td class="num text-right">{{ student.completedExamsCount }}</td>
+                            <td class="num text-right">{{ student.averageExamScorePercent ?? '–' }}</td>
+                            <td class="num text-right">{{ student.currentStreak }}</td>
                           </tr>
                         } @empty {
-                          <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                          <tr><td colspan="4" class="!py-6 text-text-muted text-center">Nincs adat.</td></tr>
                         }
                       </tbody>
                     </table>
@@ -290,21 +290,21 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
                   @if (lic.groups.length > 0) {
                     <h3 class="font-semibold text-sm mb-2">Csoportok szerinti megoszlás</h3>
-                    <div class="overflow-x-auto mb-4">
-                      <table class="w-full text-sm">
+                    <div class="data-table-scroll mb-4">
+                      <table class="data-table">
                         <thead>
-                          <tr class="text-left border-b border-border-default text-text-muted">
-                            <th class="py-2 px-3">Csoport</th>
-                            <th class="py-2 px-3">Tanár</th>
-                            <th class="py-2 px-3 text-right">Aktív helyek</th>
+                          <tr>
+                            <th>Csoport</th>
+                            <th>Tanár</th>
+                            <th class="text-right">Aktív helyek</th>
                           </tr>
                         </thead>
                         <tbody>
                           @for (g of lic.groups; track g.groupId) {
-                            <tr class="border-b border-border-default last:border-b-0">
-                              <td class="py-2 px-3">{{ g.groupName }}</td>
-                              <td class="py-2 px-3 text-text-muted">{{ g.teacherName }}</td>
-                              <td class="py-2 px-3 text-right font-variant-numeric tabular-nums">{{ g.activeSeatCount }}</td>
+                            <tr>
+                              <td>{{ g.groupName }}</td>
+                              <td class="text-text-muted">{{ g.teacherName }}</td>
+                              <td class="num text-right">{{ g.activeSeatCount }}</td>
                             </tr>
                           }
                         </tbody>
@@ -314,21 +314,21 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
                   @if (lic.seats.length > 0) {
                     <h3 class="font-semibold text-sm mb-2">Diákok ({{ lic.seats.length }} aktív hely)</h3>
-                    <div class="overflow-x-auto">
-                      <table class="w-full text-sm">
+                    <div class="data-table-scroll">
+                      <table class="data-table">
                         <thead>
-                          <tr class="text-left border-b border-border-default text-text-muted">
-                            <th class="py-2 px-3">Diák</th>
-                            <th class="py-2 px-3">Csoportok</th>
-                            <th class="py-2 px-3">Utolsó aktivitás</th>
+                          <tr>
+                            <th>Diák</th>
+                            <th>Csoportok</th>
+                            <th>Utolsó aktivitás</th>
                           </tr>
                         </thead>
                         <tbody>
                           @for (seat of lic.seats; track seat.userId) {
-                            <tr class="border-b border-border-default last:border-b-0">
-                              <td class="py-2 px-3">{{ seat.studentName }}</td>
-                              <td class="py-2 px-3 text-text-muted">{{ seat.groupNames.join(', ') || '–' }}</td>
-                              <td class="py-2 px-3 text-text-muted">{{ seat.lastActivityAt | date:'yyyy.MM.dd HH:mm' }}</td>
+                            <tr>
+                              <td class="whitespace-nowrap">{{ seat.studentName }}</td>
+                              <td class="text-text-muted">{{ seat.groupNames.join(', ') || '–' }}</td>
+                              <td class="num whitespace-nowrap text-text-muted">{{ seat.lastActivityAt | date:'yyyy.MM.dd HH:mm' }}</td>
                             </tr>
                           }
                         </tbody>
@@ -383,9 +383,7 @@ export class IntezmenyReszletekComponent implements OnInit {
     }));
 
   ariaSort(key: string): string | null {
-    const state = this.overviewSort();
-    if (state?.key !== key) return null;
-    return state.dir === 'asc' ? 'ascending' : 'descending';
+    return ariaSort(this.overviewSort(), key);
   }
   category: LeaderboardCategory = 'quiz';
   period: LeaderboardPeriod = 'weekly';

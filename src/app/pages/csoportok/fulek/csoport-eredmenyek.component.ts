@@ -10,7 +10,7 @@ import { TeacherWeakTopicDto } from '../../../models/report.model';
 import { IconComponent } from '../../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../../shared/date-range-filter/date-range-filter.component';
-import { SortHeaderComponent, SortState, sortRows } from '../../../shared/sort-header/sort-header.component';
+import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../../shared/sort-header/sort-header.component';
 import {
   DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd,
 } from '../../../shared/date-range/report-date-range';
@@ -37,36 +37,36 @@ import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-ja
           <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
         } @else {
           <div class="card overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
+            <div class="data-table-scroll">
+              <table class="data-table">
                 <thead>
-                  <tr class="text-left border-b border-border-default">
-                    <th class="py-3 px-4" [attr.aria-sort]="ariaSort('name')">
+                  <tr>
+                    <th class="sticky-col" [attr.aria-sort]="ariaSort('name')">
                       <app-sort-header key="name" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Diák</app-sort-header>
                     </th>
-                    <th class="py-3 px-4" [attr.aria-sort]="ariaSort('exams')">
+                    <th class="text-right" [attr.aria-sort]="ariaSort('exams')">
                       <app-sort-header key="exams" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Vizsgák</app-sort-header>
                     </th>
-                    <th class="py-3 px-4" [attr.aria-sort]="ariaSort('avg')">
+                    <th class="text-right" [attr.aria-sort]="ariaSort('avg')">
                       <app-sort-header key="avg" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Átlag %</app-sort-header>
                     </th>
-                    <th class="py-3 px-4" [attr.aria-sort]="ariaSort('quiz')">
+                    <th class="text-right" [attr.aria-sort]="ariaSort('quiz')">
                       <app-sort-header key="quiz" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Kvíz pontosság</app-sort-header>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (student of sortedGroupActivity(); track student.userId) {
-                    <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                      <td class="py-2.5 px-4">
+                    <tr>
+                      <td class="sticky-col whitespace-nowrap">
                         <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
                       </td>
-                      <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                      <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                      <td class="py-2.5 px-4">{{ student.quizAccuracyPercent ?? '–' }}</td>
+                      <td class="num text-right">{{ student.completedExamsCount }}</td>
+                      <td class="num text-right">{{ student.averageExamScorePercent ?? '–' }}</td>
+                      <td class="num text-right">{{ student.quizAccuracyPercent ?? '–' }}</td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
+                    <tr><td colspan="4" class="!py-6 text-text-muted text-center">Nincs adat.</td></tr>
                   }
                 </tbody>
               </table>
@@ -206,9 +206,7 @@ export class CsoportEredmenyekComponent implements OnInit {
   }
 
   ariaSort(key: string): string | null {
-    const state = this.resultsSort();
-    if (state?.key !== key) return null;
-    return state.dir === 'asc' ? 'ascending' : 'descending';
+    return ariaSort(this.resultsSort(), key);
   }
 
   applyRange(event: { key: ReportRangeKey; range: ReportDateRange }): void {
