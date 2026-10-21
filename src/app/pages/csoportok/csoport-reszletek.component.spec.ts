@@ -107,7 +107,7 @@ describe('CsoportReszletekComponent', () => {
         { provide: GroupStore, useValue: groupStoreMock },
         { provide: SchoolStore, useValue: { schools: signal([]), error: signal(null), loadMine: vi.fn() } },
         { provide: ReportStore, useValue: reportStoreMock },
-        { provide: ReportService, useValue: { getGroupWeakTopics: vi.fn(() => of([])) } },
+        { provide: ReportService, useValue: { getGroupWeakTopics: vi.fn(() => of([])), getGroupActivity: vi.fn(() => of([])) } },
         { provide: LeaderboardStore, useValue: { leaderboard: signal(null), error: signal(null), loadGroupLeaderboard: vi.fn() } },
         { provide: GroupSeatStore, useValue: { overview: signal(null), lastReleaseResult: signal(null), loading: signal(false), error: signal(null), load: vi.fn() } },
         { provide: MockExamService, useValue: { getCurrent: vi.fn(() => of(null)) } },
@@ -216,6 +216,13 @@ describe('CsoportReszletekComponent', () => {
     expect(tabByLabel('Áttekintés').getAttribute('aria-selected')).toBe('true');
     expect(router.url).toBe('/csoportok/1?tab=attekintes');
     expect(el.querySelector('app-csoport-technikum')).toBeNull();
+  });
+
+  it('az Áttekintés csapat-404-e is elrejti a Technikum fület (ha a térkép sem elérhető)', async () => {
+    configure(makeGroup(), { technikum: 'disabled', teams: 'disabled' });
+    const { labels } = await open('/csoportok/1');
+
+    expect(labels()).not.toContain('Technikum');
   });
 
   it('a térkép késői 404-ére csak a térkép tűnik el, a csapatok miatt a Technikum fül marad', async () => {

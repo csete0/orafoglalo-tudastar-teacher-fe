@@ -82,7 +82,10 @@ import { CsoportBeallitasokComponent } from './fulek/csoport-beallitasok.compone
 
         <div id="csoport-tabpanel" role="tabpanel" [attr.aria-labelledby]="'csoport-tab-' + tab()">
           @switch (tab()) {
-            @case ('attekintes') { <app-csoport-attekintes [groupId]="group.id" /> }
+            @case ('attekintes') {
+              <app-csoport-attekintes [groupId]="group.id" [showTerkep]="terkepVisible()"
+                (openTab)="selectTab($event.tab, $event.section)" (csapatokUnavailable)="csapatokVisible.set(false)" />
+            }
             @case ('diakok') { <app-csoport-diakok [groupId]="group.id" (openInvite)="selectTab('beallitasok', 'meghivo')" /> }
             @case ('kiadasok') { <app-csoport-kiadasok [groupId]="group.id" /> }
             @case ('eredmenyek') { <app-csoport-eredmenyek [groupId]="group.id" [(rangeKey)]="rangeKey" [(range)]="range" /> }
