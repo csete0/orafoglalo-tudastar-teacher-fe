@@ -229,6 +229,37 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(nagyRow.className).toContain('opacity-50');
   });
 
+  it('csak gyakorolt diáknál "csak gyakorolt" jelenik meg, a cellában külön gyakorló jelzés, az összesítő nem változik', () => {
+    const results = makeResults();
+    results.students[0].taskResults[0].practicePoints = 9;
+    results.students[0].taskResults[0].practiceMaxPoints = 10;
+    results.students[0].hasPractice = true;
+    results.students[1].hasPractice = true;
+    results.students[1].taskResults[1] = { taskId: 2, isCompleted: false, isOverridden: false, practicePoints: 3, practiceMaxPoints: 5,
+      practiceGradedAt: '2026-10-20T10:00:00Z' };
+    configure(results);
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
+    const anna = rows.find((r) => r.textContent?.includes('Kiss Anna'))!;
+    const bela = rows.find((r) => r.textContent?.includes('Nagy Béla'))!;
+
+    expect(anna.textContent).toContain('12 / 15');
+    expect(anna.querySelector('[data-testid="practice-badge"]')?.textContent).toContain('gyakorlás 9/10');
+    // A vizsga-cella gombja nem tartalmazza a gyakorló pontot.
+    expect(anna.querySelectorAll('button')[0].textContent).not.toContain('9/10');
+
+    expect(bela.textContent).toContain('csak gyakorolt');
+    expect(bela.textContent).not.toContain('nem kezdte el');
+    expect(bela.className).not.toContain('opacity-50');
+    const badges = bela.querySelectorAll('[data-testid="practice-badge"]');
+    expect(badges.length).toBe(1);
+    expect(badges[0].textContent).toContain('gyakorlás 3/5');
+    expect(badges[0].getAttribute('title')).toContain('nem számít bele');
+    expect(bela.querySelectorAll('button').length).toBe(0);
+  });
+
   // ── Tanári értékelő panel (2. fázis + 6. fázis munkafolyamat-blokk) ──────────
 
   it('cellára kattintva a helyes attemptId-vel tölti be az értékelő nézetet', () => {

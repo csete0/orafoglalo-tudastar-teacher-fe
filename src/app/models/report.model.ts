@@ -90,6 +90,13 @@ export interface TaskResultCellDto {
   maxPoints?: number;
   /** Igaz, ha a pontszámot tanár bírálta felül. */
   isOverridden: boolean;
+  /**
+   * A diák LEGJOBB sikeres gyakorló MI-értékelése erre a feladatra (irodai/weblap/GUI vagy kód/SQL) - külön jelzés,
+   * sosem része a vizsga-/dolgozat-pontnak és az átlagoknak. Hiányzik, ha nincs.
+   */
+  practicePoints?: number;
+  practiceMaxPoints?: number;
+  practiceGradedAt?: string;
 }
 
 export interface StudentTaskSetResultRowDto {
@@ -99,6 +106,8 @@ export interface StudentTaskSetResultRowDto {
   isCompleted: boolean;
   totalEarnedPoints?: number;
   totalMaxPoints?: number;
+  /** Van-e gyakorló értékelése a feladatsoron (nem vizsga-teljesítés: a státusz-szűrő nem veszi figyelembe). */
+  hasPractice?: boolean;
   taskResults: TaskResultCellDto[];
 }
 
