@@ -1,571 +1,99 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import {
+  afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, DOCUMENT, effect, inject, Injector, input,
+  OnInit, signal, untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { of, switchMap, take } from 'rxjs';
 import { GroupStore } from '../../services/group/group.store';
-import { GroupSeatStore } from '../../services/group/group-seat.store';
-import { GroupSeatOverviewDto } from '../../models/group-seat.model';
-import { SchoolStore } from '../../services/school/school.store';
-import { ReportStore } from '../../services/report/report.store';
-import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
-import { LeaderboardCategory, LeaderboardPeriod } from '../../models/leaderboard.model';
-import { environment } from '../../../environments/environment';
-import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { ToastService } from '../../shared/toast/toast.service';
-import { IconComponent } from '../../shared/icon/icon.component';
-import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
-import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
-import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
-import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
-import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
-import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
-import { TeacherGroupAssignmentDto } from '../../models/teacher-quiz.model';
-import { TeacherGroupTaskSetAssignmentDto } from '../../models/teacher-content.model';
-import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
-import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../models/teacher-project.model';
-import { parseUtc } from '../../shared/utc-date.util';
-import { SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
-import { finalize, of, switchMap, take } from 'rxjs';
 import { MockExamService } from '../../services/mock-exam/mock-exam.service';
-import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
-import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
-import { ReportService } from '../../services/report/report.service';
-import { TeacherWeakTopicDto } from '../../models/report.model';
-import { VizsgareszTerkepComponent } from '../technikum/vizsgaresz-terkep.component';
-import { CsoportCsapatokComponent } from '../csapatok/csoport-csapatok.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
-import { floorPercent, GyengeTemakJavaslatokComponent } from './gyenge-temak-javaslatok.component';
+import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { ReportDateRange, DEFAULT_RANGE_KEY, ReportRangeKey } from '../../shared/date-range/report-date-range';
+import { CSOPORT_TABS, CsoportTab, resolveCsoportTab } from './fulek/csoport-fulek';
+import { CsoportAttekintesComponent } from './fulek/csoport-attekintes.component';
+import { CsoportDiakokComponent } from './fulek/csoport-diakok.component';
+import { CsoportKiadasokComponent } from './fulek/csoport-kiadasok.component';
+import { CsoportEredmenyekComponent } from './fulek/csoport-eredmenyek.component';
+import { CsoportTechnikumComponent } from './fulek/csoport-technikum.component';
+import { CsoportBeallitasokComponent } from './fulek/csoport-beallitasok.component';
 
-type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo' | 'gyenge-temak' | 'vizsgaresz-terkep' | 'csapatok';
-
+/**
+ * Csoportoldal: fejléc (morzsa, létszám, meghívó kód, Élő játék, + Kiadás) + 6 fül. A fül a `?tab=` query-paraméterben
+ * él (könyvjelzőzhető, `replaceUrl`, így a Vissza gomb nem gyűlik fel); a 9 fülös oldal régi értékeit a
+ * `LEGACY_TAB` map az új fülre (és szakaszra) írja át.
+ */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-reszletek',
-  standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, QrCodeComponent, SortHeaderComponent, VizsgareszTerkepComponent, GyengeTemakJavaslatokComponent, CsoportCsapatokComponent],
+  imports: [
+    RouterLink, LocalSpinnerComponent, CopyButtonComponent, CsoportAttekintesComponent, CsoportDiakokComponent,
+    CsoportKiadasokComponent, CsoportEredmenyekComponent, CsoportTechnikumComponent, CsoportBeallitasokComponent,
+  ],
   template: `
     @if (store.selectedGroup(); as group) {
-      <div class="max-w-3xl mx-auto px-4 py-10">
-        <div class="flex justify-between items-start mb-1 gap-3">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="icon-tile icon-tile-primary">
-              <app-icon name="users" class="w-6 h-6 block" />
-            </div>
-            @if (!renaming()) {
-              <h1 class="page-title truncate">{{ group.name }}</h1>
+      <div class="page-wide">
+        <header class="flex flex-wrap items-center gap-3 mb-4">
+          <div class="flex-1 min-w-0">
+            <nav aria-label="Morzsa" class="text-xs text-text-muted">
+              <a routerLink="/csoportok" class="hover:underline">Csoportok</a> ›
+              <span aria-current="page">{{ group.name }}</span>
+            </nav>
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <h1 class="text-2xl font-bold min-w-0 truncate">{{ group.name }}</h1>
+              <span class="text-sm text-text-muted" data-testid="group-header-meta">
+                · {{ store.members().length }} diák@if (group.schoolName) { · {{ group.schoolName }}}
+              </span>
               @if (mockExamRegistered()) {
                 <a routerLink="/probaerettsegi" class="badge badge-warning shrink-0" data-testid="group-mock-exam-badge"
                    title="A csoport jelentkeztetve van a próbaérettségire">Próbaérettségi</a>
               }
-              <!-- UI-UX-T4: a csoport neve eddig NEM volt szerkeszthető sehol - egy
-                   elgépelt vagy évfordulóval elavuló név ("11.A" → "12.A") csak új
-                   csoporttal lett volna "javítható", elvágva a tagságot és az
-                   eredményeket. -->
-              @if (!group.isArchived) {
-                <button type="button" (click)="startRename(group.name)"
-                  class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0" title="Átnevezés">
-                  Átnevezés
-                </button>
+              @if (group.isArchived) {
+                <span class="badge badge-neutral shrink-0">Archivált</span>
               }
-            } @else {
-              <input [(ngModel)]="renameValue" maxlength="255" class="input !w-auto flex-1"
-                (keyup.enter)="saveRename(group.id)" (keyup.escape)="renaming.set(false)" />
-              <button type="button" (click)="saveRename(group.id)"
-                [disabled]="!renameValue.trim() || store.loading()" class="btn btn-primary shrink-0">Mentés</button>
-              <button type="button" (click)="renaming.set(false)" class="btn btn-ghost shrink-0">Mégse</button>
-            }
-            @if (group.isArchived) {
-              <span class="badge badge-neutral shrink-0">Archivált</span>
-            }
+            </div>
           </div>
           @if (!group.isArchived) {
-            <button (click)="archive(group.id)" class="btn btn-danger shrink-0">Archiválás</button>
-          } @else {
-            <button (click)="unarchive(group.id)" [disabled]="store.loading()" class="btn btn-primary shrink-0">Visszaállítás</button>
+            <span class="flex items-center gap-1 rounded-lg border border-border-default bg-bg-panel pl-2.5 pr-1 py-0.5 text-sm"
+                  data-testid="group-invite-chip">
+              Meghívó kód: <code class="font-mono font-bold">{{ group.inviteCode }}</code>
+              <app-copy-button [value]="group.inviteCode" label="Meghívó kód" />
+            </span>
+            <button type="button" class="btn btn-ghost" (click)="selectTab('kiadasok', 'kvizek')">Élő játék</button>
+            <a routerLink="/feladatsorok" class="btn btn-primary">+ Kiadás</a>
           }
-        </div>
-        @if (schoolStore.schools().length > 0) {
-          <div class="flex items-center gap-2 mt-4 text-sm">
-            <label class="text-text-muted">Intézmény:</label>
-            <select [ngModel]="displaySchoolId()" (ngModelChange)="changeSchool(group.id, group.name, $event)"
-              class="input !w-auto max-w-full min-w-0">
-              <option [ngValue]="null">Nincs intézményhez kötve (magántanár)</option>
-              @for (school of schoolStore.schools(); track school.id) {
-                <option [ngValue]="school.id">{{ school.name }}</option>
-              }
-            </select>
-          </div>
-        } @else if (group.schoolName) {
-          <p class="text-text-muted mt-2">Intézmény: {{ group.schoolName }}</p>
-        }
-        @if (schoolStore.error()) {
-          <p class="text-danger text-sm mt-4">{{ schoolStore.error() }}</p>
-        }
-        <div class="hairline"></div>
+        </header>
 
-        <!-- UI-TT-179: valódi, tartalom-váltó tab-widget - a wrapper role="tablist",
-             a gombok role="tab" + aria-selected nélkül egy képernyőolvasó-felhasználó
-             számára 4 néma, állapot nélküli "gomb"-ként hangzott el. -->
-        <nav class="flex gap-4 border-b border-border-default mb-6 overflow-x-auto" role="tablist">
+        <!-- UI-TT-179: valódi tab-widget (role="tablist"/"tab" + aria-selected). -->
+        <div class="flex gap-4 border-b border-border-default mb-6 overflow-x-auto" role="tablist" aria-label="Csoport nézetek">
           @for (option of tabs(); track option.value) {
-            <button (click)="setTab(option.value)" class="tab-btn"
-              [class.tab-btn-active]="tab() === option.value"
-              role="tab" [attr.aria-selected]="tab() === option.value">
+            <button type="button" (click)="selectTab(option.value)" class="tab-btn"
+              [class.tab-btn-active]="tab() === option.value" [id]="'csoport-tab-' + option.value"
+              role="tab" [attr.aria-selected]="tab() === option.value" aria-controls="csoport-tabpanel">
               {{ option.label }}
             </button>
           }
-        </nav>
+        </div>
 
         @if (store.error()) {
           <p class="text-danger text-sm mb-4">{{ store.error() }}</p>
         }
 
-        @switch (tab()) {
-          @case ('helyek') {
-            @if (seatStore.error()) {
-              <p class="text-danger text-sm mb-4">{{ seatStore.error() }}</p>
+        <div id="csoport-tabpanel" role="tabpanel" [attr.aria-labelledby]="'csoport-tab-' + tab()">
+          @switch (tab()) {
+            @case ('attekintes') { <app-csoport-attekintes [groupId]="group.id" /> }
+            @case ('diakok') { <app-csoport-diakok [groupId]="group.id" (openInvite)="selectTab('beallitasok', 'meghivo')" /> }
+            @case ('kiadasok') { <app-csoport-kiadasok [groupId]="group.id" /> }
+            @case ('eredmenyek') { <app-csoport-eredmenyek [groupId]="group.id" [(rangeKey)]="rangeKey" [(range)]="range" /> }
+            @case ('technikum') {
+              <app-csoport-technikum [groupId]="group.id" [showTerkep]="terkepVisible()" [showCsapatok]="csapatokVisible()"
+                (terkepUnavailable)="terkepVisible.set(false); leaveHiddenTechnikum()"
+                (csapatokUnavailable)="csapatokVisible.set(false); leaveHiddenTechnikum()" />
             }
-            @if (seatStore.loading()) {
-              <app-local-spinner />
-            }
-
-            @if (seatStore.overview(); as seats) {
-              @if (!seats.licenseId) {
-                <div class="card p-5 text-sm text-text-muted">
-                  Ehhez a csoporthoz nem tartozik érvényes intézményi licenc.
-                  A diákok a saját előfizetésüket használják.
-                </div>
-              } @else {
-                <div class="card p-4 mb-4">
-                  <div class="flex items-center justify-between gap-3 flex-wrap">
-                    <div class="text-sm">
-                      <span class="font-bold">{{ seats.tier === 'premium' ? 'Prémium' : 'Standard' }}</span>
-                      licenc ·
-                      <span [class.text-danger]="seats.usedSeatsOnLicense >= seats.capacity">
-                        {{ seats.usedSeatsOnLicense }}/{{ seats.capacity }} hely használatban
-                      </span>
-                      <!-- UI-TT-202: usedSeatsOnLicense csak a licenc IdleWindowMinutes-én belül
-                           friss helyeket számolja, míg a lenti "Helyet használó diákok" lista
-                           MINDEN fel nem szabadított helyet felsorol, tétlent is - enélkül a
-                           magyarázat nélkül a fejléc ("0/0") ellentmondani látszik a lista alatta.
-                           Az admin-oldali admin-intezmenyek.component.ts:115-119 mintáját követi. -->
-                      @if (idleTransferableSeatCount(seats) > 0) {
-                        <span class="text-text-muted">
-                          ({{ idleTransferableSeatCount(seats) }} tétlen, átadható)
-                        </span>
-                      }
-                      <span class="text-text-muted">(az intézmény összes csoportjával együtt)</span>
-                    </div>
-                    @if (seats.holders.length > 0) {
-                      <button (click)="confirmEndLesson()" [disabled]="seatStore.loading()"
-                              class="btn btn-danger !px-3 !py-1.5 !text-sm">
-                        Óra vége — helyek felszabadítása
-                      </button>
-                    }
-                  </div>
-                  <p class="text-xs text-text-muted mt-2">
-                    Csak ennek a csoportnak a tagjaira hat. Aki épp vizsgázik vagy kvízt ír, attól nem veszi el a helyet.
-                  </p>
-                </div>
-
-                @if (seatStore.lastReleaseResult(); as released) {
-                  <div class="bg-success-subtle border border-success/40 rounded-xl p-4 mb-4 text-sm">
-                    <p class="text-success font-bold">{{ released.releasedCount }} hely felszabadítva.</p>
-                    @if (released.skippedInProgress.length > 0) {
-                      <p class="text-text-muted mt-1">
-                        Nem érintette (folyamatban lévő vizsga/kvíz):
-                        {{ released.skippedInProgress.join(', ') }}
-                      </p>
-                    }
-                  </div>
-                }
-
-                <h3 class="font-bold text-sm mb-2">Helyet használó diákok</h3>
-                <ul class="space-y-2 mb-6">
-                  @for (holder of seats.holders; track holder.userId) {
-                    <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
-                      <div class="min-w-0">
-                        <p class="truncate">{{ holder.displayName }}</p>
-                        <p class="text-xs text-text-muted">
-                          <span [class]="holder.isFresh ? 'text-success' : ''">
-                            {{ holder.isFresh ? 'aktív' : 'tétlen' }}
-                          </span>
-                          · utoljára: {{ holder.lastActivityAt | date: 'MM.dd HH:mm' }}
-                          @if (holder.hasSessionInProgress) {
-                            · <span class="text-warning">vizsga/kvíz folyamatban</span>
-                          }
-                          @if (holder.inMultipleGroups) {
-                            · <span class="text-text-muted">több csoport tagja</span>
-                          }
-                        </p>
-                      </div>
-                      <button (click)="confirmReleaseSeat(holder)" [disabled]="seatStore.loading()"
-                              class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0">
-                        Felszabadítás
-                      </button>
-                    </li>
-                  } @empty {
-                    <li class="text-sm text-text-muted">Jelenleg senki nem használ helyet ebben a csoportban.</li>
-                  }
-                </ul>
-
-                @if (seats.withoutSeat.length > 0) {
-                  <h3 class="font-bold text-sm mb-2">
-                    Nem fért be ({{ seats.withoutSeat.length }})
-                  </h3>
-                  <p class="text-xs text-text-muted mb-2">
-                    Ezek a diákok a saját (alacsonyabb) előfizetésüket használják. Aki már fizet
-                    ugyanazért vagy jobbért, nem szerepel a listában.
-                  </p>
-                  <ul class="space-y-1">
-                    @for (missing of seats.withoutSeat; track missing.userId) {
-                      <li class="text-sm flex gap-2">
-                        <span>{{ missing.displayName }}</span>
-                        <span class="text-text-muted">({{ missing.personalTier }})</span>
-                      </li>
-                    }
-                  </ul>
-                }
-              }
-            }
+            @case ('beallitasok') { <app-csoport-beallitasok [group]="group" /> }
           }
-          @case ('tagok') {
-            <ul class="space-y-2">
-              @for (member of store.members(); track member.userId) {
-                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm">
-                  <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-9 h-9 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center shrink-0">
-                      {{ initials(member.name) }}</div>
-                    <div class="min-w-0">
-                      <p class="truncate">{{ member.name }}</p>
-                      <p class="text-xs text-text-muted truncate">{{ member.email }}</p>
-                    </div>
-                  </div>
-                  <button (click)="removeMember(group.id, member.userId, member.name)" class="text-danger hover:underline shrink-0">Eltávolítás</button>
-                </li>
-              } @empty {
-                <li class="flex flex-col items-center py-10 gap-3">
-                  <div class="icon-tile icon-tile-neutral">
-                    <app-icon name="users" class="w-6 h-6 block" />
-                  </div>
-                  <p class="font-semibold">Még nincs tag a csoportban.</p>
-                  <p class="text-sm text-text-muted">Oszd meg a meghívó kódot a diákjaiddal.</p>
-                  <!-- UI-UX-K2: az üres állapot ne csak elmondja a következő lépést -
-                       vigyen is oda. -->
-                  <button type="button" (click)="setTab('meghivo')" class="btn btn-primary">
-                    Meghívó kód megnyitása
-                  </button>
-                </li>
-              }
-            </ul>
-          }
-
-          @case ('kiadva') {
-            <!-- UI-UX-T3: a tanár fejben a csoportból indul ("a 9.A-nak mi van kiadva?").
-                 B4: feladatsorok is kiadhatók, ezért két lista jelenik meg. -->
-
-            <!-- Kvíz-kiadások -->
-            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Kvízek</h3>
-            @if (assignmentsError(); as err) {
-              <p class="text-danger text-sm mb-4">{{ err }}</p>
-            }
-            @if (assignmentsLoading()) {
-              <app-local-spinner />
-            } @else {
-              <ul class="space-y-2 mb-6">
-                @for (assignment of groupAssignments(); track assignment.assignmentId) {
-                  <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
-                    <div class="min-w-0 flex-1">
-                      <p class="font-medium truncate">{{ assignment.quizTitle }}</p>
-                      <p class="text-xs text-text-muted">
-                        {{ assignment.questionCount }} kérdés
-                        · megírta: {{ assignment.completedMemberCount }} / {{ assignment.memberCount }}
-                        @if (assignment.dueAt) {
-                          · <span [class.text-danger]="isDueSoon(assignment.dueAt)">
-                            határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
-                        }
-                        @if (assignment.hasActiveLiveRoom) {
-                          · <span class="text-warning font-semibold">élő játék fut</span>
-                        }
-                      </p>
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                      <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'eredmenyek']"
-                         class="btn btn-ghost !px-2 !py-1 !text-xs">Eredmények</a>
-                      @if (assignment.hasActiveLiveRoom) {
-                        <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'elo', assignment.activeKahootSessionId]"
-                           class="btn btn-primary !px-2 !py-1 !text-xs">Vezérlés</a>
-                      } @else {
-                        <button type="button" (click)="startLiveFromGroup(assignment)"
-                                [disabled]="liveStartPending()"
-                                class="btn btn-primary !px-2 !py-1 !text-xs">
-                          Élő indítás
-                        </button>
-                      }
-                    </div>
-                  </li>
-                } @empty {
-                  <li class="text-sm text-text-muted py-2">Nincs kiadott kvíz.</li>
-                }
-              </ul>
-              @if (liveStartError(); as err) {
-                <p class="text-sm text-danger mb-4">{{ err }}</p>
-              }
-            }
-
-            <!-- Feladatsor-kiadások (B4) -->
-            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Feladatsorok</h3>
-            @if (taskSetAssignmentsError(); as err) {
-              <p class="text-danger text-sm mb-4">{{ err }}</p>
-            }
-            @if (taskSetAssignmentsLoading()) {
-              <app-local-spinner />
-            } @else {
-              <ul class="space-y-2">
-                @for (a of groupTaskSetAssignments(); track a.assignmentId) {
-                  <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
-                    <div class="min-w-0 flex-1">
-                      <p class="font-medium truncate">
-                        {{ a.taskSetTitle }}
-                        @if (a.isTest) {
-                          <span class="badge badge-warning ml-1">Dolgozat · {{ (a.timeLimitSeconds ?? 0) / 60 }} perc</span>
-                        }
-                      </p>
-                      <p class="text-xs text-text-muted">
-                        {{ a.taskCount }} feladat
-                        · megírta: {{ a.completedMemberCount }} / {{ a.memberCount }}
-                        @if (a.isTest && a.opensAt && a.dueAt) {
-                          · megírható: {{ a.opensAt | date: 'MM.dd. HH:mm' }}–{{ a.dueAt | date: 'HH:mm' }}
-                          @if (a.resultsPublishedAt) {
-                            · <span class="text-success font-semibold">eredmény közzétéve</span>
-                          }
-                        } @else if (a.dueAt) {
-                          · <span [class.text-danger]="isDueSoon(a.dueAt)">
-                            határidő: {{ a.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
-                        }
-                      </p>
-                    </div>
-                    @if (a.isTest) {
-                      <a [routerLink]="['/dolgozatok', a.assignmentId]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Áttekintés</a>
-                    }
-                  </li>
-                } @empty {
-                  <li class="text-sm text-text-muted py-2">Nincs kiadott feladatsor. Kiadni a feladatsor-szerkesztőből lehet.</li>
-                }
-              </ul>
-            }
-
-            <!-- Projektműhely-kiadások (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G) -->
-            <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-6">Projektek</h3>
-            @if (projectAssignmentsError(); as err) {
-              <p class="text-danger text-sm mb-4">{{ err }}</p>
-            }
-            <ul class="space-y-2" data-testid="group-project-assignments">
-              @for (p of projectAssignments(); track p.id) {
-                <li class="card !rounded-xl p-3 text-sm flex items-center gap-3 flex-wrap">
-                  <div class="min-w-0 flex-1">
-                    <p class="font-semibold">{{ p.projectTitle }}
-                      @if (p.isTest) { <span class="badge badge-warning ml-1">Dolgozat</span> }
-                    </p>
-                    <p class="text-xs text-text-muted">
-                      {{ p.startedCount }}/{{ p.memberCount }} elkezdte · {{ p.completedCount }} kész
-                      @if (p.runtime) { · csak {{ projectRuntimeLabels[p.runtime] }} }
-                      @if (p.dueAt) { · <span [class.text-danger]="isDueSoon(p.dueAt)">határidő: {{ utc(p.dueAt) | date: 'yyyy.MM.dd. HH:mm' }}</span> }
-                    </p>
-                  </div>
-                  <a [routerLink]="['/feladatsorok/projektek/kiadas', p.id]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Osztály-nézet</a>
-                </li>
-              } @empty {
-                <li class="text-sm text-text-muted py-2">Nincs kiadott projekt. Kiadni a Feladatsorok → Projektek fülön lehet.</li>
-              }
-            </ul>
-          }
-
-          @case ('eredmenyek') {
-            <!-- UI-TT-178: az @switch/@case ág minden fülváltáskor destroy+recreate-eli ezt a
-                 komponenst - az initialRangeKey/initialCustomFrom/initialCustomTo inputok nélkül
-                 a legördülő mindig "Teljes időszak"-ra ugrana vissza, holott a lekérdezés maga
-                 (lent) a perzisztált range()-t használja tovább. -->
-            <app-date-range-filter [initialRangeKey]="rangeKey()"
-              [initialCustomFrom]="customFromValue()" [initialCustomTo]="customToValue()"
-              (rangeChange)="applyRange(group.id, $event)" />
-            @if (report.error()) {
-              <p class="text-danger text-sm mb-4">{{ report.error() }}</p>
-            } @else {
-              <div class="card overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="text-left border-b border-border-default">
-                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('name')">
-                          <app-sort-header key="name" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Diák</app-sort-header>
-                        </th>
-                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('exams')">
-                          <app-sort-header key="exams" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Vizsgák</app-sort-header>
-                        </th>
-                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('avg')">
-                          <app-sort-header key="avg" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Átlag %</app-sort-header>
-                        </th>
-                        <th class="py-3 px-4" [attr.aria-sort]="ariaSort('quiz')">
-                          <app-sort-header key="quiz" [state]="resultsSort()" (sortChange)="resultsSort.set($event)">Kvíz pontosság</app-sort-header>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (student of sortedGroupActivity(); track student.userId) {
-                        <tr class="border-b border-border-default last:border-b-0 hover:bg-bg-element transition-colors">
-                          <td class="py-2.5 px-4">
-                            <a [routerLink]="['/diakok', student.userId]" class="text-primary hover:underline">{{ student.name }}</a>
-                          </td>
-                          <td class="py-2.5 px-4">{{ student.completedExamsCount }}</td>
-                          <td class="py-2.5 px-4">{{ student.averageExamScorePercent ?? '–' }}</td>
-                          <td class="py-2.5 px-4">{{ student.quizAccuracyPercent ?? '–' }}</td>
-                        </tr>
-                      } @empty {
-                        <tr><td colspan="4" class="py-6 px-4 text-text-muted text-center">Nincs adat.</td></tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            }
-          }
-
-          @case ('ranglista') {
-            <div class="flex gap-2 mb-4">
-              <select [(ngModel)]="category" (ngModelChange)="loadLeaderboard(group.id)" class="input !w-auto">
-                <option value="quiz">Kvíz</option>
-                <option value="exam">Vizsga</option>
-              </select>
-              <select [(ngModel)]="period" (ngModelChange)="loadLeaderboard(group.id)" class="input !w-auto">
-                <option value="weekly">Heti</option>
-                <option value="monthly">Havi</option>
-                <option value="alltime">Összes idő</option>
-              </select>
-            </div>
-
-            @if (leaderboard.error()) {
-              <p class="text-danger text-sm mb-4">{{ leaderboard.error() }}</p>
-            } @else {
-              <ol class="space-y-2">
-                @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-                  <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm">
-                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                      [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                    <!-- UI-UX-T7: a tanárnak a valódi név a beazonosítható - a becenév
-                         mellette marad, ha eltér. Diák-hívónál a realName mindig null. -->
-                    <span class="flex-1 truncate">
-                      {{ entry.realName ?? entry.nickname }}
-                      @if (entry.realName && entry.realName !== entry.nickname) {
-                        <span class="text-text-muted text-xs">({{ entry.nickname }})</span>
-                      }
-                    </span>
-                    <span class="font-bold">{{ entry.score }}</span>
-                  </li>
-                } @empty {
-                  <li class="flex flex-col items-center py-10 gap-3">
-                    <div class="icon-tile icon-tile-neutral">
-                      <app-icon name="trophy" class="w-6 h-6 block" />
-                    </div>
-                    <p class="font-semibold">Még nincs ranglista-adat.</p>
-                  </li>
-                }
-              </ol>
-            }
-          }
-
-          @case ('vizsgaresz-terkep') {
-            <app-vizsgaresz-terkep [groupId]="group.id" (unavailable)="terkepVisible.set(false); setTab('tagok')" />
-          }
-
-          @case ('csapatok') {
-            <app-csoport-csapatok [groupId]="group.id" (unavailable)="csapatokVisible.set(false); setTab('tagok')" />
-          }
-
-          @case ('gyenge-temak') {
-            <!-- Összefoglaló mondatok + témakörönkénti gyakorló javaslatok egykattintásos kiadással - csak ha van gyenge téma,
-                 különben egyetlen üres állapot látszik (lent). -->
-            @if (!weakTopicsLoading() && weakTopics().length) {
-              <app-gyenge-temak-javaslatok [groupId]="group.id" />
-              <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-2">Minden gyenge téma</h3>
-            }
-            <!-- A2: névtelen aggregátum, k-anonimitással (≥3 diák, ≥5 válasz/téma). -->
-            @if (weakTopicsError(); as err) {
-              <p class="text-danger text-sm mb-4">{{ err }}</p>
-            }
-            @if (weakTopicsLoading()) {
-              <app-local-spinner />
-            } @else if (weakTopics().length) {
-              <ul class="flex flex-wrap gap-2">
-                @for (topic of weakTopics(); track topic.topicId) {
-                  <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
-                      [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-subtle)'"
-                      [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
-                    @if (topic.topicIcon) {
-                      <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
-                    }
-                    {{ topic.topicName }}
-                    <span class="opacity-70">{{ pct(topic.successRate) }}% · {{ topic.studentCount }} tanuló</span>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <div class="flex flex-col items-center py-10 gap-3">
-                <div class="icon-tile icon-tile-neutral">
-                  <app-icon name="check" class="w-6 h-6 block" />
-                </div>
-                <p class="font-semibold">Nincs gyenge téma.</p>
-                <p class="text-sm text-text-muted">Még nincs elég adat (legalább 3 diák, 5 válasz/téma szükséges).</p>
-              </div>
-            }
-          }
-
-          @case ('meghivo') {
-            <div class="card p-5 space-y-3">
-              <div class="flex items-center gap-3">
-                <div class="icon-tile icon-tile-primary">
-                  <app-icon name="link" class="w-6 h-6 block" />
-                </div>
-                <p class="text-sm">Meghívó kód: <code class="font-bold">{{ group.inviteCode }}</code></p>
-                <app-copy-button [value]="group.inviteCode" label="Meghívó kód" />
-                @if (group.isJoinEnabled) {
-                  <span class="badge badge-success shrink-0">Aktív</span>
-                } @else {
-                  <span class="badge badge-neutral shrink-0">Jelentkezés letiltva</span>
-                }
-              </div>
-              <p class="text-sm break-all flex items-center gap-2 flex-wrap">
-                <span>Csatlakozási link: <code>{{ joinLink(group.inviteCode) }}</code></span>
-                <app-copy-button [value]="joinLink(group.inviteCode)" label="Csatlakozási link" />
-                <button type="button" (click)="qrVisible.set(!qrVisible())" class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0">
-                  {{ qrVisible() ? 'QR elrejtése' : 'QR-kód kivetítéshez' }}
-                </button>
-              </p>
-              <!-- UI-UX-T1: kivetítve a diákok telefonnal beolvassák - nem kell gépelni. -->
-              @if (qrVisible()) {
-                <div class="flex justify-center py-2">
-                  <app-qr-code [value]="joinLink(group.inviteCode)" [size]="280" />
-                </div>
-              }
-              <p class="text-xs text-text-muted">A kód nem jár le — a jelentkezést itt tudod ki- vagy bekapcsolni anélkül, hogy a kódot le kellene cserélned.</p>
-              <div class="flex gap-2">
-                <button (click)="regenerateInvite(group.id)" [disabled]="store.loading()" class="btn btn-primary">
-                  Új kód generálása
-                </button>
-                @if (group.isJoinEnabled) {
-                  <button (click)="setJoinEnabled(group.id, false)" [disabled]="store.loading()" class="btn btn-danger">
-                    Jelentkezés letiltása
-                  </button>
-                } @else {
-                  <button (click)="setJoinEnabled(group.id, true)" [disabled]="store.loading()" class="btn btn-primary">
-                    Jelentkezés engedélyezése
-                  </button>
-                }
-              </div>
-            </div>
-          }
-        }
+        </div>
       </div>
     } @else if (store.loading()) {
       <app-local-spinner />
@@ -576,184 +104,45 @@ type Tab = 'tagok' | 'kiadva' | 'helyek' | 'eredmenyek' | 'ranglista' | 'meghivo
 })
 export class CsoportReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
-  private readonly mockExamService = inject(MockExamService);
   private readonly router = inject(Router);
-  private readonly confirmService = inject(ConfirmService);
-  private readonly toastService = inject(ToastService);
-  readonly store = inject(GroupStore);
-  readonly seatStore = inject(GroupSeatStore);
-  readonly schoolStore = inject(SchoolStore);
-  readonly report = inject(ReportStore);
-  readonly leaderboard = inject(LeaderboardStore);
-  private readonly reportService = inject(ReportService);
-
-  // ── A2: Gyenge témák fül ──
-  readonly weakTopics = signal<TeacherWeakTopicDto[]>([]);
-  readonly weakTopicsLoading = signal(false);
-  readonly weakTopicsError = signal<string | null>(null);
-  /** Az összefoglalóval egyező, lefelé kerekített százalék. */
-  readonly pct = floorPercent;
-
-  /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium - a visible prémium nélkül is igaz); a térkép késői 404 FeatureDisabled-je (unavailable) is elrejti. */
-  readonly terkepVisible = signal(false);
-  /** Vizsgaremek-csapatok fül; a kikapcsolt Git-funkció 404-e (unavailable) elrejti. */
-  readonly csapatokVisible = signal(true);
-  private readonly technikumApi = inject(TeacherTechnikumService);
+  private readonly document = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly mockExamService = inject(MockExamService);
+  private readonly technikumApi = inject(TeacherTechnikumService);
+  readonly store = inject(GroupStore);
 
-  readonly tabs = computed<{ value: Tab; label: string }[]>(() => [
-    { value: 'tagok', label: 'Tagok' },
-    { value: 'kiadva', label: 'Kiadva' },
-    { value: 'helyek', label: 'Helyek' },
-    { value: 'eredmenyek', label: 'Eredmények' },
-    ...(this.terkepVisible() ? [{ value: 'vizsgaresz-terkep' as const, label: 'Vizsgarész-térkép' }] : []),
-    ...(this.csapatokVisible() ? [{ value: 'csapatok' as const, label: 'Csapatok' }] : []),
-    { value: 'ranglista', label: 'Ranglista' },
-    { value: 'gyenge-temak', label: 'Gyenge témák' },
-    { value: 'meghivo', label: 'Meghívó' },
-  ]);
+  /** A `?tab=` query-paraméter (withComponentInputBinding). */
+  readonly tabParam = input<string | undefined>(undefined, { alias: 'tab' });
 
-  readonly tab = signal<Tab>('tagok');
-  // ── UI-UX-T3: "Kiadva" fül állapota ──
-  private readonly teacherQuizService = inject(TeacherQuizService);
-  private readonly teacherTaskSetService = inject(TeacherTaskSetService);
-  private readonly kahootHostService = inject(KahootHostService);
-  readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
-  readonly groupTaskSetAssignments = signal<TeacherGroupTaskSetAssignmentDto[]>([]);
-  readonly assignmentsLoading = signal(false);
-  readonly projectAssignments = signal<ProjectAssignmentDto[]>([]);
-  readonly projectAssignmentsError = signal<string | null>(null);
-  readonly projectRuntimeLabels = RUNTIME_LABELS;
-  readonly utc = parseUtc;
-  private readonly teacherProjectService = inject(TeacherProjectService);
-  readonly taskSetAssignmentsLoading = signal(false);
-  readonly taskSetAssignmentsError = signal<string | null>(null);
-  readonly liveStartPending = signal(false);
-  readonly liveStartError = signal<string | null>(null);
-  readonly assignmentsError = signal<string | null>(null);
+  /** Prémium tanár + bekapcsolt modul (api/technikum/me: visible ÉS hasPremium); a térkép késői 404-e is elrejti. */
+  readonly terkepVisible = signal(false);
+  /** Vizsgaremek-csapatok; a kikapcsolt Git-funkció 404-e (unavailable) elrejti. */
+  readonly csapatokVisible = signal(true);
+  readonly technikumVisible = computed(() => this.terkepVisible() || this.csapatokVisible());
 
-  // ── UI-UX-K3: Eredmények-tábla rendezése ──
-  readonly resultsSort = signal<SortState | null>(null);
-  readonly sortedGroupActivity = computed(() =>
-    sortRows(this.report.groupActivity(), this.resultsSort(), {
-      name: (r) => r.name,
-      exams: (r) => r.completedExamsCount,
-      avg: (r) => r.averageExamScorePercent,
-      quiz: (r) => r.quizAccuracyPercent,
-    }));
-
-  ariaSort(key: string): string | null {
-    const state = this.resultsSort();
-    if (state?.key !== key) return null;
-    return state.dir === 'asc' ? 'ascending' : 'descending';
-  }
-
-  private loadAssignments(groupId: number): void {
-    this.assignmentsLoading.set(true);
-    this.teacherQuizService
-      .getGroupAssignments(groupId)
-      .pipe(take(1), finalize(() => this.assignmentsLoading.set(false)))
-      .subscribe({
-        next: (assignments) => {
-          this.assignmentsError.set(null);
-          this.groupAssignments.set(assignments);
-        },
-        error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
-      });
-  }
-
-  private loadProjectAssignments(groupId: number): void {
-    this.teacherProjectService.forGroup(groupId).pipe(take(1)).subscribe({
-      next: (assignments) => {
-        this.projectAssignmentsError.set(null);
-        this.projectAssignments.set(assignments);
-      },
-      error: () => this.projectAssignmentsError.set('A projekt-kiadások betöltése sikertelen.'),
-    });
-  }
-
-  private loadTaskSetAssignments(groupId: number): void {
-    this.taskSetAssignmentsLoading.set(true);
-    this.teacherTaskSetService
-      .getGroupTaskSetAssignments(groupId)
-      .pipe(take(1), finalize(() => this.taskSetAssignmentsLoading.set(false)))
-      .subscribe({
-        next: (assignments) => {
-          this.taskSetAssignmentsError.set(null);
-          this.groupTaskSetAssignments.set(assignments);
-        },
-        error: () => this.taskSetAssignmentsError.set('A feladatsor-kiadások betöltése sikertelen.'),
-      });
-  }
-
-  private loadWeakTopics(groupId: number): void {
-    this.weakTopicsLoading.set(true);
-    this.reportService
-      .getGroupWeakTopics(groupId)
-      .pipe(take(1), finalize(() => this.weakTopicsLoading.set(false)))
-      .subscribe({
-        next: (topics) => {
-          this.weakTopicsError.set(null);
-          this.weakTopics.set(topics);
-        },
-        error: () => this.weakTopicsError.set('A gyenge témák betöltése sikertelen.'),
-      });
-  }
-
-  /** 48 órán belül lejáró határidő - vizuális sürgősség. */
-  isDueSoon(dueAt: string): boolean {
-    const remaining = new Date(dueAt).getTime() - Date.now();
-    return remaining > 0 && remaining < 48 * 3600 * 1000;
-  }
-
-  startLiveFromGroup(assignment: TeacherGroupAssignmentDto): void {
-    if (this.liveStartPending()) return;
-    this.liveStartPending.set(true);
-    this.liveStartError.set(null);
-    this.kahootHostService
-      .createRoom(assignment.quizId, this.groupId)
-      .pipe(take(1), finalize(() => this.liveStartPending.set(false)))
-      .subscribe({
-        next: (room) =>
-          void this.router.navigate([
-            '/feladatsorok', 'kvizek', assignment.quizId, 'elo', room.kahootSessionId,
-          ]),
-        error: () => this.liveStartError.set('Az élő játék indítása sikertelen.'),
-      });
-  }
-
-  /** UI-UX-T1: a kivetíthető QR alapból rejtve - csak szándékos megnyitásra. */
-  readonly qrVisible = signal(false);
-  /** UI-UX-T4: fejléc-átnevezés állapota. */
-  readonly renaming = signal(false);
-  renameValue = '';
-  category: LeaderboardCategory = 'quiz';
-  period: LeaderboardPeriod = 'weekly';
-
-  private groupId = 0;
-
-  // UI-TT-4: az intézmény-<select> korábban közvetlenül a store selectedGroup().schoolId-jára
-  // volt kötve — mivel Mégse esetén ez az érték SOHA nem változott, Angular nem hívta újra a
-  // writeValue()-t, és a <select> DOM-eleme a törölt/el nem mentett választáson maradt. Egy
-  // külön, a nézetet vezérlő signal-lal a Mégse-ág explicit vissza tudja állítani a látott
-  // értéket, akkor is, ha a mögöttes store-állapot közben nem változott.
-  readonly displaySchoolId = signal<number | null>(null);
-
-  private readonly syncDisplaySchoolId = effect(() => {
-    const group = this.store.selectedGroup();
-    this.displaySchoolId.set(group?.schoolId ?? null);
+  readonly tabs = computed(() => CSOPORT_TABS.filter((t) => t.value !== 'technikum' || this.technikumVisible()));
+  readonly tab = computed<CsoportTab>(() => {
+    const { tab } = resolveCsoportTab(this.tabParam());
+    return tab === 'technikum' && !this.technikumVisible() ? 'attekintes' : tab;
   });
+
+  /** Az Eredmények fül dátumszűrője - itt él, hogy fülváltás után is megmaradjon (UI-TT-178/180). */
+  readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
+  readonly range = signal<ReportDateRange>({});
 
   /** A csoport jelentkeztetve van az aktuális próbaérettségire (a fejléc jelvényéhez). */
   readonly mockExamRegistered = signal(false);
 
-  private loadMockExamBadge(groupId: number): void {
-    this.mockExamService.getCurrent().pipe(
-      switchMap((current) => (current ? this.mockExamService.get(current.slug) : of(null))),
-      take(1),
-    ).subscribe({
-      next: (ev) => this.mockExamRegistered.set(!!ev?.groups.find((g) => g.groupId === groupId)?.registered),
-      error: () => this.mockExamRegistered.set(false),
+  private groupId = 0;
+
+  constructor() {
+    // Régi (9 fülös) vagy ismeretlen `?tab=` érték → átírás a kanonikus fülre (+ szakasz-horgony).
+    effect(() => {
+      const raw = this.tabParam();
+      if (raw === undefined) return;
+      const target = resolveCsoportTab(raw);
+      if (raw !== target.tab) untracked(() => this.selectTab(target.tab, target.section));
     });
   }
 
@@ -763,223 +152,42 @@ export class CsoportReszletekComponent implements OnInit {
       error: () => this.terkepVisible.set(false),
     });
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
-    // A csapatjavaslat értesítése ide mutat: /csoportok/{id}?tab=csapatok
-    if (this.route.snapshot.queryParamMap.get('tab') === 'csapatok') this.setTab('csapatok');
     this.loadMockExamBadge(this.groupId);
     if (this.store.groups().length === 0) {
       this.store.loadMine();
     }
     this.store.select(this.groupId);
     this.store.loadMembers(this.groupId);
-    if (this.schoolStore.schools().length === 0) {
-      this.schoolStore.loadMine();
-    }
+    const fragment = this.route.snapshot.fragment;
+    if (fragment) this.scrollToSection(fragment);
   }
 
-  // UI-TT-202: usedSeatsOnLicense (backend) kizárólag a licenc IdleWindowMinutes-én
-  // belül friss helyeket számolja, a holders lista viszont MINDEN fel nem szabadított
-  // helyet felsorol, tétlent is - a kettő szándékosan eltérhet. Az admin-oldali
-  // admin-intezmenyek.component.ts:117 mintáját követve itt is megszámoljuk, hány
-  // listázott hely tétlen (heldSeats - usedSeats ekvivalense a teacher DTO-ban).
-  idleTransferableSeatCount(seats: GroupSeatOverviewDto): number {
-    return seats.holders.filter((h) => !h.isFresh).length;
-  }
-
-  async confirmEndLesson(): Promise<void> {
-    if (this.seatStore.loading()) return;
-
-    const holders = this.seatStore.overview()?.holders ?? [];
-    const multiGroup = holders.filter((h) => h.inMultipleGroups).length;
-
-    const ok = await this.confirmService.ask({
-      message:
-        `Felszabadítod a csoport ${holders.length} használatban lévő helyét? ` +
-        (multiGroup > 0
-          ? `Figyelem: ${multiGroup} diák más csoportnak is tagja — egy diáknak egy helye van, ` +
-            'így a felszabadítás a másik óráján is látszani fog. '
-          : '') +
-        'Aki épp vizsgázik vagy kvízt ír, attól a rendszer nem veszi el a helyet.',
-      danger: true,
-      confirmLabel: 'Óra vége',
-    });
-    if (!ok) return;
-
-    this.seatStore.releaseAll(this.groupId);
-  }
-
-  async confirmReleaseSeat(holder: { userId: number; displayName: string; inMultipleGroups: boolean }): Promise<void> {
-    if (this.seatStore.loading()) return;
-
-    const ok = await this.confirmService.ask({
-      message:
-        `Felszabadítod ${holder.displayName} helyét? A diák visszaesik a saját előfizetésére. ` +
-        (holder.inMultipleGroups
-          ? 'Ez a diák más csoportnak is tagja — egy helye van, tehát a másik óráján is elveszíti.'
-          : ''),
-      danger: true,
-      confirmLabel: 'Felszabadítás',
-    });
-    if (!ok) return;
-
-    this.seatStore.releaseSeat(this.groupId, holder.userId);
-  }
-
-  setTab(tab: Tab): void {
-    this.tab.set(tab);
-    // UI-TT-67: a store.error() (a "Tagok" fül GroupStore-hibája) egy KÖZÖS,
-    // minden fülön látszó blokkban jelenik meg - fülváltás nélküli clearError()
-    // hívás nélkül egy korábbi fülről maradt hibaüzenet félrevezető kontextusban
-    // (pl. az Eredmények fülön) ottmaradt volna.
+  selectTab(tab: CsoportTab, section?: string): void {
+    // UI-TT-67: a GroupStore hibája a közös blokkban látszik - fülváltáskor ne maradjon idegen kontextusban.
     this.store.clearError();
-    if (tab === 'tagok') this.store.loadMembers(this.groupId);
-    if (tab === 'kiadva') {
-      this.loadAssignments(this.groupId);
-      this.loadTaskSetAssignments(this.groupId);
-      this.loadProjectAssignments(this.groupId);
-    }
-    if (tab === 'helyek') this.seatStore.load(this.groupId);
-    if (tab === 'eredmenyek') this.report.loadGroupActivity(this.groupId, this.range().from, this.range().to);
-    if (tab === 'ranglista') this.loadLeaderboard(this.groupId);
-    if (tab === 'gyenge-temak') this.loadWeakTopics(this.groupId);
-  }
-
-  /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */
-  readonly range = signal<ReportDateRange>({});
-  // UI-TT-178: a szűrő KULCSÁT (nem csak a belőle feloldott range-et) is meg kell
-  // őrizni, hogy a fülváltás miatt újra-mountoló DateRangeFilterComponent a helyes
-  // legördülő-opciót tudja visszatölteni, ne mindig DEFAULT_RANGE_KEY-t ("Teljes időszak").
-  readonly rangeKey = signal<ReportRangeKey>(DEFAULT_RANGE_KEY);
-  readonly customFromValue = computed(() => toDateInputValue(this.range().from));
-  readonly customToValue = computed(() => toDateInputValueExclusiveEnd(this.range().to));
-
-  applyRange(groupId: number, event: { key: ReportRangeKey; range: ReportDateRange }): void {
-    this.rangeKey.set(event.key);
-    this.range.set(event.range);
-    this.report.loadGroupActivity(groupId, event.range.from, event.range.to);
-  }
-
-  loadLeaderboard(groupId: number): void {
-    this.leaderboard.loadGroupLeaderboard(groupId, this.category, this.period);
-  }
-
-  joinLink(code: string): string {
-    return `${environment.studentAppUrl}/csoport/csatlakozas?code=${code}`;
-  }
-
-  initials(name: string): string {
-    return name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase();
-  }
-
-  rankClass(rank: number): string {
-    if (rank === 1) return 'bg-warning-subtle text-warning';
-    if (rank === 2) return 'bg-primary-subtle text-primary';
-    if (rank === 3) return 'bg-secondary-subtle text-secondary';
-    return 'bg-bg-element text-text-muted';
-  }
-
-  async removeMember(groupId: number, userId: number, memberName: string): Promise<void> {
-    const ok = await this.confirmService.ask({
-      message: `Biztosan eltávolítod ${memberName} diákot a csoportból?`,
-      danger: true,
-      confirmLabel: 'Eltávolítás',
-    });
-    if (!ok) return;
-    this.store.removeMember(groupId, userId, () => this.toastService.success('Diák eltávolítva a csoportból.'));
-  }
-
-  async archive(groupId: number): Promise<void> {
-    // UI-TT-34: az archiválásnak MOST MÁR van visszaállítási útja (unarchive) - a
-    // korábbi "VÉGLEGES, nem vonható vissza" szöveg ezt tévesen tagadta.
-    const ok = await this.confirmService.ask({
-      message:
-        'Biztosan archiválod a csoportot? A tagok elveszítik a tartalom-hozzáférést, amíg a csoport archivált - a csoport részletei oldalon bármikor visszaállítható.',
-      danger: true,
-      confirmLabel: 'Archiválás',
-    });
-    if (!ok) return;
-    this.store.archive(groupId, () => {
-      this.toastService.success('Csoport archiválva.');
-      this.router.navigateByUrl('/csoportok');
-    });
-  }
-
-  unarchive(groupId: number): void {
-    this.store.unarchive(groupId, () => this.toastService.success('Csoport visszaállítva.'));
-  }
-
-  async changeSchool(groupId: number, groupName: string, schoolId: number | null): Promise<void> {
-    const previousSchoolId = this.displaySchoolId();
-    this.displaySchoolId.set(schoolId);
-    if (schoolId !== null) {
-      const schoolName = this.schoolStore.schools().find((s) => s.id === schoolId)?.name ?? '';
-      const ok = await this.confirmService.ask({
-        message: `Biztosan a(z) „${schoolName}” intézményhez kötöd ezt a csoportot? A tagok minden korábbi eredménye láthatóvá válik az intézmény igazgatója számára, és a diákok erről értesítést kapnak.`,
+    void this.router
+      .navigate([], { relativeTo: this.route, queryParams: { tab }, fragment: section, replaceUrl: true })
+      .then(() => {
+        if (section) this.scrollToSection(section);
       });
-      if (!ok) {
-        this.displaySchoolId.set(previousSchoolId);
-        return;
-      }
-    } else if (previousSchoolId !== null) {
-      const ok = await this.confirmService.ask({
-        message: 'Biztosan visszavonod a csoport intézményhez-kötését? A csoport lekerül az intézményről, és az igazgató a továbbiakban nem látja a diákok eredményeit.',
-        danger: true,
-        confirmLabel: 'Kötés visszavonása',
-      });
-      if (!ok) {
-        this.displaySchoolId.set(previousSchoolId);
-        return;
-      }
-    }
-    this.store.update(
-      groupId,
-      // A konkurrencia-token a MOST betöltött csoportból megy vissza: ha időközben
-      // más módosította, a backend elutasítja a mentést a néma felülírás helyett.
-      { name: groupName, schoolId: schoolId ?? undefined, rowVersion: this.store.selectedGroup()?.rowVersion },
-      () => this.toastService.success('Csoport frissítve.'),
-      // UI-TT-73: mentés sikertelensége esetén a select-et vissza kell állítani a
-      // ténylegesen mentett (előző) értékre - az optimista beállítás (fenti
-      // displaySchoolId.set(schoolId)) enélkül a hibaüzenet mellett örökre a
-      // soha el nem mentett választáson maradt volna.
-      () => this.displaySchoolId.set(previousSchoolId),
-    );
   }
 
-  startRename(currentName: string): void {
-    this.renameValue = currentName;
-    this.renaming.set(true);
+  /** A Technikum fül eltűnt (egyik blokk sem elérhető) - ne maradjon a nem látható fülön. */
+  leaveHiddenTechnikum(): void {
+    if (!this.technikumVisible()) this.selectTab('attekintes');
   }
 
-  saveRename(groupId: number): void {
-    const name = this.renameValue.trim();
-    if (!name || this.store.loading()) return;
-    // UI-UX-T4: az update ugyanaz az útvonal, mint az intézmény-kötés váltásáé - a
-    // schoolId-t a MOST LÁTOTT (displaySchoolId) értékkel küldjük, hogy a két
-    // szerkesztési út ne írhassa felül egymást.
-    this.store.update(
-      groupId,
-      { name, schoolId: this.displaySchoolId() ?? undefined, rowVersion: this.store.selectedGroup()?.rowVersion },
-      () => {
-        this.renaming.set(false);
-        this.toastService.success('Csoport átnevezve.');
-      },
-    );
+  private scrollToSection(id: string): void {
+    afterNextRender(() => this.document.getElementById(id)?.scrollIntoView({ block: 'start' }), { injector: this.injector });
   }
 
-  regenerateInvite(groupId: number): void {
-    if (this.store.loading()) return;
-    this.store.regenerateInvite(groupId, () => this.toastService.success('Új meghívó kód generálva.'));
-  }
-
-  setJoinEnabled(groupId: number, enabled: boolean): void {
-    if (this.store.loading()) return;
-    this.store.setJoinEnabled(groupId, enabled, () =>
-      this.toastService.success(enabled ? 'Jelentkezés engedélyezve.' : 'Jelentkezés letiltva.'),
-    );
+  private loadMockExamBadge(groupId: number): void {
+    this.mockExamService.getCurrent().pipe(
+      switchMap((current) => (current ? this.mockExamService.get(current.slug) : of(null))),
+      take(1),
+    ).subscribe({
+      next: (ev) => this.mockExamRegistered.set(!!ev?.groups.find((g) => g.groupId === groupId)?.registered),
+      error: () => this.mockExamRegistered.set(false),
+    });
   }
 }

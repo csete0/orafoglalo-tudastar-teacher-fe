@@ -77,7 +77,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await colleaguePage.getByRole('button', { name: 'Létrehozás' }).click();
   await expect(colleaguePage.getByText(groupName)).toBeVisible({ timeout: 15000 });
   await colleaguePage.getByText(groupName).click();
-  await colleaguePage.getByRole('tab', { name: 'Meghívó' }).click();
+  await colleaguePage.getByRole('tab', { name: 'Beállítások' }).click();
   const groupInviteCode = (await colleaguePage.locator('code').first().textContent())?.trim();
 
   // ── Az igazgató VISSZA-lefokozza a kollégát sima tanárrá ──

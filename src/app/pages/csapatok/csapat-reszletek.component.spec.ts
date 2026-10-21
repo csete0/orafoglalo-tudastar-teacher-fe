@@ -155,4 +155,13 @@ describe('CsapatReszletekComponent', () => {
     expect(el.querySelector('[data-testid="quota-full"]')).toBeTruthy();
     expect((Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('MI-átnézés kérése')) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('a csoportra mutató vissza-link a csoportoldal Technikum fülének Csapatok szakaszára visz', async () => {
+    const { fixture, el } = setup();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const back = Array.from(el.querySelectorAll('a')).find((a) => a.textContent?.includes('13.T'))!;
+    expect(back.getAttribute('href')).toBe('/csoportok/7?tab=technikum#csapatok');
+  });
 });

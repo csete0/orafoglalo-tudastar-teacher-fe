@@ -116,7 +116,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await teacherPage.locator('[formcontrolname="name"]').fill(groupName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupName).click();
-  await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
+  await teacherPage.getByRole('tab', { name: 'Beállítások' }).click();
   const inviteCode = (await teacherPage.locator('code').first().textContent())?.trim();
 
   // ── Diák csatlakozik, előfizetés NÉLKÜL ──

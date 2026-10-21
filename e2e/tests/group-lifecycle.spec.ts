@@ -33,7 +33,7 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     await expect(teacherPage).toHaveURL(/\/csoportok\/\d+/, { timeout: 15000 });
 
     // ── Meghívó kód kiolvasása ──
-    await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
+    await teacherPage.getByRole('tab', { name: 'Beállítások' }).click();
     const inviteCode = (await teacherPage.locator('code').first().textContent())?.trim();
     expect(inviteCode).toBeTruthy();
 
@@ -50,8 +50,8 @@ test('magántanár csoportot hoz létre, diák meghívó kóddal csatlakozik, ma
     await studentPage.goto(`${STUDENT_FE_URL}/csoportjaim`);
     await expect(studentPage.getByText(groupName)).toBeVisible({ timeout: 15000 });
 
-    // ── Tanár oldalán a "Tagok" fülön megjelenik a diák ──
-    await teacherPage.getByRole('tab', { name: 'Tagok' }).click();
+    // ── Tanár oldalán a "Diákok" fülön megjelenik a diák ──
+    await teacherPage.getByRole('tab', { name: 'Diákok' }).click();
     await expect(teacherPage.getByRole('button', { name: 'Eltávolítás' })).toBeVisible({ timeout: 15000 });
 
     // ── Eltávolítás (saját confirm-dialógus komponens) ──

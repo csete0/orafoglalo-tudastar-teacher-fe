@@ -32,7 +32,7 @@ const MAX_POLLS = 36;
   template: `
     @if (team(); as t) {
       <div class="max-w-6xl space-y-4 min-w-0">
-        @if (t.groupId) { <a class="text-sm underline" [routerLink]="['/csoportok', t.groupId]" [queryParams]="{ tab: 'csapatok' }">← {{ t.groupName }}</a> }
+        @if (t.groupId) { <a class="text-sm underline" [routerLink]="['/csoportok', t.groupId]" [queryParams]="{ tab: 'technikum' }" fragment="csapatok">← {{ t.groupName }}</a> }
         <h1 class="page-title break-words">{{ t.name }}</h1>
         <p class="text-sm text-text-muted">{{ t.projectTitle ? t.projectTitle + ' · ' : '' }}{{ memberLine(t) }}
           @if (t.examDate) { · vizsga: {{ t.examDate | date: 'yyyy.MM.dd.' }} }</p>
