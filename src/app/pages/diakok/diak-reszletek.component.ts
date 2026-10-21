@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Location } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';

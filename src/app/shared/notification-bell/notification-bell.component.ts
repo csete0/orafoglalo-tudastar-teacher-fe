@@ -145,8 +145,8 @@ export class NotificationBellComponent implements OnInit {
 
   readonly open = signal(false);
 
-  // UI-TT-162: egyedi azonosító fizikai DOM-példányonként (desktop/mobil
-  // header-sáv) - ld. a coordinator bell-vs-bell kizárás megjegyzését, és a
+  // UI-TT-162: egyedi azonosító fizikai DOM-példányonként (asztali oldalsáv/
+  // mobil felső sáv) - ld. a coordinator bell-vs-bell kizárás megjegyzését, és a
   // konstruktor `registerBell()` hívását lent.
   private readonly instanceId = crypto.randomUUID();
 
@@ -207,7 +207,7 @@ export class NotificationBellComponent implements OnInit {
     // coordinator felé jelezni) SZÁNDÉKOSAN nem effect()-tel, hanem az
     // open()/close() hívási pontokon, IMPERATÍV módon tesszük (ld. lentebb).
     // Ennek oka: a harang KÉT független DOM-példányban is mountolva van
-    // (desktop + mobil header-blokk), mindkettő saját `open` szignállal - egy,
+    // (asztali oldalsáv + mobil felső sáv), mindkettő saját `open` szignállal - egy,
     // a saját (mindig zárt) állapotát figyelő effect a MÁSIK, épp nyitva lévő
     // példány "bell" jelzését tudná véletlenül, hamis "close('bell')"
     // hívással felülírni, valahányszor a signal-scheduler újra kiértékeli
@@ -260,7 +260,7 @@ export class NotificationBellComponent implements OnInit {
 
   /** Escape-re zár, ÉS visszaadja a fókuszt a harang-gombra - accessible
    *  dropdown-konvenció, hogy a billentyűzet-fókusz ne "vesszen el" valahol
-   *  a fejlécben azután, hogy a panel eltűnt a DOM-ból. */
+   *  a menüsávban azután, hogy a panel eltűnt a DOM-ból. */
   closeAndReturnFocus(): void {
     this.close();
     this.triggerBtn()?.nativeElement.focus();

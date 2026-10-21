@@ -46,8 +46,10 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await teacherPage.locator('[name="newTaskDescription-6"]').fill('Feladat leírása.');
   const taskAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-6"]') });
   await taskAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
-  await expect(teacherPage.getByText('1. Feladat')).toBeVisible({ timeout: 15000 });
-  await teacherPage.getByText('1. Feladat').click();
+  // A cím a bal oldali feladat-vázlatban is szerepel - a feladatkártya kinyitó gombjára szűrünk.
+  const taskToggle = teacherPage.getByTestId('task-toggle').filter({ hasText: '1. Feladat' });
+  await expect(taskToggle).toBeVisible({ timeout: 15000 });
+  await taskToggle.click();
 
   await teacherPage.locator('[name="newSolutionDescription"]').fill('Részfeladat');
   const solutionAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newSolutionDescription"]') });
