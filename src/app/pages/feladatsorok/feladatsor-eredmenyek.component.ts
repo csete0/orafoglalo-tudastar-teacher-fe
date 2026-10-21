@@ -175,7 +175,7 @@ import {
                           [title]="'Értékelés megnyitása'">
                           {{ cell.earnedPoints ?? '–' }}/{{ cell.maxPoints ?? '–' }}
                           @if (cell.isOverridden) {
-                            <span class="badge badge-info !text-[10px] !px-1.5 !py-0.5"
+                            <span class="badge badge-primary !text-[10px] !px-1.5 !py-0.5"
                               title="A pontszámot tanár bírálta felül.">tanári</span>
                           }
                         </button>
