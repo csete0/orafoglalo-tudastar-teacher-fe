@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { PillanatkepKodComponent } from './pillanatkep-kod.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
@@ -105,6 +105,23 @@ describe('PillanatkepKodComponent', () => {
     expect(confirm.ask).toHaveBeenCalled();
     expect(api.deleteComment).toHaveBeenCalledWith(31, 1);
     expect(el.querySelector('[data-testid="comment-1"]')).toBeNull();
+  });
+
+  it('a régi dolgozatra küldött megjegyzés válasza nem kerül a közben megnyitott másik dolgozatba', async () => {
+    const { fixture, el, api } = await setup([]);
+    const pending = new Subject<ExamCodeCommentDto>();
+    api.createComment.mockReturnValueOnce(pending);
+    lineButton(el, 1).click();
+    fixture.detectChanges();
+    el.querySelector<HTMLTextAreaElement>('[data-testid="new-comment"] textarea')!.value = 'Régi';
+    el.querySelector<HTMLFormElement>('[data-testid="new-comment"]')!.dispatchEvent(new Event('submit'));
+    fixture.componentRef.setInput('snapshot', { ...snapshot, sessionId: 32 });
+    fixture.detectChanges();
+    pending.next(comment({ id: 900, line: 1, body: 'Régi' }));
+    pending.complete();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="comment-900"]')).toBeNull();
+    expect(api.comments).toHaveBeenLastCalledWith(32);
   });
 
   it('a hivatalos (csak olvasható) fájl és az egyéb fájlok nem megjegyezhetők', async () => {

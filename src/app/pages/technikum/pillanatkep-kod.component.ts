@@ -89,7 +89,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
         @for (c of commentsAt(line); track c.id) {
           <div class="thread" [attr.data-testid]="'comment-' + c.id">
             <p class="text-xs text-text-muted">
-              <strong class="text-text-default">{{ c.authorName }}</strong> · {{ utc(c.createdAt) | date: 'MM.dd. HH:mm' }}
+              <strong class="text-text-primary">{{ c.authorName }}</strong> · {{ utc(c.createdAt) | date: 'MM.dd. HH:mm' }}
               @if (c.updatedAt) { · szerkesztve }
             </p>
             @if (editingId() === c.id) {
@@ -115,7 +115,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
         @for (sg of suggestionsAt(line); track sg.key) {
           <form class="suggestion" [attr.data-testid]="'suggestion-' + sg.key" (submit)="$event.preventDefault(); accept(sg, sgBox.value)">
             <p class="text-xs text-text-muted"><span [class]="'sev sev--' + (sg.severity === 'dicséret' ? 'dicseret' : sg.severity)">{{ sg.severity }}</span>
-              <strong class="text-text-default">MI-javaslat</strong> · még nem megjegyzés</p>
+              <strong class="text-text-primary">MI-javaslat</strong> · még nem megjegyzés</p>
             <label class="sr-only" [for]="'suggestion-box-' + sg.key">A javaslat szövege</label>
             <textarea #sgBox [id]="'suggestion-box-' + sg.key" class="form-input !text-sm w-full mt-1" rows="2" maxlength="2000" [value]="sg.text"></textarea>
             <div class="flex gap-2 mt-2">
@@ -152,7 +152,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
   `,
   styles: [`
     .part-tab { padding: 0.25rem 0.625rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--color-border-default);
-      background: var(--color-bg-surface); color: var(--color-text-default); }
+      background: var(--color-bg-panel); color: var(--color-text-primary); }
     .part-tab[aria-selected="true"] { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary); }
     .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
     .gallery { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -162,13 +162,13 @@ interface Suggestion extends CodeCommentSuggestionDto {
     .thumb:hover, .thumb:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
     .lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
       padding: 1rem; background: rgba(0, 0, 0, 0.8); }
-    .lightbox img { max-width: 100%; max-height: calc(100vh - 6rem); object-fit: contain; border-radius: 0.5rem; background: var(--color-bg-surface); }
+    .lightbox img { max-width: 100%; max-height: calc(100vh - 6rem); object-fit: contain; border-radius: 0.5rem; background: var(--color-bg-panel); }
     .lightbox-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 0.75rem;
-      background: var(--color-bg-surface); color: var(--color-text-default); }
+      background: var(--color-bg-panel); color: var(--color-text-primary); }
     .ai-bar { padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary); }
     .thread, .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-family: var(--font-sans, system-ui, sans-serif);
       white-space: normal; }
-    .thread { background: var(--color-bg-surface); border: 1px solid var(--color-border-default); }
+    .thread { background: var(--color-bg-panel); border: 1px solid var(--color-border-default); }
     .suggestion { border: 1px dashed var(--color-primary); background: var(--color-primary-subtle); }
     .thread-body { margin-top: 0.25rem; font-size: 0.8125rem; white-space: pre-wrap; }
     .sev { display: inline-block; margin-right: 0.375rem; padding: 0 0.375rem; border-radius: 999px; font-size: 0.625rem; font-weight: 700; color: #fff; }
@@ -376,12 +376,18 @@ export class PillanatkepKodComponent {
     this.lightbox.set(null);
   }
 
+  /** Egy megjegyzés-művelet; a válasz eldobva, ha közben másik dolgozat pillanatképe nyílt meg. */
   private run<T>(call: Observable<T>, done: (value: T) => void): void {
+    const sessionId = this.snapshot().sessionId;
     this.busy.set(true);
     this.commentError.set(null);
     call.pipe(take(1), finalize(() => this.busy.set(false))).subscribe({
-      next: done,
-      error: (e) => this.commentError.set(extractErrorMessage(e, 'A megjegyzés mentése sikertelen.')),
+      next: (value) => {
+        if (this.snapshot().sessionId === sessionId) done(value);
+      },
+      error: (e) => {
+        if (this.snapshot().sessionId === sessionId) this.commentError.set(extractErrorMessage(e, 'A megjegyzés mentése sikertelen.'));
+      },
     });
   }
 
