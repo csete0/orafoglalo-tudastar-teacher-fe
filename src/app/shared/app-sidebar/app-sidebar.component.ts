@@ -70,7 +70,7 @@ function readCollapsed(): boolean | null {
   host: {
     class: 'contents',
     '(document:click)': 'onDocumentClick($event)',
-    '(document:keydown.escape)': 'menuOpen.set(false)',
+    '(document:keydown.escape)': 'closeMenuOnEscape()',
   },
   template: `
     <ng-template #navList let-compact>
@@ -150,7 +150,7 @@ function readCollapsed(): boolean | null {
 
     @if (menuOpen()) {
       <div class="lg:hidden fixed inset-0 z-40 bg-black/40 print:hidden" (click)="menuOpen.set(false)"></div>
-      <div #panel id="mobile-drawer" data-testid="mobile-drawer"
+      <div #panel id="mobile-drawer" data-testid="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menü"
         class="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] flex flex-col bg-bg-panel border-r border-border-default shadow-lg print:hidden">
         <nav aria-label="Fő navigáció (mobil)" class="flex-1 min-h-0 overflow-y-auto px-2 py-3">
           <ng-container [ngTemplateOutlet]="navList" [ngTemplateOutletContext]="{ $implicit: false }" />
@@ -240,6 +240,9 @@ export class AppSidebarComponent {
     effect(() => {
       if (this.dropdownCoordinator.openDropdown() === 'bell') this.menuOpen.set(false);
     });
+
+    // Nyitáskor a fókusz a drawer első menüpontjára kerül (ne a hamburgeren maradjon).
+    effect(() => this.panel()?.nativeElement.querySelector<HTMLElement>('a[href], button')?.focus());
   }
 
   toggleCollapsed(): void {
@@ -259,6 +262,13 @@ export class AppSidebarComponent {
     if (this.menuBtn()?.nativeElement.contains(target)) return;
     if (this.panel()?.nativeElement.contains(target)) return;
     this.menuOpen.set(false);
+  }
+
+  /** Escape: zár, és a fókuszt visszaadja a hamburgernek (csak ha a drawer nyitva volt). */
+  closeMenuOnEscape(): void {
+    if (!this.menuOpen()) return;
+    this.menuOpen.set(false);
+    this.menuBtn()?.nativeElement.focus();
   }
 
   logout(): void {

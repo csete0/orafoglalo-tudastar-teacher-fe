@@ -103,7 +103,7 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
           } @else {
             <ul>
               @for (n of visibleNotifications(); track n.userNotificationId) {
-                <li class="border-b border-border-subtle last:border-b-0">
+                <li class="border-b border-border-default last:border-b-0">
                   <div (click)="onItemClick(n)"
                        tabindex="0"
                        role="button"

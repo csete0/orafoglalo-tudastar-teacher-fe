@@ -145,6 +145,13 @@ describe('MiSegitoPanelComponent', () => {
     expect(el.querySelector('[data-testid="ai-catalog-link"]')!.getAttribute('href')).toBe('/feladatsorok?katalogus=1');
   });
 
+  it('töltés közben (busy) az SQL-gombok tiltottak, a többi nem', () => {
+    const { el } = render({ busy: true, selection: { label: '1. Prog', programming: true, sql: true }, sqlAvailable: true });
+    expect(button(el, 'sql-queries-open').disabled).toBe(true);
+    expect(button(el, 'ai-sql-files-open').disabled).toBe(true);
+    expect(button(el, 'ai-new-open').disabled).toBe(false);
+  });
+
   it('quotaState: prémium hiánya előbb, mint a keret; ismeretlen keretnél semmi', () => {
     expect(quotaState({ used: 1, limit: 2 }, false)).toEqual({ usage: null, blocked: AI_HELPER_PREMIUM_TEXT });
     expect(quotaState(null, true)).toEqual({ usage: null, blocked: null });

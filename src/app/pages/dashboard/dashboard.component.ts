@@ -169,7 +169,7 @@ const ADMIN_CARDS: DashboardCard[] = [
             <ul class="flex flex-wrap gap-2">
               @for (topic of d.weakTopics; track topic.topicId) {
                 <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
-                    [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-subtle)'"
+                    [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-element)'"
                     [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
                   @if (topic.topicIcon) {
                     <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />

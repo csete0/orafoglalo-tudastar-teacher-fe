@@ -238,6 +238,24 @@ describe('AppSidebarComponent', () => {
       expect(fixture.componentInstance.menuOpen()).toBe(false);
     });
 
+    it('dialógus-szemantika: nyitáskor az első menüpont kap fókuszt, Escape után a hamburger', () => {
+      const fixture = create();
+      document.body.appendChild(fixture.nativeElement); // fókusz csak dokumentumba kötött elemen működik
+      const burger = fixture.nativeElement.querySelector('button[aria-label="Menü"]') as HTMLButtonElement;
+      burger.click();
+      fixture.detectChanges();
+
+      const panel = drawer(fixture)!;
+      expect(panel.getAttribute('role')).toBe('dialog');
+      expect(panel.getAttribute('aria-modal')).toBe('true');
+      expect(document.activeElement).toBe(panel.querySelector('a[href]'));
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(burger);
+      fixture.nativeElement.remove();
+    });
+
     it('BUG UI-TT-189: a draweren kívüli kattintás bezárja, a belső nem', () => {
       const fixture = create();
       fixture.componentInstance.menuOpen.set(true);

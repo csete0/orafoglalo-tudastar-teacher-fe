@@ -86,7 +86,7 @@ describe('összesítő számítások', () => {
 describe('CsoportAttekintesComponent', () => {
   const inDays = (n: number) => new Date(Date.now() + n * DAY).toISOString();
 
-  interface SetupOpts { quizError?: boolean; activityError?: boolean; teamsError?: number; showTerkep?: boolean }
+  interface SetupOpts { quizError?: boolean; activityError?: boolean; teamsError?: number; noTeams?: boolean; showTerkep?: boolean }
 
   function setup(opts: SetupOpts = {}) {
     const fail = <T>(status = 500): Observable<T> => throwError(() => ({ status }));
@@ -117,7 +117,7 @@ describe('CsoportAttekintesComponent', () => {
             { topicId: 3, topicName: 'Tömbök', successRate: 44 }, { topicId: 4, topicName: 'Fájlkezelés', successRate: 48 },
           ])),
         } },
-        { provide: TeacherTeamService, useValue: { forGroup: vi.fn(() => opts.teamsError ? fail(opts.teamsError) : of([
+        { provide: TeacherTeamService, useValue: { forGroup: vi.fn(() => opts.teamsError ? fail(opts.teamsError) : of(opts.noTeams ? [] : [
           { id: 1, status: 'active' }, { id: 2, status: 'proposed' }, { id: 3, status: 'proposed' }, { id: 4, status: 'archived' },
         ])) } },
       ],
@@ -203,6 +203,11 @@ describe('CsoportAttekintesComponent', () => {
     expect(el.querySelector('section[aria-labelledby="technikum-kivonat"]')).toBeNull();
     expect(csapatokUnavailable()).toBe(1);
     expect(el.textContent).not.toContain('betöltése sikertelen');
+  });
+
+  it('nem technikumi csoport (üres csapatlista, nincs térkép): nincs Technikum kártya', () => {
+    const { el } = setup({ noTeams: true });
+    expect(el.querySelector('section[aria-labelledby="technikum-kivonat"]')).toBeNull();
   });
 
   it('részleges hiba: csak az érintett csempék „–”, a többi blokk megmarad', () => {

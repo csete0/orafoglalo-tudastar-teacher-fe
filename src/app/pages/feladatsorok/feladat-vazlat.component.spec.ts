@@ -52,14 +52,15 @@ describe('FeladatVazlatComponent', () => {
     expect(el.querySelector('[data-testid="outline-add-0"]')).toBeNull();
   });
 
-  it('a (keskeny nézetben használt) fejléc-gomb összecsukja a listát, aria-expanded-del', () => {
+  it('keskeny nézetben (xl alatt) csukva indul, a fejléc-gomb kinyitja/összecsukja, aria-expanded-del', () => {
     const { fixture, el } = render();
     const toggle = el.querySelector('[data-testid="task-outline-toggle"]') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    toggle.click();
-    fixture.detectChanges();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(el.querySelector('#task-outline-list')!.classList).toContain('hidden');
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(el.querySelector('#task-outline-list')!.classList).not.toContain('hidden');
   });
 
   it('pont-gond: részfeladat nélkül saját felirattal, eltérő részpont-összegnél az eltérés-felirattal', () => {

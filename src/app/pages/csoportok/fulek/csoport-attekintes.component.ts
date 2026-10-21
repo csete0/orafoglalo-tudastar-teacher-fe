@@ -122,9 +122,9 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
               <thead>
                 <tr>
                   <th class="sticky-col">Diák</th>
-                  <th>Átlag (30 nap)</th>
-                  <th>Vizsgák</th>
-                  <th>Kvíz-pontosság</th>
+                  <th class="text-right">Átlag (30 nap)</th>
+                  <th class="text-right">Vizsgák</th>
+                  <th class="text-right">Kvíz-pontosság</th>
                   <th>Jelzés</th>
                 </tr>
               </thead>
@@ -134,9 +134,9 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
                     <td class="sticky-col whitespace-nowrap">
                       <a [routerLink]="['/diakok', s.row.userId]" class="text-primary hover:underline">{{ s.row.name }}</a>
                     </td>
-                    <td class="num">{{ s.row.averageExamScorePercent == null ? '–' : s.row.averageExamScorePercent + '%' }}</td>
-                    <td class="num">{{ s.row.completedExamsCount }}</td>
-                    <td class="num">{{ s.row.quizAccuracyPercent == null ? '–' : s.row.quizAccuracyPercent + '%' }}</td>
+                    <td class="num text-right">{{ s.row.averageExamScorePercent == null ? '–' : s.row.averageExamScorePercent + '%' }}</td>
+                    <td class="num text-right">{{ s.row.completedExamsCount }}</td>
+                    <td class="num text-right">{{ s.row.quizAccuracyPercent == null ? '–' : s.row.quizAccuracyPercent + '%' }}</td>
                     <td>
                       @if (s.flag) {
                         <span class="badge" [class.badge-neutral]="s.flag === 'inaktív'" [class.badge-danger]="s.flag === 'lemaradt'">{{ s.flag }}</span>
@@ -192,11 +192,11 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
           </div>
         </section>
 
-        @if (showTerkep() || teams()) {
+        @if (showTerkep() || teams()?.length) {
           <section aria-labelledby="technikum-kivonat">
             <h2 id="technikum-kivonat" class="text-lg font-bold mb-3">Technikum</h2>
             <div class="card p-3 text-sm space-y-2">
-              @if (teams()) {
+              @if (teams()?.length) {
                 <p data-testid="technikum-teams">{{ activeTeamCount() }} csapat · {{ proposedTeamCount() }} javaslat vár jóváhagyásra</p>
                 <button type="button" class="text-primary hover:underline block"
                   (click)="openTab.emit({ tab: 'technikum', section: 'csapatok' })">Csapatok →</button>

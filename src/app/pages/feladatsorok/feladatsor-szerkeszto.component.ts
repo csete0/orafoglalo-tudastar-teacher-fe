@@ -226,7 +226,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
               @if (isSectionExpanded(section.id)) {
                 <div class="px-4 pb-4 space-y-3">
                   @for (task of section.tasks; track task.id) {
-                    <div class="bg-bg-element rounded-xl p-4 scroll-mt-4" [attr.id]="'task-' + task.id">
+                    <div class="bg-bg-element rounded-xl p-4 scroll-mt-20 lg:scroll-mt-4" [attr.id]="'task-' + task.id">
                       @if (editingTaskId() === task.id) {
                         <!-- UI-TT-214: inline szerkesztő - a UI-TT-193 részfeladat-mintáját
                              tükrözi (cím/leírás/pont, ITT + sorrend-mező is), ugyanazokra a
@@ -472,7 +472,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
                   }
 
                   @if (!section.isOther) {
-                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2 scroll-mt-4"
+                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2 scroll-mt-20 lg:scroll-mt-4"
                       [attr.id]="'new-task-' + section.id">
                       <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
                       <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id" [attr.id]="'new-task-title-' + section.id"
@@ -796,7 +796,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         </section>
         </div>
 
-        <app-mi-segito-panel #aiPanel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()"
+        <app-mi-segito-panel #aiPanel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()" [busy]="store.loading()"
           [sqlAvailable]="showSqlGeneration()"
           (rubricRequested)="openRubric()" (aiTaskRequested)="openAiTask($event, $event === 'complete' ? selectedTask() : null)"
           (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(panelSelection()?.sql ? expandedTaskId() : null)"

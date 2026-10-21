@@ -101,7 +101,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
         @if (selection()?.sql) {
           <div>
             <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-              [disabled]="takedown()" (click)="sqlQueriesRequested.emit()" data-testid="sql-queries-open">
+              [disabled]="takedown() || busy()" (click)="sqlQueriesRequested.emit()" data-testid="sql-queries-open">
               SQL megoldó lekérdezések
             </button>
             <ng-container *ngTemplateOutlet="hint; context: { $implicit: null, id: 'sql-queries', text: 'részfeladatonként, SQLite-on futtatva' }" />
@@ -148,7 +148,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
         @if (sqlAvailable()) {
           <div>
             <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-              [disabled]="takedown()" (click)="sqlFilesRequested.emit()" data-testid="ai-sql-files-open">
+              [disabled]="takedown() || busy()" (click)="sqlFilesRequested.emit()" data-testid="ai-sql-files-open">
               Hiányzó SQL-fájl elkészítése
             </button>
             <ng-container *ngTemplateOutlet="hint; context: { $implicit: null, id: 'sql-files', text: 'create.sql ↔ create_lite.sql vagy az adatfájlokból' }" />
@@ -187,6 +187,8 @@ export class MiSegitoPanelComponent {
   readonly sqlAvailable = input(false);
   /** Nyitva van-e valamelyik MI-dialógus - bezáráskor a keretek újratöltődnek. */
   readonly dialogOpen = input(false);
+  /** Töltődik-e a feladatsor (`store.loading()`) - közben az SQL-dialógusok nem nyithatók. */
+  readonly busy = input(false);
 
   readonly rubricRequested = output<void>();
   readonly aiTaskRequested = output<'new' | 'complete'>();

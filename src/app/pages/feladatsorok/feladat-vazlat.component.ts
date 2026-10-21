@@ -90,8 +90,8 @@ export class FeladatVazlatComponent {
   readonly taskSelected = output<number>();
   readonly addTaskRequested = output<number>();
 
-  /** Csak `xl` alatt számít (ott összecsukható blokk); alapból nyitva. */
-  readonly open = signal(true);
+  /** Csak `xl` alatt számít (ott összecsukható blokk): ott alapból csukva, hogy ne tolja le a szerkesztőt. */
+  readonly open = signal(typeof matchMedia === 'function' && matchMedia('(min-width: 1280px)').matches);
 
   readonly pointIssue = pointIssue;
 }

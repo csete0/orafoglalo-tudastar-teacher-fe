@@ -195,7 +195,7 @@ type SuggestScope = 'file' | 'all';
                 @for (t of threadsAt(line); track t.id) {
                   <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
                     <p class="text-xs text-text-muted">
-                      <strong class="text-text-default">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
+                      <strong class="text-text-primary">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
                       @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
                       @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
                     </p>
@@ -214,7 +214,7 @@ type SuggestScope = 'file' | 'all';
                        role="group" [attr.aria-label]="'AI-javaslat (' + sg.severity + ') a(z) ' + sg.line + '. sorhoz'">
                     <p class="text-xs text-text-muted">
                       <span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
-                      <strong class="text-text-default">AI-javaslat</strong> · még nem megjegyzés
+                      <strong class="text-text-primary">AI-javaslat</strong> · még nem megjegyzés
                       @if (sg.lineText !== text) { · <span class="text-warning">a sor azóta megváltozhatott</span> }
                     </p>
                     @if (editingKey() === sg.key) {
