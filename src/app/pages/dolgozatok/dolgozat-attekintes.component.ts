@@ -138,7 +138,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
                       @if (row.timeLimitReached) {
                         <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" title="Az idő lejártakor automatikusan adódott be (a mentett munkájából)">lejárt az idő</span>
                       }
-                      @if (row.needsManualGrading) {
+                      @if (row.needsManualGrading && row.leftGroup) {
+                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-ungradable-' + row.userId"
+                              title="Az AI nem pontozta, és a diák azóta kilépett a csoportból - a dolgozata csak olvasható, kézzel sem pontozható">a diák kilépett, nem pontozható</span>
+                      } @else if (row.needsManualGrading) {
                         <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Ezt a dolgozatot az AI nem pontozta (pl. betelt a havi keret, vagy hiba történt a pontozáskor) - pontozd kézzel; amíg pontozatlan, az eredmény nem tehető közzé">kézi pontozás</span>
                       }
                     </td>

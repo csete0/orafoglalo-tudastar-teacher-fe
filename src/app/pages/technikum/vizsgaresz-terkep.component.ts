@@ -171,6 +171,9 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
               }
               @if (sn.session.submittedAt) { · beadva: {{ utc(sn.session.submittedAt) | date: 'yyyy.MM.dd. HH:mm' }} }
             </p>
+            @if (sn.leftGroup && sn.session.notEvaluatedPoints) {
+              <p class="text-xs text-text-muted mt-1" role="note" data-testid="snapshot-left-ungradable">A diák kilépett, nem pontozható: a nem értékelt szempontok kézzel sem pontozhatók.</p>
+            }
             @if (sn.session.notEvaluatedPoints) {
               <p class="text-xs text-warning mt-1" role="note" data-testid="snapshot-not-evaluated">
                 {{ sn.session.notEvaluatedPoints }} pontnyi MI-szempont nem lett értékelve (MI-keret vagy MI-hiba) – ezek 0 pontot kaptak,

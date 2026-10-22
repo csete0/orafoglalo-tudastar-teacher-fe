@@ -98,6 +98,12 @@ describe('DolgozatAttekintesComponent', () => {
     expect(component.activeStudents().map((s) => s.userId)).toEqual([1, 2]);
   });
 
+  it('kilépett diák kézi pontozásra váró dolgozata: „a diák kilépett, nem pontozható”', () => {
+    const base = makeOverview();
+    const { el } = setup(makeOverview({ students: [{ ...base.students[0], userId: 3, leftGroup: true, needsManualGrading: true, earnedPoints: null }] }));
+    expect(el.querySelector('[data-testid="left-ungradable-3"]')!.textContent).toContain('a diák kilépett, nem pontozható');
+  });
+
   it('kézi pontozásra váró beadott sornál nem 0 pont, hanem „– / max” áll', () => {
     const base = makeOverview();
     const { el } = setup(makeOverview({

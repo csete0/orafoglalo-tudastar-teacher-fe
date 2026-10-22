@@ -163,7 +163,7 @@ describe('VizsgareszTerkepComponent', () => {
       comments: vi.fn(() => of([])),
       heatmap: vi.fn(() => of({ ...structuredClone(heatmap), students: [...structuredClone(heatmap).students,
         { userId: 66, name: 'Volt Diák', theory: null, leftGroup: true, cells: [cell({ points: 10, ratio: 10 / 15 })] }] })),
-      snapshot: vi.fn(() => of({ ...snapshot, userId: 66, leftGroup: true, session: { ...snapshot.session, parts: [
+      snapshot: vi.fn(() => of({ ...snapshot, userId: 66, leftGroup: true, session: { ...snapshot.session, notEvaluatedPoints: 5, parts: [
         { partKey: 'console' as const, title: 'Konzol', maxPoints: 15, result: { id: 1, partKey: 'console' as const, status: 'graded', points: 10, maxPoints: 15,
           source: 'exam', sessionId: 31, gradedAt: '', detail: { message: null, machine: { status: 'done', points: 10, maxPoints: 10, compileOutput: null, cases: [] },
             ai: { status: 'done', points: 0, maxPoints: 5, message: null, items: [{ key: 'k', points: 0, maxPoints: 5, reason: 'Beszédes nevek', notEvaluated: false }] } } } }] } })),
@@ -183,6 +183,7 @@ describe('VizsgareszTerkepComponent', () => {
     fixture.detectChanges();
     const section = el.querySelector('[data-testid="snapshot"]')!;
     expect(section.querySelector('[data-testid="snapshot-left-group"]')).not.toBeNull();
+    expect(section.querySelector('[data-testid="snapshot-left-ungradable"]')!.textContent).toContain('A diák kilépett, nem pontozható');
     expect(section.textContent).toContain('Beszédes nevek');
     expect(section.querySelector('[data-testid^="rubric-input-"]')).toBeNull();
     expect(section.querySelector('[data-testid^="rubric-save-"]')).toBeNull();
