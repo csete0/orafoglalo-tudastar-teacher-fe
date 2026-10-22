@@ -137,18 +137,22 @@ const ADMIN_CARDS: DashboardCard[] = [
           <section class="card p-5 mt-6">
             <h2 class="font-bold mb-3">Közelgő határidők</h2>
             <ul class="space-y-2">
-              @for (deadline of d.upcomingDeadlines; track deadline.assignmentId) {
+              @for (deadline of d.upcomingDeadlines; track deadline.kind + deadline.assignmentId) {
                 <li class="flex items-center justify-between gap-3 text-sm">
                   <span class="min-w-0 truncate">
                     @if (deadline.kind === 'taskset') {
                       <a [routerLink]="['/feladatsorok', deadline.taskSetId, 'eredmenyek']"
                          class="font-semibold text-primary hover:underline">{{ deadline.taskSetTitle }}</a>
+                    } @else if (deadline.kind === 'project') {
+                      <a [routerLink]="['/feladatsorok/projektek/kiadas', deadline.assignmentId]"
+                         class="font-semibold text-primary hover:underline">{{ deadline.projectTitle }}</a>
+                      {{ deadline.isTest ? '(dolgozat)' : '(projekt)' }}
                     } @else {
                       <a [routerLink]="['/feladatsorok/kvizek', deadline.quizId, 'eredmenyek']"
                          class="font-semibold text-primary hover:underline">{{ deadline.quizTitle }}</a>
                     }
                     · {{ deadline.groupName }}
-                    · megírta: {{ deadline.completedMemberCount }} / {{ deadline.memberCount }}
+                    · {{ deadline.kind === 'project' && !deadline.isTest ? 'befejezte' : 'megírta' }}: {{ deadline.completedMemberCount }} / {{ deadline.memberCount }}
                   </span>
                   <span class="shrink-0 text-xs"
                         [class.text-danger]="isDueSoon(deadline.dueAt)"

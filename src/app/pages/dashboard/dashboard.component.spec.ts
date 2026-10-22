@@ -113,6 +113,37 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
   });
 });
 
+describe('DashboardComponent - Közelgő határidők (UI-TT-240)', () => {
+  it('a projekt-kiadás (próbavizsga-dolgozat) határideje is megjelenik, a kiadás oldalára linkelve; azonos id-jű kvíz mellett is', () => {
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent],
+      providers: [
+        provideRouter([]),
+        { provide: AuthStore, useValue: { currentUser: signal({ firstName: 'Anna' }), hasAdminRole: signal(false) } },
+        { provide: KahootHostService, useValue: { getActiveRooms: vi.fn().mockReturnValue(of([])) } },
+        { provide: ReportService, useValue: { getDashboard: vi.fn().mockReturnValue(of({
+          recentQuizResults: [], weakTopics: [],
+          upcomingDeadlines: [
+            { assignmentId: 28, kind: 'project', projectTitle: 'Próbavizsga – Mozi-műsor', isTest: true, groupId: 127, groupName: '12.B',
+              dueAt: '2026-10-22T10:00:00Z', completedMemberCount: 1, memberCount: 8 },
+            { assignmentId: 28, kind: 'quiz', quizId: 3, quizTitle: 'Hálózatok', groupId: 127, groupName: '12.B',
+              dueAt: '2026-10-28T18:00:00Z', completedMemberCount: 0, memberCount: 8 },
+          ],
+        } as TeacherDashboardDto)) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(DashboardComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const project = el.querySelector('a[href="/feladatsorok/projektek/kiadas/28"]');
+    expect(project?.textContent?.trim()).toBe('Próbavizsga – Mozi-műsor');
+    expect(project?.closest('li')?.textContent).toContain('(dolgozat)');
+    expect(project?.closest('li')?.textContent).toContain('megírta: 1 / 8');
+    expect(el.querySelector('a[href="/feladatsorok/kvizek/3/eredmenyek"]')).not.toBeNull();
+  });
+});
+
 describe('DashboardComponent - A2: csoportjaid gyenge témái', () => {
   function makeWeakTopic(overrides: Partial<TeacherWeakTopicDto> = {}): TeacherWeakTopicDto {
     return {
