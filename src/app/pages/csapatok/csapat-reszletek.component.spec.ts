@@ -165,7 +165,7 @@ describe('CsapatReszletekComponent', () => {
     await c.setTab('merfoldkovek');
     fixture.detectChanges();
     const rows = Array.from(el.querySelectorAll('[data-testid="ms-11"] [data-testid="docs-check"] li'));
-    expect(rows.map((r) => r.className)).toEqual(['text-success', 'text-warning', 'text-danger']);
+    expect(rows.map((r) => r.querySelector('span')?.className)).toEqual(['text-success', 'text-warning', 'text-danger']);
     expect(rows[0].textContent).toContain('✔ A projekt célja – megvan (README.md)');
     expect(rows[1].textContent).toContain('~ Adatbázis-diagram – csak említve (README.md)');
     expect(rows[1].textContent).toContain('Tedd fel a képet.');

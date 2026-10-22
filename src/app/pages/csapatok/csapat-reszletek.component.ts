@@ -132,11 +132,11 @@ const MAX_POLLS = 36;
                       <p class="text-sm font-semibold">Dokumentáció – a 7 kötelező elem</p>
                       <ul class="text-sm break-words" data-testid="docs-check">
                         @for (i of d.items; track i.key) {
-                          <li [class]="docsClass[i.status]">{{ docsMark[i.status] }} {{ i.label }} – {{ docsStatus[i.status] }}@if (i.where) { ({{ i.where }})}
+                          <li><span [class]="docsClass[i.status]" aria-hidden="true">{{ docsMark[i.status] }}</span> {{ i.label }} – {{ docsStatus[i.status] }}@if (i.where) { ({{ i.where }})}
                             @if (i.hint) { <span class="block text-xs text-text-muted">{{ i.hint }}</span> }</li>
                         }
                       </ul>
-                      <p class="text-xs text-text-muted">{{ d.sources.length ? 'Átnézett dokumentumok: ' + d.sources.join(', ') : 'Nem találtunk dokumentumot (README, docs/ mappa).' }}</p>
+                      <p class="text-xs text-text-muted">{{ d.sources.length ? 'Átnézett dokumentumok: ' + d.sources.join(', ') : 'Nem találtunk dokumentumot – a README-ben, a tároló gyökerében és a docs/ mappában keresünk.' }}</p>
                       @for (w of d.warnings; track w) { <p class="text-xs text-text-muted">{{ w }}</p> }
                     }
                   }
