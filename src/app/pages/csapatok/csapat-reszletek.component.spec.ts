@@ -147,6 +147,36 @@ describe('CsapatReszletekComponent', () => {
     expect(api.testRunners).toHaveBeenCalledTimes(1); // a lista egyszer töltődik
   });
 
+  it('docs mérföldkő: a dokumentáció 7 eleme ✔/~/✘ a fájllal és a tippel; a régi (docs nélküli) ellenőrzés hibátlanul', async () => {
+    const { fixture, c, api, el } = setup();
+    const check = { at: '2027-03-12T10:00:00Z', branch: 'main', truncated: false, items: [{ pattern: 'README*|**/README*', matched: true, example: 'README.md' }],
+      allMatched: true, test: null };
+    const docs = {
+      at: '2027-03-12T10:00:00Z', sources: ['README.md'], warnings: ['docs/leiras.pdf: kimaradt (túl nagy fájl).'],
+      items: [
+        { key: 'cel', label: 'A projekt célja', status: 'found' as const, where: 'README.md', hint: '' },
+        { key: 'db-diagram', label: 'Adatbázis-diagram', status: 'mentioned' as const, where: 'README.md', hint: 'Tedd fel a képet.' },
+        { key: 'dump', label: 'Adatbázis-dump', status: 'missing' as const, where: null, hint: 'Tedd a tárolóba a dumpot.' },
+      ],
+    };
+    api.milestones.mockReturnValue(of([{ ...ms, lastCheck: { ...check, docs } }, { ...ms, id: 12, kind: 'db', lastCheck: check }]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await c.setTab('merfoldkovek');
+    fixture.detectChanges();
+    const rows = Array.from(el.querySelectorAll('[data-testid="ms-11"] [data-testid="docs-check"] li'));
+    expect(rows.map((r) => r.className)).toEqual(['text-success', 'text-warning', 'text-danger']);
+    expect(rows[0].textContent).toContain('✔ A projekt célja – megvan (README.md)');
+    expect(rows[1].textContent).toContain('~ Adatbázis-diagram – csak említve (README.md)');
+    expect(rows[1].textContent).toContain('Tedd fel a képet.');
+    expect(rows[2].textContent).toContain('✘ Adatbázis-dump – hiányzik');
+    const row = el.querySelector('[data-testid="ms-11"]')?.textContent ?? '';
+    expect(row).toContain('Átnézett dokumentumok: README.md');
+    expect(row).toContain('docs/leiras.pdf: kimaradt (túl nagy fájl).');
+    expect(el.querySelector('[data-testid="ms-12"] [data-testid="docs-check"]')).toBeNull();
+    expect(el.querySelector('[data-testid="ms-12"]')?.textContent).toContain('README*|**/README* – megvan (README.md)');
+  });
+
   it('sikertelen pipa: hibaüzenet, és a mérföldkövek a szerverről újratöltődnek', async () => {
     const { fixture, c, api } = setup();
     fixture.detectChanges();

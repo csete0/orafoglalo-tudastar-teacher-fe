@@ -11,8 +11,8 @@ import { AiHelperQuotaItemDto } from '../../shared/ai-helper-quota.util';
 import { KodOlvasoComponent } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { HetiAktivitasComponent } from './heti-aktivitas.component';
 import {
-  CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview, TeamReviews,
-  TeamTree, TestRunnerOption,
+  CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamDocsCheckItem, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview,
+  TeamReviews, TeamTree, TestRunnerOption,
 } from '../../models/team.model';
 
 type Fül = 'munka' | 'merfoldkovek' | 'mi' | 'fajlok';
@@ -128,6 +128,17 @@ const MAX_POLLS = 36;
                       @for (i of c.items; track i.pattern) { <li [class.text-danger]="!i.matched">{{ i.pattern }} – {{ i.matched ? 'megvan (' + i.example + ')' : 'hiányzik' }}</li> }
                     </ul>
                     @if (c.truncated) { <p class="text-xs text-text-muted">A tároló túl nagy: nem minden fájl ellenőrizhető.</p> }
+                    @if (c.docs; as d) {
+                      <p class="text-sm font-semibold">Dokumentáció – a 7 kötelező elem</p>
+                      <ul class="text-sm break-words" data-testid="docs-check">
+                        @for (i of d.items; track i.key) {
+                          <li [class]="docsClass[i.status]">{{ docsMark[i.status] }} {{ i.label }} – {{ docsStatus[i.status] }}@if (i.where) { ({{ i.where }})}
+                            @if (i.hint) { <span class="block text-xs text-text-muted">{{ i.hint }}</span> }</li>
+                        }
+                      </ul>
+                      <p class="text-xs text-text-muted">{{ d.sources.length ? 'Átnézett dokumentumok: ' + d.sources.join(', ') : 'Nem találtunk dokumentumot (README, docs/ mappa).' }}</p>
+                      @for (w of d.warnings; track w) { <p class="text-xs text-text-muted">{{ w }}</p> }
+                    }
                   }
                   @if (m.testPreset) {
                     @if (m.canEdit) { <button class="btn btn-ghost" type="button" (click)="runTest(m)" [disabled]="busy()">Tesztek futtatása</button> }
@@ -246,6 +257,10 @@ export class CsapatReszletekComponent implements OnInit {
   /** A tesztfuttató presetek (BE: GET test-runners); a szerveren még nem elérhetők tiltva, „(hamarosan)” jelöléssel. */
   readonly runners = signal<TestRunnerOption[]>([]);
   readonly testResult = signal<Record<number, TeamMilestoneTest>>({});
+  /** A dokumentáció-ellenőrzés állapotai: ✔ megvan / ~ csak említve / ✘ hiányzik. */
+  readonly docsStatus: Record<TeamDocsCheckItem['status'], string> = { found: 'megvan', mentioned: 'csak említve', missing: 'hiányzik' };
+  readonly docsMark: Record<TeamDocsCheckItem['status'], string> = { found: '✔', mentioned: '~', missing: '✘' };
+  readonly docsClass: Record<TeamDocsCheckItem['status'], string> = { found: 'text-success', mentioned: 'text-warning', missing: 'text-danger' };
   readonly reviews = signal<TeamReviews | null>(null);
   /** A tanár havi repóátnézési kerete (GET api/teacher/ai-helpers/quota `repoReview`); hiányában a sor nem látszik. */
   readonly quota = signal<AiHelperQuotaItemDto | null>(null);

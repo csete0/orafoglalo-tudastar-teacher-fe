@@ -27,7 +27,14 @@ export interface TeamFile { path: string; content: string | null; binary: boolea
 
 /** BE: TeamMilestoneService.cs. */
 export interface TeamMilestoneTest { passed: boolean; output: string; at: string; preset: string; }
-export interface TeamMilestoneCheck { at: string; branch: string; truncated: boolean; items: { pattern: string; matched: boolean; example: string | null }[]; allMatched: boolean; test: TeamMilestoneTest | null; }
+/** BE: TeamDocsCheck.cs – a vizsgaremek-dokumentáció egy kötelező eleme: fejezetcím/bizonyíték (`found`), csak említés (`mentioned`), hiányzik. */
+export interface TeamDocsCheckItem { key: string; label: string; status: 'found' | 'mentioned' | 'missing'; where: string | null; hint: string; }
+export interface TeamDocsCheck { at: string; items: TeamDocsCheckItem[]; sources: string[]; warnings: string[]; }
+/** `docs`: csak a „docs” mérföldkőnél (a régi ellenőrzésekben nincs). */
+export interface TeamMilestoneCheck {
+  at: string; branch: string; truncated: boolean; items: { pattern: string; matched: boolean; example: string | null }[]; allMatched: boolean; test: TeamMilestoneTest | null;
+  docs?: TeamDocsCheck | null;
+}
 export interface TeamMilestone {
   id: number; kind: 'db' | 'rest' | 'desktop' | 'mobile' | 'tests' | 'docs' | 'submit' | 'custom'; title: string; sortOrder: number; dueDate: string | null;
   effectiveDueDate: string | null; overdue: boolean; requiredPaths: string[]; testPreset: string | null; testDir: string | null;
