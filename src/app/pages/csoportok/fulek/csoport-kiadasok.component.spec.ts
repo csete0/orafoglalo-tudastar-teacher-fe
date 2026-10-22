@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { CsoportKiadasokComponent, isDueSoon } from './csoport-kiadasok.component';
 import { TeacherQuizService } from '../../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherTaskSetService } from '../../../services/teacher-taskset/teacher-taskset.service';
@@ -102,5 +102,14 @@ describe('CsoportKiadasokComponent', () => {
     TestBed.resetTestingModule();
     const failing = setup([], { oral: throwError(() => new HttpErrorResponse({ status: 500 })) });
     expect(failing.el.textContent).toContain('A szóbeli kiadások betöltése sikertelen.');
+  });
+
+  it('a Szóbeli szakasz a válaszig nem látszik (kikapcsolt funkciónál nem villan fel)', () => {
+    const pending = new Subject<TeacherOralAssignmentDto[]>();
+    const { el, fixture } = setup([], { oral: pending });
+    expect(el.textContent).not.toContain('Szóbeli');
+    pending.next([]);
+    fixture.detectChanges();
+    expect(el.textContent).toContain('Nincs kiadott szóbeli.');
   });
 });

@@ -150,6 +150,8 @@ export const routes: Routes = [
         path: 'szobeli/:id',
         loadComponent: () =>
           import('./pages/feladatsorok/szobeli-tema-szerkeszto.component').then((m) => m.SzobeliTemaSzerkesztoComponent),
+        // Mentetlen módosítások elhagyás előtt megerősítést kérnek.
+        canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
       },
       {
         path: 'kvizek/:id/szerkesztes',

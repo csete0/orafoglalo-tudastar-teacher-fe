@@ -82,6 +82,7 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-szobeli-tema-szerkeszto',
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   standalone: true,
   imports: [FormsModule, RouterLink, LocalSpinnerComponent, SzobeliKiadasDialogComponent],
   template: `
@@ -280,6 +281,24 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
     });
   }
 
+  /** Route canDeactivate: mentetlen módosításnál megerősítést kér. */
+  canLeave(): boolean | Promise<boolean> {
+    if (!this.dirty()) return true;
+    return this.confirm.ask({
+      title: 'Elveted a módosításokat?',
+      message: 'A téma mentetlen módosításai elvesznek.',
+      confirmLabel: 'Elvetem',
+      cancelLabel: 'Maradok',
+      danger: true,
+    });
+  }
+
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.dirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
   touch(): void {
     this.dirty.set(true);
     this.version.update((v) => v + 1);
@@ -385,6 +404,7 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
       .subscribe({
         next: () => {
           this.toast.success('A téma törölve.');
+          this.dirty.set(false);
           void this.router.navigate(['/feladatsorok/szobeli']);
         },
         error: (err) => this.fail(err, 'A törlés nem sikerült.'),

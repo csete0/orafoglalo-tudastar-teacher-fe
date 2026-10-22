@@ -18,12 +18,12 @@ const ASSIGNMENT: TeacherOralAssignmentDto = {
 };
 
 describe('SzobeliTemakListaComponent', () => {
-  function setup(topics: unknown = of(TOPICS)) {
+  function setup(topics: unknown = of(TOPICS), assignments: unknown = of([ASSIGNMENT])) {
     const api = {
       available: signal(true),
       topics: vi.fn(() => topics),
       profiles: vi.fn(() => of([{ slug: 'digkult-kozep', title: 'Digitális kultúra – középszint', voiceMinuteOptions: [10, 15], defaultVoiceMinutes: 15 }])),
-      assignments: vi.fn(() => of([ASSIGNMENT])),
+      assignments: vi.fn(() => assignments),
       quota: vi.fn(() => of({ oralExam: { used: 0, limit: 15 } })),
     };
     TestBed.configureTestingModule({
@@ -83,5 +83,12 @@ describe('SzobeliTemakListaComponent', () => {
     const disabled = setup(throwError(() => new HttpErrorResponse({ status: 404, error: { errorType: 'FeatureDisabled' } })));
     expect(disabled.el.querySelector('[data-testid="oral-disabled"]')).not.toBeNull();
     expect(disabled.el.querySelector('[data-testid="oral-new"]')).toBeNull();
+  });
+
+  it('a kiadások betöltési hibája hibaüzenet, nem „még nem adtál ki” üres állapot', () => {
+    const { el } = setup(of(TOPICS), throwError(() => new HttpErrorResponse({ status: 500 })));
+    expect(el.querySelector('[data-testid="oral-assignments-error"]')!.textContent).toContain('A kiadások betöltése sikertelen.');
+    expect(el.textContent).not.toContain('Még nem adtál ki szóbelit.');
+    expect(el.textContent).toContain('A fotoszintézis');
   });
 });

@@ -187,9 +187,9 @@ export function transcriptSections(turns: OralTurnDto[]): { segment: string | nu
                 @if (s.transcript; as turns) {
                   <section data-testid="oral-transcript">
                     <h3 class="font-semibold mb-2">Leirat</h3>
-                    @for (section of sections(); track $index) {
+                    @for (section of sections(); track $index; let i = $index) {
                       <details class="text-sm mb-2">
-                        <summary class="cursor-pointer">{{ section.segment ?? 'A teljes felelet' }} ({{ section.turns.length }} megszólalás)</summary>
+                        <summary class="cursor-pointer">{{ section.segment !== null ? i + 1 + '. szakasz' : 'A teljes felelet' }} ({{ section.turns.length }} megszólalás)</summary>
                         <ul class="mt-2 space-y-1">
                           @for (t of section.turns; track $index) {
                             <li class="break-words"><span class="font-semibold">{{ t.speaker === 'examiner' ? 'Vizsgáztató' : 'Diák' }}:</span> {{ t.text }}</li>
@@ -231,8 +231,8 @@ export class SzobeliEredmenyekComponent implements OnInit {
   readonly selectedId = signal<number | null>(null);
   readonly session = signal<TeacherOralSessionDto | null>(null);
   readonly sessionError = signal<string | null>(null);
-  /** A szerkesztett tanári pontok szempont-kulcs szerint (az MI-ponttal vagy a meglévő felülpontozással előtöltve). */
-  readonly points = signal<Record<string, number>>({});
+  /** A szerkesztett tanári pontok szempont-kulcs szerint (az MI-ponttal vagy a meglévő felülpontozással előtöltve; üres mező: null). */
+  readonly points = signal<Record<string, number | null>>({});
   readonly note = signal('');
   readonly reviewError = signal<string | null>(null);
 
@@ -269,7 +269,7 @@ export class SzobeliEredmenyekComponent implements OnInit {
     this.session.set(null);
   }
 
-  setPoints(key: string, value: number): void {
+  setPoints(key: string, value: number | null): void {
     this.points.update((p) => ({ ...p, [key]: value }));
   }
 
@@ -277,10 +277,9 @@ export class SzobeliEredmenyekComponent implements OnInit {
     const s = this.session();
     if (!s || this.busy()) return;
     const scored = s.criteria.filter((c) => !c.feedbackOnly);
-    const invalid = scored.find((c) => {
-      const p = Number(this.points()[c.key]);
-      return !Number.isInteger(p) || p < 0 || p > c.maxPoints;
-    });
+    // Az ürített mező null - a Number(null) === 0 miatt külön kell kiszűrni, különben csendben 0 pont menne.
+    const valid = (p: number | null | undefined, max: number): p is number => p != null && Number.isInteger(p) && p >= 0 && p <= max;
+    const invalid = scored.find((c) => !valid(this.points()[c.key], c.maxPoints));
     if (invalid) {
       this.reviewError.set(`„${invalid.title}”: 0 és ${invalid.maxPoints} közötti egész pont adható.`);
       return;
@@ -288,7 +287,7 @@ export class SzobeliEredmenyekComponent implements OnInit {
     this.busy.set(true);
     this.reviewError.set(null);
     this.api
-      .review(s.sessionId, { criteria: scored.map((c) => ({ key: c.key, points: Number(this.points()[c.key]) })), note: this.note().trim() || null })
+      .review(s.sessionId, { criteria: scored.map((c) => ({ key: c.key, points: this.points()[c.key]! })), note: this.note().trim() || null })
       .pipe(take(1), finalize(() => this.busy.set(false)))
       .subscribe({
         next: (updated) => {

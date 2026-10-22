@@ -131,6 +131,27 @@ describe('SzobeliEredmenyekComponent', () => {
     expect(c.results()!.rows[0].teacherTotalPoints).toBeNull();
   });
 
+  it('ürített tanári pont mező (null): nincs mentés, helyi hiba - nem megy csendben 0 pont', () => {
+    const { fixture, c, api } = setup();
+    c.select(RESULTS.rows[0]);
+    fixture.detectChanges();
+    c.setPoints('kommunikacio', null);
+    c.saveReview();
+    expect(api.review).not.toHaveBeenCalled();
+    expect(c.reviewError()).toBe('„Kommunikatív készség”: 0 és 4 közötti egész pont adható.');
+  });
+
+  it('szakaszolt leiratnál sorszámozott szakasz-címek, nyers kulcs nélkül', () => {
+    const turn = (segment: string) => ({ speaker: 'student' as const, text: 'x', atSeconds: 0, questionNo: 0, segment });
+    const { fixture, c, q } = setup({ session: session({ transcript: [turn('monolog'), turn('kerdesek')] }) });
+    c.select(RESULTS.rows[0]);
+    fixture.detectChanges();
+    const text = q('oral-transcript')!.textContent!;
+    expect(text).toContain('1. szakasz');
+    expect(text).toContain('2. szakasz');
+    expect(text).not.toContain('monolog');
+  });
+
   it('nem értékelt szóbelinél nincs felülpontozás', () => {
     const { fixture, c, q } = setup({ session: session({ status: 'not-graded', message: 'Túl rövid felelet.' }) });
     c.select(RESULTS.rows[0]);

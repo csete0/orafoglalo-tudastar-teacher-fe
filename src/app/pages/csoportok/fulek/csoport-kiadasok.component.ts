@@ -194,7 +194,8 @@ export class CsoportKiadasokComponent implements OnInit {
   readonly projectAssignmentsError = signal<string | null>(null);
   readonly oralAssignments = signal<TeacherOralAssignmentDto[]>([]);
   readonly oralAssignmentsError = signal<string | null>(null);
-  readonly oralEnabled = signal(true);
+  /** A válaszig rejtve: kikapcsolt szóbelinél (404 FeatureDisabled) így nem villan fel a szakasz. */
+  readonly oralEnabled = signal(false);
   readonly liveStartPending = signal(false);
   readonly liveStartError = signal<string | null>(null);
 
@@ -228,10 +229,14 @@ export class CsoportKiadasokComponent implements OnInit {
     });
 
     this.teacherOralExamService.assignments(groupId).pipe(take(1)).subscribe({
-      next: (assignments) => this.oralAssignments.set(assignments),
+      next: (assignments) => {
+        this.oralAssignments.set(assignments);
+        this.oralEnabled.set(true);
+      },
       error: (err) => {
-        if (isOralExamDisabled(err)) this.oralEnabled.set(false);
-        else this.oralAssignmentsError.set('A szóbeli kiadások betöltése sikertelen.');
+        if (isOralExamDisabled(err)) return;
+        this.oralEnabled.set(true);
+        this.oralAssignmentsError.set('A szóbeli kiadások betöltése sikertelen.');
       },
     });
   }

@@ -181,6 +181,16 @@ describe('SzobeliTemaSzerkesztoComponent', () => {
     expect(q('oral-topic-assign')).not.toBeNull();
   });
 
+  it('elhagyás: tiszta állapotban szabad; mentetlen módosításnál megerősítést kér', async () => {
+    expect(setup().c.canLeave()).toBe(true);
+
+    TestBed.resetTestingModule();
+    const staying = setup(of(topic()), false);
+    staying.c.touch();
+    expect(await staying.c.canLeave()).toBe(false);
+    expect(TestBed.inject(ConfirmService).ask).toHaveBeenCalled();
+  });
+
   it('törlés megerősítés után a listára visz; a 409 üzenete megjelenik; betöltési hiba', async () => {
     const { c, api, navigate } = setup();
     await c.remove();

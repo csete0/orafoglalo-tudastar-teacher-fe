@@ -103,7 +103,11 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
               <a [routerLink]="['/feladatsorok/szobeli/kiadas', a.id]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Eredmények</a>
             </li>
           } @empty {
-            <li class="text-sm text-text-muted py-2">Még nem adtál ki szóbelit.</li>
+            @if (assignmentsError()) {
+              <li class="text-danger text-sm py-2" role="alert" data-testid="oral-assignments-error">A kiadások betöltése sikertelen.</li>
+            } @else {
+              <li class="text-sm text-text-muted py-2">Még nem adtál ki szóbelit.</li>
+            }
           }
         </ul>
       }
@@ -126,6 +130,7 @@ export class SzobeliTemakListaComponent implements OnInit {
   readonly assignments = signal<TeacherOralAssignmentDto[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly assignmentsError = signal(false);
   readonly disabled = signal(false);
   readonly assignTarget = signal<OralAssignTarget | null>(null);
 
@@ -141,9 +146,9 @@ export class SzobeliTemakListaComponent implements OnInit {
         else this.error.set('A szóbeli témák betöltése sikertelen.');
       },
     });
-    // A két mellék-lista hibája nem takarja el a témákat: a szakasz üres marad.
+    // A mellék-listák hibája nem takarja el a témákat: a kész szóbelik szakasza rejtve marad, a kiadásoknál hibaüzenet áll.
     this.api.profiles().pipe(take(1)).subscribe({ next: (p) => this.profiles.set(p), error: () => {} });
-    this.api.assignments().pipe(take(1)).subscribe({ next: (a) => this.assignments.set(a), error: () => {} });
+    this.api.assignments().pipe(take(1)).subscribe({ next: (a) => this.assignments.set(a), error: () => this.assignmentsError.set(true) });
   }
 
   openAssign(profile: TeacherOralProfileOptionDto): void {
