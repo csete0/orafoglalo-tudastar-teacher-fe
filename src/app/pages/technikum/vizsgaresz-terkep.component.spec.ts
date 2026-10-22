@@ -347,6 +347,27 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="publish-warning"]')).toBeNull();
   });
 
+  it('a befejezés előtt csak akkor tehető közzé, ha mindenki befejezte; addig a gomb tiltott, rövid magyarázattal', async () => {
+    const { fixture, el, api, confirm } = await setup();
+    const future = new Date(Date.now() + 3_600_000).toISOString().replace('Z', '');
+    const set = (everyoneFinished: boolean) => {
+      fixture.componentInstance.map.update((m) => m && { ...m, tests: m.tests.map((t) => (t.assignmentId === 7 ? { ...t, dueAt: future, everyoneFinished } : t)) });
+      fixture.detectChanges();
+    };
+    set(false);
+    const button = () => el.querySelector<HTMLButtonElement>('[data-testid="technikum-test-7"] button')!;
+    expect(button().disabled).toBe(true);
+    expect(el.querySelector('[data-testid="publish-wait"]')!.textContent).toContain('minden diák befejezte');
+    button().click();
+    await settle();
+    expect(confirm.ask).not.toHaveBeenCalled();
+    expect(api.publish).not.toHaveBeenCalled();
+
+    set(true);
+    expect(button().disabled).toBe(false);
+    expect(el.querySelector('[data-testid="publish-wait"]')).toBeNull();
+  });
+
   it('közzététel előtt megerősítést kér: a beadott dolgozatok száma, a 0 pontos és a nem értékelt részek; mégsem → nem tesz közzé', async () => {
     const cells = heatmap.students[0].cells;
     cells.push(cell({ partKey: 'gui', points: 4, maxPoints: 10, ratio: 0.4, aiNotEvaluatedPoints: 6 }));

@@ -3,6 +3,10 @@
 export type ProjectRuntime = 'browser-python' | 'browser-js' | 'judge0-csharp' | 'judge0-java' | 'judge0-aspnet';
 export type Independence = 'onallo' | 'kis-segitseggel' | 'segitseggel';
 
+export type DesktopLanguage = 'csharp' | 'java';
+
+export const DESKTOP_LANGUAGE_LABELS: Record<DesktopLanguage, string> = { csharp: 'C#', java: 'Java' };
+
 export const RUNTIME_LABELS: Record<ProjectRuntime, string> = {
   'browser-python': 'Python',
   'browser-js': 'JavaScript',
@@ -67,6 +71,8 @@ export interface TeacherProjectDto {
   estimatedHours: number;
   previewImageUrl: string | null;
   runtimes: ProjectRuntime[];
+  /** Technikumi feladat: a konzolos és a grafikus rész nyelvei (csharp | java) - ezek közül a diák választ, a kiadás nem köt nyelvet. */
+  desktopLanguages?: DesktopLanguage[] | null;
   freeMilestoneCount: number;
   examAreas: ExamAreaDto[];
   milestones: TeacherProjectMilestoneDto[];

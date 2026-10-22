@@ -10,6 +10,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import {
+  DESKTOP_LANGUAGE_LABELS,
   ProjectAssignmentDto,
   ProjectRuntime,
   RUNTIME_LABELS,
@@ -63,7 +64,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                   <h2 class="text-lg font-bold">{{ p.title }}</h2>
                   <p class="text-sm text-text-muted mt-1">{{ p.summary }}</p>
                   <p class="text-xs text-text-muted mt-2">
-                    kb. {{ p.estimatedHours }} óra · {{ p.milestones.length }} lépés · nyelvek: {{ runtimeList(p.runtimes) }}
+                    kb. {{ p.estimatedHours }} óra · {{ p.milestones.length }} lépés · nyelvek: {{ languageList(p) }}
                   </p>
                   @if (p.examAreas.length) {
                     <p class="text-xs mt-2"><span class="text-text-muted">Érettségi:</span>
@@ -93,12 +94,18 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                       @for (g of assignableGroups(p); track g.id) { <option [value]="g.id">{{ g.name }}</option> }
                     </select>
                   </label>
-                  <label class="text-sm">Nyelv
-                    <select class="input mt-1" (change)="patch({ runtime: $any($event.target).value })" data-testid="assign-runtime">
-                      <option value="">A diák választ</option>
-                      @for (r of p.runtimes; track r) { <option [value]="r">Csak {{ runtimeLabels[r] }}</option> }
-                    </select>
-                  </label>
+                  @if (p.desktopLanguages) {
+                    <p class="text-sm" data-testid="assign-language-note">Nyelv
+                      <span class="block mt-1 text-text-muted">A diák választ ({{ languageList(p, ' vagy ') }}) – a backend ASP.NET Core.</span>
+                    </p>
+                  } @else {
+                    <label class="text-sm">Nyelv
+                      <select class="input mt-1" (change)="patch({ runtime: $any($event.target).value })" data-testid="assign-runtime">
+                        <option value="">A diák választ</option>
+                        @for (r of p.runtimes; track r) { <option [value]="r">Csak {{ runtimeLabels[r] }}</option> }
+                      </select>
+                    </label>
+                  }
                   @if (canBeTest(p)) {
                     <div class="sm:col-span-2 rounded-xl bg-bg-element p-3">
                       <label class="flex items-center gap-2 text-sm font-semibold">
@@ -106,7 +113,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                         Dolgozat (időkorláttal)
                       </label>
                       <p class="text-xs text-text-muted mt-1">
-                        A diákok vizsga-munkamenetben, időre írják; az eredményt a befejezés után a csoport Vizsgarész-térkép fülén teheted közzé.
+                        A diákok vizsga-munkamenetben, időre írják; az eredményt a csoport Vizsgarész-térkép fülén teheted közzé, ha már mindenki befejezte, vagy a befejezés után.
                       </p>
                       @if (draft().isTest) {
                         <label class="text-sm block mt-3">Időkorlát (perc)
@@ -228,8 +235,9 @@ export class ProjektekListaComponent implements OnInit {
     return p.kind === 'exam';
   }
 
-  runtimeList(runtimes: ProjectRuntime[]): string {
-    return runtimes.map((r) => RUNTIME_LABELS[r]).join(', ');
+  /** Technikumi feladatnál a diák által választható nyelvek (C#, Java), egyébként a futtatók. */
+  languageList(p: TeacherProjectDto, separator = ', '): string {
+    return p.desktopLanguages ? p.desktopLanguages.map((l) => DESKTOP_LANGUAGE_LABELS[l]).join(separator) : p.runtimes.map((r) => RUNTIME_LABELS[r]).join(separator);
   }
 
   assign(event: Event, p: TeacherProjectDto): void {
