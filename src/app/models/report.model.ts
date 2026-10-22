@@ -128,6 +128,8 @@ export interface TeacherAttemptReviewDto {
   taskTitle: string;
   studentUserId: number;
   studentDisplayName: string;
+  /** Dolgozat-beadás, és a diák azóta kilépett a csoportból: csak olvasható. Régebbi BE-n hiányzik. */
+  studentLeftGroup?: boolean;
 
   /** Az érvényes (effektív) pontszám — felülbírálás után a tanáré. Hiányzik/null = nincs kiértékelve. */
   earnedPoints: number | null;

@@ -100,7 +100,12 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
           <tbody>
             @for (s of m.students; track s.userId) {
               <tr class="border-b border-border-default last:border-b-0" [attr.data-testid]="'heat-row-' + s.userId">
-                <th scope="row" class="py-2 px-3 font-semibold whitespace-nowrap text-left">{{ s.name }}</th>
+                <th scope="row" class="py-2 px-3 font-semibold whitespace-nowrap text-left">{{ s.name }}
+                  @if (s.leftGroup) {
+                    <span class="badge badge-neutral !text-[0.625rem] font-normal" [attr.data-testid]="'left-group-' + s.userId"
+                          title="A diák azóta kilépett vagy kikerült a csoportból - csak a tagként írt dolgozatai látszanak, csak olvasva">kilépett a csoportból</span>
+                  }
+                </th>
                 @for (p of m.parts; track p.key) {
                   <td class="py-1.5 px-1.5 text-center">
                     @if (cellOf(s, p.key); as c) {
@@ -147,7 +152,11 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
           <div class="flex items-center justify-between gap-3">
             <h2 id="snapshot-title" class="font-bold">
               @if (snapshot(); as sn) { {{ sn.studentName }} – {{ sn.projectTitle }} } @else { Beadott dolgozat }
-              <span class="text-xs font-normal text-text-muted">(a beadott változat - a sorszámra kattintva megjegyzést írhatsz)</span>
+              @if (snapshot()?.leftGroup) {
+                <span class="text-xs font-normal text-text-muted" data-testid="snapshot-left-group">(a beadott változat - a diák kilépett a csoportból, csak olvasható)</span>
+              } @else {
+                <span class="text-xs font-normal text-text-muted">(a beadott változat - a sorszámra kattintva megjegyzést írhatsz)</span>
+              }
             </h2>
             <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="closeSnapshot()">Bezárás</button>
           </div>
@@ -199,7 +208,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                       @if (r.detail.ai; as ai) {
                         <p class="text-xs font-semibold mt-2">Szempontlista: {{ ai.points }}/{{ ai.maxPoints }} pont</p>
                         @if (ai.message && hasOpenItems(ai.items)) { <p class="text-xs text-text-muted">{{ ai.message }}</p> }
-                        @if (r.status === 'graded' && ai.items.length && (ai.status === 'done' || ai.status === 'unavailable')) {
+                        @if (r.status === 'graded' && ai.items.length && (ai.status === 'done' || ai.status === 'unavailable') && !sn.leftGroup) {
                           <!-- Kézi pontozás: bármely szempont felülírható, a „nem értékelt”-ek kiemelve. -->
                           <ul class="text-xs mt-1 space-y-1" [attr.data-testid]="'rubric-' + r.id">
                             @for (it of ai.items; track it.key) {

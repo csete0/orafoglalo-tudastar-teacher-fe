@@ -72,6 +72,8 @@ export interface HeatmapStudentDto {
   /** Csak a bírált részek, oszlop-sorrendben. */
   cells: HeatmapCellDto[];
   theory: HeatmapTheoryDto | null;
+  /** Kilépett / kikerült a csoportból: csak a tagként írt dolgozat eredménye, csak olvasva. Régebbi BE-n hiányzik. */
+  leftGroup?: boolean;
 }
 
 export interface TechnikumHeatmapDto {
@@ -172,6 +174,8 @@ export interface ExamSessionSnapshotDto {
   partRoots?: Partial<Record<ExamPartKey, string>> | null;
   /** A konzolos és a grafikus rész nyelve (a munkamenet indításakor rögzítve); régebbi BE-n hiányzik = C#. */
   desktopLanguage?: DesktopLanguage;
+  /** A diák azóta kilépett / kikerült a csoportból: a dolgozat csak olvasható (megjegyzés, kézi pontozás, MI-javaslat nincs). */
+  leftGroup?: boolean;
 }
 
 export interface ExamSnapshotGuiDto {

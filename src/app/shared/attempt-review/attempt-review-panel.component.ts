@@ -201,7 +201,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
             }
           } @else {
             <p class="text-sm text-text-muted">
-              Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a pontszám nem módosítható.
+              {{ r.studentLeftGroup ? leftGroupNote : 'Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a pontszám nem módosítható.' }}
             </p>
           }
 
@@ -229,7 +229,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
               placeholder="Amit a diáknak érdemes tudnia — akkor is hasznos, ha a pontszámmal egyetértesz."></textarea>
             @if (!canEditScore(r)) {
               <p class="text-sm text-text-muted mt-1">
-                Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a szöveges értékelés sem menthető el.
+                {{ r.studentLeftGroup ? leftGroupNote : 'Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a szöveges értékelés sem menthető el.' }}
               </p>
             } @else {
               <div class="flex justify-between gap-2 mt-1">
@@ -315,9 +315,12 @@ export class AttemptReviewPanelComponent {
    * A backend `MaxPoints`-a 0, ha a beadáshoz nem tartozik `ExamTaskResult` —
    * ilyenkor a mentés szerver-oldalon is elutasításra kerülne.
    */
+  /** A kilépett diák dolgozata csak olvasható (a BE is elutasítja a módosítást). */
   canEditScore(review: TeacherAttemptReviewDto): boolean {
-    return review.maxPoints > 0;
+    return review.maxPoints > 0 && !review.studentLeftGroup;
   }
+
+  readonly leftGroupNote = 'A diák kilépett a csoportból – a tagként írt dolgozata csak olvasható.';
 
   /**
    * BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: van-e ténylegesen

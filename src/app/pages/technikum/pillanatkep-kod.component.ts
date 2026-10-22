@@ -81,7 +81,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
         }
       }
 
-      @if (tab() !== 'egyeb') {
+      @if (tab() !== 'egyeb' && !locked()) {
         <div class="ai-bar mt-3 flex flex-wrap items-center gap-2">
           <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" data-testid="suggest-part" [disabled]="suggesting() || !hasFiles()"
                   (click)="requestSuggestions()">{{ suggesting() ? 'Az MI dolgozik…' : 'MI-javaslat erre a részre' }}</button>
@@ -119,12 +119,14 @@ interface Suggestion extends CodeCommentSuggestionDto {
               </form>
             } @else {
               <p class="thread-body">{{ c.body }}</p>
-              <div class="flex gap-2 mt-1">
-                <button type="button" class="btn btn-ghost !px-2 !py-0.5 !text-xs" [disabled]="busy()" (click)="editingId.set(c.id)"
-                        [attr.data-testid]="'comment-edit-' + c.id">Szerkeszt</button>
-                <button type="button" class="btn btn-ghost !px-2 !py-0.5 !text-xs text-danger" [disabled]="busy()" (click)="remove(c)"
-                        [attr.data-testid]="'comment-delete-' + c.id">Töröl</button>
-              </div>
+              @if (!locked()) {
+                <div class="flex gap-2 mt-1">
+                  <button type="button" class="btn btn-ghost !px-2 !py-0.5 !text-xs" [disabled]="busy()" (click)="editingId.set(c.id)"
+                          [attr.data-testid]="'comment-edit-' + c.id">Szerkeszt</button>
+                  <button type="button" class="btn btn-ghost !px-2 !py-0.5 !text-xs text-danger" [disabled]="busy()" (click)="remove(c)"
+                          [attr.data-testid]="'comment-delete-' + c.id">Töröl</button>
+                </div>
+              }
             }
           </div>
         }
@@ -246,10 +248,12 @@ export class PillanatkepKodComponent {
   readonly files = computed(() => this.filesOf(this.tab()));
   readonly fileRank = computed(() => this.rankOf(this.tab()));
   readonly hasFiles = computed(() => Object.keys(this.files()).length > 0);
+  /** A diák azóta kilépett a csoportból: a dolgozat csak olvasható (a megjegyzések látszanak, újat írni, MI-javaslatot kérni nem lehet). */
+  readonly locked = computed(() => !!this.snapshot().leftGroup);
   /** Megjegyzés csak a rész saját (nem hivatalos, csak olvasható) fájljára írható. */
   readonly commentable = computed(() => {
     const path = this.activePath();
-    return this.tab() !== 'egyeb' && !!path && !this.snapshot().readOnlyPaths.includes(path);
+    return !this.locked() && this.tab() !== 'egyeb' && !!path && !this.snapshot().readOnlyPaths.includes(path);
   });
 
   private readonly activeComments = computed(() =>

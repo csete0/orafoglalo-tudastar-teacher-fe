@@ -119,6 +119,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
                   <tr [class.opacity-50]="row.status === 'not_started'">
                     <td class="sticky-col whitespace-nowrap align-top">
                       {{ row.name }}
+                      @if (row.leftGroup) {
+                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-group-' + row.userId"
+                              title="A diák azóta kilépett vagy kikerült a csoportból - a tagként beadott dolgozata csak olvasható">kilépett a csoportból</span>
+                      }
                       @if (row.teacherFeedback) {
                         <details class="mt-1 whitespace-normal max-w-xs" [attr.data-testid]="'saved-feedback-' + row.userId">
                           <summary class="text-xs text-primary cursor-pointer">Visszajelzés</summary>
@@ -188,7 +192,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
           </div>
         </div>
         @if (feedbackOpen()) {
-          <app-dolgozat-visszajelzes [assignmentId]="o.assignmentId" [students]="o.students" [published]="!!o.resultsPublishedAt"
+          <app-dolgozat-visszajelzes [assignmentId]="o.assignmentId" [students]="activeStudents()" [published]="!!o.resultsPublishedAt"
             (closed)="feedbackOpen.set(false)" (saved)="load()" />
         }
       } @else if (error()) {
@@ -213,6 +217,8 @@ export class DolgozatAttekintesComponent implements OnInit {
   readonly openAttemptId = signal<number | null>(null);
   /** „Visszajelzések AI-vázlattal” párbeszédablak. */
   readonly feedbackOpen = signal(false);
+  /** A visszajelzés-író csak az élő tagoknak szól: a kilépett diák dolgozata csak olvasható. */
+  readonly activeStudents = computed(() => (this.overview()?.students ?? []).filter((s) => !s.leftGroup));
   readonly statusLabels = STATUS_LABELS;
   readonly grades = ['1', '2', '3', '4', '5'];
 

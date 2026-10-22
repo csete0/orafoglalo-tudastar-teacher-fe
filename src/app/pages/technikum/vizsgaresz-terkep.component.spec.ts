@@ -158,6 +158,36 @@ describe('VizsgareszTerkepComponent', () => {
     expect(section.textContent).toContain('Beszédes nevek');
   });
 
+  it('kilépett diák: jelölt sor, a dolgozat pillanatképe csak olvasható (nincs kézi pontozás)', async () => {
+    const api = {
+      comments: vi.fn(() => of([])),
+      heatmap: vi.fn(() => of({ ...structuredClone(heatmap), students: [...structuredClone(heatmap).students,
+        { userId: 66, name: 'Volt Diák', theory: null, leftGroup: true, cells: [cell({ points: 10, ratio: 10 / 15 })] }] })),
+      snapshot: vi.fn(() => of({ ...snapshot, userId: 66, leftGroup: true, session: { ...snapshot.session, parts: [
+        { partKey: 'console' as const, title: 'Konzol', maxPoints: 15, result: { id: 1, partKey: 'console' as const, status: 'graded', points: 10, maxPoints: 15,
+          source: 'exam', sessionId: 31, gradedAt: '', detail: { message: null, machine: { status: 'done', points: 10, maxPoints: 10, compileOutput: null, cases: [] },
+            ai: { status: 'done', points: 0, maxPoints: 5, message: null, items: [{ key: 'k', points: 0, maxPoints: 5, reason: 'Beszédes nevek', notEvaluated: false }] } } } }] } })),
+      publish: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      imports: [VizsgareszTerkepComponent],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: { success: vi.fn() } }],
+    });
+    const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+    fixture.componentRef.setInput('groupId', 12);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="left-group-66"]')!.textContent).toContain('kilépett a csoportból');
+    expect(el.querySelector('[data-testid="left-group-55"]')).toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-66-console"]')!.click();
+    fixture.detectChanges();
+    const section = el.querySelector('[data-testid="snapshot"]')!;
+    expect(section.querySelector('[data-testid="snapshot-left-group"]')).not.toBeNull();
+    expect(section.textContent).toContain('Beszédes nevek');
+    expect(section.querySelector('[data-testid^="rubric-input-"]')).toBeNull();
+    expect(section.querySelector('[data-testid^="rubric-save-"]')).toBeNull();
+  });
+
   it('kézi pontozás: a szempont pontja szerkeszthető, mentés után a pillanatkép és a térkép frissül; hibás pont elutasítva; visszavonás', async () => {
     const part = (points: number, aiPoints: number | null, review: boolean): ExamSessionSnapshotDto => ({ ...snapshot, session: { ...snapshot.session,
       notEvaluatedPoints: aiPoints === null ? 5 : 0, passed: null, parts: [{ partKey: 'console' as const, title: 'Konzol', maxPoints: 15,
