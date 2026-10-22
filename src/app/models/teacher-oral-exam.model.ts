@@ -181,6 +181,8 @@ export interface OralTurnDto {
   questionNo: number;
   /** Szakaszos feleletnél a szakasz kulcsa. */
   segment?: string | null;
+  /** A vizsgáztató mondatába a diák közbeszólt: csak az elejét hallotta (csak igaz értékkel jön). */
+  interrupted?: boolean;
 }
 
 export interface OralPrepCodeDto {

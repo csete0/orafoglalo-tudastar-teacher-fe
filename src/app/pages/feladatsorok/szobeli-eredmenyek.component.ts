@@ -192,7 +192,7 @@ export function transcriptSections(turns: OralTurnDto[]): { segment: string | nu
                         <summary class="cursor-pointer">{{ section.segment !== null ? i + 1 + '. szakasz' : 'A teljes felelet' }} ({{ section.turns.length }} megszólalás)</summary>
                         <ul class="mt-2 space-y-1">
                           @for (t of section.turns; track $index) {
-                            <li class="break-words"><span class="font-semibold">{{ t.speaker === 'examiner' ? 'Vizsgáztató' : 'Diák' }}:</span> {{ t.text }}</li>
+                            <li class="break-words"><span class="font-semibold">{{ t.speaker === 'examiner' ? 'Vizsgáztató' : 'Diák' }}:</span> {{ t.text }}@if (t.interrupted) {<span class="ml-1 text-xs text-text-muted" data-testid="oral-turn-interrupted">(félbeszakítva)</span>}</li>
                           }
                         </ul>
                       </details>
