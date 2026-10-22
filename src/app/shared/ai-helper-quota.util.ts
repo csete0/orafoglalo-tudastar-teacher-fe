@@ -21,7 +21,7 @@ export interface AiHelperQuotaDto {
   officeTask?: AiHelperQuotaItemDto;
   /** Vizsgaremek-csapat MI-repóátnézése (iskolai csapat): egy egység = egy átnézés. */
   repoReview?: AiHelperQuotaItemDto;
-  /** Asztali (WPF/WinForms) feladatsor témából: egy egység = egy sikeres generálás. */
+  /** Asztali (WPF/WinForms vagy JavaFX) feladatsor témából: egy egység = egy sikeres generálás. */
   desktopTask?: AiHelperQuotaItemDto;
 }
 

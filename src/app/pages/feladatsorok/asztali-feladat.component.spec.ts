@@ -84,6 +84,21 @@ describe('AsztaliFeladatComponent', () => {
     expect(c.canStart()).toBe(false);
   });
 
+  it('JavaFX-opció: a választóban megjelenik, és a kérésben elküldődik', () => {
+    const { fixture, c } = create();
+    c.topic.set('Iskolai könyvtár');
+    fixture.detectChanges();
+    const select = q(fixture, 'dt-framework') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent!.trim())).toEqual([
+      'WPF vagy WinForms (a diák választ)', 'WPF', 'WinForms', 'JavaFX (Java)',
+    ]);
+    select.selectedIndex = 3;
+    select.dispatchEvent(new Event('change'));
+    expect(c.framework()).toBe('javafx');
+    c.start();
+    expect(service.startJob).toHaveBeenCalledWith(7, { topic: 'Iskolai könyvtár', level: 'kozep', count: 3, framework: 'javafx' });
+  });
+
   it('nem prémium tanárnak a készítés tiltott, magyarázattal', () => {
     const { fixture, c } = create({ quota: { ...QUOTA, premium: false } });
     c.topic.set('Könyvtár');

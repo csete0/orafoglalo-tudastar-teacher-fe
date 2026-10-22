@@ -4,15 +4,30 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subscription, finalize, take } from 'rxjs';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
+import { CodeFileRank, KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { AiHelperQuotaItemDto, aiHelperErrorMessage } from '../../shared/ai-helper-quota.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import { CodeCommentSuggestionDto } from '../../models/teacher-project.model';
-import { EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto } from '../../models/technikum.model';
+import { DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto } from '../../models/technikum.model';
 
 /** A pillanatkép fülei: az öt vizsgarész és a részekhez nem tartozó (pl. hivatalos adat-) fájlok. */
 type Tab = ExamPartKey | 'egyeb';
+
+/** Az asztali részek (konzolos, grafikus): ezek nyelve a munkamenet nyelve (C# / Java). */
+const DESKTOP_PARTS: readonly Tab[] = ['console', 'gui'];
+
+const HAND_WRITTEN_SOURCES = ['.cs', '.xaml', '.java', '.fxml'];
+
+/**
+ * Az asztali részek fájlsorrendje (BE: ExamCodeCommentService.Priority): előbb a kézzel írt forrás (.cs, .xaml, .java, .fxml),
+ * aztán a generált (.Designer.cs), végül minden más (projektfájlok: .csproj, pom.xml, build.gradle…, adatfájlok).
+ */
+export const desktopFileRank: CodeFileRank = (path) => {
+  const p = path.toLowerCase();
+  if (p.endsWith('.designer.cs')) return 1;
+  return HAND_WRITTEN_SOURCES.some((x) => p.endsWith(x)) ? 0 : 2;
+};
 
 /** Kliens-oldali (nem mentett) MI-javaslat; a `key` csak a felületen azonosít. */
 interface Suggestion extends CodeCommentSuggestionDto {
@@ -39,6 +54,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
           <button type="button" role="tab" class="part-tab" [attr.aria-selected]="tab() === t.key" [attr.data-testid]="'part-tab-' + t.key"
                   (click)="selectTab(t.key)">
             {{ t.label }}
+            @if (t.language) { <span class="lang-badge" [attr.data-testid]="'part-lang-' + t.key">{{ t.language }}</span> }
             @if (t.comments) { <span class="comment-count" [attr.aria-label]="t.comments + ' megjegyzés'">{{ t.comments }}</span> }
           </button>
         }
@@ -77,7 +93,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
       }
 
       @if (hasFiles()) {
-        <app-kod-olvaso class="block mt-3" [files]="files()" [readOnlyPaths]="snapshot().readOnlyPaths" [activePath]="activePath()"
+        <app-kod-olvaso class="block mt-3" [files]="files()" [readOnlyPaths]="snapshot().readOnlyPaths" [fileRank]="fileRank()" [activePath]="activePath()"
                         (activePathChange)="selectFile($event)" [commentable]="commentable()" [markedLines]="markedLines()"
                         [badges]="commentCounts()" [suggestionBadges]="suggestionCounts()" [lineExtras]="threadTpl" (lineClick)="startComment($event)" />
       } @else if (tab() !== 'gui') {
@@ -155,6 +171,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
       background: var(--color-bg-panel); color: var(--color-text-primary); }
     .part-tab[aria-selected="true"] { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary); }
     .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
+    .lang-badge { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; border: 1px solid currentColor; font-size: 0.625rem; }
     .gallery { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .thumb { display: flex; align-items: center; justify-content: center; width: 10rem; height: 6.5rem; overflow: hidden; border-radius: 0.5rem;
       border: 1px solid var(--color-border-default); background: var(--color-bg-element); }
@@ -218,12 +235,16 @@ export class PillanatkepKodComponent {
     const keys = sn.session.parts.map((p) => p.partKey);
     const counts = new Map<ExamPartKey, number>();
     for (const c of this.comments()) counts.set(c.partKey, (counts.get(c.partKey) ?? 0) + 1);
-    const tabs: { key: Tab; label: string; comments: number }[] = keys.map((k) => ({ key: k, label: EXAM_PART_LABEL[k] ?? k, comments: counts.get(k) ?? 0 }));
-    if (Object.keys(this.otherFiles()).length) tabs.push({ key: 'egyeb', label: 'Egyéb fájlok', comments: 0 });
+    const language = DESKTOP_LANGUAGE_LABEL[sn.desktopLanguage ?? 'csharp'];
+    const tabs: { key: Tab; label: string; language: string | null; comments: number }[] = keys.map((k) => ({
+      key: k, label: EXAM_PART_LABEL[k] ?? k, language: DESKTOP_PARTS.includes(k) ? language : null, comments: counts.get(k) ?? 0,
+    }));
+    if (Object.keys(this.otherFiles()).length) tabs.push({ key: 'egyeb', label: 'Egyéb fájlok', language: null, comments: 0 });
     return tabs;
   });
 
   readonly files = computed(() => this.filesOf(this.tab()));
+  readonly fileRank = computed(() => this.rankOf(this.tab()));
   readonly hasFiles = computed(() => Object.keys(this.files()).length > 0);
   /** Megjegyzés csak a rész saját (nem hivatalos, csak olvasható) fájljára írható. */
   readonly commentable = computed(() => {
@@ -277,7 +298,11 @@ export class PillanatkepKodComponent {
     this.newLine.set(null);
     this.editingId.set(null);
     this.commentError.set(null);
-    this.activePath.set(codeFilePaths(this.filesOf(tab), this.snapshot().readOnlyPaths)[0] ?? null);
+    this.activePath.set(codeFilePaths(this.filesOf(tab), this.snapshot().readOnlyPaths, this.rankOf(tab))[0] ?? null);
+  }
+
+  private rankOf(tab: Tab): CodeFileRank {
+    return DESKTOP_PARTS.includes(tab) ? desktopFileRank : () => 0;
   }
 
   selectFile(path: string | null): void {

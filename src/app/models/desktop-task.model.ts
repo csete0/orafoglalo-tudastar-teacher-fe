@@ -1,9 +1,9 @@
 import { AiHelperQuotaItemDto } from '../shared/ai-helper-quota.util';
 
-/** Asztali (WPF/WinForms) feladatsor témából - a backend DesktopTaskModels.cs tükre. */
+/** Asztali (WPF/WinForms vagy JavaFX) feladatsor témából - a backend DesktopTaskModels.cs tükre. */
 
 export type DesktopTaskLevel = 'alap' | 'kozep' | 'emelt';
-export type DesktopFramework = 'any' | 'wpf' | 'winforms';
+export type DesktopFramework = 'any' | 'wpf' | 'winforms' | 'javafx';
 
 export interface DesktopTaskStartRequest {
   topic: string;

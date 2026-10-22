@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of } from 'rxjs';
-import { PillanatkepKodComponent } from './pillanatkep-kod.component';
+import { PillanatkepKodComponent, desktopFileRank } from './pillanatkep-kod.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ExamCodeCommentDto, ExamSessionSnapshotDto } from '../../models/technikum.model';
@@ -32,7 +32,7 @@ const comment = (over: Partial<ExamCodeCommentDto>): ExamCodeCommentDto => ({
 describe('PillanatkepKodComponent', () => {
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
-  async function setup(existing: ExamCodeCommentDto[] = [comment({})]) {
+  async function setup(existing: ExamCodeCommentDto[] = [comment({})], sn: ExamSessionSnapshotDto = snapshot) {
     let nextId = 100;
     const api = {
       comments: vi.fn(() => of(existing)),
@@ -53,7 +53,7 @@ describe('PillanatkepKodComponent', () => {
       providers: [{ provide: TeacherTechnikumService, useValue: api }, { provide: ConfirmService, useValue: confirm }],
     });
     const fixture = TestBed.createComponent(PillanatkepKodComponent);
-    fixture.componentRef.setInput('snapshot', snapshot);
+    fixture.componentRef.setInput('snapshot', sn);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -169,5 +169,80 @@ describe('PillanatkepKodComponent', () => {
     fixture.detectChanges();
     expect(api.createComment).toHaveBeenCalledWith(31, 'console', 'console/Program.cs', 3, 'Formázd a kimenetet.');
     expect(el.querySelector('[data-testid^="suggestion-"]')).toBeNull();
+  });
+
+  const javaSnapshot: ExamSessionSnapshotDto = {
+    ...snapshot,
+    desktopLanguage: 'java',
+    files: {
+      'console/Main.java': 'public class Main {\n  public static void main(String[] args) {\n  }\n}',
+      'console/Kolcsonzes.java': 'public class Kolcsonzes {\n}',
+      'console/adatok.txt': '1;Egri',
+      'backend/Program.cs': '// API',
+    },
+    readOnlyPaths: ['console/adatok.txt'],
+    gui: {
+      uploadId: 4, uploadedAt: '2026-10-10T11:00:00', imageCount: 0,
+      files: {
+        'gui/pom.xml': '<project/>',
+        'gui/src/main/resources/main.fxml': '<VBox/>',
+        'gui/src/main/java/Main.java': 'public class Main {\n}',
+        'gui/build.gradle': 'plugins {}',
+      },
+    },
+  };
+
+  const fileList = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')].map((b) => b.textContent!.trim());
+
+  it('Java-dolgozat: nyelv-jelvény az asztali részek fülén, a .java fájlok sorszámozva, megjegyzés a .java sorára', async () => {
+    const { fixture, el, api } = await setup([], javaSnapshot);
+    expect(el.querySelector('[data-testid="part-lang-console"]')!.textContent!.trim()).toBe('Java');
+    expect(el.querySelector('[data-testid="part-lang-gui"]')!.textContent!.trim()).toBe('Java');
+    expect(el.querySelector('[data-testid="part-lang-web"]')).toBeNull();
+    expect(el.querySelector('[data-testid="part-lang-api"]')).toBeNull();
+
+    expect(fileList(el)).toEqual(['console/Kolcsonzes.java', 'console/Main.java', 'console/adatok.txt (keret)']);
+    expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('public class Kolcsonzes');
+    [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')][1].click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.code-line').length).toBe(4);
+    lineButton(el, 2).click();
+    fixture.detectChanges();
+    el.querySelector<HTMLTextAreaElement>('[data-testid="new-comment"] textarea')!.value = 'A main üres.';
+    el.querySelector<HTMLFormElement>('[data-testid="new-comment"]')!.dispatchEvent(new Event('submit'));
+    expect(api.createComment).toHaveBeenCalledWith(31, 'console', 'console/Main.java', 2, 'A main üres.');
+  });
+
+  it('Java GUI-zip: előbb a kézzel írt forrás (.java, .fxml), a projektfájlok (pom.xml, build.gradle) hátul; az fxml megjegyezhető', async () => {
+    const { fixture, el, api } = await setup([], javaSnapshot);
+    click(el, '[data-testid="part-tab-gui"]');
+    fixture.detectChanges();
+    expect(fileList(el)).toEqual(['gui/src/main/java/Main.java', 'gui/src/main/resources/main.fxml', 'gui/build.gradle', 'gui/pom.xml']);
+    [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')][1].click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('<VBox/>');
+    lineButton(el, 1).click();
+    fixture.detectChanges();
+    el.querySelector<HTMLTextAreaElement>('[data-testid="new-comment"] textarea')!.value = 'Elrendezés?';
+    el.querySelector<HTMLFormElement>('[data-testid="new-comment"]')!.dispatchEvent(new Event('submit'));
+    expect(api.createComment).toHaveBeenCalledWith(31, 'gui', 'gui/src/main/resources/main.fxml', 1, 'Elrendezés?');
+  });
+
+  it('C#-dolgozat (nyelv nélküli régebbi BE is): „C#” jelvény; a GUI-ban a .Designer.cs és a .csproj hátrébb', async () => {
+    const { fixture, el } = await setup([], {
+      ...snapshot,
+      gui: { uploadId: 3, uploadedAt: '2026-10-10T11:00:00', imageCount: 0, files: {
+        'App/App.csproj': '<Project/>', 'App/Form1.Designer.cs': 'partial class Form1 {}', 'App/Form1.cs': 'class Form1 {}', 'App/MainWindow.xaml': '<Window/>',
+      } },
+    });
+    expect(el.querySelector('[data-testid="part-lang-console"]')!.textContent!.trim()).toBe('C#');
+    click(el, '[data-testid="part-tab-gui"]');
+    fixture.detectChanges();
+    expect(fileList(el)).toEqual(['App/Form1.cs', 'App/MainWindow.xaml', 'App/Form1.Designer.cs', 'App/App.csproj']);
+  });
+
+  it('desktopFileRank: kézzel írt forrás 0, generált 1, minden más 2 (kis-nagybetű független)', () => {
+    expect(['Main.JAVA', 'a.fxml', 'Program.cs', 'w.xaml', 'Form1.designer.cs', 'pom.xml', 'build.gradle', 'App.csproj', 'adatok.txt'].map(desktopFileRank))
+      .toEqual([0, 0, 0, 0, 1, 2, 2, 2, 2]);
   });
 });
