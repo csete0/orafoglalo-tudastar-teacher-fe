@@ -33,9 +33,10 @@ export const DESKTOP_LEVELS: { value: DesktopTaskLevel; label: string }[] = [
 ];
 
 export const DESKTOP_FRAMEWORKS: { value: DesktopFramework; label: string }[] = [
-  { value: 'any', label: 'Mindegy (a diák választ)' },
+  { value: 'any', label: 'WPF vagy WinForms (a diák választ)' },
   { value: 'wpf', label: 'WPF' },
   { value: 'winforms', label: 'WinForms' },
+  { value: 'javafx', label: 'JavaFX (Java)' },
 ];
 
 /**
@@ -56,7 +57,7 @@ export const DESKTOP_FRAMEWORKS: { value: DesktopFramework; label: string }[] = 
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-secondary shrink-0"><app-icon name="code" class="w-5 h-5 block" /></div>
-            <h2 id="dt-title" class="font-bold text-lg">Asztali feladatsor témából (WPF / WinForms)</h2>
+            <h2 id="dt-title" class="font-bold text-lg">Asztali feladatsor témából (WPF / WinForms / JavaFX)</h2>
           </div>
           <button type="button" class="btn btn-ghost !p-1.5" aria-label="Bezárás" (click)="close()" data-testid="dt-close">
             <app-icon name="x" class="w-5 h-5 block" />

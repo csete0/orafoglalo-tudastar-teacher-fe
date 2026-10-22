@@ -10,7 +10,7 @@ import {
   DesktopTaskStartResult,
 } from '../../models/desktop-task.model';
 
-/** Asztali (WPF/WinForms) feladatsor témából - a TeacherDesktopTaskController végpontjai. A keret a közös ai-helpers/quota `desktopTask` mezője. */
+/** Asztali (WPF/WinForms vagy JavaFX) feladatsor témából - a TeacherDesktopTaskController végpontjai. A keret a közös ai-helpers/quota `desktopTask` mezője. */
 @Injectable({ providedIn: 'root' })
 export class TeacherDesktopTaskService {
   private readonly http = inject(HttpClient);

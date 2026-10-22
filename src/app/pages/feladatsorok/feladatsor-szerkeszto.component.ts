@@ -69,7 +69,7 @@ const WORD_TASK_TYPE_ID = 1;
 const PPT_TASK_TYPE_ID = 3;
 const WEB_TASK_TYPE_ID = 7;
 const GRAPHICS_TASK_TYPE_ID = 4;
-/** Asztali alkalmazás (WPF/WinForms) - ehhez készíthető feladatsor témából AI-val. */
+/** Asztali alkalmazás (WPF/WinForms vagy JavaFX) - ehhez készíthető feladatsor témából AI-val. */
 const DESKTOP_TASK_TYPE_ID = 9;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
