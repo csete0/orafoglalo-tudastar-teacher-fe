@@ -86,10 +86,14 @@ type SuggestScope = 'file' | 'all';
               @for (s of v.students; track s.userId) {
                 <tr [attr.data-testid]="'student-' + s.userId">
                   <td class="sticky-col">
-                    @if (s.runtime) {
+                    @if (s.runtime && !s.leftGroup) {
                       <button type="button" class="font-semibold text-left underline-offset-2 hover:underline" (click)="openCode(s)">{{ s.name }}</button>
                     } @else {
                       <span class="font-semibold">{{ s.name }}</span>
+                    }
+                    @if (s.leftGroup) {
+                      <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-group-' + s.userId"
+                          title="A diák azóta kilépett vagy kikerült a csoportból - a tagként írt dolgozata csak olvasható">kilépett a csoportból</span>
                     }
                     <span class="block text-xs text-text-muted">
                       {{ s.runtime ? runtimeLabels[s.runtime] : 'még nem kezdte' }}{{ s.completedAt ? ' · kész' : '' }}

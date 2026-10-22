@@ -151,6 +151,8 @@ export interface TeacherOralResultRowDto {
   maxPoints: number | null;
   teacherTotalPoints: number | null;
   startedAt: string | null;
+  /** Szóbeli dolgozatnál: azóta kilépett a csoportból, de tagként kezdte el - csak olvasható sor. */
+  leftGroup?: boolean;
 }
 
 export interface TeacherOralResultsDto {

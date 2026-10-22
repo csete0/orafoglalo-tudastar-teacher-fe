@@ -87,6 +87,10 @@ export function transcriptSections(turns: OralTurnDto[]): { segment: string | nu
                       } @else {
                         {{ row.studentName }}
                       }
+                      @if (row.leftGroup) {
+                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-group-' + row.userId"
+                            title="A diák azóta kilépett vagy kikerült a csoportból - a tagként írt dolgozata csak olvasható">kilépett a csoportból</span>
+                      }
                     </td>
                     <td>{{ statusLabel(row.status) }}</td>
                     <td class="num">{{ row.totalPoints !== null ? row.totalPoints + ' / ' + row.maxPoints : '–' }}</td>
