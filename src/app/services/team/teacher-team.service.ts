@@ -3,7 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
-  Team, TeamActivity, TeamFile, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview, TeamReviews, TeamTree,
+  Team, TeamActivity, TeamFile, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview, TeamReviews, TeamTree, TestRunnerOption,
 } from '../../models/team.model';
 
 /** A tanár által módosítható csapatadatok (PUT api/teacher/teams/{id}; a hiányzó mező változatlan marad). */
@@ -46,6 +46,7 @@ export class TeacherTeamService {
     return this.http.post<TeamMilestone[]>(`${this.teams}/${id}/milestones/${mid}/tick`, { done, note });
   }
   testMilestone(id: number, mid: number): Observable<TeamMilestoneTest> { return this.http.post<TeamMilestoneTest>(`${this.teams}/${id}/milestones/${mid}/test`, {}); }
+  testRunners(): Observable<TestRunnerOption[]> { return this.http.get<TestRunnerOption[]>(`${this.teams}/test-runners`); }
   reviews(id: number): Observable<TeamReviews> { return this.http.get<TeamReviews>(`${this.teams}/${id}/reviews`); }
   requestReview(id: number, branch: string | null): Observable<TeamRepoReview> { return this.http.post<TeamRepoReview>(`${this.teams}/${id}/reviews`, { branch }); }
   github(id: number): Observable<TeamGithubStatus> { return this.http.get<TeamGithubStatus>(`${this.teams}/${id}/github`); }

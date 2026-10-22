@@ -5,7 +5,7 @@ import { CsapatReszletekComponent } from './csapat-reszletek.component';
 import { TeacherTeamService } from '../../services/team/teacher-team.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ReportService } from '../../services/report/report.service';
-import { Team, TeamActivity, TeamMilestone, TeamRepoReview, TeamReviews } from '../../models/team.model';
+import { Team, TeamActivity, TeamMilestone, TeamRepoReview, TeamReviews, TestRunnerOption } from '../../models/team.model';
 
 const team: Team = {
   id: 3, name: 'Büfé', kind: 'school', status: 'active', groupId: 7, groupName: '13.T', projectTitle: 'Iskolai büfé', examDate: '2027-05-20',
@@ -16,6 +16,13 @@ const ms: TeamMilestone = {
   id: 11, kind: 'docs', title: 'Dokumentáció', sortOrder: 5, dueDate: null, effectiveDueDate: null, overdue: false, requiredPaths: ['README*|**/README*'], testPreset: null,
   testDir: null, lastCheck: null, tickedAt: null, tickedByName: null, teacherNote: null, canEdit: true, canTick: true,
 };
+
+const RUNNERS: TestRunnerOption[] = [
+  { key: 'python-unittest', label: 'Python unittest', language: 'Python', available: true },
+  { key: 'node-test', label: 'Node.js (node --test)', language: 'JavaScript', available: true },
+  { key: 'nunit', label: 'NUnit (C#, NUnitLite)', language: 'C#', available: true },
+  { key: 'junit', label: 'JUnit 5 (Java)', language: 'Java', available: false },
+];
 
 describe('CsapatReszletekComponent', () => {
   const review = (over: Partial<TeamRepoReview>): TeamRepoReview => ({
@@ -34,6 +41,7 @@ describe('CsapatReszletekComponent', () => {
       tree: vi.fn(() => of({ ref: 'main', truncated: false, entries: [{ path: 'README.md', type: 'blob', size: 10 }] })),
       file: vi.fn(() => of({ path: 'README.md', content: '# Büfé', binary: false, tooLarge: false })),
       github: vi.fn(() => of({ enabled: true, linked: false, branches: [] })),
+      testRunners: vi.fn(() => of(RUNNERS)), updateMilestone: vi.fn(() => of([ms])),
     };
     const reports = { getAiHelperQuota: vi.fn(() => of({ repoReview: { used: 2, limit: 40 } })) };
     TestBed.configureTestingModule({
@@ -111,6 +119,32 @@ describe('CsapatReszletekComponent', () => {
     await c.setTab('mi');
     fixture.detectChanges();
     expect(el.textContent).not.toContain('MI-átnézés kérése');
+  });
+
+  it('tesztfuttató-legördülő a szerver listájából: a nem elérhető tiltva „(hamarosan)”, mentés a választott presettel; súgó presetenként', async () => {
+    const { fixture, c, api, el } = setup();
+    api.milestones.mockReturnValue(of([{ ...ms, kind: 'tests', testPreset: 'junit', testDir: 'backend' }]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await c.setTab('merfoldkovek');
+    fixture.detectChanges();
+    const select = el.querySelector('[data-testid="ms-11"] select') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent?.trim(), o.disabled])).toEqual([
+      ['', 'nincs (csak a fájlok megléte)', false],
+      ['python-unittest', 'Python unittest', false],
+      ['node-test', 'Node.js (node --test)', false],
+      ['nunit', 'NUnit (C#, NUnitLite)', false],
+      ['junit', 'JUnit 5 (Java) (hamarosan)', true],
+    ]);
+    expect(select.value).toBe('junit');
+    expect(el.querySelector('[data-testid="test-help"]')?.textContent).toContain('a Maven/Gradle modul gyökere');
+    select.value = 'nunit';
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.updateMilestone).toHaveBeenCalledWith(3, 11, { testPreset: 'nunit', testDir: 'backend' });
+    expect(c.testHelp('nunit')).toContain('a tesztprojekt mappája, pl. backend/Api.Tests');
+    await c.setTab('merfoldkovek');
+    expect(api.testRunners).toHaveBeenCalledTimes(1); // a lista egyszer töltődik
   });
 
   it('sikertelen pipa: hibaüzenet, és a mérföldkövek a szerverről újratöltődnek', async () => {

@@ -16,5 +16,7 @@ describe('TeacherTeamService', () => {
     expect(http.expectOne(`${environment.apiUrl}/teacher/teams/3/reject`).request.body).toEqual({ reason: 'más felosztás' });
     void firstValueFrom(api.activity(3));
     http.expectOne((r) => r.url === `${environment.apiUrl}/teams/3/activity`);
+    void firstValueFrom(api.testRunners());
+    expect(http.expectOne(`${environment.apiUrl}/teams/test-runners`).request.method).toBe('GET');
   });
 });

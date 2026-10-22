@@ -12,7 +12,7 @@ import { KodOlvasoComponent } from '../../shared/kod-olvaso/kod-olvaso.component
 import { HetiAktivitasComponent } from './heti-aktivitas.component';
 import {
   CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview, TeamReviews,
-  TeamTree,
+  TeamTree, TestRunnerOption,
 } from '../../models/team.model';
 
 type Fül = 'munka' | 'merfoldkovek' | 'mi' | 'fajlok';
@@ -110,8 +110,9 @@ const MAX_POLLS = 36;
                         <label class="text-sm block">Tesztfuttató
                           <select class="input w-full" [disabled]="busy()" (change)="savePreset(m, $any($event.target).value, m.testDir)">
                             <option value="" [selected]="!m.testPreset">nincs (csak a fájlok megléte)</option>
-                            <option value="python-unittest" [selected]="m.testPreset === 'python-unittest'">Python unittest</option>
-                            <option value="node-test" [selected]="m.testPreset === 'node-test'">Node.js (node --test)</option>
+                            @for (r of runners(); track r.key) {
+                              <option [value]="r.key" [disabled]="!r.available" [selected]="m.testPreset === r.key">{{ r.label }}{{ r.available ? '' : ' (hamarosan)' }}</option>
+                            }
                           </select></label>
                         <label class="text-sm block sm:col-span-2">Várt fájlok/mappák (soronként egy minta, pl. **/*.sql)
                           <textarea class="input w-full" rows="2" [value]="m.requiredPaths.join('\\n')" [disabled]="busy()" (change)="savePaths(m, $any($event.target).value)"></textarea></label>
@@ -130,7 +131,7 @@ const MAX_POLLS = 36;
                   }
                   @if (m.testPreset) {
                     @if (m.canEdit) { <button class="btn btn-ghost" type="button" (click)="runTest(m)" [disabled]="busy()">Tesztek futtatása</button> }
-                    <p class="text-xs text-text-muted" data-testid="test-help">A tesztfuttatás a megadott mappa fájljait küldi először, majd a tároló többi fájlját (legfeljebb 150 fájl / 2 MB). Python esetén a szülőmappából importáláshoz csomag-szerkezet kell (__init__.py).</p>
+                    <p class="text-xs text-text-muted" data-testid="test-help">{{ testHelp(m.testPreset) }}</p>
                     @if (testResult()[m.id] ?? m.lastCheck?.test; as tr) {
                       <details class="text-sm" [open]="!tr.passed"><summary class="cursor-pointer" [class.text-danger]="!tr.passed">Tesztek: {{ tr.passed ? 'lefutottak' : 'hibával álltak le' }}
                         ({{ tr.at | date: 'yyyy.MM.dd. HH:mm' }})</summary><pre class="whitespace-pre-wrap max-h-64 overflow-auto text-xs">{{ tr.output }}</pre></details>
@@ -242,6 +243,8 @@ export class CsapatReszletekComponent implements OnInit {
   readonly team = signal<Team | null>(null);
   readonly activity = signal<TeamActivity | null>(null);
   readonly milestones = signal<TeamMilestone[]>([]);
+  /** A tesztfuttató presetek (BE: GET test-runners); a szerveren még nem elérhetők tiltva, „(hamarosan)” jelöléssel. */
+  readonly runners = signal<TestRunnerOption[]>([]);
   readonly testResult = signal<Record<number, TeamMilestoneTest>>({});
   readonly reviews = signal<TeamReviews | null>(null);
   /** A tanár havi repóátnézési kerete (GET api/teacher/ai-helpers/quota `repoReview`); hiányában a sor nem látszik. */
@@ -298,7 +301,7 @@ export class CsapatReszletekComponent implements OnInit {
     this.error.set(null);
     clearTimeout(this.timer); // a fülről elnavigálva a frissítés leáll (visszatéréskor újraindul)
     this.stalled.set(false);
-    if (tab === 'merfoldkovek') await this.loadMilestones();
+    if (tab === 'merfoldkovek') await Promise.all([this.loadMilestones(), this.loadRunners()]);
     if (tab === 'mi') {
       this.polls = 0;
       await Promise.all([this.loadReviews(), this.loadQuota()]);
@@ -378,6 +381,22 @@ export class CsapatReszletekComponent implements OnInit {
   /** Hibás mentésnél a lista a szerverről újratöltődik, hogy a mezőkben ne maradjon el nem mentett érték. */
   private async updateMilestone(m: TeamMilestone, edit: TeamMilestoneEdit): Promise<void> {
     if (!(await this.run(async () => this.milestones.set(await firstValueFrom(this.api.updateMilestone(this.id, m.id, edit)))))) await this.loadMilestones(false);
+  }
+
+  /** Súgó presetenként: mi a tesztmappa és mi kerül a futásba (BE: TestRunSources). */
+  testHelp(preset: string): string {
+    const language = this.runners().find((r) => r.key === preset)?.language;
+    const hint = preset === 'python-unittest' ? ' Python esetén a szülőmappából importáláshoz csomag-szerkezet kell (__init__.py).'
+      : language === 'C#' ? ' Tesztmappa: a tesztprojekt mappája, pl. backend/Api.Tests – a ProjectReference-szel hivatkozott projektek is fordulnak, a Program.cs nélkül.'
+      : language === 'Java' ? ' Tesztmappa: a Maven/Gradle modul gyökere, pl. backend – a src/main/java és a src/test/java fordul (letöltés nélkül, csak egységteszt).'
+      : preset === 'node-test' ? '' : ' Tesztmappa: a JS/TS-projekt mappája, pl. frontend – a tároló jest/vitest-konfigja nem számít (rögzített beállítás).';
+    return `A tesztfuttatás a megadott mappa fájljait küldi először, majd a tesztelt kódot (legfeljebb 150 fájl / 2 MB).${hint}`;
+  }
+
+  /** A presetlista csapatonként állandó: egyszer töltődik; hibánál a legördülő csak a „nincs” opciót mutatja (a mérföldkövek hibája jelez). */
+  private async loadRunners(): Promise<void> {
+    if (this.runners().length) return;
+    this.runners.set(await firstValueFrom(this.api.testRunners()).catch(() => []));
   }
 
   private async loadMilestones(showError = true): Promise<void> {

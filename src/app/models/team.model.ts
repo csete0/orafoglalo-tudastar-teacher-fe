@@ -30,9 +30,11 @@ export interface TeamMilestoneTest { passed: boolean; output: string; at: string
 export interface TeamMilestoneCheck { at: string; branch: string; truncated: boolean; items: { pattern: string; matched: boolean; example: string | null }[]; allMatched: boolean; test: TeamMilestoneTest | null; }
 export interface TeamMilestone {
   id: number; kind: 'db' | 'rest' | 'desktop' | 'mobile' | 'tests' | 'docs' | 'submit' | 'custom'; title: string; sortOrder: number; dueDate: string | null;
-  effectiveDueDate: string | null; overdue: boolean; requiredPaths: string[]; testPreset: 'python-unittest' | 'node-test' | null; testDir: string | null;
+  effectiveDueDate: string | null; overdue: boolean; requiredPaths: string[]; testPreset: string | null; testDir: string | null;
   lastCheck: TeamMilestoneCheck | null; tickedAt: string | null; tickedByName: string | null; teacherNote: string | null; canEdit: boolean; canTick: boolean;
 }
+/** A tesztfuttató-legördülő sora (BE: GET api/teams/test-runners); a nem elérhető (`available: false`) a szerveren még nem fut, nem választható. */
+export interface TestRunnerOption { key: string; label: string; language: string; available: boolean; }
 export interface TeamMilestoneEdit {
   title?: string | null; dueDate?: string | null; clearDueDate?: boolean; requiredPaths?: string[] | null; testPreset?: string | null; testDir?: string | null; clearTest?: boolean;
 }
