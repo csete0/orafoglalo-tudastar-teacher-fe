@@ -60,12 +60,13 @@ import {
 
         <!-- C7: szűrősáv egy sorban — a nyomtatott nézeten nem jelenik meg -->
         <div class="flex flex-wrap items-end gap-3 mb-4 print:hidden">
-          <div>
+          <!-- max-w-full: hosszú csoportnévnél a legördülő ne lógjon ki 375 px-en. -->
+          <div class="max-w-full">
             <label class="text-xs text-text-muted block mb-1" for="filter-group">Csoport</label>
             <select id="filter-group"
               [ngModel]="selectedGroupId()" (ngModelChange)="onGroupChange($event)"
               [ngModelOptions]="{ standalone: true }"
-              class="input !w-auto">
+              class="input !w-auto max-w-full">
               <option [ngValue]="null">Minden csoport</option>
               @for (g of activeGroups(); track g.id) {
                 <option [ngValue]="g.id">{{ g.name }}</option>

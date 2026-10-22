@@ -189,7 +189,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
                    komponenst - az initialRangeKey/initialCustomFrom/initialCustomTo inputok
                    nélkül a legördülő mindig "Teljes időszak"-ra ugrana vissza, holott a
                    lekérdezés maga (lent) a perzisztált range()-t használja tovább. -->
-              <app-date-range-filter [initialRangeKey]="rangeKey()"
+              <app-date-range-filter class="block mb-4" [initialRangeKey]="rangeKey()"
                 [initialCustomFrom]="customFromValue()" [initialCustomTo]="customToValue()"
                 (rangeChange)="applyRange($event)" />
               @if (report.error()) {

@@ -30,7 +30,7 @@ import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-ja
         <h2 id="osszesito" class="text-lg font-bold mb-3">Összesítő</h2>
         <!-- UI-TT-178/180: a fül minden váltáskor újra létrejön - a szűrő kulcsa és tartománya a szülőben (model) él,
              különben a legördülő mindig „Teljes időszak”-ra ugrana vissza. -->
-        <app-date-range-filter [initialRangeKey]="rangeKey()"
+        <app-date-range-filter class="block mb-4" [initialRangeKey]="rangeKey()"
           [initialCustomFrom]="customFromValue()" [initialCustomTo]="customToValue()"
           (rangeChange)="applyRange($event)" />
         @if (report.error()) {

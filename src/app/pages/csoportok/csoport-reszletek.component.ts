@@ -35,7 +35,8 @@ import { CsoportBeallitasokComponent } from './fulek/csoport-beallitasok.compone
     @if (store.selectedGroup(); as group) {
       <div class="page-wide">
         <header class="flex flex-wrap items-center gap-3 mb-4">
-          <div class="flex-1 min-w-0">
+          <!-- min-w-64: keskeny képernyőn a meghívó kód és a gombok új sorba törnek, a cím nem zsugorodik „brow…”-ra. -->
+          <div class="flex-1 min-w-64">
             <nav aria-label="Morzsa" class="text-xs text-text-muted">
               <a routerLink="/csoportok" class="hover:underline">Csoportok</a> ›
               <span aria-current="page">{{ group.name }}</span>

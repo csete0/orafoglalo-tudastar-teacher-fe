@@ -37,7 +37,7 @@ import { ReportDateRange, ReportRangeKey } from '../../shared/date-range/report-
         }
         <div class="hairline"></div>
 
-        <app-date-range-filter (rangeChange)="applyRange($event)" />
+        <app-date-range-filter class="block mb-4" (rangeChange)="applyRange($event)" />
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
           @for (stat of stats(detail); track stat.label) {

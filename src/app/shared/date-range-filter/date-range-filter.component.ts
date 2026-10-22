@@ -18,7 +18,8 @@ import {
  * és a validáció is szétcsúszhatna.
  *
  * A komponens NEM tölt be semmit; csak feloldott tartományt ad ki
- * (`rangeChange`), a betöltés a szülő oldal dolga.
+ * (`rangeChange`), a betöltés a szülő oldal dolga. Külső margója nincs: a hívó
+ * adja (önállóan `class="block mb-4"`, szűrősorban a sor gap-je igazítja).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,7 +27,7 @@ import {
   standalone: true,
   imports: [FormsModule],
   template: `
-    <div class="flex flex-wrap items-end gap-2 mb-4">
+    <div class="flex flex-wrap items-end gap-2">
       <div>
         <label class="text-xs text-text-muted block mb-1" [attr.for]="'range-key'">Időszak</label>
         <select id="range-key" [ngModel]="rangeKey()" (ngModelChange)="selectKey($event)"

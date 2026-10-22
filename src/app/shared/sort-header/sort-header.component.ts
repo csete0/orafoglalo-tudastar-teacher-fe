@@ -19,11 +19,13 @@ export interface SortState {
   standalone: true,
   template: `
     <button type="button" (click)="toggle()"
-      class="inline-flex items-center gap-1 uppercase tracking-wide text-xs font-semibold
+      class="relative inline-flex items-center uppercase tracking-wide text-xs font-semibold
              text-text-muted hover:text-text-primary transition-colors"
       [attr.aria-label]="ariaLabel()">
       <ng-content />
-      <span aria-hidden="true" class="w-3 text-center">{{ arrow() }}</span>
+      <!-- A nyíl a cella-paddingbe lóg ki (nem foglal helyet), így a jobbra igazított fejléc
+           a számokkal egy vonalban marad, és kattintáskor sem ugrik a felirat. -->
+      <span aria-hidden="true" class="absolute left-full w-3 text-center">{{ arrow() }}</span>
     </button>
   `,
 })
