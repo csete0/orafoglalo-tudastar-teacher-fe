@@ -11,6 +11,11 @@ export const EXAM_PART_LABEL: Record<ExamPartKey, string> = {
   client: 'Kliens alkalmazás',
 };
 
+/** A konzolos és a grafikus rész nyelve (BE: DesktopLanguages). */
+export type DesktopLanguage = 'csharp' | 'java';
+
+export const DESKTOP_LANGUAGE_LABEL: Record<DesktopLanguage, string> = { csharp: 'C#', java: 'Java' };
+
 /** A vizsga sikerességi határa (BE: ExamScoring.PassPercent). */
 export const EXAM_PASS_RATIO = 0.4;
 
@@ -163,6 +168,8 @@ export interface ExamSessionSnapshotDto {
   gui?: ExamSnapshotGuiDto | null;
   /** A részek gyökérmappái a munkaterületen (a GUI-résznek nincs: az külön feltöltés). */
   partRoots?: Partial<Record<ExamPartKey, string>> | null;
+  /** A konzolos és a grafikus rész nyelve (a munkamenet indításakor rögzítve); régebbi BE-n hiányzik = C#. */
+  desktopLanguage?: DesktopLanguage;
 }
 
 export interface ExamSnapshotGuiDto {

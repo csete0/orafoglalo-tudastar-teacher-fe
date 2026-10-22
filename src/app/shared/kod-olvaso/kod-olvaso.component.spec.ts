@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { KodOlvasoComponent } from './kod-olvaso.component';
+import { KodOlvasoComponent, codeFilePaths } from './kod-olvaso.component';
 
 @Component({
   standalone: true,
@@ -27,5 +27,12 @@ describe('KodOlvasoComponent', () => {
     expect(fixture.componentInstance.active()).toBe('b.py');
     expect(el.querySelectorAll('.code-line').length).toBe(1);
     expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('print("b")');
+  });
+
+  it('a rang a csak olvasható kereten belül, az ábécérend előtt rendez', () => {
+    const files = { 'b.py': '', 'a.txt': '', 'c.py': '', 'keret.py': '' };
+    const rank = (p: string) => (p.endsWith('.py') ? 0 : 1);
+    expect(codeFilePaths(files, ['keret.py'], rank)).toEqual(['b.py', 'c.py', 'a.txt', 'keret.py']);
+    expect(codeFilePaths(files, ['keret.py'])).toEqual(['a.txt', 'b.py', 'c.py', 'keret.py']);
   });
 });

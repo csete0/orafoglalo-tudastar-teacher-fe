@@ -7,10 +7,13 @@ export interface KodSorKornyezet {
   text: string;
 }
 
-/** A fájllista sorrendje: előbb a diák fájljai, utána a csak olvasható keret, mindkettő ábécérendben. */
-export function codeFilePaths(files: Record<string, string>, readOnlyPaths: readonly string[]): string[] {
+/** Egy fájl helye a listában (kisebb = előrébb); az azonos rangúak ábécérendben. */
+export type CodeFileRank = (path: string) => number;
+
+/** A fájllista sorrendje: előbb a diák fájljai, utána a csak olvasható keret, mindkettőn belül a rang, majd ábécérend. */
+export function codeFilePaths(files: Record<string, string>, readOnlyPaths: readonly string[], rank: CodeFileRank = () => 0): string[] {
   const ro = new Set(readOnlyPaths);
-  return Object.keys(files).sort((a, b) => Number(ro.has(a)) - Number(ro.has(b)) || a.localeCompare(b));
+  return Object.keys(files).sort((a, b) => Number(ro.has(a)) - Number(ro.has(b)) || rank(a) - rank(b) || a.localeCompare(b));
 }
 
 /** Egy fájl sorai (CRLF-ből is). */
@@ -77,6 +80,8 @@ export function codeLines(text: string | undefined): string[] {
 export class KodOlvasoComponent {
   readonly files = input.required<Record<string, string>>();
   readonly readOnlyPaths = input<readonly string[]>([]);
+  /** A fájlok rangja a listában (a szülő ugyanezzel választja ki az elsőt: `codeFilePaths(…, fileRank)[0]`). */
+  readonly fileRank = input<CodeFileRank>(() => 0);
   /** A megnyitott fájl (kétirányú): a szülő választja ki az elsőt (`codeFilePaths(...)[0]`). */
   readonly activePath = model<string | null>(null);
   /** Igaz: a sorszám gomb, és `lineClick`-et küld (megjegyzés írása). */
@@ -91,7 +96,7 @@ export class KodOlvasoComponent {
   readonly lineExtras = input<TemplateRef<KodSorKornyezet> | null>(null);
   readonly lineClick = output<number>();
 
-  readonly paths = computed(() => codeFilePaths(this.files(), this.readOnlyPaths()));
+  readonly paths = computed(() => codeFilePaths(this.files(), this.readOnlyPaths(), this.fileRank()));
   readonly lines = computed(() => {
     const path = this.activePath();
     return path ? codeLines(this.files()[path]) : [];
