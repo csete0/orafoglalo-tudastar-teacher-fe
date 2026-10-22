@@ -77,7 +77,7 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await colleaguePage.getByRole('button', { name: 'Létrehozás' }).click();
   await expect(colleaguePage.getByText(groupName)).toBeVisible({ timeout: 15000 });
   await colleaguePage.getByText(groupName).click();
-  await colleaguePage.getByRole('tab', { name: 'Meghívó' }).click();
+  await colleaguePage.getByRole('tab', { name: 'Beállítások' }).click();
   const groupInviteCode = (await colleaguePage.locator('code').first().textContent())?.trim();
 
   // ── Az igazgató VISSZA-lefokozza a kollégát sima tanárrá ──
@@ -111,8 +111,10 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await principalPage.locator('[name="newTaskDescription-6"]').fill('Igazgatói feladat leírása.');
   const taskAddForm = principalPage.locator('form', { has: principalPage.locator('[name="newTaskTitle-6"]') });
   await taskAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
-  await expect(principalPage.getByText('1. Igazgatói feladat')).toBeVisible({ timeout: 15000 });
-  await principalPage.getByText('1. Igazgatói feladat').click();
+  // A cím a bal oldali feladat-vázlatban is szerepel - a feladatkártya kinyitó gombjára szűrünk.
+  const taskToggle = principalPage.getByTestId('task-toggle').filter({ hasText: '1. Igazgatói feladat' });
+  await expect(taskToggle).toBeVisible({ timeout: 15000 });
+  await taskToggle.click();
 
   await principalPage.locator('[name="newSolutionDescription"]').fill('Igazgatói részfeladat');
   const solutionAddForm = principalPage.locator('form', { has: principalPage.locator('[name="newSolutionDescription"]') });

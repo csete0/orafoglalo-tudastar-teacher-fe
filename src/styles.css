@@ -108,6 +108,11 @@ body {
   button:disabled {
     cursor: not-allowed;
   }
+  /* Egységes, token-színű billentyűzet-fókusz; a saját fókusz-gyűrűs elemek (utility / .input) felülírják. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 }
 
 /* Közös komponens-osztályok — a diák-app vizuális idiómáinak világos-téma
@@ -193,9 +198,59 @@ body {
     @apply animate-pulse rounded-2xl bg-bg-element;
   }
 
+  /* Teljes szélességű adatoldal (route data.wide): a táblázat kapja a helyet, nincs max-w. */
+  .page-wide {
+    @apply w-full px-4 py-6 lg:px-6;
+  }
+
+  /* Kompakt adattáblázat. A görgető konténeren (.data-table-scroll) belül ragad a fejléc;
+     border-collapse: separate, mert collapse mellett a ragadós cellák kerete elvész. */
+  .data-table-scroll {
+    @apply max-h-[calc(100vh-12rem)] overflow-auto print:max-h-none print:overflow-visible;
+  }
+  .data-table {
+    @apply w-full text-sm;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .data-table th {
+    @apply py-2 px-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted border-b border-border-default bg-bg-panel;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .data-table td {
+    @apply py-1.5 px-3 border-b border-border-default;
+  }
+  .data-table tbody tr:last-child > td {
+    @apply border-b-0;
+  }
+  .data-table tbody tr:not(.detail-row):hover > td {
+    @apply bg-bg-element;
+  }
+  .data-table tfoot td {
+    @apply border-t border-b-0 border-border-default font-semibold text-text-muted;
+  }
+  .data-table .num {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Ragadós első oszlop (pl. diák neve széles mátrixban); a fejléc-sarok a többi fejléc fölött. */
+  .data-table .sticky-col {
+    @apply bg-bg-panel;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  .data-table th.sticky-col {
+    z-index: 2;
+  }
+
   /* Fül-navigáció */
+  /* A fülsáv overflow-x-auto görgetőjében a fül nem törik és nem zsugorodik; a fókusz-keret befelé,
+     mert a görgető konténer a kifelé rajzolt keretet levágná. */
   .tab-btn {
-    @apply pb-2 border-b-2 border-transparent text-sm text-text-muted transition-colors;
+    @apply pb-2 border-b-2 border-transparent text-sm text-text-muted transition-colors shrink-0 whitespace-nowrap rounded-t;
+    outline-offset: -2px;
   }
   .tab-btn-active {
     @apply border-primary text-text-primary font-semibold;

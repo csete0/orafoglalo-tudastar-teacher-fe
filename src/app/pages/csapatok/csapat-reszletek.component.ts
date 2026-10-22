@@ -32,7 +32,7 @@ const MAX_POLLS = 36;
   template: `
     @if (team(); as t) {
       <div class="max-w-6xl space-y-4 min-w-0">
-        @if (t.groupId) { <a class="text-sm underline" [routerLink]="['/csoportok', t.groupId]" [queryParams]="{ tab: 'csapatok' }">← {{ t.groupName }}</a> }
+        @if (t.groupId) { <a class="text-sm underline" [routerLink]="['/csoportok', t.groupId]" [queryParams]="{ tab: 'technikum' }" fragment="csapatok">← {{ t.groupName }}</a> }
         <h1 class="page-title break-words">{{ t.name }}</h1>
         <p class="text-sm text-text-muted">{{ t.projectTitle ? t.projectTitle + ' · ' : '' }}{{ memberLine(t) }}
           @if (t.examDate) { · vizsga: {{ t.examDate | date: 'yyyy.MM.dd.' }} }</p>
@@ -68,7 +68,7 @@ const MAX_POLLS = 36;
 
         <nav class="flex gap-4 border-b border-border-default overflow-x-auto" role="tablist" aria-label="Csapat nézetei">
           @for (f of fulek; track f.value) {
-            <button class="tab-btn whitespace-nowrap" [class.tab-btn-active]="tab() === f.value" role="tab" [id]="'csapat-tab-' + f.value"
+            <button class="tab-btn" [class.tab-btn-active]="tab() === f.value" role="tab" [id]="'csapat-tab-' + f.value"
               [attr.aria-selected]="tab() === f.value" aria-controls="csapat-panel" type="button" (click)="setTab(f.value)">{{ f.label }}</button>
           }
         </nav>

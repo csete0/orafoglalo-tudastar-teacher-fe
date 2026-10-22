@@ -1,319 +1,62 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { AppComponent } from './app.component';
 import { AuthStore } from './services/auth/store/auth.store';
-import { HeaderDropdownCoordinatorService } from './shared/header-dropdown-coordinator.service';
-
-@Component({ standalone: true, changeDetection: ChangeDetectionStrategy.Eager,
- template: '' })
-class BlankTestComponent {}
+import { MockExamService } from './services/mock-exam/mock-exam.service';
 
 describe('AppComponent', () => {
-  let authStoreMock: {
-    isAuthenticated: ReturnType<typeof vi.fn>;
-    hasAdminRole: ReturnType<typeof vi.fn>;
-    hasTeacherRole: ReturnType<typeof vi.fn>;
-    currentUser: ReturnType<typeof vi.fn>;
-    logout: ReturnType<typeof vi.fn>;
-  };
+  let isAuthenticated: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    authStoreMock = {
-      isAuthenticated: vi.fn().mockReturnValue(false),
-      hasAdminRole: vi.fn().mockReturnValue(false),
-      hasTeacherRole: vi.fn().mockReturnValue(true),
-      currentUser: vi.fn().mockReturnValue({
-        id: 1,
-        userName: 'teszt@example.com',
-        email: 'teszt@example.com',
-        firstName: 'Elek',
-        lastName: 'Teszt',
-        roles: ['teacher'],
-      }),
-      logout: vi.fn(),
-    };
-
+    isAuthenticated = vi.fn().mockReturnValue(false);
     await TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
-        provideRouter([{ path: 'dashboard', component: BlankTestComponent }]),
-        { provide: AuthStore, useValue: authStoreMock },
+        provideRouter([]),
+        {
+          provide: AuthStore,
+          useValue: {
+            isAuthenticated,
+            hasAdminRole: vi.fn().mockReturnValue(false),
+            hasTeacherRole: vi.fn().mockReturnValue(true),
+            currentUser: vi.fn().mockReturnValue({ firstName: 'Elek', lastName: 'Teszt', email: 'teszt@example.com' }),
+            logout: vi.fn(),
+          },
+        },
+        { provide: MockExamService, useValue: { getCurrent: () => of(null) } },
       ],
     }).compileComponents();
   });
 
-  it('létrejön a shell (router-outlet-tel)', () => {
+  it('létrejön a shell (router-outlet a main-ben)', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('router-outlet')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('main router-outlet')).toBeTruthy();
   });
 
-  it('nem autentikált userre nem jelenik meg a navigáció', () => {
+  it('nem autentikált userre nincs menü (sem oldalsáv, sem mobil sáv)', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
 
+    expect(fixture.nativeElement.querySelector('app-sidebar')).toBeNull();
     expect(fixture.nativeElement.querySelector('nav')).toBeNull();
   });
 
-  it('autentikált userre megjelenik a navigáció, admin-linkkel csak admin role esetén', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(false);
-
+  it('autentikált usernél a menü a main ELŐTT, azon kívül áll (a régi felső fejléc nincs)', () => {
+    isAuthenticated.mockReturnValue(true);
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
 
-    const nav = fixture.nativeElement.querySelector('nav');
-    expect(nav).toBeTruthy();
-    expect(nav.textContent).not.toContain('Jelentkezések');
-  });
-
-  // §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a "Jelentkezések" platform-admin
-  // nav-link admin-fe-be költözött - ez az app innentől platform-adminnak SEM ad extra
-  // nav-linket (csak a saját tanári linkjeit látja, ha van teacher role-ja is).
-  it('platform-admin usernek nem jelenik meg "Jelentkezések" link (admin-fe-be költözött)', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Jelentkezések');
-  });
-
-  // UI-TT-15: teacher role NÉLKÜLI (pl. elbírálás alatt álló) bejelentkezett usernek
-  // a tanár-only nav-linkek (Csoportok/Feladatsorok/Intézmények) ne is jelenjenek meg,
-  // ne csak a roleGuard dobja vissza kattintáskor néma módon.
-  it('BUG UI-TT-15: teacher role NÉLKÜLI bejelentkezett usernek nem jelenik meg a tanári navigáció', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasTeacherRole.mockReturnValue(false);
-    authStoreMock.hasAdminRole.mockReturnValue(false);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const nav = fixture.nativeElement.querySelector('nav');
-    expect(nav).toBeTruthy();
-    expect(nav.textContent).not.toContain('Csoportok');
-    expect(nav.textContent).not.toContain('Feladatsorok');
-    expect(nav.textContent).not.toContain('Intézmények');
-  });
-
-  it('teacher role-lal rendelkező usernek megjelenik a tanári navigáció', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasTeacherRole.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const nav = fixture.nativeElement.querySelector('nav');
-    expect(nav.textContent).toContain('Csoportok');
-    expect(nav.textContent).toContain('Feladatsorok');
-    expect(nav.textContent).toContain('Intézmények');
-  });
-
-  // UI-TT-177: a "hidden md:flex"/"md:hidden" töréspont-pár 768px-nél fix - ez elég a
-  // 3 tanári linkhez, de a hasAdminRole() melletti (eredetileg 6, majd Ellenőrzés-sel 7,
-  // majd AI-költés-sel 8 linkes) desktop-nav élőben teljes oldal-szintű vízszintes
-  // túlcsordulást okozott 768px és a küszöb között. Admin usernél a desktop-nav/profil-
-  // blokk küszöbét min-[1400px]-re kell emelni (AI-KOLTES-PULT: a user kifejezetten
-  // kérte, hogy az AI-költés is a menüben legyen - a 8. link miatt a korábbi
-  // min-[1200px] küszöb óvatosan feljebb tolva, élő ellenőrzést igényel), a mobil
-  // harang+hamburger blokknak (és lenyíló panelnek) pedig ezzel lépést tartva
-  // min-[1400px]:hidden-re, különben 768px és a küszöb között SEM a desktop-nav,
-  // SEM a hamburger nem jelenne meg.
-  it('BUG UI-TT-177 javítva: admin usernél a desktop-nav/profil-blokk töréspontja min-[1400px]-re emelve, a mobil harang+hamburger pedig ugyanerre a küszöbre vált', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
-    expect(nav.className).toContain('min-[1400px]:flex');
-    expect(nav.className).not.toContain('md:flex');
-
-    const mobileToggle = fixture.nativeElement.querySelector('[aria-label="Menü"]')!.closest('div') as HTMLElement;
-    expect(mobileToggle.className).toContain('min-[1400px]:hidden');
-    expect(mobileToggle.className).not.toContain('md:hidden');
-  });
-
-  it('nem-admin usernél a töréspont-pár változatlanul md:flex/md:hidden marad', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(false);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const nav = fixture.nativeElement.querySelector('nav') as HTMLElement;
-    expect(nav.className).toContain('md:flex');
-    expect(nav.className).not.toContain('min-[1400px]:flex');
-
-    const mobileToggle = fixture.nativeElement.querySelector('[aria-label="Menü"]')!.closest('div') as HTMLElement;
-    expect(mobileToggle.className).toContain('md:hidden');
-    expect(mobileToggle.className).not.toContain('min-[1400px]:hidden');
-  });
-
-  // UI-TT-192: a `max-w-5xl` (1024px, `px-4`-gyel 992px tényleges tartalom-szélesség)
-  // konténer élőben mérve mindig 2 sorra törte a fejlécet admin-szerepkörű tanárnál
-  // (16px root font-size, zoom nélkül, MINDEN viewport-szélességnél, mert a 6 admin-
-  // link + logó + jobb blokk ~1118.9px-et igényel, ~126.9px-cel többet, mint amennyi a
-  // 992px-es doboznak valaha is jut) - a törött fejléc miatt a NotificationBellComponent
-  // lenyíló panelje (`position: absolute; right: 0` a 2. sorra tördelt, immár a fejléc
-  // BAL szélén ülő szülőjéhez képest) ~44%-ban a viewport bal szélén KÍVÜLRE
-  // (negatív x-koordinátára) renderelődött, olvashatatlanul.
-  it('BUG UI-TT-192 javítva: admin usernél a fejléc-konténer max-w-7xl-re bővül, hogy a 6 admin-link egy sorban elférjen', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const headerContainer = fixture.nativeElement.querySelector('header > div') as HTMLElement;
-    expect(headerContainer.className).toContain('max-w-7xl');
-    expect(headerContainer.className).not.toContain('max-w-5xl');
-  });
-
-  it('nem-admin usernél a fejléc-konténer változatlanul max-w-5xl marad', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-    authStoreMock.hasAdminRole.mockReturnValue(false);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const headerContainer = fixture.nativeElement.querySelector('header > div') as HTMLElement;
-    expect(headerContainer.className).toContain('max-w-5xl');
-    expect(headerContainer.className).not.toContain('max-w-7xl');
-  });
-
-  it('a profil-chip monogramja magyar sorrendben: vezetéknév + keresztnév kezdőbetű', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const monogram = fixture.nativeElement.querySelector('[data-testid="profile-monogram"]');
-    expect(monogram).toBeTruthy();
-    expect(monogram.textContent.trim()).toBe('TE');
-  });
-
-  // UI-TT-78: a mobil lenyíló panel korábban csak a PANELEN BELÜLI linkekre (és
-  // logout()-ra) kattintva záródott be - a fejléc-logóra, dashboard-kártyák saját
-  // linkjeire, VAGY a böngésző Vissza/Előre gombjára (popstate, sosem fut le (click)
-  // handleren) navigálva nyitva maradt. Egy Router.events/NavigationEnd-alapú zárás
-  // MINDEN navigációs útvonalat lefed, (click)-handlerektől függetlenül.
-  it('BUG UI-TT-78 javítva: a mobil menü BÁRMILYEN NavigationEnd-re bezáródik, nem csak a panelen belüli (click)-re', async () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    fixture.componentInstance.menuOpen.set(true);
-    expect(fixture.componentInstance.menuOpen()).toBe(true);
-
-    const router = TestBed.inject(Router);
-    await router.navigate(['/dashboard']);
-
-    expect(fixture.componentInstance.menuOpen()).toBe(false);
-  });
-
-  // UI-TT-101: a mobil hamburger-menü és a fejléc harang-dropdownja (két
-  // egymástól független, azonos z-40-es lenyíló) korábban SEMMILYEN kölcsönös
-  // kizárást nem ismertek - egyszerre nyitva tartva a KÉSŐBB a DOM-fába kerülő
-  // hamburger-panel valós nav-linkjei/"Kilépés" gombja a harang dropdownja
-  // "alatt/mögött" élő, kattintható maradt. A HeaderDropdownCoordinatorService
-  // köti össze a két felületet, pontosan úgy, ahogy a menü már eddig is
-  // záródott Router/NavigationEnd-re (UI-TT-78).
-  it('BUG UI-TT-101 javítva: a menü megnyitása "menu"-ként jelzi magát a coordinatorban', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
-    fixture.componentInstance.menuOpen.set(true);
-    fixture.detectChanges();
-
-    expect(coordinator.openDropdown()).toBe('menu');
-  });
-
-  it('BUG UI-TT-101 javítva: ha a harang dropdown megnyílik (coordinator "bell"), a nyitva lévő mobil hamburger-menü bezáródik', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    fixture.componentInstance.menuOpen.set(true);
-    fixture.detectChanges();
-    expect(fixture.componentInstance.menuOpen()).toBe(true);
-
-    const coordinator = TestBed.inject(HeaderDropdownCoordinatorService);
-    coordinator.open('bell');
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.menuOpen()).toBe(false);
-  });
-
-  it('BUG UI-TT-101 javítva: a valódi harang-gombra kattintva bezárul a nyitva lévő hamburger-menü', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    fixture.componentInstance.menuOpen.set(true);
-    fixture.detectChanges();
-    expect(fixture.componentInstance.menuOpen()).toBe(true);
-
-    const bellButton = fixture.nativeElement.querySelector('button[aria-label="Értesítések"]') as HTMLButtonElement;
-    bellButton.click();
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.menuOpen()).toBe(false);
-  });
-
-  // UI-TT-189: a mobil hamburger-menü panelje - a NotificationBellComponent
-  // dropdownjával (fixed inset-0 backdrop (click)="open.set(false)" ÉS
-  // (keydown.escape) handler) ellentétben - SEM kattintás-a-panelen-kívülre,
-  // SEM Escape billentyűre nem záródik be. Egyetlen módja a bezárásnak: a
-  // hamburger-gombra ismételt kattintás, egy panelen belüli linkre kattintás,
-  // vagy navigáció (UI-TT-78 fixe). Amíg nyitva marad, a panel (absolute
-  // top-full inset-x-0 z-40) ténylegesen letiltja a pointer-eseményeket az
-  // alatta lévő oldaltartalomra.
-  it('BUG UI-TT-189: Escape billentyűre a nyitott mobil hamburger-menü NEM záródik be', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    fixture.componentInstance.menuOpen.set(true);
-    fixture.detectChanges();
-    expect(fixture.componentInstance.menuOpen()).toBe(true);
-
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    fixture.detectChanges();
-
-    // Elvárt (helyes) viselkedés: false. Tényleges: true marad, mert nincs
-    // semmilyen (keydown.escape) handler a menu-panelen vagy az AppComponent-en.
-    expect(fixture.componentInstance.menuOpen()).toBe(false);
-  });
-
-  it('BUG UI-TT-189: a panelen KÍVÜLI (pl. document body) kattintásra a nyitott mobil hamburger-menü NEM záródik be', () => {
-    authStoreMock.isAuthenticated.mockReturnValue(true);
-
-    const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
-
-    fixture.componentInstance.menuOpen.set(true);
-    fixture.detectChanges();
-    expect(fixture.componentInstance.menuOpen()).toBe(true);
-
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    fixture.detectChanges();
-
-    // Elvárt (helyes) viselkedés: false, ahogy a testvér NotificationBellComponent
-    // dropdownja saját "fixed inset-0" backdrop-kattintással bezáródik. Tényleges:
-    // true marad, mert a menu-panelnek nincs saját backdropja/document-click listenere.
-    expect(fixture.componentInstance.menuOpen()).toBe(false);
+    const root = fixture.nativeElement as HTMLElement;
+    const sidebar = root.querySelector('app-sidebar')!;
+    expect(sidebar).toBeTruthy();
+    expect(sidebar.nextElementSibling?.tagName).toBe('MAIN');
+    expect(root.querySelector('main [data-testid="app-sidebar"]')).toBeNull();
+    expect(root.querySelector('main')!.className).toContain('min-w-0');
+    // A régi admin-ágú max-w-7xl/1400 px fejléc-trükkök megszűntek.
+    expect(root.innerHTML).not.toContain('max-w-7xl');
+    expect(root.innerHTML).not.toContain('min-[1400px]');
   });
 });

@@ -46,8 +46,10 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await teacherPage.locator('[name="newTaskDescription-6"]').fill('Feladat leírása.');
   const taskAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-6"]') });
   await taskAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
-  await expect(teacherPage.getByText('1. Feladat')).toBeVisible({ timeout: 15000 });
-  await teacherPage.getByText('1. Feladat').click();
+  // A cím a bal oldali feladat-vázlatban is szerepel - a feladatkártya kinyitó gombjára szűrünk.
+  const taskToggle = teacherPage.getByTestId('task-toggle').filter({ hasText: '1. Feladat' });
+  await expect(taskToggle).toBeVisible({ timeout: 15000 });
+  await taskToggle.click();
 
   await teacherPage.locator('[name="newSolutionDescription"]').fill('Részfeladat');
   const solutionAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newSolutionDescription"]') });
@@ -72,7 +74,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await teacherPage.locator('[formcontrolname="name"]').fill(groupAName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupAName).click();
-  await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
+  await teacherPage.getByRole('tab', { name: 'Beállítások' }).click();
   const groupACode = (await teacherPage.locator('code').first().textContent())?.trim();
 
   const otherTeacherPage = await otherTeacherContext.newPage();
@@ -84,7 +86,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await otherTeacherPage.locator('[formcontrolname="name"]').fill(groupBName);
   await otherTeacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await otherTeacherPage.getByText(groupBName).click();
-  await otherTeacherPage.getByRole('tab', { name: 'Meghívó' }).click();
+  await otherTeacherPage.getByRole('tab', { name: 'Beállítások' }).click();
   const groupBCode = (await otherTeacherPage.locator('code').first().textContent())?.trim();
 
   // ── Diák1: A csoport tagja — POZITÍV kontroll, ő elérje ──

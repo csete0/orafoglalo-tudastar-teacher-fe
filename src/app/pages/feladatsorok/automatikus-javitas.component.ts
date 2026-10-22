@@ -86,7 +86,7 @@ export function gradingCheckHint(check: GradingQualityCheckDto): string | null {
       }
 
       <!-- A lista minden változása (vázlat, jóváhagyás) a javítás-minőséget is érinti. -->
-      <app-szempontlista [taskSetId]="taskSetId()" [task]="task()" [quality]="quality()" (changed)="loadQuality()" />
+      <app-szempontlista [taskSetId]="taskSetId()" [task]="task()" [quality]="quality()" (changed)="loadQuality(); rubricChanged.emit()" />
     </div>
   `,
 })
@@ -97,6 +97,8 @@ export class AutomatikusJavitasComponent {
   readonly task = input.required<TeacherTaskDto>();
   /** A „stdin” teendő gombja: a szerkesztő kinyitja a „Tesztbemenet” részt és odagörget. */
   readonly stdinRequested = output<void>();
+  /** A szempontlista változott (pl. MI-vázlat készült) - a szerkesztő ekkor frissíti az MI-segítő panel kereteit. */
+  readonly rubricChanged = output<void>();
 
   readonly quality = signal<GradingQualityDto | null>(null);
   readonly error = signal<string | null>(null);

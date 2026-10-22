@@ -6,6 +6,7 @@ import {
   effect,
   ElementRef,
   inject,
+  input,
   OnInit,
   signal,
   viewChild,
@@ -28,8 +29,8 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
  * UI-TT-82: harang-ikon + lenyíló lista - a teacher-fe eddig egyáltalán nem
  * jelenítette meg a backend által a tanárnak generált értesítéseket (pl.
  * intézmény-törlés, jelentkezés elbírálás, feladatsor levétel admin által).
- * Egyszer mountolva az AppComponent fejlécében (desktop ÉS mobil verzió is,
- * két külön DOM-példányban), mindig látható amíg a felhasználó be van
+ * Az `AppSidebarComponent`-ben két DOM-példányban él (asztali oldalsáv ÉS
+ * mobil felső sáv), mindig látható amíg a felhasználó be van
  * jelentkezve.
  *
  * UI-TT-100/UI-TT-101: a panel megnyitásakor korábban SEMMILYEN fókusz-
@@ -73,8 +74,9 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
         <div #panel data-testid="notification-panel" tabindex="-1"
              (keydown.escape)="closeAndReturnFocus()"
              (keydown)="onPanelKeydown($event)"
-             class="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto
-                    rounded-xl border border-border-default bg-bg-panel shadow-lg z-50 outline-none">
+             class="absolute w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto
+                    rounded-xl border border-border-default bg-bg-panel shadow-lg z-50 outline-none"
+             [class]="placement() === 'side' ? 'left-full bottom-0 ml-2' : 'right-0 mt-2'">
           <div class="flex items-center justify-between px-4 py-2.5 border-b border-border-default">
             <span class="text-sm font-semibold">Értesítések</span>
             @if (store.unreadCount() > 0) {
@@ -101,7 +103,7 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
           } @else {
             <ul>
               @for (n of visibleNotifications(); track n.userNotificationId) {
-                <li class="border-b border-border-subtle last:border-b-0">
+                <li class="border-b border-border-default last:border-b-0">
                   <div (click)="onItemClick(n)"
                        tabindex="0"
                        role="button"
@@ -138,10 +140,13 @@ export class NotificationBellComponent implements OnInit {
   private readonly dropdownCoordinator = inject(HeaderDropdownCoordinatorService);
   readonly store = inject(NotificationStore);
 
+  /** `side`: az oldalsáv aljáról jobbra, alulra igazítva nyílik; `below`: a gomb alá, jobbra igazítva. */
+  readonly placement = input<'below' | 'side'>('below');
+
   readonly open = signal(false);
 
-  // UI-TT-162: egyedi azonosító fizikai DOM-példányonként (desktop/mobil
-  // header-sáv) - ld. a coordinator bell-vs-bell kizárás megjegyzését, és a
+  // UI-TT-162: egyedi azonosító fizikai DOM-példányonként (asztali oldalsáv/
+  // mobil felső sáv) - ld. a coordinator bell-vs-bell kizárás megjegyzését, és a
   // konstruktor `registerBell()` hívását lent.
   private readonly instanceId = crypto.randomUUID();
 
@@ -202,7 +207,7 @@ export class NotificationBellComponent implements OnInit {
     // coordinator felé jelezni) SZÁNDÉKOSAN nem effect()-tel, hanem az
     // open()/close() hívási pontokon, IMPERATÍV módon tesszük (ld. lentebb).
     // Ennek oka: a harang KÉT független DOM-példányban is mountolva van
-    // (desktop + mobil header-blokk), mindkettő saját `open` szignállal - egy,
+    // (asztali oldalsáv + mobil felső sáv), mindkettő saját `open` szignállal - egy,
     // a saját (mindig zárt) állapotát figyelő effect a MÁSIK, épp nyitva lévő
     // példány "bell" jelzését tudná véletlenül, hamis "close('bell')"
     // hívással felülírni, valahányszor a signal-scheduler újra kiértékeli
@@ -255,7 +260,7 @@ export class NotificationBellComponent implements OnInit {
 
   /** Escape-re zár, ÉS visszaadja a fókuszt a harang-gombra - accessible
    *  dropdown-konvenció, hogy a billentyűzet-fókusz ne "vesszen el" valahol
-   *  a fejlécben azután, hogy a panel eltűnt a DOM-ból. */
+   *  a menüsávban azután, hogy a panel eltűnt a DOM-ból. */
   closeAndReturnFocus(): void {
     this.close();
     this.triggerBtn()?.nativeElement.focus();

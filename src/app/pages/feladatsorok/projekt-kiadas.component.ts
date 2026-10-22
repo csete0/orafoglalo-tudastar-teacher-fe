@@ -49,7 +49,7 @@ type SuggestScope = 'file' | 'all';
   imports: [DatePipe, NgTemplateOutlet, RouterLink, LocalSpinnerComponent, KodOlvasoComponent],
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
-    <div class="max-w-6xl mx-auto px-4 py-10">
+    <div class="page-wide">
       <a routerLink="/feladatsorok/projektek" class="text-sm text-text-muted">← Projektek</a>
       @if (error(); as err) { <p class="text-danger text-sm mt-4">{{ err }}</p> }
       @if (loading()) {
@@ -68,23 +68,24 @@ type SuggestScope = 'file' | 'all';
           }
         </div>
 
-        <div class="card overflow-x-auto mt-4">
-          <table class="w-full text-sm" data-testid="project-matrix">
+        <div class="card overflow-hidden mt-4">
+        <div class="data-table-scroll">
+          <table class="data-table" data-testid="project-matrix">
             <thead>
-              <tr class="text-left border-b border-border-default">
-                <th class="py-2 px-3">Diák</th>
+              <tr>
+                <th class="sticky-col">Diák</th>
                 @for (m of v.milestones; track m.orderNo) {
-                  <th class="py-2 px-2 text-center" [class.drop-col]="m.orderNo === worstDrop()" [attr.title]="m.title">{{ m.orderNo }}.</th>
+                  <th class="!px-2 text-center" [class.drop-col]="m.orderNo === worstDrop()" [attr.title]="m.title">{{ m.orderNo }}.</th>
                 }
-                <th class="py-2 px-3 text-right">Ellenőrzés</th>
-                <th class="py-2 px-3 text-right">AI-token (30 nap)</th>
-                <th class="py-2 px-3">Utoljára</th>
+                <th class="text-right">Ellenőrzés</th>
+                <th class="text-right">AI-token (30 nap)</th>
+                <th>Utoljára</th>
               </tr>
             </thead>
             <tbody>
               @for (s of v.students; track s.userId) {
-                <tr class="border-b border-border-default last:border-b-0" [attr.data-testid]="'student-' + s.userId">
-                  <td class="py-2 px-3">
+                <tr [attr.data-testid]="'student-' + s.userId">
+                  <td class="sticky-col">
                     @if (s.runtime) {
                       <button type="button" class="font-semibold text-left underline-offset-2 hover:underline" (click)="openCode(s)">{{ s.name }}</button>
                     } @else {
@@ -96,29 +97,30 @@ type SuggestScope = 'file' | 'all';
                     </span>
                   </td>
                   @for (step of s.steps; track step.orderNo) {
-                    <td class="py-2 px-2 text-center" [class.drop-col]="step.orderNo === worstDrop()">
+                    <td class="!px-2 text-center" [class.drop-col]="step.orderNo === worstDrop()">
                       <span class="cell-dot" [class]="'cell-dot cell--' + cell(s, step)" [attr.title]="cellTitle(s, step)"
                             [attr.aria-label]="step.orderNo + '. lépés: ' + cellLabel(s, step)"></span>
                     </td>
                   }
-                  <td class="py-2 px-3 text-right tabular-nums">{{ checks(s) }}</td>
-                  <td class="py-2 px-3 text-right tabular-nums">{{ s.aiTokens30 }}</td>
-                  <td class="py-2 px-3 text-xs text-text-muted">{{ s.lastActivityAt ? (utc(s.lastActivityAt) | date: 'MM.dd. HH:mm') : '–' }}</td>
+                  <td class="num text-right">{{ checks(s) }}</td>
+                  <td class="num text-right">{{ s.aiTokens30 }}</td>
+                  <td class="num whitespace-nowrap text-xs text-text-muted">{{ s.lastActivityAt ? (utc(s.lastActivityAt) | date: 'MM.dd. HH:mm') : '–' }}</td>
                 </tr>
               } @empty {
-                <tr><td class="py-3 px-3 text-text-muted" [attr.colspan]="v.milestones.length + 4">A csoportnak még nincs tagja.</td></tr>
+                <tr><td class="!py-6 text-text-muted text-center" [attr.colspan]="v.milestones.length + 4">A csoportnak még nincs tagja.</td></tr>
               }
             </tbody>
             <tfoot>
-              <tr class="border-t border-border-default text-xs text-text-muted">
-                <td class="py-2 px-3 font-semibold">Teljesítette</td>
+              <tr class="text-xs">
+                <td>Teljesítette</td>
                 @for (c of passedCounts(); track c.orderNo) {
-                  <td class="py-2 px-2 text-center tabular-nums" [class.drop-col]="c.orderNo === worstDrop()">{{ c.passed }}/{{ v.students.length }}</td>
+                  <td class="num !px-2 text-center" [class.drop-col]="c.orderNo === worstDrop()">{{ c.passed }}/{{ v.students.length }}</td>
                 }
                 <td colspan="3"></td>
               </tr>
             </tfoot>
           </table>
+        </div>
         </div>
         @if (worstDrop(); as order) {
           <p class="text-sm mt-3" data-testid="worst-drop">A legtöbben a(z) <strong>{{ order }}. lépésnél</strong> akadnak el ({{ milestoneTitle(order) }}).</p>
@@ -193,7 +195,7 @@ type SuggestScope = 'file' | 'all';
                 @for (t of threadsAt(line); track t.id) {
                   <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
                     <p class="text-xs text-text-muted">
-                      <strong class="text-text-default">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
+                      <strong class="text-text-primary">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
                       @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
                       @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
                     </p>
@@ -212,7 +214,7 @@ type SuggestScope = 'file' | 'all';
                        role="group" [attr.aria-label]="'AI-javaslat (' + sg.severity + ') a(z) ' + sg.line + '. sorhoz'">
                     <p class="text-xs text-text-muted">
                       <span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
-                      <strong class="text-text-default">AI-javaslat</strong> · még nem megjegyzés
+                      <strong class="text-text-primary">AI-javaslat</strong> · még nem megjegyzés
                       @if (sg.lineText !== text) { · <span class="text-warning">a sor azóta megváltozhatott</span> }
                     </p>
                     @if (editingKey() === sg.key) {
@@ -264,26 +266,26 @@ type SuggestScope = 'file' | 'all';
   `,
   styles: [`
     .cell-dot { display: inline-block; width: 1rem; height: 1rem; border-radius: 999px; border: 2px solid transparent; vertical-align: middle; }
-    .cell--onallo { background: var(--color-success, #1a7f37); }
-    .cell--kis-segitseggel { background: var(--color-primary, #0969da); }
-    .cell--segitseggel { background: var(--color-warning, #9a6700); }
-    .cell--folyamatban { border-color: var(--color-text-muted, #6b7280); }
-    .cell--nincs { background: var(--color-bg-element, #eaeef2); }
-    .drop-col { background: var(--color-warning-subtle, rgba(154, 103, 0, 0.1)); }
-    .thread { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: var(--color-bg-surface, #fff);
+    .cell--onallo { background: var(--color-success); }
+    .cell--kis-segitseggel { background: var(--color-primary); }
+    .cell--segitseggel { background: var(--color-warning); }
+    .cell--folyamatban { border-color: var(--color-text-muted); }
+    .cell--nincs { background: var(--color-bg-element); }
+    .drop-col { background: var(--color-warning-subtle); }
+    .thread { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; background: var(--color-bg-panel);
       border: 1px solid var(--color-border-default); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
     .thread--resolved { opacity: 0.7; }
     .thread-body { margin-top: 0.25rem; font-size: 0.8125rem; white-space: pre-wrap; }
     .thread-reply { margin-top: 0.25rem; padding-left: 0.75rem; border-left: 2px solid var(--color-border-default); font-size: 0.75rem; white-space: pre-wrap; }
-    .ai-bar { padding: 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary, #0969da); }
-    .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary, #0969da);
-      background: var(--color-primary-subtle, rgba(9, 105, 218, 0.08)); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
-    .suggestion:focus { outline: 2px solid var(--color-primary, #0969da); outline-offset: 2px; }
+    .ai-bar { padding: 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary); }
+    .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary);
+      background: var(--color-primary-subtle); font-family: var(--font-sans, system-ui, sans-serif); white-space: normal; }
+    .suggestion:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
     .suggest-list { max-height: 40vh; overflow: auto; }
-    .sev { display: inline-block; margin-right: 0.375rem; padding: 0 0.375rem; border-radius: 999px; font-size: 0.625rem; font-weight: 700; color: #fff; }
-    .sev--hiba { background: var(--color-danger, #cf222e); }
-    .sev--javaslat { background: var(--color-primary, #0969da); }
-    .sev--dicseret { background: var(--color-success, #1a7f37); }
+    .sev { display: inline-block; margin-right: 0.375rem; padding: 0 0.375rem; border-radius: 999px; font-size: 0.625rem; font-weight: 700; color: white; }
+    .sev--hiba { background: var(--color-danger); }
+    .sev--javaslat { background: var(--color-primary); }
+    .sev--dicseret { background: var(--color-success); }
     @media (max-width: 480px) { .thread, .suggestion { margin-left: 0.5rem; margin-right: 0.5rem; } }
   `],
 })

@@ -33,7 +33,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
   standalone: true,
   imports: [RouterLink, DatePipe, LocalSpinnerComponent, AttemptReviewPanelComponent, DolgozatVisszajelzesComponent],
   template: `
-    <div class="max-w-6xl mx-auto px-4 py-6">
+    <div class="page-wide">
       @if (overview(); as o) {
         <a [routerLink]="['/csoportok', o.groupId]" class="text-sm text-primary hover:underline">← {{ o.groupName }}</a>
         <div class="flex items-start justify-between gap-4 flex-wrap mt-2 mb-5">
@@ -101,23 +101,23 @@ const LIVE_TAIL_MS = 15 * 60_000;
 
         <!-- Névsor -->
         <div class="card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+          <div class="data-table-scroll">
+            <table class="data-table">
               <thead>
-                <tr class="text-left text-text-muted text-xs uppercase tracking-wide border-b border-border-default">
-                  <th class="py-3 px-4">Diák</th>
-                  <th class="py-3 px-4">Állapot</th>
-                  <th class="py-3 px-4">Összesen</th>
+                <tr>
+                  <th class="sticky-col">Diák</th>
+                  <th>Állapot</th>
+                  <th>Összesen</th>
                   @for (task of o.tasks; track task.taskId; let i = $index) {
-                    <th class="py-3 px-4 min-w-[6rem] max-w-[12rem] align-bottom" [title]="task.title">{{ i + 1 }}. {{ task.title }} <span class="normal-case">({{ task.maxPoints }})</span></th>
+                    <th class="min-w-[6rem] max-w-[12rem] align-bottom" [title]="task.title">{{ i + 1 }}. {{ task.title }} <span class="normal-case">({{ task.maxPoints }})</span></th>
                   }
-                  <th class="py-3 px-4 min-w-[7rem] max-w-[9rem] align-bottom">Fül-elhagyás / beillesztés</th>
+                  <th class="min-w-[7rem] max-w-[9rem] align-bottom">Fül-elhagyás / beillesztés</th>
                 </tr>
               </thead>
               <tbody>
                 @for (row of o.students; track row.userId) {
-                  <tr class="border-b border-border-default last:border-b-0" [class.opacity-50]="row.status === 'not_started'">
-                    <td class="py-2.5 px-4 whitespace-nowrap align-top">
+                  <tr [class.opacity-50]="row.status === 'not_started'">
+                    <td class="sticky-col whitespace-nowrap align-top">
                       {{ row.name }}
                       @if (row.teacherFeedback) {
                         <details class="mt-1 whitespace-normal max-w-xs" [attr.data-testid]="'saved-feedback-' + row.userId">
@@ -126,7 +126,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
                         </details>
                       }
                     </td>
-                    <td class="py-2.5 px-4 whitespace-nowrap">
+                    <td class="whitespace-nowrap">
                       {{ statusLabels[row.status] }}
                       @if (row.status === 'in_progress') {
                         <span class="tabular-nums text-text-muted">· {{ remaining(row) }}</span>
@@ -138,7 +138,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
                         <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" title="Ezt a dolgozatot az AI nem pontozta (pl. betelt a havi keret, vagy hiba történt a pontozáskor) - pontozd kézzel; amíg pontozatlan, az eredmény nem tehető közzé">kézi pontozás</span>
                       }
                     </td>
-                    <td class="py-2.5 px-4 whitespace-nowrap tabular-nums">
+                    <td class="num whitespace-nowrap">
                       @if (row.status === 'submitted' && row.earnedPoints !== null) {
                         <strong>{{ row.earnedPoints }} / {{ row.maxPoints }}</strong>
                         <span class="text-text-muted"> ({{ percent(row) }}%)</span>
@@ -147,7 +147,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
                       } @else { – }
                     </td>
                     @for (cell of row.tasks; track cell.taskId) {
-                      <td class="py-2.5 px-4 whitespace-nowrap tabular-nums">
+                      <td class="num whitespace-nowrap">
                         @if (row.status === 'submitted' && cell.attemptId != null) {
                           <button type="button" class="text-primary hover:underline" (click)="toggleReview(cell)"
                                   [attr.aria-expanded]="openAttemptId() === cell.attemptId">
@@ -157,15 +157,15 @@ const LIVE_TAIL_MS = 15 * 60_000;
                         } @else { – }
                       </td>
                     }
-                    <td class="py-2.5 px-4 whitespace-nowrap tabular-nums"
+                    <td class="num whitespace-nowrap"
                         [class.text-warning]="row.focusLossCount + row.pasteCount > 0">
                       {{ row.focusLossCount }} / {{ row.pasteCount }}
                       @if (row.pastedChars > 0) { <span class="text-text-muted text-xs">({{ row.pastedChars }} kar.)</span> }
                     </td>
                   </tr>
                   @if (openAttemptId() !== null && rowHasOpenAttempt(row)) {
-                    <tr>
-                      <td [attr.colspan]="o.tasks.length + 4" class="px-4 pb-4">
+                    <tr class="detail-row">
+                      <td [attr.colspan]="o.tasks.length + 4" class="!px-4 !pb-4">
                         <app-attempt-review-panel [attemptId]="openAttemptId()!" [taskSetId]="o.taskSetId"
                                                   (closed)="openAttemptId.set(null)" (changed)="load()" />
                       </td>
@@ -175,10 +175,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
               </tbody>
               @if (o.stats.submitted > 0) {
                 <tfoot>
-                  <tr class="border-t border-border-default text-text-muted">
-                    <td class="py-2.5 px-4" colspan="3">Feladatonkénti átlag</td>
+                  <tr>
+                    <td colspan="3">Feladatonkénti átlag</td>
                     @for (avg of o.stats.taskAverages; track avg.taskId) {
-                      <td class="py-2.5 px-4 tabular-nums">{{ avg.averagePercent ?? '–' }}{{ avg.averagePercent != null ? '%' : '' }}</td>
+                      <td class="num">{{ avg.averagePercent ?? '–' }}{{ avg.averagePercent != null ? '%' : '' }}</td>
                     }
                     <td></td>
                   </tr>

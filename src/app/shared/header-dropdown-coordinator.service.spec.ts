@@ -56,7 +56,7 @@ describe('HeaderDropdownCoordinatorService', () => {
   // egy MÁSIK bell-példány ténylegesen meghívja a saját open()-jét - egy puszta
   // viewport-váltás (kattintás NÉLKÜL), ami a CSS-sel elrejtett, korábban nyitva
   // hagyott példányt egyszerűen újra láthatóvá teszi, ezt sosem triggerelte. A
-  // konstruktorban regisztrált `matchMedia('(min-width: 768px)')` change-listener
+  // konstruktorban regisztrált `matchMedia('(min-width: 1024px)')` change-listener
   // most MINDEN breakpoint-átlépéskor bezárja az ÖSSZES regisztrált bell-példányt,
   // függetlenül attól, hívott-e bárki `open()`-t közben.
   it('UI-TT-164: breakpoint-átlépéskor bezárja az ÖSSZES regisztrált bell-példányt, kattintás nélkül is', () => {

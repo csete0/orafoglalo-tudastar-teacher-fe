@@ -36,7 +36,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
 /**
  * Projektműhely a tanári oldalon (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G fázis): a kész projektek katalógusa (csak
  * olvasás - saját projekt NEM hozható létre) és a kiadás csoportnak (nyitás, határidő, kötött nyelv). A Feladatsorok
- * oldal FÜLE alatt él (a fejléc-navigáció 6 linkre van méretezve - ld. TartalomFulekComponent).
+ * oldal fülsávjában is (ld. TartalomFulekComponent), saját menüponttal a bal oldali menüben.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

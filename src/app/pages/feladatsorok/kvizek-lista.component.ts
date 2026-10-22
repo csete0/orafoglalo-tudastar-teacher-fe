@@ -16,16 +16,13 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
 /**
  * Tanári kvízek listája.
  *
- * SZÁNDÉKOSAN a Feladatsorok oldal FÜLE alatt él, nem külön menüpontként: a
- * fejléc-navigáció pontosan 6 linkre van méretezve (élőben mérve ~1118.9px a 1248px-es
- * tartalom-dobozban), egy 7. link visszanyitná a UI-TT-181/192/177 alatt javított
- * túlcsordulási hibát. Ugyanez a megfontolás vitte a licenc-kezelést is az Intézmények
- * oldalra.
+ * Saját menüpontja van a bal oldali menüben („Kvízek és élő játék”), és a Feladatsorok
+ * oldal fülsávjában is elérhető (ld. TartalomFulekComponent).
  *
  * C5: ugyanez a komponens szolgálja ki az admin "Platform-kvízek" oldalt is
  * (`/admin/kvizek`, route `data: { scope: 'admin' }`) - a lista, az űrlap és a jelvények
- * azonosak, csak a BE-gyökér (a store scope-ja), a címek és a szerkesztő-útvonal más. A
- * 6-linkes nav-korlát miatt az admin belépési pont a vezérlőpult kártyája, nem menüpont.
+ * azonosak, csak a BE-gyökér (a store scope-ja), a címek és a szerkesztő-útvonal más. Az
+ * admin belépési pont a vezérlőpult kártyája, nem menüpont (csak platform-adminnak kell).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

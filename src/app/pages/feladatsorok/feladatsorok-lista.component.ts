@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
@@ -46,7 +46,7 @@ const LEVELS = [
       </div>
 
       @if (catalogOpen()) {
-        <app-katalogus-masolas (closed)="catalogOpen.set(false)" />
+        <app-katalogus-masolas (closed)="closeCatalog()" />
       }
 
       <app-tartalom-fulek />
@@ -143,7 +143,7 @@ const LEVELS = [
     </div>
   `,
 })
-export class FeladatsorokListaComponent {
+export class FeladatsorokListaComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly categoryService = inject(CategoryService);
@@ -160,8 +160,9 @@ export class FeladatsorokListaComponent {
   readonly createSkillIds = signal<number[]>([]);
 
   readonly createOpen = signal(false);
-  /** „Másolás a katalógusból” ablak. */
+  /** „Másolás a katalógusból” ablak; a `?katalogus=1` (a szerkesztő MI-segítő paneljéről) nyitva indítja. */
   readonly catalogOpen = signal(false);
+  readonly katalogus = input<string>();
   readonly search = signal('');
 
   readonly visibleTaskSets = computed(() => {
@@ -200,6 +201,16 @@ export class FeladatsorokListaComponent {
 
   constructor() {
     this.store.loadMine();
+  }
+
+  ngOnInit(): void {
+    if (this.katalogus() === '1') this.catalogOpen.set(true);
+  }
+
+  /** Bezáráskor a `?katalogus=1` is lekerül, hogy frissítéskor / visszalépéskor ne nyíljon újra. */
+  closeCatalog(): void {
+    this.catalogOpen.set(false);
+    if (this.katalogus()) this.router.navigate(['/feladatsorok'], { replaceUrl: true });
   }
 
   /**

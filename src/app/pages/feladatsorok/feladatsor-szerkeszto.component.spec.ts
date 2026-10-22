@@ -1,8 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { FeladatsorSzerkesztoComponent } from './feladatsor-szerkeszto.component';
+import { AutomatikusJavitasComponent } from './automatikus-javitas.component';
+import { MiSegitoPanelComponent } from './mi-segito-panel.component';
 import { TeacherTaskSetStore } from '../../services/teacher-taskset/teacher-taskset.store';
 import { SchoolStore } from '../../services/school/school.store';
 import { AuthorizedFileService } from '../../services/file/authorized-file.service';
@@ -34,6 +37,11 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
     requiredSkillIds: [],
     ...overrides,
   };
+}
+
+function helperQuota() {
+  return { month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, codeComments: { used: 0, limit: 1 },
+    officeTask: { used: 0, limit: 20 }, desktopTask: { used: 0, limit: 20 } };
 }
 
 describe('FeladatsorSzerkesztoComponent', () => {
@@ -73,6 +81,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
   };
 
   function configure(detail: TeacherTaskSetDetailDto | null) {
+    // A vázlat-kijelölés / panel görget - a jsdom-ban nincs scrollIntoView.
+    Element.prototype.scrollIntoView = vi.fn();
     taskSetStoreMock = {
       selectedDetail: signal(detail),
       loading: signal(false),
@@ -122,6 +132,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
         { provide: AuthorizedFileService, useValue: authorizedFileServiceMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
         { provide: TeacherRubricService, useValue: rubricServiceMock },
+        // A MI-segítő panel keret-hívásai (a tesztek felülírhatják).
+        { provide: ReportService, useValue: { getAiHelperQuota: () => of(helperQuota()) } },
+        { provide: TeacherAiCodeTaskService, useValue: { getQuota: () => of({ used: 1, limit: 30, month: '2026-10', isPremium: true }), getActiveJob: () => of(null) } },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } },
@@ -197,7 +210,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
-    (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('[data-testid="ai-panel"] [data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
   });
@@ -214,49 +227,60 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
     expect((fixture.nativeElement.querySelector('[data-testid="sql-files-warning-generate"]') as HTMLButtonElement).disabled).toBe(true);
-    expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  describe('AI programozási feladat', () => {
-    const aiServiceMock = () => ({
-      getQuota: vi.fn(() => of({ used: 1, limit: 30, month: '2026-10', isPremium: true })),
-      getActiveJob: vi.fn(() => of(null)),
-    });
+  describe('MI-segítő panel belépési pontjai', () => {
     const tasks = () => [
       { id: 1, title: 'Prog', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], aiAssisted: true,
         subTasks: [{ id: 11, description: 'a', points: 10, snippets: [] }] },
       { id: 2, title: 'SQL', description: 'd', maxPoints: 10, taskOrder: 2, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] },
     ];
+    const officeServiceMock = { useValue: { getQuota: () => of(helperQuota()), getActiveJob: () => of(null), getLastSaved: () => of(null) } };
+    const click = (el: HTMLElement, testId: string) => (el.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement).click();
 
-    it('csak a programozási feladat kártyáján kínálja az AI-val kiegészítést, és jelöli az AI-val készültet', () => {
+    it('a szerkesztőben nincs több szétszórt MI-gomb: minden belépési pont egyszer, a panelen van', () => {
       configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.selectTask(1);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      for (const id of ['ai-new-open', 'ai-complete-open', 'office-task-open', 'desktop-task-open', 'ai-rubric-open', 'ai-sql-files-open']) {
+        expect(el.querySelectorAll(`[data-testid="${id}"]`).length, id).toBe(1);
+        expect(el.querySelector(`[data-testid="ai-panel"] [data-testid="${id}"]`), id).not.toBeNull();
+      }
+      expect(el.querySelector('[data-testid="ai-complete-entry"]')).toBeNull();
+      expect(el.querySelector('[data-testid="ai-catalog-link"]')!.getAttribute('href')).toBe('/feladatsorok?katalogus=1');
+    });
+
+    it('csak kijelölt programozási feladatnál kínálja a hiányzó részek pótlását, és a feladattal nyitja az ablakot; az AI-val készültet jelöli', () => {
+      configure(makeDetail({ tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const el: HTMLElement = fixture.nativeElement;
 
       expect(el.querySelectorAll('[data-testid="task-ai-assisted"]').length).toBe(1);
-      fixture.componentInstance.toggleTask(2);
+      fixture.componentInstance.selectTask(2);
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="ai-complete-open"]')).toBeNull();
 
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.selectTask(1);
       fixture.detectChanges();
-      (el.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).click();
+      click(el, 'ai-complete-open');
       fixture.detectChanges();
+      expect(fixture.componentInstance.aiTaskDialog()).toEqual({ mode: 'complete', task: expect.objectContaining({ id: 1 }) });
       expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Feladat kiegészítése AI-val');
     });
 
-    it('a Programozás blokk „Új feladat” űrlapja mellől új feladat kérhető; mentés után újratölt és kinyitja az új feladatot', () => {
+    it('új programozási feladat a panelről; mentés után újratölt és kinyitja az új feladatot', () => {
       configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherAiCodeTaskService, { useValue: aiServiceMock() });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const el: HTMLElement = fixture.nativeElement;
 
-      expect(el.querySelectorAll('[data-testid="ai-new-open"]').length).toBe(1);
-      (el.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).click();
+      click(el, 'ai-new-open');
       fixture.detectChanges();
+      expect(fixture.componentInstance.aiTaskDialog()).toEqual({ mode: 'new', task: null });
       expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Új programozási feladat AI-val');
 
       fixture.componentInstance.onAiTaskSaved(1, 456);
@@ -264,52 +288,33 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(fixture.componentInstance.expandedTaskId()).toBe(456);
     });
 
-    it('a Táblázatkezelés blokk „Új feladat” űrlapja mellől nyílik az „Irodai feladat a megoldott fájlból (Excel)” ablak', () => {
+    it('az irodai ablak a panel típusválasztójával nyílik (alapból Excel, átállítva Word)', () => {
       configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
-      });
+      TestBed.overrideProvider(TeacherOfficeTaskService, officeServiceMock);
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const el: HTMLElement = fixture.nativeElement;
-      if (!fixture.componentInstance.isSectionExpanded(2)) fixture.componentInstance.toggleSection(2);
-      fixture.detectChanges();
 
-      expect(el.querySelectorAll('[data-testid="office-task-open"]').length).toBe(1);
-      (el.querySelector('[data-testid="office-task-open"]') as HTMLButtonElement).click();
+      click(el, 'office-task-open');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Excel)');
-      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
+      click(el, 'io-close');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
-    });
 
-    it('a Szövegszerkesztés blokk „Új feladat” űrlapja mellől Word-címmel nyílik ugyanaz az ablak', () => {
-      configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
-      });
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      const select = el.querySelector('[data-testid="office-task-kind"]') as HTMLSelectElement;
+      select.value = select.options[1].value;
+      select.dispatchEvent(new Event('change'));
       fixture.detectChanges();
-      const el: HTMLElement = fixture.nativeElement;
-      if (!fixture.componentInstance.isSectionExpanded(1)) fixture.componentInstance.toggleSection(1);
+      click(el, 'office-task-open');
       fixture.detectChanges();
-
-      expect(el.querySelectorAll('[data-testid="office-task-open-word"]').length).toBe(1);
-      (el.querySelector('[data-testid="office-task-open-word"]') as HTMLButtonElement).click();
-      fixture.detectChanges();
+      expect(fixture.componentInstance.officeTaskDialog()).toBe('word');
       expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
-      expect(el.querySelector('[data-testid="io-file"]')!.getAttribute('accept')).toBe('.xlsx,.docx,.pptx,.zip,.html,.png,.jpg,.jpeg,.gif,.svg');
-      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
     });
 
     it('irodai mentés után újranyitva az ablak jelzi a mentett feladatot; az „Ugrás a feladathoz” bezár és kinyitja a feladatot', () => {
       configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
-      });
+      TestBed.overrideProvider(TeacherOfficeTaskService, officeServiceMock);
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const c = fixture.componentInstance;
@@ -318,7 +323,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       c.officeTaskDialog.set('excel');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-last-saved"]')!.textContent).toContain('Az előző generálás mentve: Kupa');
-      (el.querySelector('[data-testid="io-last-saved-open"]') as HTMLButtonElement).click();
+      click(el, 'io-last-saved-open');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
       expect(c.expandedTaskId()).toBe(456);
@@ -329,56 +334,101 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="io-last-saved"]')).toBeNull();
     });
 
-    it('a Prezentáció blokk „Új feladat” űrlapja mellől PowerPoint-címmel nyílik ugyanaz az ablak', () => {
-      configure(makeDetail({ tasks: tasks() }));
-      TestBed.overrideProvider(TeacherOfficeTaskService, {
-        useValue: { getQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, officeTask: { used: 0, limit: 20 } }), getActiveJob: () => of(null), getLastSaved: () => of(null) },
-      });
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const el: HTMLElement = fixture.nativeElement;
-      if (!fixture.componentInstance.isSectionExpanded(3)) fixture.componentInstance.toggleSection(3);
-      fixture.detectChanges();
-
-      expect(el.querySelectorAll('[data-testid="office-task-open-ppt"]').length).toBe(1);
-      (el.querySelector('[data-testid="office-task-open-ppt"]') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (PowerPoint)');
-      (el.querySelector('[data-testid="io-close"]') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
-    });
-
-    it('az Asztali alkalmazás blokk „Új feladat” űrlapja mellől nyílik az „Asztali feladatsor témából” ablak', () => {
+    it('az „Asztali feladatsor témából” ablak a panelről nyílik', () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherDesktopTaskService, { useValue: { getActiveJob: () => of(null) } });
-      TestBed.overrideProvider(ReportService, {
-        useValue: { getAiHelperQuota: () => of({ month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 },
-          codeComments: { used: 0, limit: 1 }, desktopTask: { used: 0, limit: 20 } }) },
-      });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const el: HTMLElement = fixture.nativeElement;
-      expect(fixture.componentInstance.isOfficeType(9)).toBe(true);
-      if (!fixture.componentInstance.isSectionExpanded(9)) fixture.componentInstance.toggleSection(9);
-      fixture.detectChanges();
 
-      expect(el.querySelectorAll('[data-testid="desktop-task-open"]').length).toBe(1);
-      (el.querySelector('[data-testid="desktop-task-open"]') as HTMLButtonElement).click();
+      click(el, 'desktop-task-open');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="dt-dialog"]')!.textContent).toContain('Asztali feladatsor témából');
-      (el.querySelector('[data-testid="dt-close"]') as HTMLButtonElement).click();
+      click(el, 'dt-close');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="dt-dialog"]')).toBeNull();
     });
 
-    it('visszavont (takedown) feladatsoron az AI-gombok tiltottak', () => {
+    it('a panel „Hiányzó SQL-fájl elkészítése” gombja a generátort nyitja', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      click(fixture.nativeElement, 'ai-sql-files-open');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+    });
+
+    it('a szempontlista-vázlat kijelölés nélkül tiltott; kijelölve a feladat szempontlista-blokkjához görget', () => {
+      vi.useFakeTimers();
+      try {
+        configure(makeDetail({ tasks: tasks() }));
+        const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+        fixture.detectChanges();
+        const el: HTMLElement = fixture.nativeElement;
+        expect((el.querySelector('[data-testid="ai-rubric-open"]') as HTMLButtonElement).disabled).toBe(true);
+        expect(el.querySelector('[data-testid="ai-panel-no-selection"]')).not.toBeNull();
+
+        fixture.componentInstance.selectTask(2);
+        fixture.detectChanges();
+        vi.runAllTimers();
+        const rubricHost = el.querySelector('#task-2 app-szempontlista') as HTMLElement;
+        rubricHost.scrollIntoView = vi.fn();
+        click(el, 'ai-rubric-open');
+        vi.runAllTimers();
+        expect(rubricHost.scrollIntoView).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a szempontlista változásakor (inline MI-vázlat) a panel újratölti a kereteket', () => {
+      configure(makeDetail({ tasks: tasks() }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.selectTask(2);
+      fixture.detectChanges();
+      const reload = vi.spyOn(fixture.debugElement.query(By.directive(MiSegitoPanelComponent)).componentInstance as MiSegitoPanelComponent, 'reload');
+      (fixture.debugElement.query(By.directive(AutomatikusJavitasComponent)).componentInstance as AutomatikusJavitasComponent).rubricChanged.emit();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('visszavont (takedown) feladatsoron minden MI-gomb tiltott', () => {
       configure(makeDetail({ takedownAt: '2026-10-01T00:00:00Z', tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.selectTask(1);
       fixture.detectChanges();
-      expect((fixture.nativeElement.querySelector('[data-testid="ai-new-open"]') as HTMLButtonElement).disabled).toBe(true);
-      expect((fixture.nativeElement.querySelector('[data-testid="ai-complete-open"]') as HTMLButtonElement).disabled).toBe(true);
+      const buttons = fixture.nativeElement.querySelectorAll('[data-testid="ai-panel"] button:not([data-testid="task-outline-toggle"])') as NodeListOf<HTMLButtonElement>;
+      expect(buttons.length).toBeGreaterThanOrEqual(6);
+      buttons.forEach((b) => expect(b.disabled, b.dataset['testid']).toBe(true));
+    });
+
+    it('a vázlat kijelölése kinyitja az összecsukott típus-blokkot és a feladatot; a „+ Új feladat” a blokk űrlapjának címére fókuszál', () => {
+      vi.useFakeTimers();
+      try {
+        configure(makeDetail({ tasks: tasks() }));
+        const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+        const c = fixture.componentInstance;
+        fixture.detectChanges();
+        const el: HTMLElement = fixture.nativeElement;
+        c.toggleSection(6);
+        fixture.detectChanges();
+        expect(c.isSectionExpanded(6)).toBe(false);
+
+        click(el, 'outline-task-1');
+        fixture.detectChanges();
+        expect(c.isSectionExpanded(6)).toBe(true);
+        expect(c.expandedTaskId()).toBe(1);
+        expect(el.querySelector('[data-testid="outline-task-1"]')!.getAttribute('aria-current')).toBe('true');
+
+        // Üres irodai blokk alapból zárva - a „+ Új feladat” kinyitja és a cím-mezőre fókuszál.
+        expect(c.isSectionExpanded(2)).toBe(false);
+        click(el, 'outline-add-2');
+        fixture.detectChanges();
+        vi.runAllTimers();
+        expect(c.isSectionExpanded(2)).toBe(true);
+        expect(document.activeElement?.id).toBe('new-task-title-2');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -386,7 +436,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     configure(makeDetail({ tasks: [], files: [] }));
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-entry"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]')).toBeNull();
   });
 
   // UI-TT-30: az "Összevont megoldás" mező a részfeladatonkénti kódrészletektől teljesen
@@ -1714,7 +1764,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(fixture.componentInstance.expandedTaskId()).toBe(1);
 
       const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
-      const taskToggleButton = buttons.find((b) => b.textContent?.includes('F1'));
+      const taskToggleButton = buttons.find((b) => b.dataset['testid'] === 'task-toggle' && b.textContent?.includes('F1'));
       expect(taskToggleButton).toBeDefined();
 
       // Bukó elvárás: toggleTask(1) után a feladat nyitva van (expandedTaskId()===1, a részfeladatok
@@ -2182,16 +2232,16 @@ describe('FeladatsorSzerkesztoComponent', () => {
       createdAt: '2026-10-15T10:00:00Z', url: '/api/teacher-files/l', taskId,
     });
 
-    it('csak SQL-feladat kártyáján jelenik meg, és a párbeszédablakot nyitja', () => {
+    it('csak kijelölt SQL-feladatnál kínálja a panel, és a feladat párbeszédablakát nyitja', () => {
       configure(makeDetail({ tasks: [sqlTask(), sqlTask({ id: 8, taskTypeIds: [6] })], files: [liteFile(null)] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(8);
+      fixture.componentInstance.selectTask(8);
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-entry-8"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-open"]')).toBeNull();
 
-      fixture.componentInstance.toggleTask(7);
+      fixture.componentInstance.selectTask(7);
       fixture.detectChanges();
-      (fixture.nativeElement.querySelector('[data-testid="sql-queries-open-7"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('[data-testid="sql-queries-open"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-dialog"]')).not.toBeNull();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-q-no-lite"]')).toBeNull();
@@ -2311,14 +2361,30 @@ describe('FeladatsorSzerkesztoComponent', () => {
       configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      expect((fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).disabled).toBe(true);
+      // Választás nélkül a panel gombja nem nyit, csak figyelmeztet.
+      const warning = vi.spyOn(TestBed.inject(ToastService), 'warning');
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(warning).toHaveBeenCalled();
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
 
       fixture.componentInstance.schemaTaskChoice.set(7);
       fixture.detectChanges();
-      (fixture.nativeElement.querySelector('[data-testid="sql-generation-open"]') as HTMLButtonElement).click();
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(7);
       expect(fixture.componentInstance.sqlGenerationFiles().map((f) => f.id)).toEqual(['a']);
+      expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
+    });
+
+    it('a vázlatban kijelölt SQL-feladattal a panel gombja annak a feladatnak nyitja a generátort', () => {
+      configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.componentInstance.selectTask(8);
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(8);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
 

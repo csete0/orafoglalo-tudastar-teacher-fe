@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../../services/auth/store/auth.store';
-import { IconComponent, IconName } from '../../shared/icon/icon.component';
+import { IconComponent, IconName, isIconName } from '../../shared/icon/icon.component';
 import { KahootActiveRoomDto } from '../../models/kahoot-host.model';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
 import { ReportService } from '../../services/report/report.service';
@@ -42,8 +42,7 @@ const CARDS: DashboardCard[] = [
     accent: 'accent-2',
     tile: 'icon-tile-success',
   },
-  // UI-UX-T2: a Kvízek felület a 6-linkes nav-korlát miatt csak a Feladatsorok
-  // fülén él - a vezérlőpultról viszont közvetlenül elérhetőnek kell lennie.
+  // UI-UX-T2: a Kvízek felület a vezérlőpultról is közvetlenül elérhető.
   {
     path: '/feladatsorok/kvizek',
     title: 'Kvízeim',
@@ -54,8 +53,8 @@ const CARDS: DashboardCard[] = [
   },
 ];
 
-// C5: a platform-kvízek admin-oldala ugyanazon 6-linkes nav-korlát miatt nem kap
-// menüpontot, mint a Kvízeim - a vezérlőpult kártyája a belépési pont, csak platform-adminnak.
+// C5: a platform-kvízek admin-oldala nem kap menüpontot - a vezérlőpult kártyája a
+// belépési pont, csak platform-adminnak.
 // §3 migráció (PATRICKS-ADMIN-SZETVALASZTAS-TERV.md): a kuponok/AI-költés admin-fe-be
 // költöztek - ez a kártya SZÁNDÉKOSAN maradt itt, mert az AdminQuizController (a mögötte
 // álló backend) egyelőre a publikus API-ban maradt (ld. AdminQuizController doc-kommentje
@@ -170,10 +169,10 @@ const ADMIN_CARDS: DashboardCard[] = [
             <ul class="flex flex-wrap gap-2">
               @for (topic of d.weakTopics; track topic.topicId) {
                 <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
-                    [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-subtle)'"
+                    [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-element)'"
                     [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
-                  @if (topic.topicIcon) {
-                    <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
+                  @if (isIconName(topic.topicIcon)) {
+                    <app-icon [name]="topic.topicIcon" class="w-3.5 h-3.5 block shrink-0" />
                   }
                   {{ topic.topicName }}
                   <span class="opacity-70">{{ topic.successRate }}% · {{ topic.studentCount }} tanuló</span>
@@ -214,6 +213,7 @@ const ADMIN_CARDS: DashboardCard[] = [
   `,
 })
 export class DashboardComponent implements OnInit {
+  readonly isIconName = isIconName;
   readonly authStore = inject(AuthStore);
   private readonly kahootHostService = inject(KahootHostService);
   readonly cards = computed(() => (this.authStore.hasAdminRole() ? [...CARDS, ...ADMIN_CARDS] : CARDS));

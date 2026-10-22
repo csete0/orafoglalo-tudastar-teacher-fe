@@ -3,6 +3,10 @@ import { authGuard } from './guards/auth.guard';
 import { guestGuard } from './guards/guest.guard';
 import { roleGuard } from './guards/role.guard';
 
+/**
+ * `data: { wide: true }` = teljes szélességű adatoldal (széles táblázat): az oldal `.page-wide`
+ * konténert használ, és az oldalsáv itt alapból összecsukva indul (AppSidebarComponent).
+ */
 export const routes: Routes = [
   {
     path: 'login',
@@ -83,6 +87,7 @@ export const routes: Routes = [
     // Próbaérettségi: a saját csoportok jelentkeztetése és áttekintése (a menüpont csak közzétett eseménynél látszik).
     path: 'probaerettsegi',
     canActivate: [authGuard, roleGuard('teacher')],
+    data: { wide: true },
     loadComponent: () =>
       import('./pages/probaerettsegi/probaerettsegi-page.component').then((m) => m.ProbaerettsegiPageComponent),
   },
@@ -90,6 +95,7 @@ export const routes: Routes = [
     // Dolgozat mód: a kiadott dolgozat élő áttekintője (a csoport "Kiadva" füléről / a feladatsor-szerkesztőből).
     path: 'dolgozatok/:assignmentId',
     canActivate: [authGuard, roleGuard('teacher')],
+    data: { wide: true },
     loadComponent: () =>
       import('./pages/dolgozatok/dolgozat-attekintes.component').then((m) => m.DolgozatAttekintesComponent),
   },
@@ -102,16 +108,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsorok-lista.component').then((m) => m.FeladatsorokListaComponent),
       },
-      // A kvíz-útvonalak SZÁNDÉKOSAN a ':id/...' minták ELŐTT állnak, és szándékosan a
-      // 'feladatsorok' alatt: a fejléc-navigáció 6 linkre van méretezve
-      // (UI-TT-181/192/177), ezért a kvízkezelés nem kap külön menüpontot, hanem a
-      // Feladatsorok oldal fülén él.
+      // A kvíz-útvonalak SZÁNDÉKOSAN a ':id/...' minták ELŐTT állnak; a 'feladatsorok' alatt
+      // élnek, mert a Feladatsorok oldal fülsávja (TartalomFulekComponent) is ide visz.
       {
         path: 'kvizek',
         loadComponent: () =>
           import('./pages/feladatsorok/kvizek-lista.component').then((m) => m.KvizekListaComponent),
       },
-      // Projektműhely (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G): ugyanazért a fülsávban, mint a kvízek.
+      // Projektműhely (PATRICKS-PROJEKTMUHELY-2-TERV.md, F+G): a kvízekhez hasonlóan a fülsávban is.
       {
         path: 'projektek',
         loadComponent: () =>
@@ -119,6 +123,7 @@ export const routes: Routes = [
       },
       {
         path: 'projektek/kiadas/:id',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/projekt-kiadas.component').then((m) => m.ProjektKiadasComponent),
         // El nem fogadott AI-javaslatok (csak a böngészőben élnek) elhagyás előtt megerősítést kérnek.
@@ -131,6 +136,7 @@ export const routes: Routes = [
       },
       {
         path: 'kvizek/:id/eredmenyek',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/kviz-eredmenyek.component').then((m) => m.KvizEredmenyekComponent),
       },
@@ -142,12 +148,15 @@ export const routes: Routes = [
           import('./pages/feladatsorok/kahoot-host.component').then((m) => m.KahootHostComponent),
       },
       {
+        // Háromhasábos szerkesztő (vázlat · tartalom · MI-segítő): az oldalsáv összecsukva indul, hogy a középső hasáb elférjen.
         path: ':id/szerkesztes',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-szerkeszto.component').then((m) => m.FeladatsorSzerkesztoComponent),
       },
       {
         path: ':id/eredmenyek',
+        data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-eredmenyek.component').then((m) => m.FeladatsorEredmenyekComponent),
       },
@@ -166,8 +175,8 @@ export const routes: Routes = [
   // a backend repóban), és ez a route ugyanazokat a tanári kvíz-lista/-szerkesztő
   // komponenseket használja admin-scope-ban, nem saját admin/*.ts oldalt.
   // C5: platform-kvízek ("Hivatalos kvízek") - a tanári kvíz-lista és -szerkesztő
-  // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap fejléc-linket
-  // (6-linkes nav-korlát, ld. fent) - a belépési pont a vezérlőpult admin-kártyája.
+  // ugyanazon komponensei admin-scope-ban (api/admin/… gyökér). Nem kap menüpontot -
+  // a belépési pont a vezérlőpult admin-kártyája.
   {
     path: 'admin/kvizek',
     canActivate: [authGuard, roleGuard('admin')],

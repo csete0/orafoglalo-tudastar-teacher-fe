@@ -97,7 +97,7 @@ describe('DashboardComponent - "Élő játék fut" kártya', () => {
     expect(fixture.nativeElement.textContent).toContain('Feladatsoraim');
   });
 
-  // C5: a platform-kvízek admin-oldala a 6-linkes nav-korlát miatt nem menüpont, hanem
+  // C5: a platform-kvízek admin-oldala nem menüpont, hanem
   // vezérlőpult-kártya - és csak platform-adminnak.
   it('C5: a Platform-kvízek kártya csak platform-adminnak jelenik meg', () => {
     const teacher = configure([]);

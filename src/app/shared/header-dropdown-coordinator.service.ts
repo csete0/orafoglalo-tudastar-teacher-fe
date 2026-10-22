@@ -3,7 +3,7 @@ import { Injectable, computed, signal } from '@angular/core';
 export type HeaderDropdown = 'menu' | 'bell';
 
 /**
- * UI-TT-101: a fejléc mobil hamburger-menüje (`AppComponent.menuOpen`) és a
+ * UI-TT-101: a mobil felső sáv hamburger-menüje (`AppSidebarComponent.menuOpen`) és a
  * `NotificationBellComponent` saját, független `open` szignálja korábban
  * SEMMILYEN kölcsönös kizárást nem ismertek - mindkettő ugyanazt a `z-40`
  * z-indexet használta, így egyszerre nyitva tartva a KÉSŐBB a DOM-fába
@@ -13,7 +13,7 @@ export type HeaderDropdown = 'menu' | 'bell';
  *
  * Ez a szolgáltatás pontosan azt a mintát követi, amivel a `menuOpen` már
  * eddig is záródott `Router`/`NavigationEnd`-re (UI-TT-78): mindkét felület
- * (`AppComponent` és `NotificationBellComponent`) egy `effect()`-tel jelzi
+ * (`AppSidebarComponent` és `NotificationBellComponent`) egy `effect()`-tel jelzi
  * ide a saját nyitott/zárt állapotát, és egy másik `effect()`-tel reagál rá,
  * ha a MÁSIK felület nyílt meg - így egyik felület sem veszíti el a saját,
  * tesztek által is közvetlenül állítható `signal`-ját, csak a kettő közti
@@ -25,7 +25,7 @@ export class HeaderDropdownCoordinatorService {
   readonly openDropdown = computed(() => this._openDropdown());
 
   // UI-TT-162: a "bell" KÉT teljesen független fizikai DOM-példányban is
-  // mountolva van egyszerre (desktop + mobil header-sáv), csak CSS dönti el,
+  // mountolva van egyszerre (asztali oldalsáv + mobil felső sáv), csak CSS dönti el,
   // melyik LÁTSZIK - mindkettő él a komponensfában, saját `open` szignállal.
   // Az `openDropdown()==='bell'` reaktív effect-alapú figyelése (ahogy a
   // 'menu' esetnél) ITT nem elég: egy `effect()` csak a FIGYELŐ komponens
@@ -54,16 +54,16 @@ export class HeaderDropdownCoordinatorService {
     // KIZÁRÓLAG akkor sül el, ha egy MÁSIK bell-példány ténylegesen meghívja a
     // saját `open()`-jét - egy puszta viewport-váltás (kattintás NÉLKÜL), ami a
     // CSS-sel elrejtett, korábban nyitva hagyott példányt egyszerűen újra
-    // láthatóvá teszi, ezt sosem triggereli. Az `app.component.ts` a Tailwind
-    // `hidden md:flex`/`md:hidden flex` osztályokkal (768px, az alapértelmezett
-    // `md` breakpoint) dönt a desktop/mobil harang-wrapper láthatóságáról -
+    // láthatóvá teszi, ezt sosem triggereli. Az `app-sidebar.component.ts` a Tailwind
+    // `hidden lg:flex`/`lg:hidden` osztályokkal (1024px, az alapértelmezett
+    // `lg` breakpoint) dönt az oldalsáv/mobil harang láthatóságáról -
     // ugyanezt a breakpointot figyelve MINDEN átlépéskor bezárjuk az ÖSSZES
     // regisztrált bell-példányt, függetlenül attól, hívott-e bárki `open()`-t
     // közben. Ez a szolgáltatás `providedIn: 'root'`, egyetlen példánya él az
     // app teljes élettartama alatt - a listenernek nincs explicit leiratkozása,
     // ahogy a többi itteni állapotnak sincs.
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-      window.matchMedia('(min-width: 768px)').addEventListener('change', () => {
+      window.matchMedia('(min-width: 1024px)').addEventListener('change', () => {
         for (const onForceClose of this.bellCloseCallbacks.values()) onForceClose();
       });
     }

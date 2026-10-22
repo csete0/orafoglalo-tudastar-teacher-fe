@@ -226,7 +226,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const nagyRow = Array.from(rows).find((r) => (r as HTMLElement).textContent?.includes('Nagy Béla')) as HTMLElement;
 
     expect(nagyRow.textContent).toContain('nem kezdte el');
-    expect(nagyRow.className).toContain('opacity-50');
+    expect(nagyRow.className).toContain('opacity-70');
   });
 
   it('csak gyakorolt diáknál "csak gyakorolt" jelenik meg, a cellában külön gyakorló jelzés, az összesítő nem változik', () => {
@@ -252,7 +252,7 @@ describe('FeladatsorEredmenyekComponent', () => {
 
     expect(bela.textContent).toContain('csak gyakorolt');
     expect(bela.textContent).not.toContain('nem kezdte el');
-    expect(bela.className).not.toContain('opacity-50');
+    expect(bela.className).not.toContain('opacity-70');
     const badges = bela.querySelectorAll('[data-testid="practice-badge"]');
     expect(badges.length).toBe(1);
     expect(badges[0].textContent).toContain('gyakorlás 3/5');
@@ -665,6 +665,33 @@ describe('FeladatsorEredmenyekComponent', () => {
 
     expect(fixture.componentInstance.weakest()).toEqual([]);
     expect(fixture.nativeElement.textContent).not.toContain('Leggyengébben teljesített feladatok');
+  });
+
+  it('a szűrősorban „Leggyengébb: N. feladat (x%)” jelzés, a láblécben feladatonkénti átlag', () => {
+    configure(makeResults());
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="weakest-indicator"]')?.textContent).toContain('Leggyengébb: 2. feladat (40%)');
+    const cells = [...el.querySelectorAll('[data-testid="task-average-row"] td')] as HTMLElement[];
+    expect(cells.map((c) => c.textContent!.trim())).toEqual(['Feladatonkénti átlag', '100%', '40%']);
+    expect(cells[2].classList.contains('text-warning')).toBe(true);
+  });
+
+  it('értékelt beadás nélkül nincs leggyengébb-jelzés és átlag-lábléc', () => {
+    const results = makeResults();
+    results.students = results.students.map((s) => ({
+      ...s,
+      taskResults: s.taskResults.map((c) => ({ ...c, isCompleted: false })),
+    }));
+    configure(results);
+    const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="weakest-indicator"]')).toBeNull();
+    expect(el.querySelector('[data-testid="task-average-row"]')).toBeNull();
   });
 
   it('a leggyengébb feladat oszlopa kiemelést kap a mátrix fejlécében', () => {

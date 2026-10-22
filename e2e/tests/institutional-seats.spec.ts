@@ -54,7 +54,7 @@ test('intézményi licenc: diák megkapja, tanár látja és az óra végén fel
     await principalPage.getByRole('button', { name: 'Létrehozás' }).click();
     await expect(principalPage.getByText(groupName)).toBeVisible({ timeout: 15000 });
     await principalPage.getByText(groupName).click();
-    await principalPage.getByRole('tab', { name: 'Meghívó' }).click();
+    await principalPage.getByRole('tab', { name: 'Beállítások' }).click();
     const inviteCode = (await principalPage.locator('code').first().textContent())?.trim();
     expect(inviteCode).toBeTruthy();
 
@@ -99,7 +99,7 @@ test('intézményi licenc: diák megkapja, tanár látja és az óra végén fel
     // ── A tanár a saját csoportjánál látja a helyzetet ──
     await principalPage.goto(`${TEACHER_FE_URL}/csoportok`);
     await principalPage.getByText(groupName).click();
-    await principalPage.getByRole('tab', { name: 'Helyek' }).click();
+    await principalPage.getByRole('tab', { name: 'Beállítások' }).click();
 
     await expect(principalPage.getByText(/1\/1 hely használatban/)).toBeVisible({ timeout: 15000 });
     await expect(principalPage.getByText('Helyet használó diákok')).toBeVisible({ timeout: 15000 });

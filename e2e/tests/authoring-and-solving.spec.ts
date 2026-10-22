@@ -49,8 +49,10 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   const sqlAddForm = teacherPage.locator('form', { has: teacherPage.locator('[name="newTaskTitle-5"]') });
   await sqlAddForm.getByRole('button', { name: 'Hozzáadás' }).click();
 
-  await expect(teacherPage.getByText('1. Feladat egy')).toBeVisible({ timeout: 15000 });
-  await teacherPage.getByText('1. Feladat egy').click();
+  // A cím a bal oldali feladat-vázlatban is szerepel - a feladatkártya kinyitó gombjára szűrünk.
+  const taskToggle = teacherPage.getByTestId('task-toggle').filter({ hasText: '1. Feladat egy' });
+  await expect(taskToggle).toBeVisible({ timeout: 15000 });
+  await taskToggle.click();
 
   // ── Részfeladat (megoldás) hozzáadása ──
   // A "Hozzáadás" gomb szövege több formmal is megegyezik (típusonkénti "új
@@ -116,7 +118,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await teacherPage.locator('[formcontrolname="name"]').fill(groupName);
   await teacherPage.getByRole('button', { name: 'Létrehozás' }).click();
   await teacherPage.getByText(groupName).click();
-  await teacherPage.getByRole('tab', { name: 'Meghívó' }).click();
+  await teacherPage.getByRole('tab', { name: 'Beállítások' }).click();
   const inviteCode = (await teacherPage.locator('code').first().textContent())?.trim();
 
   // ── Diák csatlakozik, előfizetés NÉLKÜL ──
