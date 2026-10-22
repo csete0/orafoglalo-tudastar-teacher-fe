@@ -16,6 +16,17 @@ export type DesktopLanguage = 'csharp' | 'java';
 
 export const DESKTOP_LANGUAGE_LABEL: Record<DesktopLanguage, string> = { csharp: 'C#', java: 'Java' };
 
+/** A REST API (backend) nyelve = a munkamenet futtatója (BE: BackendLanguages.Runtimes). */
+export type BackendRuntime = 'judge0-aspnet' | 'judge0-spring' | 'judge0-express' | 'judge0-laravel';
+
+/** A backend-nyelv címkéje (BE: BackendLanguages.Label). */
+export const BACKEND_RUNTIME_LABEL: Record<BackendRuntime, string> = {
+  'judge0-aspnet': 'C# (ASP.NET Core)',
+  'judge0-spring': 'Java (Spring Boot)',
+  'judge0-express': 'JavaScript (Node.js + Express)',
+  'judge0-laravel': 'PHP (Laravel)',
+};
+
 /** A vizsga sikerességi határa (BE: ExamScoring.PassPercent). */
 export const EXAM_PASS_RATIO = 0.4;
 
@@ -170,7 +181,8 @@ export interface ExamSessionSnapshotDto {
   studentName: string;
   projectSlug: string;
   projectTitle: string;
-  runtime: string;
+  /** A munkamenet backend-futtatója (a REST API és a kliens rész referencia-backendje; BE: ProjectExamSession.Runtime). */
+  runtime: BackendRuntime;
   files: Record<string, string>;
   readOnlyPaths: string[];
   session: ExamSessionDto;
