@@ -7,9 +7,11 @@ import { TeacherQuizService } from '../../../services/teacher-quiz/teacher-quiz.
 import { TeacherTaskSetService } from '../../../services/teacher-taskset/teacher-taskset.service';
 import { TeacherProjectService } from '../../../services/teacher-project/teacher-project.service';
 import { KahootHostService } from '../../../services/kahoot-host/kahoot-host.service';
+import { isOralExamDisabled, TeacherOralExamService } from '../../../services/teacher-oral-exam/teacher-oral-exam.service';
 import { TeacherGroupAssignmentDto } from '../../../models/teacher-quiz.model';
 import { TeacherGroupTaskSetAssignmentDto } from '../../../models/teacher-content.model';
 import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../../models/teacher-project.model';
+import { ORAL_MODE_LABELS, TeacherOralAssignmentDto } from '../../../models/teacher-oral-exam.model';
 import { parseUtc } from '../../../shared/utc-date.util';
 
 /** 48 órán belül lejáró határidő - vizuális sürgősség. */
@@ -20,7 +22,8 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
 
 /**
  * Csoportoldal „Kiadások” fül (UI-UX-T3: a tanár fejben a csoportból indul - „a 9.A-nak mi van kiadva?”):
- * kvíz-, feladatsor- (B4) és projekt-kiadások, kvíznél élő játék indításával.
+ * kvíz-, feladatsor- (B4), projekt- és szóbeli kiadások, kvíznél élő játék indításával. A szóbeli szakasz kikapcsolt szóbeli
+ * funkciónál (404 FeatureDisabled) nem látszik.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -141,6 +144,33 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
           <li class="text-sm text-text-muted py-2">Nincs kiadott projekt. Kiadni a Feladatsorok → Projektek fülön lehet.</li>
         }
       </ul>
+
+      <!-- Szóbeli kiadások (PATRICKS-SZOBELI-VIZSGA-2-FAZIS-MEGVALOSITAS.md, T11) -->
+      @if (oralEnabled()) {
+        <h2 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2 mt-6">Szóbeli</h2>
+        @if (oralAssignmentsError(); as err) {
+          <p class="text-danger text-sm mb-4">{{ err }}</p>
+        }
+        <ul class="space-y-2" data-testid="group-oral-assignments">
+          @for (o of oralAssignments(); track o.id) {
+            <li class="card !rounded-xl px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
+              <div class="min-w-0 flex-1">
+                <p class="font-semibold">{{ o.title }}
+                  @if (o.mode === 'exam') { <span class="badge badge-warning ml-1">{{ oralModeLabels.exam }}</span> }
+                </p>
+                <p class="text-xs text-text-muted">
+                  {{ oralModeLabels[o.mode] }} · {{ o.voiceMinutes }} perc · {{ o.studentCount }} diák indította
+                  @if (o.dueAt) { · <span [class.text-danger]="isDueSoon(o.dueAt)">határidő: {{ utc(o.dueAt) | date: 'yyyy.MM.dd. HH:mm' }}</span> }
+                  @if (o.resultsPublishedAt) { · <span class="text-success font-semibold">eredmény közzétéve</span> }
+                </p>
+              </div>
+              <a [routerLink]="['/feladatsorok/szobeli/kiadas', o.id]" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0">Eredmények</a>
+            </li>
+          } @empty {
+            <li class="text-sm text-text-muted py-2">Nincs kiadott szóbeli. Kiadni a Feladatsorok → Szóbeli fülön lehet.</li>
+          }
+        </ul>
+      }
     </div>
   `,
 })
@@ -152,6 +182,7 @@ export class CsoportKiadasokComponent implements OnInit {
   private readonly teacherTaskSetService = inject(TeacherTaskSetService);
   private readonly teacherProjectService = inject(TeacherProjectService);
   private readonly kahootHostService = inject(KahootHostService);
+  private readonly teacherOralExamService = inject(TeacherOralExamService);
 
   readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
   readonly assignmentsLoading = signal(false);
@@ -161,10 +192,15 @@ export class CsoportKiadasokComponent implements OnInit {
   readonly taskSetAssignmentsError = signal<string | null>(null);
   readonly projectAssignments = signal<ProjectAssignmentDto[]>([]);
   readonly projectAssignmentsError = signal<string | null>(null);
+  readonly oralAssignments = signal<TeacherOralAssignmentDto[]>([]);
+  readonly oralAssignmentsError = signal<string | null>(null);
+  /** A válaszig rejtve: kikapcsolt szóbelinél (404 FeatureDisabled) így nem villan fel a szakasz. */
+  readonly oralEnabled = signal(false);
   readonly liveStartPending = signal(false);
   readonly liveStartError = signal<string | null>(null);
 
   readonly projectRuntimeLabels = RUNTIME_LABELS;
+  readonly oralModeLabels = ORAL_MODE_LABELS;
   readonly utc = parseUtc;
   readonly isDueSoon = isDueSoon;
 
@@ -190,6 +226,18 @@ export class CsoportKiadasokComponent implements OnInit {
     this.teacherProjectService.forGroup(groupId).pipe(take(1)).subscribe({
       next: (assignments) => this.projectAssignments.set(assignments),
       error: () => this.projectAssignmentsError.set('A projekt-kiadások betöltése sikertelen.'),
+    });
+
+    this.teacherOralExamService.assignments(groupId).pipe(take(1)).subscribe({
+      next: (assignments) => {
+        this.oralAssignments.set(assignments);
+        this.oralEnabled.set(true);
+      },
+      error: (err) => {
+        if (isOralExamDisabled(err)) return;
+        this.oralEnabled.set(true);
+        this.oralAssignmentsError.set('A szóbeli kiadások betöltése sikertelen.');
+      },
     });
   }
 

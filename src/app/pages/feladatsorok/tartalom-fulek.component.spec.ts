@@ -1,20 +1,26 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { TartalomFulekComponent } from './tartalom-fulek.component';
+import { TeacherOralExamService } from '../../services/teacher-oral-exam/teacher-oral-exam.service';
 
 @Component({ selector: 'app-host', imports: [TartalomFulekComponent], template: '<app-tartalom-fulek />' })
 class HostComponent {}
 
 describe('TartalomFulekComponent', () => {
-  async function at(url: string) {
+  async function at(url: string, oralAvailable = false) {
     TestBed.configureTestingModule({
-      providers: [provideRouter([
-        { path: 'feladatsorok', component: HostComponent },
-        { path: 'feladatsorok/kvizek', component: HostComponent },
-        { path: 'feladatsorok/projektek', component: HostComponent },
-      ])],
+      providers: [
+        provideRouter([
+          { path: 'feladatsorok', component: HostComponent },
+          { path: 'feladatsorok/kvizek', component: HostComponent },
+          { path: 'feladatsorok/projektek', component: HostComponent },
+          { path: 'feladatsorok/szobeli', component: HostComponent },
+          { path: 'feladatsorok/szobeli/:id', component: HostComponent },
+        ]),
+        { provide: TeacherOralExamService, useValue: { available: signal(oralAvailable) } },
+      ],
     });
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
@@ -29,6 +35,15 @@ describe('TartalomFulekComponent', () => {
       { label: 'Kvízek', active: true, current: 'page' },
       { label: 'Projektek', active: false, current: null },
     ]);
+  });
+
+  it('bekapcsolt szóbelinél negyedik fül a „Szóbeli”, a téma-oldalakon is aktív; kikapcsolva nincs', async () => {
+    const tabs = await at('/feladatsorok/szobeli/5', true);
+    expect(tabs.map(t => t.label)).toEqual(['Feladatsorok', 'Kvízek', 'Projektek', 'Szóbeli']);
+    expect(tabs.filter(t => t.active).map(t => t.label)).toEqual(['Szóbeli']);
+
+    TestBed.resetTestingModule();
+    expect((await at('/feladatsorok')).map(t => t.label)).not.toContain('Szóbeli');
   });
 
   it('a /feladatsorok útvonalon csak a Feladatsorok fül aktív', async () => {

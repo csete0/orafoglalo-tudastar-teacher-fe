@@ -42,6 +42,7 @@ describe('app.routes - teljes szélességű adatoldalak (data.wide)', () => {
     'feladatsorok/kvizek/:id/eredmenyek',
     'probaerettsegi',
     'feladatsorok/projektek/kiadas/:id',
+    'feladatsorok/szobeli/kiadas/:id',
     // A háromhasábos szerkesztő is: az oldalsáv összecsukva indul.
     'feladatsorok/:id/szerkesztes',
   ];
@@ -53,5 +54,19 @@ describe('app.routes - teljes szélességű adatoldalak (data.wide)', () => {
   it('más útvonal nem az', () => {
     const others = all.filter((r) => r.route.data?.['wide'] === true && !widePaths.includes(r.path));
     expect(others.map((r) => r.path)).toEqual([]);
+  });
+});
+
+describe('app.routes - szóbeli (T11)', () => {
+  const feladatsorok = routes.find((r) => r.path === 'feladatsorok')!.children!.map((r) => r.path);
+
+  it('a négy szóbeli útvonal a feladatsorok alatt, a \':id/...\' minták előtt', () => {
+    const oral = ['szobeli', 'szobeli/uj', 'szobeli/kiadas/:id', 'szobeli/:id'];
+    for (const path of oral) expect(feladatsorok).toContain(path);
+    const firstParam = feladatsorok.findIndex((p) => p?.startsWith(':id'));
+    expect(Math.max(...oral.map((p) => feladatsorok.indexOf(p)))).toBeLessThan(firstParam);
+    // Az 'uj' és a 'kiadas/:id' a ':id' előtt, különben a szerkesztő nyelné el őket.
+    expect(feladatsorok.indexOf('szobeli/uj')).toBeLessThan(feladatsorok.indexOf('szobeli/:id'));
+    expect(feladatsorok.indexOf('szobeli/kiadas/:id')).toBeLessThan(feladatsorok.indexOf('szobeli/:id'));
   });
 });

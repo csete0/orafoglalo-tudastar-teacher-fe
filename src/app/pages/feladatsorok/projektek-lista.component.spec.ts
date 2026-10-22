@@ -7,6 +7,7 @@ import { TeacherProjectService } from '../../services/teacher-project/teacher-pr
 import { GroupStore } from '../../services/group/group.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ProjectAssignmentDto, TeacherProjectDto } from '../../models/teacher-project.model';
+import { TeacherOralExamService } from '../../services/teacher-oral-exam/teacher-oral-exam.service';
 
 const assignment = (over: Partial<ProjectAssignmentDto> = {}): ProjectAssignmentDto => ({
   id: 7, projectSlug: 'bufe-rendelo', projectTitle: 'Büfé-rendelő', groupId: 1, groupName: '11.B', assignedAt: '2026-10-01T10:00:00',
@@ -32,6 +33,7 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
       imports: [ProjektekListaComponent],
       providers: [
         provideRouter([]),
+        { provide: TeacherOralExamService, useValue: { available: signal(false) } },
         { provide: TeacherProjectService, useValue: api },
         { provide: GroupStore, useValue: { loadMine: vi.fn(), activeGroups: signal([{ id: 1, name: '11.B' }, { id: 2, name: '12.A' }]) } },
         { provide: ConfirmService, useValue: { ask: vi.fn(() => Promise.resolve(confirm)) } },
