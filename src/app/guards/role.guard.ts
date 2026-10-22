@@ -9,12 +9,17 @@ import { AuthStore } from '../services/auth/store/auth.store';
  *
  * `authGuard`-dal együtt kell használni (a route canActivate tömbjében előtte),
  * mert ez nem ellenőrzi az autentikációt, csak a role-t.
+ *
+ * UI-TT-241: az Angular egy route canActivate-guardjait PÁRHUZAMOSAN indítja (csak az eredményük sorrendje számít), így
+ * az authGuard várakozása itt nem véd: lejárt access tokennél (frissítés hálózaton) a role-ok még üresek. Ezért ez a guard
+ * is megvárja az auth-állapot betöltését, különben egy valódi tanárt is a jelentkezési oldalra dobna.
  */
 export function roleGuard(role: 'teacher' | 'admin'): CanActivateFn {
-  return (): boolean | UrlTree => {
+  return async (): Promise<boolean | UrlTree> => {
     const authStore = inject(AuthStore);
     const router = inject(Router);
 
+    await authStore.ensureInitialization();
     if (authStore.roles().includes(role)) {
       return true;
     }
