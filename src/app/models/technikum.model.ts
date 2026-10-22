@@ -32,6 +32,8 @@ export interface HeatmapTestDto {
   dueAt: string | null;
   closedSessions: number;
   resultsPublished: boolean;
+  /** Mindenki befejezte (beadta / lejárt az ideje), senki nem ír: a befejezés előtt is közzétehető. Régebbi BE-válaszon hiányozhat. */
+  everyoneFinished?: boolean;
 }
 
 export interface HeatmapCellDto {

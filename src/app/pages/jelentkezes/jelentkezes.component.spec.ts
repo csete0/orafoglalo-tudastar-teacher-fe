@@ -643,12 +643,12 @@ describe('JelentkezesComponent', () => {
 
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('24 órán belül');
-    expect(text).toContain('info@orafoglalo.hu');
+    expect(text).toContain('csete0@gmail.com');
 
     // A kapcsolattartási cím valódi, kattintható mailto legyen, ne csak szöveg.
     const mailto = fixture.nativeElement.querySelector('a[href^="mailto:"]');
     expect(mailto).not.toBeNull();
-    expect(mailto.getAttribute('href')).toBe('mailto:info@orafoglalo.hu');
+    expect(mailto.getAttribute('href')).toBe('mailto:csete0@gmail.com');
   });
 
   // UI-TT-184: a "Bemutatkozás" mező required/minLength(20)/blank validátorainak egyikéhez sincs

@@ -56,7 +56,7 @@ import { ConfirmService } from '../../shared/confirm/confirm.service';
                 <div class="icon-tile icon-tile-neutral">
                   <app-icon name="building" class="w-6 h-6 block" />
                 </div>
-                <p class="font-semibold">Még nem tagja egyetlen intézménynek sem.</p>
+                <p class="font-semibold">Még nem vagy tagja egyetlen intézménynek sem.</p>
                 <p class="text-sm text-text-muted">Hozz létre egyet, vagy csatlakozz meghívó kóddal.</p>
               </li>
             }

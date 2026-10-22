@@ -116,6 +116,17 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
     });
   });
 
+  it('technikumi feladat: a nyelv a diák választása (C# vagy Java), nincs „Csak C# (ASP.NET Core)” opció', async () => {
+    const exam: TeacherProjectDto = { ...project(), slug: 'konyvtar', title: 'Könyvtár', kind: 'exam', runtimes: ['judge0-aspnet'], desktopLanguages: ['csharp', 'java'] };
+    const { fixture, el } = await setup([exam]);
+    expect(el.querySelector('[data-testid="project-konyvtar"]')!.textContent).toContain('nyelvek: C#, Java');
+    (el.querySelector('[data-testid="assign-open-konyvtar"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="assign-runtime"]')).toBeNull();
+    expect(el.querySelector('[data-testid="assign-language-note"]')!.textContent).toContain('A diák választ (C# vagy Java)');
+    expect(el.textContent).not.toContain('ASP.NET Core)');
+  });
+
   it('visszavonás megerősítés után', async () => {
     const { fixture, el } = await setup([project([assignment()])]);
     [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.includes('Visszavonás'))!.click();

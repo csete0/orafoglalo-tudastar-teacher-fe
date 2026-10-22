@@ -65,10 +65,15 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                 @if (t.resultsPublished) {
                   <span class="badge badge-success shrink-0">Eredmény közzétéve</span>
                 } @else {
-                  <button type="button" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0" [disabled]="publishing() === t.assignmentId"
-                          (click)="publish(t)">Eredmények közzététele</button>
+                  <button type="button" class="btn btn-primary !px-2 !py-1 !text-xs shrink-0" [disabled]="publishing() === t.assignmentId || !canPublish(t)"
+                          [attr.aria-describedby]="canPublish(t) ? null : 'publish-wait-' + t.assignmentId" (click)="publish(t)">Eredmények közzététele</button>
                 }
               </div>
+              @if (!t.resultsPublished && !canPublish(t)) {
+                <p class="text-text-muted text-xs mt-2" [id]="'publish-wait-' + t.assignmentId" data-testid="publish-wait">
+                  Akkor teheted közzé, ha minden diák befejezte (beadta, vagy lejárt az ideje), vagy a befejezés után – addig az eredmény nem szivároghat ki.
+                </p>
+              }
               @if (publishWarning()[t.assignmentId]; as warn) {
                 <p class="text-warning text-xs mt-2" role="status" data-testid="publish-warning">{{ warn }}</p>
               }
@@ -365,6 +370,11 @@ export class VizsgareszTerkepComponent {
     const failed = c.gradingFailed ? ' – a bírálat végleg sikertelen, 0 pontnak számít' : '';
     const ai = c.aiNotEvaluatedPoints ? ` – ${c.aiNotEvaluatedPoints} pont MI-szempont nem értékelt (MI-keret / MI-hiba), 0 pontnak számít` : '';
     return `${c.projectTitle} – ${source}, ${Math.round(c.ratio * 100)}%${failed}${ai}`;
+  }
+
+  /** Közzétehető: mindenki befejezte (a szerver szerint), vagy elmúlt a befejezés (a nyitva hagyott lapon is). */
+  canPublish(t: HeatmapTestDto): boolean {
+    return !!t.everyoneFinished || (!!t.dueAt && parseUtc(t.dueAt) <= Date.now());
   }
 
   /** Közzététel megerősítéssel: hány beadott dolgozat, és hány rész 0 pontos (végleg sikertelen) / nem értékelt MI-szempontú. */

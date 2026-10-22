@@ -21,7 +21,7 @@ const POLL_INTERVAL_MS = 5000;
 const DECISION_TURNAROUND_HOURS = 24;
 
 /** Kapcsolattartási cím a sürgős esetekre — ugyanaz, mint a backend SupportEmail-je. */
-const SUPPORT_EMAIL = 'info@orafoglalo.hu';
+const SUPPORT_EMAIL = 'csete0@gmail.com';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
