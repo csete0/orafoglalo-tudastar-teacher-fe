@@ -49,7 +49,13 @@ export interface TeamMilestoneEdit {
 /** BE: TeamRepoReviewService.cs, RepoReviewPrompt.cs. */
 export interface CodeSuggestion { path: string; line: number; lineText: string; severity: 'hiba' | 'javaslat' | 'dicséret'; text: string; }
 export interface RepoReviewCriterion { key: 'quality' | 'clean' | 'docs' | 'tests'; label: string; score: number; text: string; }
-export interface RepoReviewResult { summary: string | null; criteria: RepoReviewCriterion[]; suggestions: CodeSuggestion[]; reviewedPaths: string[]; truncatedPaths: string[]; skippedFiles: number; }
+/** A vizsgaremek-dokumentáció egy kötelező eleme az MI szerint. */
+export interface RepoReviewDocsItem { key: string; label: string; present: boolean; note: string; }
+/** `docsChecklist`: a hét kötelező dokumentáció-elem; a régi (dokumentáció-kiterjesztés előtti) átnézésekben nincs / null. */
+export interface RepoReviewResult {
+  summary: string | null; criteria: RepoReviewCriterion[]; suggestions: CodeSuggestion[]; reviewedPaths: string[]; truncatedPaths: string[]; skippedFiles: number;
+  docsChecklist?: RepoReviewDocsItem[] | null;
+}
 export interface TeamRepoReview {
   id: number; status: 'queued' | 'running' | 'done' | 'failed' | 'truncated'; branch: string; commitSha: string | null; requestedByName: string | null;
   payerKind: 'teacher' | 'system'; createdAt: string; finishedAt: string | null; error: string | null; counted: boolean; result: RepoReviewResult | null;

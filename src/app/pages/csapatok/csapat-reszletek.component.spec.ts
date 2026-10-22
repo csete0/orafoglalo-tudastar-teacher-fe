@@ -84,6 +84,28 @@ describe('CsapatReszletekComponent', () => {
     expect(fixture.nativeElement.textContent.replace(/\s+/g, ' ')).toContain('is fogy (most 2/40); a sikertelen');
   });
 
+  it('MI-átnézés: a dokumentáció 7 kötelező eleme ✔/✘ megjegyzéssel; a régi (lista nélküli) eredmény hibátlanul', async () => {
+    const { fixture, c, api, el } = setup();
+    const result = { summary: 'Jó.', criteria: [{ key: 'docs' as const, label: 'Dokumentáció', score: 2, text: 'Hiányos.' }], suggestions: [], reviewedPaths: ['README.md'],
+      truncatedPaths: [], skippedFiles: 0 };
+    api.reviews.mockReturnValue(of({ used: 1, limit: 4, month: '2027-03', items: [
+      review({ result: { ...result, docsChecklist: [{ key: 'cel', label: 'A projekt célja', present: true, note: 'Világos.' },
+        { key: 'dump', label: 'Adatbázis-dump', present: false, note: 'Nincs .sql.' }] } }),
+      review({ id: 2, result }),
+    ] }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await c.setTab('mi');
+    fixture.detectChanges();
+    const rows = Array.from(el.querySelectorAll('[data-testid="review-1"] [data-testid="review-docs"] li'));
+    expect(rows.map((r) => r.querySelector('span')?.className)).toEqual(['text-success', 'text-danger']);
+    expect(rows[0].textContent).toContain('✔ A projekt célja – megvan');
+    expect(rows[1].textContent).toContain('✘ Adatbázis-dump – hiányzik');
+    expect(rows[1].textContent).toContain('Nincs .sql.');
+    expect(el.querySelector('[data-testid="review-2"]')?.textContent).toContain('Dokumentáció: 2/5');
+    expect(el.querySelector('[data-testid="review-2"] [data-testid="review-docs"]')).toBeNull();
+  });
+
   it('csapatmunka: a törölt felhasználó és az import külön sor és külön heti kulcs (deleted / import)', async () => {
     const { fixture, api, el } = setup();
     api.activity.mockReturnValue(of({

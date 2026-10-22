@@ -193,6 +193,15 @@ const MAX_POLLS = 36;
                     @if (x.result; as res) {
                       @if (res.summary) { <p>{{ res.summary }}</p> }
                       <ul class="list-disc pl-5">@for (c of res.criteria; track c.key) { <li><strong>{{ c.label }}: {{ c.score }}/5</strong> – {{ c.text }}</li> }</ul>
+                      @if (res.docsChecklist; as docs) {
+                        <p class="font-semibold">Dokumentáció – a 7 kötelező elem</p>
+                        <ul class="break-words" data-testid="review-docs">
+                          @for (i of docs; track i.key) {
+                            <li><span [class]="i.present ? 'text-success' : 'text-danger'" aria-hidden="true">{{ i.present ? '✔' : '✘' }}</span> {{ i.label }} – {{ i.present ? 'megvan' : 'hiányzik' }}
+                              @if (i.note) { <span class="block text-xs text-text-muted">{{ i.note }}</span> }</li>
+                          }
+                        </ul>
+                      }
                       @for (s of res.suggestions; track $index) {
                         <p class="break-words" [class.text-danger]="s.severity === 'hiba'"><code>{{ s.path }}:{{ s.line }}</code> {{ severityLabel(s) }}: {{ s.text }}</p>
                       }
