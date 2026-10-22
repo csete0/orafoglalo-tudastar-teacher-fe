@@ -153,6 +153,8 @@ export const routes: Routes = [
         data: { wide: true },
         loadComponent: () =>
           import('./pages/feladatsorok/feladatsor-szerkeszto.component').then((m) => m.FeladatsorSzerkesztoComponent),
+        // UI-TT-238: mentetlen módosítás (Alapadatok, feladat-szerkesztés, új feladat űrlap…) elhagyás előtt megerősítést kér.
+        canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
       },
       {
         path: ':id/eredmenyek',

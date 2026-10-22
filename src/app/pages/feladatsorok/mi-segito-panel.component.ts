@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { AiCodeTaskQuotaDto } from '../../models/ai-code-task.model';
 import { OfficeFileKind } from '../../models/office-task.model';
 import { RubricQuotaDto } from '../../models/teacher-content.model';
@@ -27,7 +28,11 @@ export interface MiSegitoSelection {
 export interface QuotaState {
   usage: string | null;
   blocked: string | null;
+  /** Az első keret-válasz még nem érkezett meg: a prémiumhoz kötött gomb addig nem kattintható (UI-TT-239). */
+  pending?: boolean;
 }
+
+const PENDING: QuotaState = { usage: null, blocked: null, pending: true };
 
 /** Ismeretlen keret (hiba, nincs válasz) → nincs szám és nincs tiltás: a dialógus maga is kezeli a keretet. */
 export function quotaState(quota: AiHelperQuotaItemDto | null | undefined, premium: boolean | undefined): QuotaState {
@@ -91,7 +96,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
         @if (selection()?.programming) {
           <div>
             <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-              [disabled]="takedown() || !!code().blocked" (click)="aiTaskRequested.emit('complete')" data-testid="ai-complete-open">
+              [disabled]="takedown() || !!code().blocked || !!code().pending" (click)="aiTaskRequested.emit('complete')" data-testid="ai-complete-open">
               Hiányzó részek pótlása
             </button>
             <ng-container *ngTemplateOutlet="hint; context: { $implicit: code(), id: 'complete', text: 'mintamegoldás, kódrészletek, bemenet' }" />
@@ -114,7 +119,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
 
         <div>
           <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-            [disabled]="takedown() || !!code().blocked" (click)="aiTaskRequested.emit('new')" data-testid="ai-new-open">
+            [disabled]="takedown() || !!code().blocked || !!code().pending" (click)="aiTaskRequested.emit('new')" data-testid="ai-new-open">
             Új programozási feladat
           </button>
           <ng-container *ngTemplateOutlet="hint; context: { $implicit: code(), id: 'new', text: 'mintamegoldással, lefuttatva' }" />
@@ -130,7 +135,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
               }
             </select>
             <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm shrink-0"
-              [disabled]="takedown() || !!office().blocked" (click)="officeTaskRequested.emit(officeKind())" data-testid="office-task-open">
+              [disabled]="takedown() || !!office().blocked || !!office().pending" (click)="officeTaskRequested.emit(officeKind())" data-testid="office-task-open">
               Megnyitás
             </button>
           </div>
@@ -139,7 +144,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
 
         <div>
           <button type="button" class="btn btn-ghost w-full justify-start !px-3 !py-1.5 text-sm"
-            [disabled]="takedown() || !!desktop().blocked" (click)="desktopTaskRequested.emit()" data-testid="desktop-task-open">
+            [disabled]="takedown() || !!desktop().blocked || !!desktop().pending" (click)="desktopTaskRequested.emit()" data-testid="desktop-task-open">
             Asztali feladatsor témából
           </button>
           <ng-container *ngTemplateOutlet="hint; context: { $implicit: desktop(), id: 'desktop', text: 'WPF / WinForms' }" />
@@ -200,16 +205,28 @@ export class MiSegitoPanelComponent {
   readonly officeKinds = OFFICE_KINDS;
   readonly officeKind = signal<OfficeFileKind>('excel');
 
-  private readonly helperQuota = signal<AiHelperQuotaDto | null>(null);
-  private readonly rubricQuota = signal<RubricQuotaDto | null>(null);
-  private readonly codeQuota = signal<AiCodeTaskQuotaDto | null>(null);
+  /** undefined = az első válasz még nem jött meg; null = ismeretlen (hiba). */
+  private readonly helperQuota = signal<AiHelperQuotaDto | null | undefined>(undefined);
+  private readonly rubricQuota = signal<RubricQuotaDto | null | undefined>(undefined);
+  private readonly codeQuota = signal<AiCodeTaskQuotaDto | null | undefined>(undefined);
 
   readonly rubric = computed(() => quotaState(this.rubricQuota(), undefined));
-  readonly code = computed(() => quotaState(this.codeQuota(), this.codeQuota()?.isPremium));
-  readonly office = computed(() => quotaState(this.helperQuota()?.officeTask, this.helperQuota()?.premium));
-  readonly desktop = computed(() => quotaState(this.helperQuota()?.desktopTask, this.helperQuota()?.premium));
+  readonly code = computed(() => {
+    const quota = this.codeQuota();
+    return quota === undefined ? PENDING : quotaState(quota, quota?.isPremium);
+  });
+  readonly office = computed(() => {
+    const quota = this.helperQuota();
+    return quota === undefined ? PENDING : quotaState(quota?.officeTask, quota?.premium);
+  });
+  readonly desktop = computed(() => {
+    const quota = this.helperQuota();
+    return quota === undefined ? PENDING : quotaState(quota?.desktopTask, quota?.premium);
+  });
 
   private lastDialogOpen: boolean | null = null;
+  /** A futó keret-kérések: új reload() előtt lemondjuk őket, így egy késve érkező régi válasz nem írja felül az újat. */
+  private loads = new Subscription();
 
   constructor() {
     // Első futáskor (init) és minden dialógus-bezáráskor (true → false) egyszer töltjük a három keretet.
@@ -222,8 +239,10 @@ export class MiSegitoPanelComponent {
 
   /** A három keret újratöltése - a szerkesztő hívja a nem dialógusos MI-használat után is (inline szempontlista-vázlat). */
   reload(): void {
-    this.reportService.getAiHelperQuota().subscribe({ next: (q) => this.helperQuota.set(q), error: () => this.helperQuota.set(null) });
-    this.rubricService.getRubricQuota().subscribe({ next: (q) => this.rubricQuota.set(q), error: () => this.rubricQuota.set(null) });
-    this.aiCodeTaskService.getQuota().subscribe({ next: (q) => this.codeQuota.set(q), error: () => this.codeQuota.set(null) });
+    this.loads.unsubscribe();
+    this.loads = new Subscription();
+    this.loads.add(this.reportService.getAiHelperQuota().subscribe({ next: (q) => this.helperQuota.set(q), error: () => this.helperQuota.set(null) }));
+    this.loads.add(this.rubricService.getRubricQuota().subscribe({ next: (q) => this.rubricQuota.set(q), error: () => this.rubricQuota.set(null) }));
+    this.loads.add(this.aiCodeTaskService.getQuota().subscribe({ next: (q) => this.codeQuota.set(q), error: () => this.codeQuota.set(null) }));
   }
 }

@@ -86,7 +86,7 @@ describe('összesítő számítások', () => {
 describe('CsoportAttekintesComponent', () => {
   const inDays = (n: number) => new Date(Date.now() + n * DAY).toISOString();
 
-  interface SetupOpts { quizError?: boolean; activityError?: boolean; teamsError?: number; noTeams?: boolean; showTerkep?: boolean }
+  interface SetupOpts { quizError?: boolean; taskSetError?: boolean; projectError?: boolean; activityError?: boolean; teamsError?: number; noTeams?: boolean; showTerkep?: boolean }
 
   function setup(opts: SetupOpts = {}) {
     const fail = <T>(status = 500): Observable<T> => throwError(() => ({ status }));
@@ -103,13 +103,13 @@ describe('CsoportAttekintesComponent', () => {
           { assignmentId: 2, quizId: 21, quizTitle: 'Határidő nélkül', dueAt: null },
           { assignmentId: 3, quizId: 22, quizTitle: 'Lejárt kvíz', dueAt: inDays(-2) },
         ]))) } },
-        { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn(() => of([
+        { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn(() => opts.taskSetError ? fail() : of([
           { assignmentId: 5, taskSetId: 50, taskSetTitle: 'Témazáró', isTest: true, dueAt: inDays(1) },
           { assignmentId: 6, taskSetId: 60, taskSetTitle: 'Gyakorló sor', dueAt: inDays(3) },
           { assignmentId: 7, taskSetId: 70, taskSetTitle: 'Múlt heti dolgozat', isTest: true, dueAt: inDays(-5) },
           { assignmentId: 8, taskSetId: 80, taskSetTitle: 'Közzétett dolgozat', isTest: true, dueAt: inDays(-6), resultsPublishedAt: inDays(-4) },
         ])) } },
-        { provide: TeacherProjectService, useValue: { forGroup: vi.fn(() => of([{ id: 9, projectTitle: 'Büfé', dueAt: inDays(30) }])) } },
+        { provide: TeacherProjectService, useValue: { forGroup: vi.fn(() => opts.projectError ? fail() : of([{ id: 9, projectTitle: 'Büfé', dueAt: inDays(30) }])) } },
         { provide: ReportService, useValue: {
           getGroupActivity,
           getGroupWeakTopics: vi.fn(() => of([
@@ -178,6 +178,18 @@ describe('CsoportAttekintesComponent', () => {
     expect(rows[0].querySelector('a')!.getAttribute('href')).toBe('/dolgozatok/5');
     expect(rows[1].querySelector('a')!.getAttribute('href')).toBe('/feladatsorok/kvizek/20/eredmenyek');
     expect(rows[2].querySelector('a')!.getAttribute('href')).toBe('/feladatsorok/60/eredmenyek');
+    expect(el.querySelector('[data-testid="deadlines-partial"]')).toBeNull();
+  });
+
+  it('UI-TT-242: ha a három forrás bármelyike hibázik, a meglévő határidők látszanak, de a lista hiányosként jelölve', () => {
+    for (const failing of ['quizError', 'taskSetError', 'projectError'] as const) {
+      TestBed.resetTestingModule();
+      const { el } = setup({ [failing]: true });
+      expect(el.querySelector('[data-testid="deadlines-partial"]'), failing).not.toBeNull();
+      const rows = el.querySelectorAll('section[aria-labelledby="kozelgo-hataridok"] li');
+      expect(rows.length, failing).toBeGreaterThan(0);
+      expect(el.textContent, failing).not.toContain('nincs lejáró határidő');
+    }
   });
 
   it('gyenge témák: az első 3 lefelé kerekített %-kal, a gomb az Eredmények#gyenge-temak szakaszra visz', () => {

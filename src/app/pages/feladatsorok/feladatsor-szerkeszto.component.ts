@@ -91,6 +91,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, MiSegitoPanelComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
@@ -1352,6 +1353,56 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.schoolStore.loadMine();
   }
 
+  /** A feladatsor törlése után a lista felé navigálás nem kérdez rá a (már értelmetlen) piszkozatokra. */
+  private leaveWithoutAsking = false;
+
+  /**
+   * UI-TT-238: van-e mentetlen módosítás - Alapadatok, nyitott feladat- vagy részfeladat-szerkesztés, kitöltött „Új feladat” /
+   * „Új részfeladat” űrlap, mentetlen kódrészlet.
+   */
+  hasUnsavedChanges(): boolean {
+    const detail = this.store.selectedDetail();
+    if (!detail) return false;
+    const meta = this.metadataDraft();
+    if (meta && (meta.title !== detail.title || meta.description !== detail.description || meta.levelId !== detail.levelId
+      || meta.subjectCategoryId !== (detail.subjectCategoryId ?? null)
+      || [...meta.requiredSkillIds].sort().join() !== [...(detail.requiredSkillIds ?? [])].sort().join())) return true;
+
+    const task = detail.tasks.find((t) => t.id === this.editingTaskId());
+    const taskDraft = task && this.editTaskDrafts[task.id];
+    if (task && taskDraft && (taskDraft.title !== task.title || taskDraft.description !== (task.description ?? '')
+      || taskDraft.maxPoints !== task.maxPoints || taskDraft.taskOrder !== task.taskOrder
+      || taskDraft.taskTypeId !== this.taskTypeIdFor(task))) return true;
+
+    const solution = detail.tasks.flatMap((t) => t.subTasks).find((s) => s.id === this.editingSolutionId());
+    const solutionDraft = solution && this.editSolutionDrafts[solution.id];
+    if (solution && solutionDraft
+      && (solutionDraft.description !== (solution.description ?? '') || solutionDraft.points !== (solution.points ?? 0))) return true;
+
+    return Object.values(this.newTaskDrafts).some((d) => d.title.trim() || d.description.trim())
+      || Object.values(this.newSolutionDrafts).some((d) => d.description.trim())
+      || this.dirtyDraftKeys().size > 0;
+  }
+
+  /** Route canDeactivate: mentetlen módosításnál megerősítés (SPA-navigáció). */
+  canLeave(): boolean | Promise<boolean> {
+    if (this.leaveWithoutAsking || !this.hasUnsavedChanges()) return true;
+    return this.confirmService.ask({
+      title: 'Elveted a módosításokat?',
+      message: 'A feladatsoron mentetlen módosításaid vannak. Ha most továbblépsz, elvesznek.',
+      confirmLabel: 'Elvetem',
+      cancelLabel: 'Maradok',
+      danger: true,
+    });
+  }
+
+  /** Újratöltés / lap bezárása: a böngésző saját megerősítése. */
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.leaveWithoutAsking || !this.hasUnsavedChanges()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
   ngOnDestroy(): void {
     for (const url of Object.values(this.resolvedDownloadUrls())) {
       this.authorizedFileService.revoke(url);
@@ -1542,6 +1593,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.store.deleteTaskSet(id, () => {
       this.toastService.success('Feladatsor törölve.');
       // A szerkesztő-oldal egy már nem létező feladatsorra mutatna - vissza a listára.
+      this.leaveWithoutAsking = true;
       this.router.navigate(['/feladatsorok']);
     });
   }
