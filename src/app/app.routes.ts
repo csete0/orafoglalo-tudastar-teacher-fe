@@ -129,6 +129,28 @@ export const routes: Routes = [
         // El nem fogadott AI-javaslatok (csak a böngészőben élnek) elhagyás előtt megerősítést kérnek.
         canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
       },
+      // Szóbeli (PATRICKS-SZOBELI-VIZSGA-2-FAZIS-MEGVALOSITAS.md, T11): a fülsáv negyedik füle; a ':id/...' minták ELŐTT.
+      {
+        path: 'szobeli',
+        loadComponent: () =>
+          import('./pages/feladatsorok/szobeli-temak-lista.component').then((m) => m.SzobeliTemakListaComponent),
+      },
+      {
+        path: 'szobeli/uj',
+        loadComponent: () =>
+          import('./pages/feladatsorok/szobeli-tema-vazlat.component').then((m) => m.SzobeliTemaVazlatComponent),
+      },
+      {
+        path: 'szobeli/kiadas/:id',
+        data: { wide: true },
+        loadComponent: () =>
+          import('./pages/feladatsorok/szobeli-eredmenyek.component').then((m) => m.SzobeliEredmenyekComponent),
+      },
+      {
+        path: 'szobeli/:id',
+        loadComponent: () =>
+          import('./pages/feladatsorok/szobeli-tema-szerkeszto.component').then((m) => m.SzobeliTemaSzerkesztoComponent),
+      },
       {
         path: 'kvizek/:id/szerkesztes',
         loadComponent: () =>

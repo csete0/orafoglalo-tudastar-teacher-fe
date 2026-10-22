@@ -8,6 +8,7 @@ import { CategoryService } from '../../services/category/category.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { PublicCategoryDto } from '../../models/category.model';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { TeacherOralExamService } from '../../services/teacher-oral-exam/teacher-oral-exam.service';
 
 describe('FeladatsorokListaComponent', () => {
   let storeMock: {
@@ -33,6 +34,7 @@ describe('FeladatsorokListaComponent', () => {
       imports: [FeladatsorokListaComponent],
       providers: [
         provideRouter([]),
+        { provide: TeacherOralExamService, useValue: { available: signal(false) } },
         { provide: TeacherTaskSetStore, useValue: storeMock },
         { provide: CategoryService, useValue: { getAll: () => of([]) } },
       ],

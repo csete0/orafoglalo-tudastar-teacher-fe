@@ -23,6 +23,10 @@ export interface AiHelperQuotaDto {
   repoReview?: AiHelperQuotaItemDto;
   /** Asztali (WPF/WinForms) feladatsor témából: egy egység = egy sikeres generálás. */
   desktopTask?: AiHelperQuotaItemDto;
+  /** Szóbeli tételvázlat a tanár anyagából: egy egység = egy vázlat. */
+  oralDraft?: AiHelperQuotaItemDto;
+  /** Szóbeli dolgozatként kiadott szóbeli: egy egység = egy diák számító szóbelije. */
+  oralExam?: AiHelperQuotaItemDto;
 }
 
 export const AI_HELPER_PREMIUM_REQUIRED = 'AiHelperPremiumRequired';

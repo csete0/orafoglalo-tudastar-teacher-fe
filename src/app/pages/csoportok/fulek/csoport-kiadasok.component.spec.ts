@@ -8,6 +8,9 @@ import { TeacherProjectService } from '../../../services/teacher-project/teacher
 import { KahootHostService } from '../../../services/kahoot-host/kahoot-host.service';
 import { TeacherGroupAssignmentDto } from '../../../models/teacher-quiz.model';
 import { TeacherGroupTaskSetAssignmentDto } from '../../../models/teacher-content.model';
+import { HttpErrorResponse } from '@angular/common/http';
+import { TeacherOralExamService } from '../../../services/teacher-oral-exam/teacher-oral-exam.service';
+import { TeacherOralAssignmentDto } from '../../../models/teacher-oral-exam.model';
 
 const hours = (h: number) => new Date(Date.now() + h * 3600 * 1000).toISOString();
 
@@ -27,8 +30,14 @@ describe('CsoportKiadasokComponent', () => {
     assignmentId: 2, quizId: 20, quizTitle: 'Törtek', questionCount: 8, assignedAt: '', completedMemberCount: 1, memberCount: 3, hasActiveLiveRoom: false,
   };
 
-  function setup(taskSets: TeacherGroupTaskSetAssignmentDto[] = [], opts: { quizError?: boolean } = {}) {
+  const oral: TeacherOralAssignmentDto = {
+    id: 9, topicId: 3, profileSlug: null, title: 'A fotoszintézis', groupId: 1, groupName: '9.A', mode: 'exam', voiceMinutes: 10,
+    opensAt: null, dueAt: null, createdAt: '2026-10-22T08:00:00', revokedAt: null, resultsPublishedAt: null, studentCount: 2,
+  };
+
+  function setup(taskSets: TeacherGroupTaskSetAssignmentDto[] = [], opts: { quizError?: boolean; oral?: unknown } = {}) {
     const kahoot = { createRoom: vi.fn(() => of({ kahootSessionId: 77 })) };
+    const oralApi = { assignments: vi.fn(() => opts.oral ?? of([oral])) };
     TestBed.configureTestingModule({
       imports: [CsoportKiadasokComponent],
       providers: [
@@ -37,12 +46,13 @@ describe('CsoportKiadasokComponent', () => {
         { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn(() => of(taskSets)) } },
         { provide: TeacherProjectService, useValue: { forGroup: vi.fn(() => of([])) } },
         { provide: KahootHostService, useValue: kahoot },
+        { provide: TeacherOralExamService, useValue: oralApi },
       ],
     });
     const fixture = TestBed.createComponent(CsoportKiadasokComponent);
     fixture.componentRef.setInput('groupId', 1);
     fixture.detectChanges();
-    return { fixture, c: fixture.componentInstance, el: fixture.nativeElement as HTMLElement, kahoot };
+    return { fixture, c: fixture.componentInstance, el: fixture.nativeElement as HTMLElement, kahoot, oralApi };
   }
 
   it('B4: a feladatsor-kiadások listája megjelenik; a Kvízek szakasz #kvizek horgonnyal', () => {
@@ -71,5 +81,26 @@ describe('CsoportKiadasokComponent', () => {
     ([...el.querySelectorAll('button')] as HTMLButtonElement[]).find((b) => b.textContent?.includes('Élő indítás'))!.click();
     expect(kahoot.createRoom).toHaveBeenCalledWith(20, 1);
     expect(navigate).toHaveBeenCalledWith(['/feladatsorok', 'kvizek', 20, 'elo', 77]);
+  });
+
+  it('Szóbeli szakasz: a csoport szóbeli-kiadásai móddal és „Eredmények” linkkel', () => {
+    const { el, oralApi } = setup();
+    expect(oralApi.assignments).toHaveBeenCalledWith(1);
+    const section = el.querySelector('[data-testid="group-oral-assignments"]')!;
+    expect(section.textContent).toContain('A fotoszintézis');
+    expect(section.textContent).toContain('Szóbeli dolgozat');
+    expect(section.textContent).toContain('2 diák indította');
+    expect(section.querySelector('a')!.getAttribute('href')).toBe('/feladatsorok/szobeli/kiadas/9');
+  });
+
+  it('kikapcsolt szóbelinél (404 FeatureDisabled) nincs Szóbeli szakasz; más hibánál hibaüzenet', () => {
+    const disabled = new HttpErrorResponse({ status: 404, error: { errorType: 'FeatureDisabled' } });
+    const { el } = setup([], { oral: throwError(() => disabled) });
+    expect(el.querySelector('[data-testid="group-oral-assignments"]')).toBeNull();
+    expect(el.textContent).not.toContain('Szóbeli');
+
+    TestBed.resetTestingModule();
+    const failing = setup([], { oral: throwError(() => new HttpErrorResponse({ status: 500 })) });
+    expect(failing.el.textContent).toContain('A szóbeli kiadások betöltése sikertelen.');
   });
 });

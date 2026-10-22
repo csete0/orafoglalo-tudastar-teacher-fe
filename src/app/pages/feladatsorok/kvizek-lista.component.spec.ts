@@ -5,6 +5,7 @@ import { TeacherQuizDto } from '../../models/teacher-quiz.model';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import { ToastService } from '../../shared/toast/toast.service';
 import { KvizekListaComponent } from './kvizek-lista.component';
+import { TeacherOralExamService } from '../../services/teacher-oral-exam/teacher-oral-exam.service';
 
 function makeQuiz(overrides: Partial<TeacherQuizDto> = {}): TeacherQuizDto {
   return {
@@ -49,6 +50,7 @@ describe('KvizekListaComponent', () => {
       imports: [KvizekListaComponent],
       providers: [
         provideRouter([]),
+        { provide: TeacherOralExamService, useValue: { available: signal(false) } },
         { provide: ActivatedRoute, useValue: { snapshot: { data: routeData } } },
         { provide: TeacherQuizStore, useValue: storeMock },
         { provide: ToastService, useValue: { success: vi.fn() } },
