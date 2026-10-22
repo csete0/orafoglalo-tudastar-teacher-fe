@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
+import { AiCodeTaskQuotaDto } from '../../models/ai-code-task.model';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
@@ -150,6 +151,35 @@ describe('MiSegitoPanelComponent', () => {
     expect(button(el, 'sql-queries-open').disabled).toBe(true);
     expect(button(el, 'ai-sql-files-open').disabled).toBe(true);
     expect(button(el, 'ai-new-open').disabled).toBe(false);
+  });
+
+  it('UI-TT-239: amíg a keret-válasz nem érkezett meg, a prémiumhoz kötött gombok nem kattinthatók; ingyenes tanárnál utána is tiltva', () => {
+    const helperResponse = new Subject<AiHelperQuotaDto>();
+    const codeResponse = new Subject<AiCodeTaskQuotaDto>();
+    getAiHelperQuota.mockReturnValue(helperResponse);
+    getQuota.mockReturnValue(codeResponse);
+    const { fixture, el } = render({ selection: { label: '1. Prog', programming: true, sql: false } });
+    for (const id of ['ai-new-open', 'ai-complete-open', 'office-task-open', 'desktop-task-open']) expect(button(el, id).disabled, id).toBe(true);
+
+    helperResponse.next(helper({ premium: false }));
+    codeResponse.next({ used: 5, limit: 30, month: '2026-10', isPremium: false });
+    fixture.detectChanges();
+    for (const id of ['ai-new-open', 'ai-complete-open', 'office-task-open', 'desktop-task-open']) expect(button(el, id).disabled, id).toBe(true);
+    expect(el.querySelector('[data-testid="ai-quota-new"]')).toBeNull();
+    expect(text(el, 'ai-quota-blocked-new')).toBe(AI_HELPER_PREMIUM_TEXT);
+  });
+
+  it('UI-TT-239: egymást átfedő újratöltéseknél a késve érkező régi válasz nem írja felül az újat', () => {
+    const first = new Subject<AiCodeTaskQuotaDto>();
+    const second = new Subject<AiCodeTaskQuotaDto>();
+    getQuota.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const { fixture, el } = render();
+    fixture.componentInstance.reload();
+    second.next({ used: 0, limit: 0, month: '2026-10', isPremium: false });
+    first.next({ used: 5, limit: 30, month: '2026-10', isPremium: true });
+    fixture.detectChanges();
+    expect(button(el, 'ai-new-open').disabled).toBe(true);
+    expect(text(el, 'ai-quota-blocked-new')).toBe(AI_HELPER_PREMIUM_TEXT);
   });
 
   it('quotaState: prémium hiánya előbb, mint a keret; ismeretlen keretnél semmi', () => {
