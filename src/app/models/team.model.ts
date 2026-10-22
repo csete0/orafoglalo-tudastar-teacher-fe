@@ -27,12 +27,21 @@ export interface TeamFile { path: string; content: string | null; binary: boolea
 
 /** BE: TeamMilestoneService.cs. */
 export interface TeamMilestoneTest { passed: boolean; output: string; at: string; preset: string; }
-export interface TeamMilestoneCheck { at: string; branch: string; truncated: boolean; items: { pattern: string; matched: boolean; example: string | null }[]; allMatched: boolean; test: TeamMilestoneTest | null; }
+/** BE: TeamDocsCheck.cs – a vizsgaremek-dokumentáció egy kötelező eleme: fejezetcím/bizonyíték (`found`), csak említés (`mentioned`), hiányzik. */
+export interface TeamDocsCheckItem { key: string; label: string; status: 'found' | 'mentioned' | 'missing'; where: string | null; hint: string; }
+export interface TeamDocsCheck { at: string; items: TeamDocsCheckItem[]; sources: string[]; warnings: string[]; }
+/** `docs`: csak a „docs” mérföldkőnél (a régi ellenőrzésekben nincs). */
+export interface TeamMilestoneCheck {
+  at: string; branch: string; truncated: boolean; items: { pattern: string; matched: boolean; example: string | null }[]; allMatched: boolean; test: TeamMilestoneTest | null;
+  docs?: TeamDocsCheck | null;
+}
 export interface TeamMilestone {
   id: number; kind: 'db' | 'rest' | 'desktop' | 'mobile' | 'tests' | 'docs' | 'submit' | 'custom'; title: string; sortOrder: number; dueDate: string | null;
-  effectiveDueDate: string | null; overdue: boolean; requiredPaths: string[]; testPreset: 'python-unittest' | 'node-test' | null; testDir: string | null;
+  effectiveDueDate: string | null; overdue: boolean; requiredPaths: string[]; testPreset: string | null; testDir: string | null;
   lastCheck: TeamMilestoneCheck | null; tickedAt: string | null; tickedByName: string | null; teacherNote: string | null; canEdit: boolean; canTick: boolean;
 }
+/** A tesztfuttató-legördülő sora (BE: GET api/teams/test-runners); a nem elérhető (`available: false`) a szerveren még nem fut, nem választható. */
+export interface TestRunnerOption { key: string; label: string; language: string; available: boolean; }
 export interface TeamMilestoneEdit {
   title?: string | null; dueDate?: string | null; clearDueDate?: boolean; requiredPaths?: string[] | null; testPreset?: string | null; testDir?: string | null; clearTest?: boolean;
 }
@@ -40,7 +49,13 @@ export interface TeamMilestoneEdit {
 /** BE: TeamRepoReviewService.cs, RepoReviewPrompt.cs. */
 export interface CodeSuggestion { path: string; line: number; lineText: string; severity: 'hiba' | 'javaslat' | 'dicséret'; text: string; }
 export interface RepoReviewCriterion { key: 'quality' | 'clean' | 'docs' | 'tests'; label: string; score: number; text: string; }
-export interface RepoReviewResult { summary: string | null; criteria: RepoReviewCriterion[]; suggestions: CodeSuggestion[]; reviewedPaths: string[]; truncatedPaths: string[]; skippedFiles: number; }
+/** A vizsgaremek-dokumentáció egy kötelező eleme az MI szerint. */
+export interface RepoReviewDocsItem { key: string; label: string; present: boolean; note: string; }
+/** `docsChecklist`: a hét kötelező dokumentáció-elem; a régi (dokumentáció-kiterjesztés előtti) átnézésekben nincs / null. */
+export interface RepoReviewResult {
+  summary: string | null; criteria: RepoReviewCriterion[]; suggestions: CodeSuggestion[]; reviewedPaths: string[]; truncatedPaths: string[]; skippedFiles: number;
+  docsChecklist?: RepoReviewDocsItem[] | null;
+}
 export interface TeamRepoReview {
   id: number; status: 'queued' | 'running' | 'done' | 'failed' | 'truncated'; branch: string; commitSha: string | null; requestedByName: string | null;
   payerKind: 'teacher' | 'system'; createdAt: string; finishedAt: string | null; error: string | null; counted: boolean; result: RepoReviewResult | null;
