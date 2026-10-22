@@ -7,7 +7,7 @@ import { ReportService } from '../../../services/report/report.service';
 import { LeaderboardStore } from '../../../services/leaderboard/leaderboard.store';
 import { LeaderboardCategory, LeaderboardPeriod } from '../../../models/leaderboard.model';
 import { TeacherWeakTopicDto } from '../../../models/report.model';
-import { IconComponent } from '../../../shared/icon/icon.component';
+import { IconComponent, isIconName } from '../../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../../shared/date-range-filter/date-range-filter.component';
 import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../../shared/sort-header/sort-header.component';
@@ -138,8 +138,8 @@ import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-ja
               <li class="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
                   [style.background-color]="topic.topicColor ? topic.topicColor + '22' : 'var(--color-bg-element)'"
                   [style.color]="topic.topicColor ?? 'var(--color-text-primary)'">
-                @if (topic.topicIcon) {
-                  <app-icon [name]="$any(topic.topicIcon)" class="w-3.5 h-3.5 block shrink-0" />
+                @if (isIconName(topic.topicIcon)) {
+                  <app-icon [name]="topic.topicIcon" class="w-3.5 h-3.5 block shrink-0" />
                 }
                 {{ topic.topicName }}
                 <span class="opacity-70">{{ pct(topic.successRate) }}% · {{ topic.studentCount }} tanuló</span>
@@ -160,6 +160,7 @@ import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-ja
   `,
 })
 export class CsoportEredmenyekComponent implements OnInit {
+  readonly isIconName = isIconName;
   readonly groupId = input.required<number>();
   /** A dátumszűrő kulcsa és tartománya - a szülőben él, hogy fülváltás után is megmaradjon. */
   readonly rangeKey = model<ReportRangeKey>(DEFAULT_RANGE_KEY);

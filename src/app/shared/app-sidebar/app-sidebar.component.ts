@@ -151,6 +151,7 @@ function readCollapsed(): boolean | null {
     @if (menuOpen()) {
       <div class="lg:hidden fixed inset-0 z-40 bg-black/40 print:hidden" (click)="menuOpen.set(false)"></div>
       <div #panel id="mobile-drawer" data-testid="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menü"
+        (keydown.tab)="trapFocus($event)" (keydown.shift.tab)="trapFocus($event)"
         class="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] flex flex-col bg-bg-panel border-r border-border-default shadow-lg print:hidden">
         <nav aria-label="Fő navigáció (mobil)" class="flex-1 min-h-0 overflow-y-auto px-2 py-3">
           <ng-container [ngTemplateOutlet]="navList" [ngTemplateOutletContext]="{ $implicit: false }" />
@@ -269,6 +270,18 @@ export class AppSidebarComponent {
     if (!this.menuOpen()) return;
     this.menuOpen.set(false);
     this.menuBtn()?.nativeElement.focus();
+  }
+
+  /** Fókuszcsapda (aria-modal): Tab az utolsó elemről az elsőre, Shift+Tab az elsőről az utolsóra ugrik. */
+  trapFocus(event: Event): void {
+    const items = this.panel()?.nativeElement.querySelectorAll<HTMLElement>('a[href], button');
+    if (!items?.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const backward = (event as KeyboardEvent).shiftKey;
+    if (document.activeElement !== (backward ? first : last)) return;
+    event.preventDefault();
+    (backward ? last : first).focus();
   }
 
   logout(): void {

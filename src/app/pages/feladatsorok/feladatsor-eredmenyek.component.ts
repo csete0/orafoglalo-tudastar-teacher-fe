@@ -143,7 +143,7 @@ import {
             </thead>
             <tbody>
               @for (row of results.students; track row.userId) {
-                <tr [class.opacity-50]="!row.hasSession && !row.hasPractice">
+                <tr [class.opacity-70]="!row.hasSession && !row.hasPractice">
                   <td class="sticky-col whitespace-nowrap">
                     <a [routerLink]="['/diakok', row.userId]" class="text-primary hover:underline">{{ row.name }}</a>
                   </td>

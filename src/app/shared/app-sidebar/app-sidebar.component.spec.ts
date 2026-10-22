@@ -256,6 +256,24 @@ describe('AppSidebarComponent', () => {
       fixture.nativeElement.remove();
     });
 
+    it('fókuszcsapda: Tab az utolsó elemről az elsőre, Shift+Tab az elsőről az utolsóra', () => {
+      const fixture = create();
+      document.body.appendChild(fixture.nativeElement);
+      fixture.componentInstance.menuOpen.set(true);
+      fixture.detectChanges();
+
+      const items = drawer(fixture)!.querySelectorAll<HTMLElement>('a[href], button');
+      const first = items[0];
+      const last = items[items.length - 1];
+      last.focus();
+      last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(document.activeElement).toBe(first);
+
+      first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+      expect(document.activeElement).toBe(last);
+      fixture.nativeElement.remove();
+    });
+
     it('BUG UI-TT-189: a draweren kívüli kattintás bezárja, a belső nem', () => {
       const fixture = create();
       fixture.componentInstance.menuOpen.set(true);

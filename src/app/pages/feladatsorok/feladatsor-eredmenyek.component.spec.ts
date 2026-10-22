@@ -226,7 +226,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const nagyRow = Array.from(rows).find((r) => (r as HTMLElement).textContent?.includes('Nagy Béla')) as HTMLElement;
 
     expect(nagyRow.textContent).toContain('nem kezdte el');
-    expect(nagyRow.className).toContain('opacity-50');
+    expect(nagyRow.className).toContain('opacity-70');
   });
 
   it('csak gyakorolt diáknál "csak gyakorolt" jelenik meg, a cellában külön gyakorló jelzés, az összesítő nem változik', () => {
@@ -252,7 +252,7 @@ describe('FeladatsorEredmenyekComponent', () => {
 
     expect(bela.textContent).toContain('csak gyakorolt');
     expect(bela.textContent).not.toContain('nem kezdte el');
-    expect(bela.className).not.toContain('opacity-50');
+    expect(bela.className).not.toContain('opacity-70');
     const badges = bela.querySelectorAll('[data-testid="practice-badge"]');
     expect(badges.length).toBe(1);
     expect(badges[0].textContent).toContain('gyakorlás 3/5');
