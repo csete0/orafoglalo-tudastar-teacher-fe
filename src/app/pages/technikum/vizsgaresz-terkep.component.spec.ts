@@ -14,7 +14,7 @@ const cell = (over: Partial<HeatmapCellDto>): HeatmapCellDto => ({
 });
 
 const heatmap: TechnikumHeatmapDto = {
-  groupId: 12, groupName: '13.T', theoryMaxPoints: 40,
+  groupId: 12, groupName: '13.T', theoryMaxPoints: 40, testsOnly: false,
   parts: [{ key: 'console', maxPoints: 15 }, { key: 'gui', maxPoints: 10 }, { key: 'web', maxPoints: 10 }, { key: 'api', maxPoints: 15 }, { key: 'client', maxPoints: 15 }],
   tests: [
     { assignmentId: 7, projectSlug: 'konyvtar', projectTitle: 'Könyvtár', opensAt: null, dueAt: '2026-10-10T12:00:00', closedSessions: 4, resultsPublished: false },
@@ -87,6 +87,23 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="theory-55"]')!.className).toContain('bg-danger-subtle');
     expect(el.querySelector('[data-testid="theory-55"]')!.textContent!.trim()).toBe('5/40');
     expect(row.querySelectorAll('.heat-cell--empty').length).toBe(1);
+    expect(el.querySelector('[data-testid="tests-only-note"]')).toBeNull();
+  });
+
+  it('prémium nélkül (testsOnly) jelzi, hogy csak a kiadott dolgozatok eredménye látszik; a dolgozat megnyitható és közzétehető', () => {
+    const api = { heatmap: vi.fn(() => of({ ...structuredClone(heatmap), testsOnly: true })), snapshot: vi.fn(() => of(snapshot)), comments: vi.fn(() => of([])) };
+    TestBed.configureTestingModule({
+      imports: [VizsgareszTerkepComponent],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }],
+    });
+    const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+    fixture.componentRef.setInput('groupId', 12);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tests-only-note"]')!.textContent).toContain('már kiadott technikumi dolgozatok eredménye');
+    expect(el.querySelector('[data-testid="technikum-test-7"] button')!.textContent).toContain('Eredmények közzététele');
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    expect(api.snapshot).toHaveBeenCalledWith(31);
   });
 
   it('a végleg sikertelen bírálatú dolgozat-rész 0 pontként, külön jelölve (és nem a sikereseké)', async () => {

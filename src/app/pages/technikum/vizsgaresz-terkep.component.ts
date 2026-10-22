@@ -41,6 +41,12 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
     @if (loading()) {
       <app-local-spinner />
     } @else if (map(); as m) {
+      @if (m.testsOnly) {
+        <p class="text-sm text-text-muted mb-4" role="note" data-testid="tests-only-note">
+          Prémium előfizetés nélkül a csoportnak már kiadott technikumi dolgozatok eredménye látszik: megnyithatod, pontozhatod és
+          közzéteheted. A gyakorlás, a próbavizsga és az elméleti teszt eredménye, valamint új dolgozat kiadása Prémiummal érhető el.
+        </p>
+      }
       @if (m.tests.length) {
         <h3 class="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Technikumi dolgozatok</h3>
         <ul class="space-y-2 mb-6" data-testid="technikum-tests">

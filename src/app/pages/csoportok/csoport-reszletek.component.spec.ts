@@ -12,6 +12,7 @@ import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { GroupSeatStore } from '../../services/group/group-seat.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { GroupDto } from '../../models/group.model';
 import { SchoolDto } from '../../models/school.model';
@@ -226,17 +227,18 @@ describe('CsoportReszletekComponent', () => {
     expect(tabByLabel('Eredmények').getAttribute('aria-selected')).toBe('true');
   });
 
-  it('a Vizsgarész-térkép fül csak prémium tanárnak (api/technikum/me visible) látszik, és a térképet mutatja', () => {
+  it('a Vizsgarész-térkép fül prémium tanárnak (api/technikum/me visible) látszik, és a térképet mutatja', () => {
     configure(makeGroup(), []);
     TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: false, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
     let fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
 
-    // A diák-menü miatt a visible prémium nélkül is igaz (lakattal) - a tanári térkép-fülhöz a hasPremium kell.
+    // A diák-menü miatt a visible prémium nélkül is igaz (lakattal) - prémium nélkül a fül csak kiadott technikumi dolgozatnál kell.
     TestBed.resetTestingModule();
     configure(makeGroup(), []);
     TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
+    TestBed.overrideProvider(TeacherProjectService, { useValue: { forGroup: vi.fn(() => of([{ id: 3, isTest: false }])) } });
     fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('nav').textContent).not.toContain('Vizsgarész-térkép');
@@ -246,6 +248,20 @@ describe('CsoportReszletekComponent', () => {
     TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: true })), heatmap: vi.fn(() => NEVER) } });
     fixture = TestBed.createComponent(CsoportReszletekComponent);
     fixture.detectChanges();
+    const tab = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].find((b: Element) => b.textContent?.trim() === 'Vizsgarész-térkép') as HTMLButtonElement;
+    tab.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-vizsgaresz-terkep')).not.toBeNull();
+  });
+
+  it('lejárt prémiumnál a csoport kiadott technikumi dolgozata miatt a fül megmarad (eredmény, pontozás, közzététel)', () => {
+    configure(makeGroup(), []);
+    const forGroup = vi.fn(() => of([{ id: 3, isTest: false }, { id: 4, isTest: true }]));
+    TestBed.overrideProvider(TeacherTechnikumService, { useValue: { me: vi.fn(() => of({ visible: true, hasPremium: false })), heatmap: vi.fn(() => NEVER) } });
+    TestBed.overrideProvider(TeacherProjectService, { useValue: { forGroup } });
+    const fixture = TestBed.createComponent(CsoportReszletekComponent);
+    fixture.detectChanges();
+    expect(forGroup).toHaveBeenCalledWith(1);
     const tab = [...fixture.nativeElement.querySelectorAll('nav button.tab-btn')].find((b: Element) => b.textContent?.trim() === 'Vizsgarész-térkép') as HTMLButtonElement;
     tab.click();
     fixture.detectChanges();

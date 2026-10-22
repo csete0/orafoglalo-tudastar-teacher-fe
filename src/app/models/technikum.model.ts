@@ -76,6 +76,8 @@ export interface TechnikumHeatmapDto {
   theoryMaxPoints: number;
   tests: HeatmapTestDto[];
   students: HeatmapStudentDto[];
+  /** Prémium nélküli tanár: csak a csoport kiadott dolgozatainak cellái, elméleti teszt nélkül. */
+  testsOnly: boolean;
 }
 
 export interface CaseDetailDto {
