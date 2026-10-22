@@ -33,6 +33,9 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 #     a böngésző már a kapcsolódási kísérlet ELŐTT, csendben blokkolja a /kahoothub
 #     WebSocket-et (élesben derült ki, 2026-09-17: a tanár a "Csatlakozás a játékhoz…"
 #     állapotban ragadt, semmilyen hálózati kérés nem indult, a Console-ban CSP-hiba).
+#   - media-src: az oktatóvideók <video> eleme közvetlenül az API-ról tölt (aláírt URL,
+#     Range-kérésekkel) - prodban ez a www.patricks.hu, nem a tanári app originje; enélkül a
+#     default-src 'self' csendben blokkolná a lejátszást.
 #   - script-src 'self' (unsafe-inline NÉLKÜL): az Angular CLI production build
 #     alapból egy inline onload="this.media='all'" attribútumot szúr be a CSS
 #     <link>-re (kritikus-CSS betöltés-optimalizáció) — ezt ez a szigorú CSP
@@ -41,4 +44,4 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 #     NEM a CSP lazítása (unsafe-inline hozzáadása), hanem az `angular.json`
 #     production/staging konfigurációjában az `optimization.styles.inlineCritical:
 #     false` beállítása, ami megszünteti az inline onload-ot a forrásnál.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://www.patricks.hu wss://www.patricks.hu; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' https://www.patricks.hu; connect-src 'self' https://www.patricks.hu wss://www.patricks.hu; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" always;

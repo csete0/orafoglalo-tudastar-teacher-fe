@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import { AppComponent } from './app.component';
 import { AuthStore } from './services/auth/store/auth.store';
 import { MockExamService } from './services/mock-exam/mock-exam.service';
+import { TutorialVideoService } from './services/tutorial-video/tutorial-video.service';
 
 describe('AppComponent', () => {
   let isAuthenticated: ReturnType<typeof vi.fn>;
@@ -25,6 +26,7 @@ describe('AppComponent', () => {
           },
         },
         { provide: MockExamService, useValue: { getCurrent: () => of(null) } },
+        { provide: TutorialVideoService, useValue: { hasPremium: () => of(true) } },
       ],
     }).compileComponents();
   });

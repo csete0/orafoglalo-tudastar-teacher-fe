@@ -100,6 +100,12 @@ export const routes: Routes = [
       import('./pages/dolgozatok/dolgozat-attekintes.component').then((m) => m.DolgozatAttekintesComponent),
   },
   {
+    // Oktatóvideók (csak Prémium tanárnak - Prémium nélkül az oldal a fizetőfalat mutatja, a menüpont lakattal).
+    path: 'oktatovideok',
+    canActivate: [authGuard, roleGuard('teacher')],
+    loadComponent: () => import('./pages/oktatovideok/oktatovideok.component').then((m) => m.OktatovideokComponent),
+  },
+  {
     path: 'feladatsorok',
     canActivate: [authGuard, roleGuard('teacher')],
     children: [

@@ -5,6 +5,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { MockExamService } from '../../services/mock-exam/mock-exam.service';
+import { TutorialVideoService } from '../../services/tutorial-video/tutorial-video.service';
 import { HeaderDropdownCoordinatorService } from '../header-dropdown-coordinator.service';
 import { IconComponent, IconName } from '../icon/icon.component';
 import { NotificationBellComponent } from '../notification-bell/notification-bell.component';
@@ -13,11 +14,14 @@ export interface NavLink {
   path: string;
   label: string;
   icon: IconName;
+  /** Prémium nélkül lakattal jelenik meg (az oldal a fizetőfalat mutatja). */
+  locked?: boolean;
 }
 
 const MOCK_EXAM_LINK: NavLink = { path: '/probaerettsegi', label: 'Próbaérettségi', icon: 'academic-cap' };
+const TUTORIAL_LINK: NavLink = { path: '/oktatovideok', label: 'Oktatóvideók', icon: 'play' };
 
-/** Menüpontok a makett sorrendjében; a Próbaérettségi csak közzétett eseménynél kerül az Intézményeim elé. */
+/** Menüpontok a makett sorrendjében; a Próbaérettségi csak közzétett eseménynél kerül az Intézményeim elé, az Oktatóvideók mindig a végén. */
 const TEACHER_LINKS: NavLink[] = [
   { path: '/dashboard', label: 'Vezérlőpult', icon: 'chart' },
   { path: '/csoportok', label: 'Csoportok', icon: 'users' },
@@ -78,14 +82,19 @@ function readCollapsed(): boolean | null {
         @for (link of links(); track link.path) {
           <li>
             <a [routerLink]="link.path" [attr.aria-current]="activePath() === link.path ? 'page' : null"
-              [attr.title]="compact ? link.label : null"
+              [attr.title]="compact ? link.label + (link.locked ? ' (Prémium)' : '') : null"
               class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary"
               [class.justify-center]="compact"
               [class]="activePath() === link.path
                 ? 'text-primary font-semibold bg-primary-subtle'
                 : 'text-text-muted hover:text-text-primary hover:bg-bg-element'">
               <app-icon [name]="link.icon" class="w-5 h-5 block shrink-0" />
-              <span [class]="compact ? 'sr-only' : 'truncate'">{{ link.label }}</span>
+              <span [class]="compact ? 'sr-only' : 'truncate flex-1'">{{ link.label }}</span>
+              @if (link.locked) {
+                <app-icon name="lock" data-testid="nav-lock" aria-hidden="true"
+                  class="w-4 h-4 block shrink-0 text-warning" [class.hidden]="compact" />
+                <span class="sr-only">(Prémium)</span>
+              }
             </a>
           </li>
         }
@@ -176,14 +185,20 @@ export class AppSidebarComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dropdownCoordinator = inject(HeaderDropdownCoordinatorService);
   private readonly mockExams = inject(MockExamService);
+  private readonly tutorialVideos = inject(TutorialVideoService);
   readonly authStore = inject(AuthStore);
 
   /** Van közzétett próbaérettségi - csak akkor kap menüpontot. */
   private readonly mockExamActive = signal(false);
+  /** Prémium nélküli tanár: az Oktatóvideók lakattal (hiba / még ismeretlen = lakat nélkül; az oldal úgyis a fizetőfalat mutatja). */
+  private readonly tutorialLocked = signal(false);
+  private tutorialAccessUserId: number | null = null;
   readonly links = computed<NavLink[]>(() => {
     if (!this.authStore.hasTeacherRole()) return [];
-    if (!this.mockExamActive()) return TEACHER_LINKS;
-    return [...TEACHER_LINKS.slice(0, -1), MOCK_EXAM_LINK, TEACHER_LINKS[TEACHER_LINKS.length - 1]];
+    const base = this.mockExamActive()
+      ? [...TEACHER_LINKS.slice(0, -1), MOCK_EXAM_LINK, TEACHER_LINKS[TEACHER_LINKS.length - 1]]
+      : TEACHER_LINKS;
+    return [...base, { ...TUTORIAL_LINK, locked: this.tutorialLocked() }];
   });
 
   private readonly url = signal(this.router.url);
@@ -230,6 +245,17 @@ export class AppSidebarComponent {
       this.mockExams.getCurrent().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: (current) => this.mockExamActive.set(current != null),
         error: () => this.mockExamActive.set(false),
+      });
+    });
+
+    // Oktatóvideók lakatja: tanárnál felhasználónként egyszer lekérjük, van-e Prémium.
+    effect(() => {
+      const userId = this.authStore.currentUser()?.id ?? null;
+      if (!this.authStore.hasTeacherRole() || userId === null || this.tutorialAccessUserId === userId) return;
+      this.tutorialAccessUserId = userId;
+      this.tutorialVideos.hasPremium().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: (hasPremium) => this.tutorialLocked.set(!hasPremium),
+        error: () => this.tutorialLocked.set(false),
       });
     });
 
