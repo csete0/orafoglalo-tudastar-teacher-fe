@@ -64,7 +64,10 @@ export interface OralAssignTarget {
             }
           </div>
           <p class="text-xs text-text-muted mt-1" data-testid="oral-assign-mode-help">
-            @if (mode() === 'exam') {
+            @if (mode() === 'exam' && examBlocked()) {
+              <span class="text-danger" data-testid="oral-assign-premium-required">A szóbeli dolgozat a havi tanári keretedből fogy, ezért Prémium
+                tanári előfizetéssel adható ki. Gyakorlásként most is kiadhatod (a diák a saját keretéből indítja).</span>
+            } @else if (mode() === 'exam') {
               Diákonként 1 egység a havi szóbeli-keretedből@if (examQuota(); as q) { (még {{ remaining(q) }} / {{ q.limit }})}. A diáknak
               nem kell előfizetés, egyszer írhatja meg, az eredményt te teszed közzé.
             } @else {
@@ -94,7 +97,7 @@ export interface OralAssignTarget {
 
         <div class="flex flex-wrap justify-end gap-2">
           <button type="button" class="btn btn-ghost" (click)="closed.emit()">Mégse</button>
-          <button type="submit" class="btn btn-primary" [disabled]="saving() || groupId() == null" data-testid="oral-assign-submit">Kiadás</button>
+          <button type="submit" class="btn btn-primary" [disabled]="saving() || groupId() == null || (mode() === 'exam' && examBlocked())" data-testid="oral-assign-submit">Kiadás</button>
         </div>
       </form>
     </div>
@@ -117,6 +120,11 @@ export class SzobeliKiadasDialogComponent implements OnInit {
   readonly opensAt = signal('');
   readonly dueAt = signal('');
   readonly examQuota = signal<AiHelperQuotaItemDto | null>(null);
+  /**
+   * Prémium nélküli tanárnál a szóbeli dolgozatot egyetlen diák sem tudná elindítani (BE-ORALEXAM-ASSIGNMENT-NONPREMIUM-TEACHER-DEADEND):
+   * a dialógus ezt előre jelzi, és a dolgozat-kiadást nem engedi. Ha a keret nem jön meg, nem tiltunk.
+   */
+  readonly examBlocked = signal(false);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -132,13 +140,19 @@ export class SzobeliKiadasDialogComponent implements OnInit {
     this.voiceMinutes.set(this.target().defaultVoiceMinutes);
     this.groups.loadMine();
     // A keret csak tájékoztatás: ha nem jön meg, a kiadás attól még megy (a diák indításakor számít).
-    this.api.quota().pipe(take(1)).subscribe({ next: (q) => this.examQuota.set(q.oralExam ?? null), error: () => {} });
+    this.api.quota().pipe(take(1)).subscribe({
+      next: (q) => {
+        this.examQuota.set(q.oralExam ?? null);
+        this.examBlocked.set(q.premium === false);
+      },
+      error: () => {},
+    });
     setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   submit(): void {
     const groupId = this.groupId();
-    if (groupId == null || this.saving()) return;
+    if (groupId == null || this.saving() || (this.mode() === 'exam' && this.examBlocked())) return;
     const { opensAt, dueAt } = this.schedule();
     if (opensAt && dueAt && dueAt <= opensAt) {
       this.error.set('A határidő a nyitás után legyen.');

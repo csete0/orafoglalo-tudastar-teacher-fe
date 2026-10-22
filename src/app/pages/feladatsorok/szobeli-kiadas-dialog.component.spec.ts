@@ -48,6 +48,40 @@ describe('SzobeliKiadasDialogComponent', () => {
     expect(q('oral-assign-mode-help').textContent).toContain('még 11 / 15');
   });
 
+  it('prémium nélküli tanárnál dolgozat módban figyelmeztet és nem engedi kiadni (BE-ORALEXAM-ASSIGNMENT-NONPREMIUM-TEACHER-DEADEND)', () => {
+    const api = { quota: vi.fn(() => of({ premium: false, oralExam: { used: 0, limit: 5 } })), assign: vi.fn(() => of({ id: 9, groupName: '9.A' })) };
+    const groups = { loadMine: vi.fn(), activeGroups: signal([{ id: 1, name: '9.A' }]) };
+    TestBed.configureTestingModule({
+      imports: [SzobeliKiadasDialogComponent],
+      providers: [{ provide: TeacherOralExamService, useValue: api }, { provide: GroupStore, useValue: groups }],
+    });
+    const fixture = TestBed.createComponent(SzobeliKiadasDialogComponent);
+    fixture.componentRef.setInput('target', TARGET);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const q = (id: string) => el.querySelector(`[data-testid="${id}"]`) as HTMLElement;
+
+    (q('oral-assign-mode-exam') as HTMLInputElement).click();
+    fixture.detectChanges();
+
+    // Nem-prémium tanárnál a dolgozat-kiadás MINDEN diáknál garantáltan 400 AiHelperPremiumRequired-del
+    // bukik majd induláskor (TeacherAiHelperQuota.ReserveAsync) - a dialógusnak ezt ELŐRE kellene jeleznie
+    // és a "Kiadás" gombot tiltania, ugyanúgy, mint a testvér "Új szóbeli téma anyagból" oldal teszi
+    // (AI_HELPER_PREMIUM_TEXT). A quota() válasz premium:false-ja már a dialógusban elérhető, csak nem
+    // néz rá senki (ngOnInit csak a q.oralExam-et olvassa).
+    expect(q('oral-assign-mode-help').textContent).toContain('Prémium');
+    fixture.componentInstance.groupId.set(1);
+    fixture.detectChanges();
+    expect((q('oral-assign-submit') as HTMLButtonElement).disabled).toBe(true);
+    fixture.componentInstance.submit();
+    expect(api.assign).not.toHaveBeenCalled();
+
+    // Gyakorlás módban kiadható.
+    (q('oral-assign-mode-practice') as HTMLInputElement).click();
+    fixture.detectChanges();
+    expect((q('oral-assign-submit') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('a kiadás a helyes törzzsel (helyi idő → UTC ISO) és kibocsátja az eredményt', () => {
     const { c, api, assigned } = setup();
     c.groupId.set(2);
