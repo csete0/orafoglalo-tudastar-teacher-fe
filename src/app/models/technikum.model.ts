@@ -94,6 +94,10 @@ export interface CaseDetailDto {
   reason: string | null;
   points: number;
   rubricItemKey: string | null;
+  /** Saját gépes (build-módú) kliens-részen az eset pontozási csoportja (csoport nélkül az eset kulcsa); böngészős módban hiányzik. */
+  groupKey?: string | null;
+  /** A tanár kézzel felülbírálta: az eredeti gépi ítélet (a passed a kézi); null / hiányzik = nincs felülbírálva. */
+  machinePassed?: boolean | null;
 }
 
 export interface RubricItemOutcomeDto {
@@ -114,6 +118,8 @@ export interface ExamPartDetailDto {
   message: string | null;
   /** A tanári kézi pontozás (ki, mikor); null = nincs. */
   review?: { reviewedAt: string; teacherProfileId: number } | null;
+  /** A gépi esetek kézi felülbírálata (csak saját gépes kliens-részen: ki, mikor, megjegyzés - a diák csak az időpontot látja); null = nincs. */
+  machineReview?: { reviewedAt: string; teacherProfileId: number; note?: string | null } | null;
 }
 
 export interface ExamPartResultDto {
@@ -176,6 +182,8 @@ export interface ExamSessionSnapshotDto {
   desktopLanguage?: DesktopLanguage;
   /** A diák azóta kilépett / kikerült a csoportból: a dolgozat csak olvasható (megjegyzés, kézi pontozás, MI-javaslat nincs). */
   leftGroup?: boolean;
+  /** A kliens-rész saját gépes (keretrendszeres) beadása - ezt bírálta a gép; null / hiányzik = böngészős mód. */
+  clientBuild?: ExamSnapshotClientBuildDto | null;
 }
 
 export interface ExamSnapshotGuiDto {
@@ -184,6 +192,22 @@ export interface ExamSnapshotGuiDto {
   files: Record<string, string>;
   /** A képek a GET sessions/{id}/gui/images/{index} végponton (0-tól). */
   imageCount: number;
+}
+
+/** A kliens-rész saját gépes buildjének felismert keretrendszere (BE: ProjectClientBuild.Framework). */
+export type ClientFramework = 'angular' | 'react' | 'vue' | 'egyeb';
+
+export const CLIENT_FRAMEWORK_LABEL: Record<ClientFramework, string> = { angular: 'Angular', react: 'React', vue: 'Vue', egyeb: 'egyéb keretrendszer' };
+
+/** A kliens-rész saját gépes beadása: a lefordított kimenet csak összesítésként, a forrás fájljai (a projekt gyökeréhez képest). */
+export interface ExamSnapshotClientBuildDto {
+  id: number;
+  uploadedAt: string;
+  framework: ClientFramework;
+  /** A build-kimenet gyökere a zipben (üres = a zip gyökere). */
+  distRoot: string;
+  distFileCount: number;
+  sourceFiles: Record<string, string>;
 }
 
 /** A részek gyökérmappái (BE: ExamParts.StudentRoots) - ha a pillanatkép nem hozza. */

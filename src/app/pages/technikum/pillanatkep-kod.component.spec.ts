@@ -180,6 +180,45 @@ describe('PillanatkepKodComponent', () => {
     expect(el.querySelector('[data-testid^="suggestion-"]')).toBeNull();
   });
 
+  const buildSnapshot: ExamSessionSnapshotDto = {
+    ...snapshot,
+    files: { ...snapshot.files, 'frontend/client/app.js': '// BÖNGÉSZŐS VÁLTOZAT' },
+    clientBuild: {
+      id: 9, uploadedAt: '2026-10-10T10:30:00', framework: 'react', distRoot: 'dist', distFileCount: 3,
+      sourceFiles: { 'src/App.jsx': 'export default function App() {\n  return null;\n}', 'package.json': '{ "name": "konyvtar" }' },
+    },
+  };
+
+  it('saját gépes kliens-rész: fejléc a keretrendszerrel és a dist összesítésével, a forrás olvasható, megjegyzés és MI-javaslat nincs', async () => {
+    const { fixture, el } = await setup([], buildSnapshot);
+    expect(el.querySelector('[data-testid="part-lang-client"]')!.textContent!.trim()).toBe('React');
+    expect(el.querySelector('[data-testid="client-build-header"]')).toBeNull();
+    click(el, '[data-testid="part-tab-client"]');
+    fixture.detectChanges();
+    const header = el.querySelector('[data-testid="client-build-header"]')!.textContent!;
+    expect(header).toContain('Saját gépes beadás – React');
+    expect(header).toContain('3 fájl');
+    expect(header).toContain('gyökér: dist');
+    expect(fileList(el)).toEqual(['package.json', 'src/App.jsx']);
+    expect(el.textContent).not.toContain('frontend/client/app.js');
+    [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')][1].click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('export default function App()');
+    expect(el.querySelector('.code-ln--action')).toBeNull();
+    expect(el.querySelector('[data-testid="suggest-part"]')).toBeNull();
+  });
+
+  it('böngészős kliens-rész: nincs build-fejléc, a munkaterület fájljai megjegyezhetők', async () => {
+    const { fixture, el } = await setup([], { ...snapshot, files: { ...snapshot.files, 'frontend/client/app.js': 'fetch("/api/konyvek");' } });
+    expect(el.querySelector('[data-testid="part-lang-client"]')).toBeNull();
+    click(el, '[data-testid="part-tab-client"]');
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="client-build-header"]')).toBeNull();
+    expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('fetch("/api/konyvek")');
+    expect(el.querySelector('.code-ln--action')).not.toBeNull();
+    expect(el.querySelector('[data-testid="suggest-part"]')).not.toBeNull();
+  });
+
   const javaSnapshot: ExamSessionSnapshotDto = {
     ...snapshot,
     desktopLanguage: 'java',
