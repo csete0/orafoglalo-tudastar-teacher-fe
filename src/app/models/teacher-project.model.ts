@@ -105,6 +105,8 @@ export interface ProjectAssignmentStudentDto {
   hasFullAccess: boolean;
   aiTokens30: number;
   steps: ProjectAssignmentStepDto[];
+  /** Dolgozatnál: azóta kilépett a csoportból, de tagként írta - csak olvasható sor. */
+  leftGroup?: boolean;
 }
 
 export interface ProjectAssignmentStudentsDto {
