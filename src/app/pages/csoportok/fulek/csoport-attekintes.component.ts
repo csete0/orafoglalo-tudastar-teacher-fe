@@ -155,6 +155,9 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
       <div class="space-y-6 min-w-0">
         <section aria-labelledby="kozelgo-hataridok">
           <h2 id="kozelgo-hataridok" class="text-lg font-bold mb-3">Közelgő határidők</h2>
+          @if (deadlinesPartial()) {
+            <p class="text-danger text-sm mb-2" data-testid="deadlines-partial">Néhány kiadás határideje nem tölthető be - a lista hiányos lehet.</p>
+          }
           <ul class="card divide-y divide-border-default">
             @for (d of deadlines(); track d.key) {
               <li class="flex items-center gap-3 p-3 text-sm">
@@ -163,7 +166,7 @@ export function awaitingPublication(list: TeacherGroupTaskSetAssignmentDto[], no
                 <span class="text-text-muted shrink-0">{{ d.dueAt | date: 'MM.dd. HH:mm' }}</span>
               </li>
             } @empty {
-              <li class="p-3 text-sm text-text-muted">A következő 14 napban nincs lejáró határidő.</li>
+              <li class="p-3 text-sm text-text-muted">{{ deadlinesPartial() ? '–' : 'A következő 14 napban nincs lejáró határidő.' }}</li>
             }
           </ul>
         </section>
@@ -236,6 +239,8 @@ export class CsoportAttekintesComponent implements OnInit {
   readonly weakTopics = signal<TeacherWeakTopicDto[] | null>(null);
   readonly teams = signal<Team[] | null>(null);
   readonly error = signal(false);
+  /** A határidő-lista valamelyik forrása (kvíz/feladatsor/projekt) nem töltődött be: a lista hiányos, ezt jelezni kell. */
+  readonly deadlinesPartial = signal(false);
 
   private readonly now = Date.now();
   readonly pct = floorPercent;
@@ -286,9 +291,10 @@ export class CsoportAttekintesComponent implements OnInit {
 
     this.load(this.reportService.getGroupActivity(groupId, daysAgo(7)), this.activity7);
     this.load(this.reportService.getGroupActivity(groupId, daysAgo(30)), this.activity30);
-    this.load(this.teacherQuizService.getGroupAssignments(groupId), this.quizzes);
-    this.load(this.teacherTaskSetService.getGroupTaskSetAssignments(groupId), this.taskSets);
-    this.load(this.teacherProjectService.forGroup(groupId), this.projects);
+    const deadlineSourceFailed = () => this.deadlinesPartial.set(true);
+    this.load(this.teacherQuizService.getGroupAssignments(groupId), this.quizzes, deadlineSourceFailed);
+    this.load(this.teacherTaskSetService.getGroupTaskSetAssignments(groupId), this.taskSets, deadlineSourceFailed);
+    this.load(this.teacherProjectService.forGroup(groupId), this.projects, deadlineSourceFailed);
     this.load(this.reportService.getGroupWeakTopics(groupId), this.weakTopics);
     this.teamService.forGroup(groupId).pipe(take(1)).subscribe({
       next: (teams) => this.teams.set(teams),
@@ -298,7 +304,13 @@ export class CsoportAttekintesComponent implements OnInit {
   }
 
   /** Független hívás: hiba esetén a cél-signal null marad (a blokk „–”), és megjelenik a közös figyelmeztetés. */
-  private load<T>(source: Observable<T>, target: { set(value: T): void }): void {
-    source.pipe(take(1)).subscribe({ next: (value) => target.set(value), error: () => this.error.set(true) });
+  private load<T>(source: Observable<T>, target: { set(value: T): void }, onError?: () => void): void {
+    source.pipe(take(1)).subscribe({
+      next: (value) => target.set(value),
+      error: () => {
+        this.error.set(true);
+        onError?.();
+      },
+    });
   }
 }
