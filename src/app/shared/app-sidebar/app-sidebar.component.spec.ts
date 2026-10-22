@@ -4,6 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { MockExamService } from '../../services/mock-exam/mock-exam.service';
+import { TutorialVideoService } from '../../services/tutorial-video/tutorial-video.service';
 import { HeaderDropdownCoordinatorService } from '../header-dropdown-coordinator.service';
 import { AppSidebarComponent, SIDEBAR_COLLAPSED_KEY, activeLinkPath } from './app-sidebar.component';
 
@@ -19,10 +20,12 @@ describe('AppSidebarComponent', () => {
     logout: ReturnType<typeof vi.fn>;
   };
   let mockExamCurrent: unknown;
+  let hasPremium: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     localStorage.clear();
     mockExamCurrent = null;
+    hasPremium = vi.fn(() => of(true));
     authStoreMock = {
       isAuthenticated: vi.fn().mockReturnValue(true),
       hasAdminRole: vi.fn().mockReturnValue(false),
@@ -46,6 +49,7 @@ describe('AppSidebarComponent', () => {
         ]),
         { provide: AuthStore, useValue: authStoreMock },
         { provide: MockExamService, useValue: { getCurrent: () => of(mockExamCurrent) } },
+        { provide: TutorialVideoService, useValue: { hasPremium } },
       ],
     }).compileComponents();
   });
@@ -73,8 +77,10 @@ describe('AppSidebarComponent', () => {
       'Kvízek és élő játék',
       'Projektek',
       'Intézményeim',
+      'Oktatóvideók',
     ]);
-    expect(sidebar(fixture).querySelectorAll('nav a app-icon').length).toBe(6);
+    expect(sidebar(fixture).querySelectorAll('nav a app-icon').length).toBe(7);
+    expect(sidebar(fixture).querySelector('[data-testid="nav-lock"]')).toBeNull();
     expect(sidebar(fixture).textContent).not.toContain('Fejlesztőműhely');
   });
 
@@ -84,8 +90,20 @@ describe('AppSidebarComponent', () => {
     fixture.detectChanges();
 
     const labels = linkLabels(sidebar(fixture));
-    expect(labels.at(-2)).toBe('Próbaérettségi');
-    expect(labels.at(-1)).toBe('Intézményeim');
+    expect(labels.at(-3)).toBe('Próbaérettségi');
+    expect(labels.at(-2)).toBe('Intézményeim');
+    expect(labels.at(-1)).toBe('Oktatóvideók');
+  });
+
+  it('Prémium nélkül az Oktatóvideók lakattal (felhasználónként egyszer kérdezve)', () => {
+    hasPremium.mockReturnValue(of(false));
+    const fixture = create();
+    fixture.detectChanges();
+
+    const link = sidebar(fixture).querySelector('a[href="/oktatovideok"]') as HTMLElement;
+    expect(link.querySelector('[data-testid="nav-lock"]')).toBeTruthy();
+    expect(link.textContent).toContain('(Prémium)');
+    expect(hasPremium).toHaveBeenCalledTimes(1);
   });
 
   it('BUG UI-TT-15: teacher role NÉLKÜL nincs tanári menüpont, de kilépni lehet', () => {
