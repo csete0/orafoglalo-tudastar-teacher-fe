@@ -278,6 +278,36 @@ describe('CsoportReszletekComponent', () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
+  it('szakasz-horgony: a később (aszinkron) megjelenő szakaszhoz is odagörget, kézi görgetés után már nem', async () => {
+    configure();
+    const { harness, component, settle } = await open();
+    component.selectTab('eredmenyek', 'kesobb-betoltott');
+    await settle();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    const late = document.createElement('section');
+    late.id = 'kesobb-betoltott';
+    document.body.appendChild(late);
+    try {
+      await vi.waitFor(() => expect(scrollIntoView.mock.contexts).toContain(late), { timeout: 1000 });
+
+      // a hely elmozdul (fölötte betöltődött valami) → újraigazít; a felhasználó görgetése után nem
+      let top = 0;
+      late.getBoundingClientRect = () => ({ top } as DOMRect);
+      top = 300;
+      const calls = scrollIntoView.mock.calls.length;
+      await vi.waitFor(() => expect(scrollIntoView.mock.calls.length).toBeGreaterThan(calls), { timeout: 1000 });
+      window.dispatchEvent(new Event('wheel'));
+      const afterUser = scrollIntoView.mock.calls.length;
+      top = 600;
+      await new Promise((r) => setTimeout(r, 400));
+      expect(scrollIntoView.mock.calls.length).toBe(afterUser);
+    } finally {
+      late.remove();
+      harness.fixture.destroy();
+    }
+  });
+
   it('archivált csoportnál nincs meghívókód-chip és kiadás-gomb, az „Archivált” jelvény látszik', async () => {
     configure(makeGroup({ isArchived: true }));
     const { el } = await open();
