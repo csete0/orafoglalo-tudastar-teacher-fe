@@ -29,7 +29,7 @@ function session(overrides: Partial<TeacherOralSessionDto> = {}): TeacherOralSes
     ],
     questions: [], strengths: [], gaps: [], practice: [],
     transcript: [
-      { speaker: 'examiner', text: 'Szia! Mi a fotoszintézis?', atSeconds: 0, questionNo: 1 },
+      { speaker: 'examiner', text: 'Szia! Mi a fotoszintézis?', atSeconds: 0, questionNo: 1, interrupted: true },
       { speaker: 'student', text: 'A növények…', atSeconds: 5, questionNo: 1 },
     ],
     transcriptDeleted: false,
@@ -107,6 +107,8 @@ describe('SzobeliEredmenyekComponent', () => {
     expect(q('oral-planned-questions')!.textContent).toContain('glükóz');
     expect(q('oral-prep-code')!.textContent).toContain('print(1)');
     expect(q('oral-transcript')!.textContent).toContain('Mi a fotoszintézis?');
+    expect(Array.from(q('oral-transcript')!.querySelectorAll('li')).map((li) => li.querySelector('[data-testid="oral-turn-interrupted"]')?.textContent ?? null))
+      .toEqual(['(félbeszakítva)', null]);
   });
 
   it('felülpontozás: a pontozott szempontok a megjegyzéssel; a tábla tanári pontja frissül; tartományon kívül helyi hiba', () => {
