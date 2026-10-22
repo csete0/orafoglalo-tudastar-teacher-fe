@@ -21,6 +21,8 @@ export type ClassTestStudentStatus = 'not_started' | 'in_progress' | 'submitted'
 export interface ClassTestStudentRow {
   userId: number;
   name: string;
+  /** Kilépett / kikerült a csoportból: a tagként beadott dolgozata csak olvasható. Régebbi BE-n hiányzik. */
+  leftGroup?: boolean;
   status: ClassTestStudentStatus;
   examSessionId: number | null;
   startedAt: string | null;

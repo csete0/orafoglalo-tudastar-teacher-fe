@@ -90,6 +90,20 @@ describe('DolgozatAttekintesComponent', () => {
     expect(el.textContent).not.toMatch(/gyanú|csalás/i);
   });
 
+  it('a kilépett diák beadott dolgozata jelölt sor; a visszajelzés-író csak az élő tagokat kapja', () => {
+    const base = makeOverview();
+    const { el, component } = setup(makeOverview({ students: [...base.students, { ...base.students[0], userId: 3, name: 'Volt Diák', leftGroup: true }] }));
+    expect(el.querySelector('[data-testid="left-group-3"]')!.textContent).toContain('kilépett a csoportból');
+    expect(el.querySelector('[data-testid="left-group-1"]')).toBeNull();
+    expect(component.activeStudents().map((s) => s.userId)).toEqual([1, 2]);
+  });
+
+  it('kilépett diák kézi pontozásra váró dolgozata: „a diák kilépett, nem pontozható”', () => {
+    const base = makeOverview();
+    const { el } = setup(makeOverview({ students: [{ ...base.students[0], userId: 3, leftGroup: true, needsManualGrading: true, earnedPoints: null }] }));
+    expect(el.querySelector('[data-testid="left-ungradable-3"]')!.textContent).toContain('a diák kilépett, nem pontozható');
+  });
+
   it('kézi pontozásra váró beadott sornál nem 0 pont, hanem „– / max” áll', () => {
     const base = makeOverview();
     const { el } = setup(makeOverview({

@@ -124,6 +124,15 @@ describe('PillanatkepKodComponent', () => {
     expect(api.comments).toHaveBeenLastCalledWith(32);
   });
 
+  it('kilépett diák dolgozata: a megjegyzések látszanak, de új, szerkesztés, törlés és MI-javaslat nincs', async () => {
+    const { el } = await setup([comment({})], { ...snapshot, leftGroup: true });
+    expect(el.querySelector('[data-testid="comment-1"]')!.textContent).toContain('Miért 2?');
+    expect(el.querySelector('.code-ln--action')).toBeNull();
+    expect(el.querySelector('[data-testid="comment-edit-1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="comment-delete-1"]')).toBeNull();
+    expect(el.querySelector('[data-testid="suggest-part"]')).toBeNull();
+  });
+
   it('a hivatalos (csak olvasható) fájl és az egyéb fájlok nem megjegyezhetők', async () => {
     const { fixture, el } = await setup();
     [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')].find((b) => b.textContent!.includes('console/adatok.txt'))!.click();
