@@ -2399,4 +2399,48 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(component.sqlGenerationTaskId()).toBeNull();
     });
   });
+  describe('UI-TT-238: mentetlen módosítás elhagyáskor', () => {
+    const task = (): TeacherTaskDto => ({
+      id: 4, title: 'F1', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [1], completeSolutionSnippets: [], subTasks: [],
+    });
+
+    function create() {
+      configure(makeDetail({ tasks: [task()] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      return fixture.componentInstance;
+    }
+
+    it('módosítás nélkül megerősítés nélkül elhagyható', () => {
+      const c = create();
+      expect(c.canLeave()).toBe(true);
+      expect(confirmServiceMock.ask).not.toHaveBeenCalled();
+    });
+
+    it('mentetlen Alapadatok: megerősítést kér, „Maradok”-ra nem enged el', async () => {
+      const c = create();
+      c.metadataDraft.update((d) => d && { ...d, description: 'd - UNSAVED-EDIT' });
+      expect(await c.canLeave()).toBe(false);
+      expect(confirmServiceMock.ask).toHaveBeenCalledTimes(1);
+      const unload = { preventDefault: vi.fn(), returnValue: undefined as unknown } as unknown as BeforeUnloadEvent;
+      c.onBeforeUnload(unload);
+      expect(unload.preventDefault).toHaveBeenCalled();
+    });
+
+    it('nyitott feladat-szerkesztés módosított leírással: megerősítést kér, „Elvetem”-re elenged', async () => {
+      const c = create();
+      c.startEditTask(task());
+      expect(c.canLeave()).toBe(true); // csak megnyitva, változtatás nélkül nem kérdez
+      c.setEditTaskDescription(4, 'Eredeti leírás - UNSAVED-TASKEDIT');
+      confirmServiceMock.ask.mockResolvedValue(true);
+      expect(await c.canLeave()).toBe(true);
+      expect(confirmServiceMock.ask).toHaveBeenCalledTimes(1);
+    });
+
+    it('kitöltött „Új feladat” űrlap is mentetlen módosításnak számít', async () => {
+      const c = create();
+      c.newTaskDrafts[1].title = 'UNSAVED-QUICKADD';
+      expect(await c.canLeave()).toBe(false);
+    });
+  });
 });
