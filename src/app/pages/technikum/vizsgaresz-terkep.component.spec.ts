@@ -245,6 +245,60 @@ describe('VizsgareszTerkepComponent', () => {
     expect(el.querySelector('[data-testid="rubric-revert-77"]')).toBeNull();
   });
 
+  it('gépi felülbírálás: csak saját gépes kliens-részen (csoportkulcsos esetek), mentés után a pillanatkép és a térkép frissül', async () => {
+    const clientPart = (build: boolean, passed: boolean): ExamSessionSnapshotDto => ({ ...snapshot, session: { ...snapshot.session, parts: [
+      snapshot.session.parts[0],
+      { partKey: 'client' as const, title: 'Kliens', maxPoints: 15, result: { id: 88, partKey: 'client' as const, status: 'graded', points: passed ? 10 : 6,
+        maxPoints: 15, source: 'exam', sessionId: 31, gradedAt: '', detail: { message: null, ai: null,
+          machineReview: passed ? { reviewedAt: '2026-10-20T09:00:00', teacherProfileId: 3, note: null } : null,
+          machine: { status: 'done', points: passed ? 10 : 6, maxPoints: 10, compileOutput: null, cases: [
+            { key: 'betoltes', title: 'Lista', passed: true, reason: null, points: 6, rubricItemKey: null, groupKey: build ? 'betoltes' : null },
+            { key: 'hiba', title: 'Hibaüzenet', passed, reason: passed ? null : 'hiányzó elem', points: 4, rubricItemKey: null,
+              groupKey: build ? 'hiba' : null, machinePassed: passed ? false : null }] } } } }] } });
+    const api = {
+      comments: vi.fn(() => of([])),
+      heatmap: vi.fn(() => of(structuredClone(heatmap))),
+      snapshot: vi.fn(() => of(clientPart(false, false))),
+      scoreMachine: vi.fn(() => of(clientPart(true, true))),
+      publish: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      imports: [VizsgareszTerkepComponent],
+      providers: [provideRouter([]), { provide: TeacherTechnikumService, useValue: api }, { provide: ToastService, useValue: { success: vi.fn() } }],
+    });
+    const fixture = TestBed.createComponent(VizsgareszTerkepComponent);
+    fixture.componentRef.setInput('groupId', 12);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Böngészős kliens-rész és más rész: nincs felülbírálás-UI, a gépi esetek sima listája.
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="snapshot-parts"]')!.textContent).toContain('hiányzó elem');
+    expect(el.querySelector('app-gepi-felulbiralas')).toBeNull();
+
+    api.snapshot.mockReturnValue(of(clientPart(true, false)));
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('app-gepi-felulbiralas').length).toBe(1);
+    const verdict = el.querySelector<HTMLSelectElement>('[data-testid="machine-verdict-hiba"]')!;
+    verdict.value = 'atment';
+    verdict.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    el.querySelector<HTMLButtonElement>('[data-testid="machine-save-88"]')!.click();
+    fixture.detectChanges();
+    expect(api.scoreMachine).toHaveBeenCalledWith(88, [{ groupKey: 'hiba', passed: true }], null);
+    expect(api.heatmap).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('[data-testid="machine-revert-88"]')).not.toBeNull();
+    expect(el.querySelector<HTMLSelectElement>('[data-testid="machine-verdict-hiba"]')!.value).toBe('atment');
+
+    // A kilépett diák dolgozatán nincs felülbírálás.
+    api.snapshot.mockReturnValue(of({ ...clientPart(true, false), leftGroup: true }));
+    el.querySelector<HTMLButtonElement>('[data-testid="cell-55-console"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('app-gepi-felulbiralas')).toBeNull();
+  });
+
   it('a nem dolgozatból jövő cella a projekt osztály-nézetébe visz a diák kódjához; kiadás nélkül nem kattintható', async () => {
     const { el } = await setup();
     const link = el.querySelector<HTMLAnchorElement>('[data-testid="cell-55-api"]')!;

@@ -8,12 +8,14 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { PillanatkepKodComponent } from './pillanatkep-kod.component';
+import { GepiFelulbiralasComponent } from './gepi-felulbiralas.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import {
   EXAM_PART_LABEL,
   EXAM_PASS_RATIO,
   ExamPartKey,
+  ExamPartResultDto,
   ExamSessionSnapshotDto,
   HeatmapCellDto,
   HeatmapStudentDto,
@@ -35,7 +37,7 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-vizsgaresz-terkep',
   standalone: true,
-  imports: [DatePipe, RouterLink, LocalSpinnerComponent, PillanatkepKodComponent],
+  imports: [DatePipe, RouterLink, LocalSpinnerComponent, PillanatkepKodComponent, GepiFelulbiralasComponent],
   template: `
     @if (error(); as err) { <p class="text-danger text-sm mb-4" role="alert">{{ err }}</p> }
     @if (loading()) {
@@ -200,12 +202,17 @@ type Heat = 'fail' | 'low' | 'mid' | 'high';
                       @if (r.detail.message) { <p class="text-xs text-text-muted mt-2">{{ r.detail.message }}</p> }
                       @if (r.detail.machine; as mc) {
                         <p class="text-xs font-semibold mt-2">Gépi ellenőrzés: {{ mc.points }}/{{ mc.maxPoints }} pont</p>
-                        <ul class="text-xs mt-1 space-y-0.5">
-                          @for (k of mc.cases; track k.key) {
-                            <li><span [class]="k.passed ? 'text-success' : 'text-danger'">{{ k.passed ? '✓' : '✗' }}</span> {{ k.title }}
-                              @if (k.reason) { <span class="text-text-muted">– {{ k.reason }}</span> }</li>
-                          }
-                        </ul>
+                        @if (machineOverridable(r) && !sn.leftGroup) {
+                          <!-- Saját gépes kliens-rész: a gépi esetek csoportonként kézzel felülbírálhatók. -->
+                          <app-gepi-felulbiralas [result]="r" (saved)="onReviewed($event)" />
+                        } @else {
+                          <ul class="text-xs mt-1 space-y-0.5">
+                            @for (k of mc.cases; track k.key) {
+                              <li><span [class]="k.passed ? 'text-success' : 'text-danger'">{{ k.passed ? '✓' : '✗' }}</span> {{ k.title }}
+                                @if (k.reason) { <span class="text-text-muted">– {{ k.reason }}</span> }</li>
+                            }
+                          </ul>
+                        }
                         @if (mc.compileOutput) { <pre class="compile-output">{{ mc.compileOutput }}</pre> }
                       }
                       @if (r.detail.ai; as ai) {
@@ -392,6 +399,21 @@ export class VizsgareszTerkepComponent {
       next: (sn) => this.snapshot.set(sn),
       error: (e) => this.snapshotError.set(extractErrorMessage(e, 'A beadott dolgozat betöltése sikertelen.')),
     });
+  }
+
+  /**
+   * A gépi esetek kézi felülbírálata: csak értékelt, lefutott gépi bírálatú, saját gépes (build-módú) kliens-részen - a build-módot
+   * a bírálatkor rögzített csoportkulcsok jelzik (BE: CaseDetail.GroupKey csak build-módban), nem a mostani feltöltés.
+   */
+  machineOverridable(r: ExamPartResultDto): boolean {
+    const mc = r.detail.machine;
+    return r.partKey === 'client' && r.status === 'graded' && mc?.status === 'done' && mc.cases.some((c) => c.groupKey != null);
+  }
+
+  /** Gépi felülbírálás után: a friss pillanatkép és a térkép pontjai. */
+  onReviewed(sn: ExamSessionSnapshotDto): void {
+    this.snapshot.set(sn);
+    this.loadMap();
   }
 
   hasOpenItems(items: RubricItemOutcomeDto[]): boolean {

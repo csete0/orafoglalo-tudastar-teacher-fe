@@ -9,7 +9,9 @@ import { extractErrorMessage } from '../../shared/http-error/extract-error-messa
 import { AiHelperQuotaItemDto, aiHelperErrorMessage } from '../../shared/ai-helper-quota.util';
 import { parseUtc } from '../../shared/utc-date.util';
 import { CodeCommentSuggestionDto } from '../../models/teacher-project.model';
-import { DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto } from '../../models/technikum.model';
+import {
+  CLIENT_FRAMEWORK_LABEL, DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto,
+} from '../../models/technikum.model';
 
 /** A pillanatkép fülei: az öt vizsgarész és a részekhez nem tartozó (pl. hivatalos adat-) fájlok. */
 type Tab = ExamPartKey | 'egyeb';
@@ -38,7 +40,8 @@ interface Suggestion extends CodeCommentSuggestionDto {
 /**
  * A beadott technikumi dolgozat kódja vizsgarészenként (a tanári pillanatképben): a részek fájljai csak olvasva, a sorszámra
  * kattintva soronkénti megjegyzés (írás, szerkesztés, törlés - a diák a közzététel után látja), a grafikus résznél a
- * képernyőképek nagyítható galériája és a feltöltött zip forrásfájljai. „MI-javaslat”: soronkénti javaslatok a rész fájljaira
+ * képernyőképek nagyítható galériája és a feltöltött zip forrásfájljai; a saját gépes (keretrendszeres) kliens-résznél a feltöltött
+ * forrás (a lefordított kimenet csak összesítésként - azon futott a gépi ellenőrzés). „MI-javaslat”: soronkénti javaslatok a rész fájljaira
  * (havi keret), amelyekből csak az elfogadottak lesznek megjegyzések.
  */
 @Component({
@@ -81,7 +84,18 @@ interface Suggestion extends CodeCommentSuggestionDto {
         }
       }
 
-      @if (tab() !== 'egyeb' && !locked()) {
+      @if (tab() === 'client' && clientBuild(); as b) {
+        <div class="build-info mt-3" data-testid="client-build-header">
+          <p class="text-sm font-semibold">Saját gépes beadás – {{ frameworkLabel[b.framework] }}</p>
+          <p class="text-xs text-text-muted">
+            Feltöltve: {{ utc(b.uploadedAt) | date: 'yyyy.MM.dd. HH:mm' }} · lefordított kimenet: {{ b.distFileCount }} fájl
+            ({{ b.distRoot ? 'gyökér: ' + b.distRoot : 'a zip gyökerében' }}) – a gépi ellenőrzés ezen futott; lent a diák forrása.
+            Ehhez a részhez soronkénti megjegyzés és MI-javaslat nem kérhető.
+          </p>
+        </div>
+      }
+
+      @if (tab() !== 'egyeb' && !locked() && !buildTab()) {
         <div class="ai-bar mt-3 flex flex-wrap items-center gap-2">
           <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" data-testid="suggest-part" [disabled]="suggesting() || !hasFiles()"
                   (click)="requestSuggestions()">{{ suggesting() ? 'Az MI dolgozik…' : 'MI-javaslat erre a részre' }}</button>
@@ -184,6 +198,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
     .lightbox img { max-width: 100%; max-height: calc(100vh - 6rem); object-fit: contain; border-radius: 0.5rem; background: var(--color-bg-panel); }
     .lightbox-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 0.75rem;
       background: var(--color-bg-panel); color: var(--color-text-primary); }
+    .build-info { padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--color-border-default); background: var(--color-bg-element); }
     .ai-bar { padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary); }
     .thread, .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-family: var(--font-sans, system-ui, sans-serif);
       white-space: normal; }
@@ -205,6 +220,7 @@ export class PillanatkepKodComponent {
   readonly snapshot = input.required<ExamSessionSnapshotDto>();
 
   readonly utc = parseUtc;
+  readonly frameworkLabel = CLIENT_FRAMEWORK_LABEL;
   readonly tab = signal<Tab>('console');
   readonly activePath = signal<string | null>(null);
   readonly comments = signal<ExamCodeCommentDto[]>([]);
@@ -224,6 +240,10 @@ export class PillanatkepKodComponent {
   private loads: Subscription[] = [];
   private nextKey = 1;
 
+  readonly clientBuild = computed(() => this.snapshot().clientBuild ?? null);
+  /** A kliens-rész fülén a saját gépes beadás forrása látszik (a megjegyzés-végpont csak a munkaterület fájljait ismeri). */
+  readonly buildTab = computed(() => this.tab() === 'client' && !!this.clientBuild());
+
   private readonly roots = computed(() => ({ ...EXAM_PART_ROOTS, ...(this.snapshot().partRoots ?? {}) }));
 
   /** A részhez nem tartozó fájlok (pl. a hivatalos adatbázis-fájlok) - csak olvasásra. */
@@ -238,8 +258,10 @@ export class PillanatkepKodComponent {
     const counts = new Map<ExamPartKey, number>();
     for (const c of this.comments()) counts.set(c.partKey, (counts.get(c.partKey) ?? 0) + 1);
     const language = DESKTOP_LANGUAGE_LABEL[sn.desktopLanguage ?? 'csharp'];
+    const framework = sn.clientBuild ? CLIENT_FRAMEWORK_LABEL[sn.clientBuild.framework] : null;
     const tabs: { key: Tab; label: string; language: string | null; comments: number }[] = keys.map((k) => ({
-      key: k, label: EXAM_PART_LABEL[k] ?? k, language: DESKTOP_PARTS.includes(k) ? language : null, comments: counts.get(k) ?? 0,
+      key: k, label: EXAM_PART_LABEL[k] ?? k, language: DESKTOP_PARTS.includes(k) ? language : k === 'client' ? framework : null,
+      comments: counts.get(k) ?? 0,
     }));
     if (Object.keys(this.otherFiles()).length) tabs.push({ key: 'egyeb', label: 'Egyéb fájlok', language: null, comments: 0 });
     return tabs;
@@ -253,7 +275,7 @@ export class PillanatkepKodComponent {
   /** Megjegyzés csak a rész saját (nem hivatalos, csak olvasható) fájljára írható. */
   readonly commentable = computed(() => {
     const path = this.activePath();
-    return !this.locked() && this.tab() !== 'egyeb' && !!path && !this.snapshot().readOnlyPaths.includes(path);
+    return !this.locked() && this.tab() !== 'egyeb' && !this.buildTab() && !!path && !this.snapshot().readOnlyPaths.includes(path);
   });
 
   private readonly activeComments = computed(() =>
@@ -293,6 +315,7 @@ export class PillanatkepKodComponent {
     const sn = this.snapshot();
     if (tab === 'egyeb') return this.otherFiles();
     if (tab === 'gui') return sn.gui?.files ?? {};
+    if (tab === 'client' && sn.clientBuild) return sn.clientBuild.sourceFiles;
     const root = this.roots()[tab];
     return root ? Object.fromEntries(Object.entries(sn.files).filter(([p]) => p.startsWith(root))) : {};
   }

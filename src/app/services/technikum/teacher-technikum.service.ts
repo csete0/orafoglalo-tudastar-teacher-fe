@@ -60,6 +60,16 @@ export class TeacherTechnikumService {
     return this.http.delete<ExamSessionSnapshotDto>(`${this.baseUrl}/results/${resultId}/rubric`);
   }
 
+  /** Saját gépes kliens-rész: a gépi esetek csoportonkénti kézi ítélete (a teljes felülbírálás) és megjegyzés; a frissített beadott dolgozatot adja. */
+  scoreMachine(resultId: number, groups: { groupKey: string; passed: boolean }[], note: string | null): Observable<ExamSessionSnapshotDto> {
+    return this.http.put<ExamSessionSnapshotDto>(`${this.baseUrl}/results/${resultId}/machine`, { groups, note });
+  }
+
+  /** A gépi felülbírálás visszavonása (az eredeti gépi ítéletek). */
+  revertMachine(resultId: number): Observable<ExamSessionSnapshotDto> {
+    return this.http.delete<ExamSessionSnapshotDto>(`${this.baseUrl}/results/${resultId}/machine`);
+  }
+
   publish(assignmentId: number): Observable<PublishResultDto> {
     return this.http.post<PublishResultDto>(`${this.baseUrl}/sessions/assignment/${assignmentId}/publish`, {});
   }
