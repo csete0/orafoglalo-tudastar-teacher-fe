@@ -20,6 +20,11 @@ import { CsoportEredmenyekComponent } from './fulek/csoport-eredmenyek.component
 import { CsoportTechnikumComponent } from './fulek/csoport-technikum.component';
 import { CsoportBeallitasokComponent } from './fulek/csoport-beallitasok.component';
 
+/** Ennyi ideig igazítunk újra a szakasz-horgonyra, amíg a fül aszinkron tartalma betöltődik. */
+const SECTION_SCROLL_SETTLE_MS = 3000;
+/** A felhasználó saját görgetése - ilyenkor abbahagyjuk az újraigazítást. */
+const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+
 /**
  * Csoportoldal: fejléc (morzsa, létszám, meghívó kód, Élő játék, + Kiadás) + 6 fül. A fül a `?tab=` query-paraméterben
  * él (könyvjelzőzhető, `replaceUrl`, így a Vissza gomb nem gyűlik fel); a 9 fülös oldal régi értékeit a
@@ -191,8 +196,33 @@ export class CsoportReszletekComponent implements OnInit {
     if (!this.technikumVisible()) this.selectTab('attekintes');
   }
 
+  /**
+   * Szakasz-horgonyra görgetés. A fül tartalma (és a fölötte lévő blokkok, pl. a vizsgarész-térkép) aszinkron töltődik,
+   * a cél később jelenik meg vagy lejjebb csúszik - ezért egy rövid ideig újraigazítunk, valahányszor a helye elmozdul.
+   * A felhasználó saját görgetése/kattintása megszakítja (ne rántsuk vissza).
+   */
   private scrollToSection(id: string): void {
-    afterNextRender(() => this.document.getElementById(id)?.scrollIntoView({ block: 'start' }), { injector: this.injector });
+    afterNextRender(() => {
+      let lastTop: number | null = null;
+      const align = (): void => {
+        const el = this.document.getElementById(id);
+        if (!el || (lastTop !== null && Math.abs(el.getBoundingClientRect().top - lastTop) < 1)) return;
+        el.scrollIntoView({ block: 'start' });
+        lastTop = el.getBoundingClientRect().top;
+      };
+      align();
+      const win = this.document.defaultView;
+      if (!win) return;
+      const timer = win.setInterval(align, 150);
+      const deadline = win.setTimeout(() => stop(), SECTION_SCROLL_SETTLE_MS);
+      const stop = (): void => {
+        win.clearInterval(timer);
+        win.clearTimeout(deadline);
+        for (const type of USER_SCROLL_EVENTS) win.removeEventListener(type, stop);
+      };
+      for (const type of USER_SCROLL_EVENTS) win.addEventListener(type, stop, { passive: true });
+      this.destroyRef.onDestroy(stop);
+    }, { injector: this.injector });
   }
 
   private loadMockExamBadge(groupId: number): void {

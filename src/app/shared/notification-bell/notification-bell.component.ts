@@ -74,9 +74,9 @@ const ICON_TYPE_MAP: Record<number, IconName> = {
         <div #panel data-testid="notification-panel" tabindex="-1"
              (keydown.escape)="closeAndReturnFocus()"
              (keydown)="onPanelKeydown($event)"
-             class="absolute w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto
+             class="w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto
                     rounded-xl border border-border-default bg-bg-panel shadow-lg z-50 outline-none"
-             [class]="placement() === 'side' ? 'left-full bottom-0 ml-2' : 'right-0 mt-2'">
+             [class]="placement() === 'side' ? 'absolute left-full bottom-0 ml-2' : 'fixed right-4 top-16'">
           <div class="flex items-center justify-between px-4 py-2.5 border-b border-border-default">
             <span class="text-sm font-semibold">Értesítések</span>
             @if (store.unreadCount() > 0) {
@@ -140,7 +140,8 @@ export class NotificationBellComponent implements OnInit {
   private readonly dropdownCoordinator = inject(HeaderDropdownCoordinatorService);
   readonly store = inject(NotificationStore);
 
-  /** `side`: az oldalsáv aljáról jobbra, alulra igazítva nyílik; `below`: a gomb alá, jobbra igazítva. */
+  /** `side`: az oldalsáv aljáról jobbra, alulra igazítva nyílik; `below`: a mobil felső sáv alá,
+   * a képernyő jobb széléhez rögzítve (a gombhoz igazítva 375 px-en a bal széle kilógott a képből). */
   readonly placement = input<'below' | 'side'>('below');
 
   readonly open = signal(false);

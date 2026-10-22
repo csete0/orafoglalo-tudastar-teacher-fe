@@ -67,8 +67,8 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
       }
 
       @if (detail(); as quiz) {
-        <div class="flex items-start gap-3 mt-3">
-          <h1 class="page-title flex-1">{{ quiz.title }}</h1>
+        <div class="flex flex-wrap items-start gap-3 mt-3">
+          <h1 class="page-title flex-1 min-w-48 break-words">{{ quiz.title }}</h1>
           <span class="badge shrink-0" [class]="badgeClass()">{{ badgeLabel() }}</span>
           <button type="button" class="btn btn-ghost text-sm shrink-0" [disabled]="store.loading()"
                   (click)="cloneQuiz()" title="Kvíz másolása piszkozatként">
