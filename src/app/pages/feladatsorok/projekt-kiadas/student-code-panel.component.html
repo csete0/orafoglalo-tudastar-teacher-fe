@@ -1,0 +1,101 @@
+@if (codeView.codeFor(); as s) {
+  <section class="card p-4 mt-6" aria-labelledby="code-title" data-testid="student-code">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="code-title" class="font-bold">{{ s.name }} kódja
+        <span class="text-xs font-normal text-text-muted">(csak olvasás – sorszámra kattintva megjegyzést írhatsz)</span></h2>
+      <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="closeCode()">Bezárás</button>
+    </div>
+    @if (codeView.codeLoading()) {
+      <app-local-spinner />
+    } @else if (codeView.code(); as c) {
+      <app-code-suggest-bar />
+      <app-kod-olvaso class="block mt-3" [files]="c.files" [readOnlyPaths]="c.readOnlyPaths" [activePath]="codeView.activePath()" (activePathChange)="selectFile($event)"
+                      [commentable]="true" [markedLines]="codeView.markedLines()" [badges]="codeView.openCounts()" [suggestionBadges]="suggest.suggestionCounts()"
+                      [lineExtras]="threadTpl" (lineClick)="codeView.startComment($event)">
+        @if (suggest.suggestions().length) {
+          <section class="mt-3" aria-labelledby="suggest-list-title" data-testid="suggest-list">
+            <h3 id="suggest-list-title" class="text-xs font-semibold">AI-javaslatok ({{ suggest.suggestions().length }})</h3>
+            <ul class="space-y-2 mt-1 suggest-list">
+              @for (sg of suggest.suggestions(); track sg.key) {
+                <li class="suggestion !m-0" [attr.data-testid]="'suggest-item-' + sg.key">
+                  <p class="text-xs"><span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
+                    <button type="button" class="font-mono underline-offset-2 hover:underline" (click)="jumpTo(sg)"
+                            [attr.aria-label]="'Ugrás: ' + sg.path + ', ' + sg.line + '. sor'">{{ sg.path }}:{{ sg.line }}</button></p>
+                  <p class="thread-body">{{ sg.text }}</p>
+                  <ng-container *ngTemplateOutlet="suggestActions; context: { $implicit: sg }" />
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      </app-kod-olvaso>
+      <ng-template #threadTpl let-line let-text="text">
+        @for (t of codeView.threadsAt(line); track t.id) {
+          <div class="thread" [class.thread--resolved]="t.resolvedAt" [attr.data-testid]="'thread-' + t.id">
+            <p class="text-xs text-text-muted">
+              <strong class="text-text-primary">{{ t.authorName }}</strong> · {{ utc(t.createdAt) | date: 'MM.dd. HH:mm' }}
+              @if (t.resolvedAt) { · <span class="text-success">megoldva</span> }
+              @if (t.lineText !== text) { · <span class="text-warning" data-testid="thread-outdated">elavult – a sor azóta megváltozott</span> }
+            </p>
+            <p class="thread-body">{{ t.body }}</p>
+            @for (r of t.replies; track r.id) {
+              <p class="thread-reply"><strong>{{ r.authorName }}</strong>{{ r.authorIsTeacher ? '' : ' (diák)' }}: {{ r.body }}</p>
+            }
+            <form class="flex gap-2 mt-2" (submit)="$event.preventDefault(); codeView.reply(t, replyBox)">
+              <input #replyBox class="form-input !py-1 !text-xs flex-1" maxlength="2000" placeholder="Válasz…" aria-label="Válasz a megjegyzésre" />
+              <button type="submit" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="codeView.commentBusy()">Válasz</button>
+            </form>
+          </div>
+        }
+        @for (sg of suggest.suggestionsAt(line); track sg.key) {
+          <div class="suggestion" tabindex="-1" [id]="'suggestion-' + sg.key" [attr.data-testid]="'suggestion-' + sg.key"
+               role="group" [attr.aria-label]="'AI-javaslat (' + sg.severity + ') a(z) ' + sg.line + '. sorhoz'">
+            <p class="text-xs text-text-muted">
+              <span class="sev" [class]="'sev sev--' + sevClass(sg)">{{ sg.severity }}</span>
+              <strong class="text-text-primary">AI-javaslat</strong> · még nem megjegyzés
+              @if (sg.lineText !== text) { · <span class="text-warning">a sor azóta megváltozhatott</span> }
+            </p>
+            @if (suggest.editingKey() === sg.key) {
+              <form (submit)="$event.preventDefault(); suggest.accept(sg, editBox.value)">
+                <label class="sr-only" [for]="'suggest-edit-' + sg.key">A javaslat szövege</label>
+                <textarea #editBox [id]="'suggest-edit-' + sg.key" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
+                          [value]="sg.text"></textarea>
+                <div class="flex flex-wrap gap-2 mt-2">
+                  <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="suggest.acceptBusy()">Elfogad</button>
+                  <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="suggest.editingKey.set(null)">Mégse</button>
+                </div>
+              </form>
+            } @else {
+              <p class="thread-body">{{ sg.text }}</p>
+              <ng-container *ngTemplateOutlet="suggestActions; context: { $implicit: sg }" />
+            }
+          </div>
+        }
+        @if (codeView.newCommentLine() === line) {
+          <form class="thread" data-testid="new-comment" (submit)="$event.preventDefault(); codeView.createComment(newBox)">
+            <label class="text-xs font-semibold" for="new-comment-box">Megjegyzés a(z) {{ line }}. sorhoz</label>
+            <textarea #newBox id="new-comment-box" class="form-input !text-sm w-full mt-1" rows="3" maxlength="2000"
+                      placeholder="Pl.: Itt mi történik, ha üres a rendelés?"></textarea>
+            <div class="flex gap-2 mt-2">
+              <button type="submit" class="btn btn-primary !px-3 !py-1 !text-xs" [disabled]="codeView.commentBusy()">Megjegyzés küldése</button>
+              <button type="button" class="btn btn-ghost !px-3 !py-1 !text-xs" (click)="codeView.newCommentLine.set(null)">Mégse</button>
+            </div>
+          </form>
+        }
+      </ng-template>
+      @if (codeView.commentError(); as err) { <p class="text-danger text-sm mt-2" role="alert">{{ err }}</p> }
+      <ng-template #suggestActions let-sg>
+        <div class="flex flex-wrap gap-2 mt-2">
+          <button type="button" class="btn btn-primary !px-2 !py-1 !text-xs" [disabled]="suggest.acceptBusy()" (click)="suggest.accept(sg)"
+                  [attr.aria-label]="'Elfogad: ' + sg.path + ', ' + sg.line + '. sor'">Elfogad</button>
+          <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="suggest.acceptBusy()" (click)="startEdit(sg)"
+                  [attr.aria-label]="'Szerkeszt: ' + sg.path + ', ' + sg.line + '. sor'">Szerkeszt</button>
+          <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" [disabled]="suggest.acceptBusy()" (click)="suggest.dismiss(sg)"
+                  [attr.aria-label]="'Elvet: ' + sg.path + ', ' + sg.line + '. sor'">Elvet</button>
+        </div>
+      </ng-template>
+    } @else if (codeView.codeError(); as err) {
+      <p class="text-danger text-sm mt-2">{{ err }}</p>
+    }
+  </section>
+}
