@@ -76,6 +76,16 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
   const button = (el: HTMLElement, text: string, root = '') =>
     [...el.querySelectorAll<HTMLButtonElement>(`${root} button`)].find((b) => b.textContent!.trim() === text)!;
 
+  it('technikumi projektnél a diák választott nyelvét mutatja, nem a REST-futtatót (staging 10-23)', async () => {
+    const { cmp } = await setup();
+    const tech = (desktopLanguage: 'csharp' | 'java' | null): ProjectAssignmentStudentDto =>
+      ({ ...student(4, 'Dóra', 1, []), runtime: 'judge0-aspnet', desktopLanguage });
+    expect(cmp.languageLabel(tech('java'))).toBe('Java');
+    expect(cmp.languageLabel(tech('csharp'))).toBe('C#');
+    expect(cmp.languageLabel(tech(null))).toBe('C# (ASP.NET Core)');
+    expect(cmp.languageLabel(student(3, 'Csilla', null, []))).toBe('még nem kezdte');
+  });
+
   it('mátrix az önállósággal, folyamatban és még-nem állapottal; összesítő és a legnagyobb lemorzsolódás', async () => {
     const { el } = await setup();
     const cells = (id: number) => [...el.querySelectorAll(`[data-testid="student-${id}"] .cell-dot`)].map((c) => c.className.replace('cell-dot ', ''));

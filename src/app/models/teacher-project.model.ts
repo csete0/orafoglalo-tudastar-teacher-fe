@@ -105,6 +105,8 @@ export interface ProjectAssignmentStudentDto {
   userId: number;
   name: string;
   runtime: ProjectRuntime | null;
+  /** Technikumi projektnél a diák választott nyelve (dolgozatnál a munkamenetéé); a `runtime` ott csak a REST-backend futtatója. */
+  desktopLanguage?: DesktopLanguage | null;
   currentMilestoneOrder: number | null;
   completedAt: string | null;
   lastActivityAt: string | null;

@@ -13,6 +13,7 @@ import { parseUtc } from '../../shared/utc-date.util';
 import { KodOlvasoComponent, codeFilePaths, codeLines } from '../../shared/kod-olvaso/kod-olvaso.component';
 import {
   CodeCommentSuggestionDto,
+  DESKTOP_LANGUAGE_LABELS,
   CodeCommentSuggestionsResponse,
   CodeCommentThreadDto,
   INDEPENDENCE_LABELS,
@@ -96,8 +97,8 @@ type SuggestScope = 'file' | 'all';
                           title="A diák azóta kilépett vagy kikerült a csoportból - a tagként írt dolgozata csak olvasható">kilépett a csoportból</span>
                     }
                     <span class="block text-xs text-text-muted">
-                      {{ s.runtime ? runtimeLabels[s.runtime] : 'még nem kezdte' }}{{ s.completedAt ? ' · kész' : '' }}
-                      @if (!s.hasFullAccess) { · <span class="text-warning">ingyenes lépésekig</span> }
+                      {{ languageLabel(s) }}{{ s.completedAt ? ' · kész' : '' }}
+                      @if (!s.hasFullAccess && !s.leftGroup) { · <span class="text-warning">ingyenes lépésekig</span> }
                     </span>
                   </td>
                   @for (step of s.steps; track step.orderNo) {
@@ -305,6 +306,12 @@ export class ProjektKiadasComponent implements OnInit {
   readonly diak = input<string>();
 
   readonly runtimeLabels = RUNTIME_LABELS;
+
+  /** A diák nyelve: technikumi projektnél a választott C#/Java (a futtató ott csak a REST-backendé), különben a futtató. */
+  languageLabel(s: ProjectAssignmentStudentDto): string {
+    if (s.desktopLanguage) return DESKTOP_LANGUAGE_LABELS[s.desktopLanguage];
+    return s.runtime ? this.runtimeLabels[s.runtime] : 'még nem kezdte';
+  }
   readonly utc = parseUtc;
   readonly legend: { state: CellState; label: string }[] = [
     { state: 'onallo', label: INDEPENDENCE_LABELS.onallo },
