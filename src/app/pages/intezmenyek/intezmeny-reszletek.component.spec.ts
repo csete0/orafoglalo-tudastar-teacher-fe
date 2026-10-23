@@ -465,6 +465,28 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(schoolStoreMock.loadLicenseOverview).toHaveBeenCalledWith(1);
   });
 
+  it('A6: a Licenc fül licencenként mutatja a keretet, a csoport-megoszlást és a foglalt helyeket', () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+    schoolStoreMock.licenseOverview.set([{
+      licenseId: 7, tier: 'premium', capacity: 30, usedSeats: 1,
+      validFrom: '2026-09-01T00:00:00Z', validTo: '2027-06-30T00:00:00Z', idleWindowMinutes: 45,
+      groups: [{ groupId: 3, groupName: '9.A', teacherName: 'Teszt Tanár', activeSeatCount: 1 }],
+      seats: [{ userId: 11, studentName: 'Kiss Anna', groupNames: ['9.A'], claimedAt: '2026-09-02T08:00:00Z', lastActivityAt: '2026-10-20T08:00:00Z' }],
+    }]);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('licenc');
+    fixture.detectChanges();
+
+    const card = fixture.nativeElement.querySelector('[data-testid="license-overview-card"]') as HTMLElement;
+    expect(card.textContent).toContain('1 / 30');
+    expect(card.textContent).toContain('2026.09.01');
+    expect(card.textContent).toContain('9.A');
+    expect(card.textContent).toContain('Kiss Anna');
+    expect(card.textContent).toContain('Diákok (1 aktív hely)');
+  });
+
   // UI-TT-175: az archivált csoport megkülönböztethető maradjon. Az osztály-összesítő csak az aktív csoportokat
   // sorolja; az archiváltak külön, „Archivált csoportok” lenyitható listában jelennek meg.
   it('BUG UI-TT-175: az archivált csoport a Csoportok fülön az „Archivált csoportok” listában jelenik meg, a nem-archivált nem', () => {
