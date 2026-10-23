@@ -28,8 +28,8 @@
           "configurations": {
             "production": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "50kB" }
+                { "type": "initial", "maximumWarning": "600kB", "maximumError": "750kB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
               ],
               "outputHashing": "all",
               "fileReplacements": [
@@ -43,8 +43,8 @@
             },
             "staging": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "50kB" }
+                { "type": "initial", "maximumWarning": "600kB", "maximumError": "750kB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
               ],
               "outputHashing": "all",
               "fileReplacements": [
@@ -78,6 +78,12 @@
         },
         "extract-i18n": {
           "builder": "@angular/build:extract-i18n"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test",

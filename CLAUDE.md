@@ -1,7 +1,7 @@
 # Tudástár Teacher Frontend (orafoglalo-tudastar-teacher-fe)
 
 ## Overview
-Angular 21 standalone frontend (no SSR), dev port 4300, for teachers/external instructors using the
+Angular 22 standalone frontend (no SSR), dev port 4300, for teachers/external instructors using the
 Tudástár platform: creating private task sets, managing groups/schools, viewing student results,
 group/school leaderboards. Shares the same backend (`orafoglalo-tudastar-be`) and database as the
 student app. Part of "Patricks alkalmazás" / "PaTricks alkalmazás" (see the backend repo's CLAUDE.md
@@ -44,6 +44,14 @@ There are **two distinct "admin" concepts — don't conflate them:**
 | Csoportba lépés kódja | „Meghívó kód” | „Meghívó kód” | invite, belépőkód |
 | Ajánlóprogram kódja (diák → diák) | – | „Ajánlókód” | meghívó kód (az a csoporté) |
 
+
+## Lint
+ESLint flat config (`eslint.config.js`, angular-eslint + typescript-eslint), run with `npm run lint`
+(= `ng lint`, under `memrun` on the CT). Deliberately narrow rule set (refactor guard rails, not a style
+rewrite): `prefer-control-flow`, `use-lifecycle-interface`, `no-input-rename` are errors;
+`no-explicit-any`, `template/no-any`, `prefer-signals`, `prefer-on-push-component-change-detection` are
+warnings until the FE refactor's Z package flips them to error. Don't add new warnings; no `any` /
+`$any` in new code.
 
 ## Test infra
 Vitest, same pattern as the student frontend (no Karma). Playwright E2E lives in this repo's own
