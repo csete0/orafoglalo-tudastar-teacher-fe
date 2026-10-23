@@ -1,0 +1,102 @@
+<!-- ── 1. Kérés ─────────────────────────────── -->
+<div class="space-y-4" data-testid="ai-task-input">
+  @if (request.premiumRequired()) {
+    <p class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex items-start gap-2" data-testid="ai-task-premium">
+      <app-icon name="warning-triangle" class="w-5 h-5 block shrink-0" />
+      <span>{{ premiumMessage }}</span>
+    </p>
+  } @else if (request.quota(); as q) {
+    <p class="text-sm" [class.text-danger]="request.quotaExhausted()" [class.text-text-muted]="!request.quotaExhausted()" data-testid="ai-task-quota">
+      @if (request.quotaExhausted()) {
+        Elfogyott a havi kereted ({{ q.used }}/{{ q.limit }}) - a következő hónapban újra kérhetsz AI-feladatot.
+      } @else {
+        Költség: 1 egység a havi keretedből (ebben a hónapban még {{ q.limit - q.used }} / {{ q.limit }} maradt). Az újraellenőrzés ingyenes.
+      }
+    </p>
+  }
+
+  @if (otherJob(); as job) {
+    <div class="card !rounded-xl p-3 flex flex-wrap items-center justify-between gap-2" data-testid="ai-task-other-job">
+      <span class="text-sm">Van egy elkészült, még nem mentett AI-feladatod ebben a feladatsorban{{ job.taskId ? ' („' + (otherJobTitle() ?? 'meglévő feladat') + '”)' : ' (új feladat)' }}.</span>
+      <button type="button" class="btn btn-ghost !px-3 !py-1 text-sm" (click)="resume.emit(job.jobId)" data-testid="ai-task-resume">Megnyitás</button>
+    </div>
+  }
+
+  @if (mode() === 'complete') {
+    <p class="text-sm text-text-muted">
+      Az AI a feladat leírása és a részfeladatok alapján elkészíti, ami még hiányzik: pontjavaslat, mintamegoldás, részfeladatonkénti
+      kódrészletek, szükség esetén bemeneti adatfájl (generáló szkripttel) és tárolt bemenet. A meglévő részeidet nem írja felül.
+      Mentés előtt mindent átnézhetsz, semmi nem mentődik magától.
+    </p>
+    @if (taskSubtaskCount() === 0) {
+      <p class="text-sm text-warning" data-testid="ai-task-no-subtasks">Előbb add meg a feladat részfeladatait (legalább egyet) - az AI ezekhez készít megoldást.</p>
+    }
+    <label class="flex items-start gap-2 text-sm">
+      <input type="checkbox" class="mt-1" [ngModel]="request.regenerateSolution()" (ngModelChange)="request.regenerateSolution.set($event)"
+        [ngModelOptions]="{ standalone: true }" data-testid="ai-task-regenerate" />
+      <span>A meglévő megoldást is írja újra <span class="text-text-muted">(a mintamegoldást és a kódrészleteket; különben csak a hiányzót)</span></span>
+    </label>
+  } @else {
+    <p class="text-sm text-text-muted">
+      Add meg a témát és a szintet - az AI érettségi stílusban megírja a teljes feladatot: leírás, részfeladatok pontokkal, adatfájl,
+      mintamegoldás. Mentés előtt mindent átnézhetsz és módosíthatsz.
+    </p>
+    <div>
+      <label for="ai-task-topic" class="text-sm font-medium block mb-1">Téma</label>
+      <input id="ai-task-topic" class="input !px-2 !py-1" [maxlength]="maxTopic" [ngModel]="request.topic()" (ngModelChange)="request.topic.set($event)"
+        [ngModelOptions]="{ standalone: true }" placeholder="Pl. Kártyajáték pontszámai" data-testid="ai-task-topic" />
+    </div>
+    <div class="flex flex-wrap gap-4">
+      <fieldset>
+        <legend class="text-sm font-medium mb-1">Szint</legend>
+        <div class="flex gap-3">
+          @for (lv of levels; track lv.value) {
+            <label class="flex items-center gap-1.5 text-sm">
+              <input type="radio" name="ai-task-level" [value]="lv.value" [checked]="request.level() === lv.value" (change)="request.level.set(lv.value)"
+                [attr.data-testid]="'ai-task-level-' + lv.value" />
+              {{ lv.label }}
+            </label>
+          }
+        </div>
+      </fieldset>
+      <div>
+        <label for="ai-task-count" class="text-sm font-medium block mb-1">Részfeladatok száma</label>
+        <select id="ai-task-count" class="input !px-2 !py-1 !w-24" [ngModel]="request.subtaskCount()" (ngModelChange)="request.subtaskCount.set(+$event)"
+          [ngModelOptions]="{ standalone: true }" data-testid="ai-task-count">
+          @for (n of subtaskCounts; track n) { <option [ngValue]="n">{{ n }}</option> }
+        </select>
+      </div>
+    </div>
+    <div>
+      <label for="ai-task-idea" class="text-sm font-medium block mb-1">Ötlet, kérés (nem kötelező)</label>
+      <textarea id="ai-task-idea" rows="3" class="input !px-2 !py-1 !text-sm" [maxlength]="maxIdea" [ngModel]="request.idea()" (ngModelChange)="request.idea.set($event)"
+        [ngModelOptions]="{ standalone: true }" placeholder="Pl. legyen benne rendezés és egy fájlba írás." data-testid="ai-task-idea"></textarea>
+      <p class="text-xs text-text-muted mt-1">{{ request.idea().length }}/{{ maxIdea }}</p>
+    </div>
+  }
+
+  <fieldset>
+    <legend class="text-sm font-medium mb-1">Nyelvek</legend>
+    <div class="flex flex-wrap gap-x-4 gap-y-1">
+      @for (l of languageOptions; track l.key) {
+        <label class="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" [checked]="request.languages().has(l.key)" [disabled]="l.key === 'python'" (change)="request.toggleLanguage(l.key)"
+            [attr.data-testid]="'ai-task-language-' + l.key" />
+          {{ l.name }}
+        </label>
+      }
+    </div>
+    <p class="text-xs text-text-muted mt-1">A Python mindig elkészül: ez az ellenőrzés alapja, a többi nyelv kimenetét ehhez méri a rendszer.</p>
+  </fieldset>
+
+  @if (startError()) {
+    <p class="text-sm text-danger" role="alert" data-testid="ai-task-error">{{ startError() }}</p>
+  }
+
+  <div class="flex flex-wrap justify-end gap-2">
+    <button type="button" class="btn btn-ghost" (click)="cancel.emit()">Mégse</button>
+    <button type="button" class="btn btn-primary" (click)="start.emit()" [disabled]="!canStart()" data-testid="ai-task-start">
+      {{ starting() ? 'Indítás…' : 'Elkészítés' }}
+    </button>
+  </div>
+</div>
