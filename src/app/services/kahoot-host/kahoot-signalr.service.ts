@@ -1,11 +1,4 @@
-import {
-  computed,
-  inject,
-  Injectable,
-  NgZone,
-  OnDestroy,
-  signal,
-} from '@angular/core';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { HttpTransportType, HubConnectionState } from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
@@ -17,8 +10,8 @@ import { KahootRoomSnapshotDto } from '../../models/kahoot-host.model';
  * szolgáltatásának copy-adapt portja (a repók közti megosztás mintája a
  * token.service-szel azonos):
  *
- *  - a kapcsolat-életciklus NgZone-on KÍVÜL fut, az eseménykezelők zone-BAN
- *    hívódnak vissza (signal-írás → UI-frissülés);
+ *  - az állapot és az eseménykezelők signalt írnak, a zoneless
+ *    változásérzékelés ebből frissíti a UI-t (nincs NgZone);
  *  - a JWT accessTokenFactory-val megy (a WebSocket-handshake nem hordozhat
  *    Authorization fejlécet - a backend a query access_token-t fogadja el);
  *  - a szerver-timeout a backend KeepAliveInterval=15s / ClientTimeout=60s
@@ -29,7 +22,6 @@ import { KahootRoomSnapshotDto } from '../../models/kahoot-host.model';
  */
 @Injectable({ providedIn: 'root' })
 export class KahootSignalRService implements OnDestroy {
-  private readonly ngZone = inject(NgZone);
   private readonly tokenService = inject(TokenService);
 
   private hubConnection: signalR.HubConnection | null = null;
@@ -51,11 +43,9 @@ export class KahootSignalRService implements OnDestroy {
       return Promise.resolve();
     }
 
-    this.connectionPromise = this.ngZone
-      .runOutsideAngular(() => this.connectInternal())
-      .finally(() => {
-        this.connectionPromise = null;
-      });
+    this.connectionPromise = this.connectInternal().finally(() => {
+      this.connectionPromise = null;
+    });
 
     return this.connectionPromise;
   }
@@ -77,9 +67,7 @@ export class KahootSignalRService implements OnDestroy {
       this.hubConnection.onreconnecting(() => this.updateState(HubConnectionState.Reconnecting));
       this.hubConnection.onreconnected(() => {
         this.updateState(HubConnectionState.Connected);
-        if (this.reconnectedCallback) {
-          this.ngZone.run(this.reconnectedCallback);
-        }
+        this.reconnectedCallback?.();
       });
       this.hubConnection.onclose(() => this.updateState(HubConnectionState.Disconnected));
     }
@@ -95,7 +83,7 @@ export class KahootSignalRService implements OnDestroy {
     this.hubConnection = null;
     this.reconnectedCallback = null;
     if (connection) {
-      this.ngZone.runOutsideAngular(() => void connection.stop().catch(() => undefined));
+      void connection.stop().catch(() => undefined);
     }
     this._state.set(HubConnectionState.Disconnected);
   }
@@ -130,11 +118,9 @@ export class KahootSignalRService implements OnDestroy {
     return this.invoke<void>('LeaveRoom', kahootSessionId);
   }
 
-  /** Szerver-esemény feliratkozás - a handler zone-BAN fut. */
+  /** Szerver-esemény feliratkozás. */
   on<T>(eventName: string, handler: (payload: T) => void): void {
-    this.hubConnection?.on(eventName, (payload: T) => {
-      this.ngZone.run(() => handler(payload));
-    });
+    this.hubConnection?.on(eventName, handler);
   }
 
   private async invoke<T>(methodName: string, ...args: unknown[]): Promise<T> {
@@ -142,12 +128,10 @@ export class KahootSignalRService implements OnDestroy {
     if (!this.hubConnection) {
       throw new Error('Nincs élő kapcsolat.');
     }
-    return this.ngZone.runOutsideAngular(() =>
-      this.hubConnection!.invoke<T>(methodName, ...args),
-    );
+    return this.hubConnection.invoke<T>(methodName, ...args);
   }
 
   private updateState(state: HubConnectionState): void {
-    this.ngZone.run(() => this._state.set(state));
+    this._state.set(state);
   }
 }

@@ -16,7 +16,6 @@
             "outputPath": "dist/teacher-fe",
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               "src/assets",
@@ -91,8 +90,7 @@
             "buildTarget": "teacher-fe:build",
             "runner": "vitest",
             "runnerConfig": "vitest.config.ts",
-            "tsConfig": "tsconfig.spec.json",
-            "setupFiles": ["src/test-setup.ts"]
+            "tsConfig": "tsconfig.spec.json"
           },
           "configurations": {
             "ci": { "progress": false, "watch": false }

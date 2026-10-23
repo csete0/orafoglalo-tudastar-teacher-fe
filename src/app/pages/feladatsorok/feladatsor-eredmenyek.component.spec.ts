@@ -176,8 +176,19 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(rubric).not.toContain('igazítás: center'); // a teljesült szempont indoka nem kell
     expect(el.textContent).not.toContain('A diák megoldása');
 
-    (el.querySelector('[data-testid="attempt-files"] button') as HTMLButtonElement).click();
-    expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
+    // jsdom-ban nincs valódi blob-URL és letöltés: a böngésző-API-kat a saveBlob specjéhez hasonlóan stubboljuk
+    // (zone.js nélkül a jsdom-hiba már nem nyelődik el, hanem kezeletlen hibaként buktatná a futást).
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:teszt');
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    try {
+      (el.querySelector('[data-testid="attempt-files"] button') as HTMLButtonElement).click();
+      expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
+      expect(createUrl).toHaveBeenCalledWith(expect.any(Blob));
+      expect(anchorClick).toHaveBeenCalledTimes(1);
+    } finally {
+      createUrl.mockRestore();
+      anchorClick.mockRestore();
+    }
   });
 
   it('a gépi tételnél közérthető indok, a nyers szabály-útvonal nélkül; a blokk címe semleges', () => {

@@ -8,6 +8,9 @@ import { ReportDateRange, ReportRangeKey } from '../date-range/report-date-range
 // kliens-oldali validáció csak kényelmi réteg — a szerver a mérvadó —, de UI-TT-134
 // miatt SOHA nem lehet néma no-op: ha nem szűrünk, meg kell mondani, miért.
 describe('DateRangeFilterComponent', () => {
+  /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
   let toastService: ToastService;
   // UI-TT-178: az emit payload a range mellett a KULCSOT is tartalmazza, hogy egy
   // fülváltás miatt újra-mountoló szülő vissza tudja tölteni a legördülő állapotát.
@@ -205,9 +208,10 @@ describe('DateRangeFilterComponent', () => {
     expect(toInput.value).toBe('2026-08-09');
   });
 
-  it('input nélkül a viselkedés változatlan: DEFAULT_RANGE_KEY-vel ("Teljes időszak") jön létre', () => {
+  it('input nélkül a viselkedés változatlan: DEFAULT_RANGE_KEY-vel ("Teljes időszak") jön létre', async () => {
     const fixture = TestBed.createComponent(DateRangeFilterComponent);
     fixture.detectChanges();
+    await settle();
 
     expect(fixture.componentInstance.rangeKey()).toBe('all');
     const select = fixture.nativeElement.querySelector('select#range-key') as HTMLSelectElement;

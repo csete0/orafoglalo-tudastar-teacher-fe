@@ -25,6 +25,9 @@ const RUNNERS: TestRunnerOption[] = [
 ];
 
 describe('CsapatReszletekComponent', () => {
+  /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
   const review = (over: Partial<TeamRepoReview>): TeamRepoReview => ({
     id: 1, status: 'done', branch: 'main', commitSha: null, requestedByName: null, payerKind: 'teacher', createdAt: '2027-03-12T10:00:00Z', finishedAt: null,
     error: null, counted: true, result: null, ...over,
@@ -58,16 +61,19 @@ describe('CsapatReszletekComponent', () => {
     const { fixture, c, api, el } = setup();
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     expect(el.textContent).toContain('Kiss Anna');
     expect(el.textContent).toContain('+90');
     c.setTab('merfoldkovek');
     await fixture.whenStable();
+    await settle();
     c.note.set('Rendben');
     await c.tick(ms, true);
     expect(api.tickMilestone).toHaveBeenCalledWith(3, 11, true, 'Rendben');
     c.setTab('fajlok');
     await fixture.whenStable();
+    await settle();
     await c.openFile('README.md');
     expect(c.openFiles()).toEqual({ 'README.md': '# Büfé' });
   });
@@ -119,6 +125,7 @@ describe('CsapatReszletekComponent', () => {
     }));
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="activity-row-deleted"]')?.textContent).toContain('Törölt felhasználó');
     expect(el.querySelector('[data-testid="activity-row-import"]')?.textContent).toContain('Importált (GitHub)');

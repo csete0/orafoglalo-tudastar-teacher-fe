@@ -30,6 +30,9 @@ class HostComponent {
 }
 
 describe('DialogShellComponent', () => {
+  /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
   function setup(configure?: (host: HostComponent) => void) {
     const fixture = TestBed.createComponent(HostComponent);
     configure?.(fixture.componentInstance);
@@ -93,11 +96,13 @@ describe('DialogShellComponent', () => {
   it('megnyitáskor a panelre, [data-dialog-autofocus] esetén arra az elemre fókuszál', async () => {
     const plain = setup();
     await plain.fixture.whenStable();
+    await settle();
     expect(document.activeElement).toBe(plain.panel);
     plain.fixture.destroy();
 
     const withTarget = setup((h) => h.withAutofocus.set(true));
     await withTarget.fixture.whenStable();
+    await settle();
     expect(document.activeElement).toBe(withTarget.el.querySelector('[data-testid="t-autofocus"]'));
     withTarget.fixture.destroy();
   });
@@ -109,6 +114,7 @@ describe('DialogShellComponent', () => {
       trigger.focus();
       const { fixture, host, panel } = setup();
       await fixture.whenStable();
+      await settle();
       expect(document.activeElement).toBe(panel);
 
       host.open.set(false);

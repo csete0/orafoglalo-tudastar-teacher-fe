@@ -15,6 +15,9 @@ const proposed: Team = {
 };
 
 describe('CsoportCsapatokComponent', () => {
+  /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
   function setup(list: Team[] | Error) {
     const api = {
       forGroup: vi.fn(() => (list instanceof Error ? throwError(() => list) : of(list))), approve: vi.fn(() => of({ ...proposed, status: 'active' })),
@@ -40,6 +43,7 @@ describe('CsoportCsapatokComponent', () => {
     c.unavailable.subscribe(spy);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     expect(spy).toHaveBeenCalled();
   });
 
@@ -47,6 +51,7 @@ describe('CsoportCsapatokComponent', () => {
     const { fixture, c, api, confirm, el } = setup([proposed]);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="team-9"]')?.textContent).toContain('jóváhagyásra vár');
     await c.approve(proposed);
@@ -61,6 +66,7 @@ describe('CsoportCsapatokComponent', () => {
     const { fixture, c, api } = setup([]);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     expect(c.canCreate()).toBe(false);
     c.toggle(1); c.toggle(3); c.newName.set('Edzőterem');
     expect(c.canCreate()).toBe(true);
@@ -73,6 +79,7 @@ describe('CsoportCsapatokComponent', () => {
     const { fixture, c, api, confirm, el } = setup([active, full]);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     const kivetel = (id: number) => [...el.querySelectorAll<HTMLButtonElement>(`[data-testid="team-${id}"] button[aria-label^="Kivétel"]`)];
     expect(kivetel(9).every((b) => b.disabled)).toBe(true);
@@ -94,11 +101,13 @@ describe('CsoportCsapatokComponent', () => {
     const { fixture, api, el } = setup([active]);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     const select = el.querySelector<HTMLSelectElement>('[data-testid="team-9"] select')!;
     select.value = '3';
     select.dispatchEvent(new Event('change'));
     await fixture.whenStable();
+    await settle();
     expect(api.addMember).toHaveBeenCalledWith(9, 3);
     expect(select.value).toBe('');
   });

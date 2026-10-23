@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { NgZone } from '@angular/core';
+import { signal } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { HttpTransportType, HubConnectionState, IHttpConnectionOptions } from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
@@ -136,19 +136,16 @@ describe('KahootSignalRService', () => {
     expect(await service.joinRoom(7)).toBe(snapshot);
   });
 
-  it('szerver-esemény: a kezelő zone-ban kapja meg a payloadot', async () => {
+  // Zoneless (FE-refaktor Z): nincs NgZone-visszahívás, a kezelő által írt signal maga ütemezi a UI-frissítést.
+  it('szerver-esemény: a kezelő megkapja a payloadot, és az általa írt signal azonnal látszik', async () => {
     await service.startConnection();
-    let received: unknown;
-    let inZone = false;
-    service.on<{ n: number }>('QuestionStarted', (payload) => {
-      received = payload;
-      inZone = NgZone.isInAngularZone();
-    });
+    const received = signal<{ n: number } | null>(null);
+    service.on<{ n: number }>('QuestionStarted', (payload) => received.set(payload));
 
-    TestBed.inject(NgZone).runOutsideAngular(() => hub().handlers.get('QuestionStarted')!({ n: 3 }));
+    expect(hub().on).toHaveBeenCalledWith('QuestionStarted', expect.any(Function));
+    hub().handlers.get('QuestionStarted')!({ n: 3 });
 
-    expect(received).toEqual({ n: 3 });
-    expect(inZone).toBe(true);
+    expect(received()).toEqual({ n: 3 });
   });
 
   it('állapotváltások: újracsatlakozás → reconnect-callback, bezárás → bontott', async () => {

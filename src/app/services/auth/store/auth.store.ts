@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Injectable, signal, computed, inject, DestroyRef, NgZone } from '@angular/core';
+import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { finalize, take } from 'rxjs/operators';
@@ -22,7 +22,6 @@ export class AuthStore {
   private readonly destroyRef = inject(DestroyRef);
   private readonly authService = inject(AuthService);
   private readonly tokenService = inject(TokenService);
-  private readonly ngZone = inject(NgZone);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
 
@@ -150,11 +149,9 @@ export class AuthStore {
   // ==================== TOKEN-FIGYELÉS ====================
 
   private startTokenRefreshMonitoring(): void {
-    this.ngZone.runOutsideAngular(() => {
-      timer(0, TIMING_CONFIG.REFRESH_CHECK_INTERVAL)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe(() => this.ngZone.run(() => this.checkAndRefreshToken()));
-    });
+    timer(0, TIMING_CONFIG.REFRESH_CHECK_INTERVAL)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.checkAndRefreshToken());
   }
 
   // ==================== CROSS-TAB SZINKRON ====================
@@ -163,52 +160,48 @@ export class AuthStore {
    *  a natív 'storage' esemény ezt a tabot is azonnal értesíti — enélkül
    *  isAuthenticated hamisan true maradna a másik tab kijelentkezése után. */
   private setupStorageListener(): void {
-    this.ngZone.runOutsideAngular(() => {
-      window.addEventListener('storage', (event) => {
-        if (event.key === STORAGE_KEYS.ACCESS_TOKEN || event.key === STORAGE_KEYS.USER_DATA) {
-          this.ngZone.run(() => {
-            if (!event.newValue) {
-              this.performCompleteSignOut();
-              return;
-            }
-
-            // UI-TT-142: a `teacher_access_token`/`teacher_user_data` kulcsok
-            // origin-szintűek (nem tab-szintűek) - egy MÁSIK tabban történő
-            // bejelentkezés felülírja őket ennek a tabnak is. Az `else` ág
-            // korábban feltétel nélkül átvette az így megjelenő új
-            // identitást (initializeAuthState() a friss localStorage-tartalmat
-            // olvasná be) - ha az új tárolt user ID-je ELTÉR a jelenleg
-            // tartott identitásétól, ez NEM "a saját munkamenetem frissült
-            // máshol", hanem "egy másik fiók vált aktívvá ezen a böngészőn" -
-            // ilyenkor a helyes válasz egy kényszerített teljes kijelentkezés,
-            // ugyanúgy, mint a fenti `!event.newValue` ágnál, NEM egy csendes
-            // identitás-csere.
-            const currentUserId = this.currentUser()?.id;
-            const newUserId = this.tokenService.getStoredUser()?.id;
-
-            if (currentUserId != null && newUserId != null && newUserId !== currentUserId) {
-              this.toastService.warning(
-                'Kijelentkeztünk, mert egy másik fiók jelentkezett be ezen az eszközön.',
-                5000,
-              );
-              // Regresszió-fix: itt NEM performCompleteSignOut()-ot hívunk. A
-              // localStorage EBBEN a pillanatban már a MÁSIK tab friss, érvényes
-              // munkamenetét tartalmazza (ő írta felül) - egy tokenService.clearTokens()
-              // hívás innen letörölné AZT a legitim, éppen csak most létrejött
-              // munkamenetet is, mert a token/user kulcsok origin-szintűek, nem
-              // tab-szintűek. Ez saját magát becsapó "storage" eseményt váltana ki
-              // a másik tabban, ami így - egy sikeres bejelentkezés UTÁN közvetlenül -
-              // magát is csendben kijelentkeztetné. Ezért itt csak EZEN a tabon
-              // (memóriában) állítjuk vissza a nem-hitelesített állapotot, a
-              // megosztott storage-hoz nem nyúlunk.
-              this.signOutLocallyWithoutClearingStorage();
-              return;
-            }
-
-            this.initializeAuthState();
-          });
+    window.addEventListener('storage', (event) => {
+      if (event.key === STORAGE_KEYS.ACCESS_TOKEN || event.key === STORAGE_KEYS.USER_DATA) {
+        if (!event.newValue) {
+          this.performCompleteSignOut();
+          return;
         }
-      });
+
+        // UI-TT-142: a `teacher_access_token`/`teacher_user_data` kulcsok
+        // origin-szintűek (nem tab-szintűek) - egy MÁSIK tabban történő
+        // bejelentkezés felülírja őket ennek a tabnak is. Az `else` ág
+        // korábban feltétel nélkül átvette az így megjelenő új
+        // identitást (initializeAuthState() a friss localStorage-tartalmat
+        // olvasná be) - ha az új tárolt user ID-je ELTÉR a jelenleg
+        // tartott identitásétól, ez NEM "a saját munkamenetem frissült
+        // máshol", hanem "egy másik fiók vált aktívvá ezen a böngészőn" -
+        // ilyenkor a helyes válasz egy kényszerített teljes kijelentkezés,
+        // ugyanúgy, mint a fenti `!event.newValue` ágnál, NEM egy csendes
+        // identitás-csere.
+        const currentUserId = this.currentUser()?.id;
+        const newUserId = this.tokenService.getStoredUser()?.id;
+
+        if (currentUserId != null && newUserId != null && newUserId !== currentUserId) {
+          this.toastService.warning(
+            'Kijelentkeztünk, mert egy másik fiók jelentkezett be ezen az eszközön.',
+            5000,
+          );
+          // Regresszió-fix: itt NEM performCompleteSignOut()-ot hívunk. A
+          // localStorage EBBEN a pillanatban már a MÁSIK tab friss, érvényes
+          // munkamenetét tartalmazza (ő írta felül) - egy tokenService.clearTokens()
+          // hívás innen letörölné AZT a legitim, éppen csak most létrejött
+          // munkamenetet is, mert a token/user kulcsok origin-szintűek, nem
+          // tab-szintűek. Ez saját magát becsapó "storage" eseményt váltana ki
+          // a másik tabban, ami így - egy sikeres bejelentkezés UTÁN közvetlenül -
+          // magát is csendben kijelentkeztetné. Ezért itt csak EZEN a tabon
+          // (memóriában) állítjuk vissza a nem-hitelesített állapotot, a
+          // megosztott storage-hoz nem nyúlunk.
+          this.signOutLocallyWithoutClearingStorage();
+          return;
+        }
+
+        this.initializeAuthState();
+      }
     });
   }
 
