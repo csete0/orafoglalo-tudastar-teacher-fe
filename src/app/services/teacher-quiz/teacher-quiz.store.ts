@@ -9,13 +9,12 @@ import {
   CreateTeacherQuizRequest,
   GenerateTeacherQuizQuestionsRequest,
   QuizAuthoringScope,
-  QuizBankQuestionDto,
-  QuizDifficulty,
   TeacherQuizDetailDto,
   TeacherQuizDto,
 } from '../../models/teacher-quiz.model';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { DetailReloadTarget, mutateAndReload, publishAndReload } from '../detail-reload.util';
+import { QuizBankStore } from './quiz-bank.store';
 import { TeacherQuizService } from './teacher-quiz.service';
 
 /**
@@ -35,12 +34,14 @@ import { TeacherQuizService } from './teacher-quiz.service';
  * C5: a store egy `scope`-ot is tart (`teacher` | `admin`), ami a service-ben a BE-gyökeret
  * váltja. A tanári és az admin (platform-kvíz) oldalak UGYANEZT az egy root-store-t
  * használják, ezért a scope-váltás a teljes tartalmat üríti: a tanár saját listája nem
- * villanhat fel a platform-kvízek oldalán, és fordítva.
+ * villanhat fel a platform-kvízek oldalán, és fordítva (a kérdésbank-keresés találatai is,
+ * amelyek a külön `QuizBankStore`-ban vannak).
  */
 @Injectable({ providedIn: 'root' })
 export class TeacherQuizStore {
   private readonly destroyRef = inject(DestroyRef);
   private readonly service = inject(TeacherQuizService);
+  private readonly bank = inject(QuizBankStore);
 
   private readonly _scope = signal<QuizAuthoringScope>('teacher');
   private readonly _quizzes = signal<TeacherQuizDto[]>([]);
@@ -50,13 +51,6 @@ export class TeacherQuizStore {
   private readonly _mineLoading = signal(false);
   private readonly _generating = signal(false);
   private readonly _error = signal<string | null>(null);
-
-  // UI-UX: közös AI-bank keresés ("meglévő kérdés hozzáadása") - a fő betöltés/hiba
-  // jelzőktől KÜLÖN, ugyanazzal az indoklással, mint a _generating-nél: a keresés a
-  // szerkesztő-oldal más részét ne fagyassza/hibáztassa, és fordítva.
-  private readonly _bankResults = signal<QuizBankQuestionDto[]>([]);
-  private readonly _bankSearching = signal(false);
-  private readonly _bankSearchError = signal<string | null>(null);
 
   private _detailGeneration = 0;
   private _detailQuizId: number | null = null;
@@ -71,12 +65,6 @@ export class TeacherQuizStore {
     reload: (id, onSuccess) => this.loadDetail(id, onSuccess),
   };
 
-  // UI-TT-226: minden searchBankQuestions()-hívás saját, független subscribe()-ot
-  // indított, cél-generáció/id-ellenőrzés nélkül - egy lassabb, tág keresés KÉSVE
-  // érkező válasza csendben felülírhatta egy közben indított, szűkített keresés
-  // már megjelenő, helyes találatait. A _detailQuizId mintáját követve.
-  private _bankSearchRequestId = 0;
-
   readonly scope = this._scope.asReadonly();
   readonly quizzes = this._quizzes.asReadonly();
   readonly selectedDetail = this._selectedDetail.asReadonly();
@@ -86,9 +74,6 @@ export class TeacherQuizStore {
   /** Az AI-generálás külön jelzőt kap: hosszabb, és saját gombot tilt le. */
   readonly generating = this._generating.asReadonly();
   readonly error = this._error.asReadonly();
-  readonly bankResults = this._bankResults.asReadonly();
-  readonly bankSearching = this._bankSearching.asReadonly();
-  readonly bankSearchError = this._bankSearchError.asReadonly();
 
   /**
    * C5: a szerkesztő-oldalak minden belépéskor beállítják, hogy tanári vagy admin
@@ -108,7 +93,7 @@ export class TeacherQuizStore {
     this._error.set(null);
     this._loading.set(false);
     this._mineLoading.set(false);
-    this.clearBankResults();
+    this.bank.clear();
   }
 
   loadMine(): void {
@@ -277,41 +262,6 @@ export class TeacherQuizStore {
           this._error.set(extractErrorMessage(err, 'A kérdésgenerálás sikertelen.'));
         },
       });
-  }
-
-  /** UI-UX: keresés a közös AI-kérdésbankban ("meglévő kérdés hozzáadása"). */
-  searchBankQuestions(search: string | null, topicId: number | null, difficulty: QuizDifficulty | null): void {
-    this._bankSearching.set(true);
-    this._bankSearchError.set(null);
-
-    const requestId = ++this._bankSearchRequestId;
-
-    this.service
-      .searchBankQuestions(search, topicId, difficulty, this._scope())
-      .pipe(
-        take(1),
-        finalize(() => {
-          if (requestId !== this._bankSearchRequestId) return;
-          this._bankSearching.set(false);
-        }),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (results) => {
-          if (requestId !== this._bankSearchRequestId) return;
-          this._bankResults.set(results);
-        },
-        error: (err) => {
-          if (requestId !== this._bankSearchRequestId) return;
-          this._bankSearchError.set(extractErrorMessage(err, 'A keresés sikertelen.'));
-        },
-      });
-  }
-
-  clearBankResults(): void {
-    this._bankSearchRequestId++;
-    this._bankResults.set([]);
-    this._bankSearchError.set(null);
   }
 
   /** A kiválasztott bank-kérdés MÁSOLATÁNAK felvétele a kvízbe. */
