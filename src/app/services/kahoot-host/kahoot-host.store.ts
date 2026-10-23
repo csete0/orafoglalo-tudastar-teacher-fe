@@ -43,22 +43,22 @@ export class KahootHostStore {
   private readonly _actionPending = signal(false);
   private readonly _timeLeftSeconds = signal(0);
 
-  readonly phase = computed(() => this._phase());
-  readonly roomId = computed(() => this._roomId());
-  readonly quizTitle = computed(() => this._quizTitle());
-  readonly groupName = computed(() => this._groupName());
-  readonly joinCode = computed(() => this._joinCode());
-  readonly questionCount = computed(() => this._questionCount());
-  readonly participantCount = computed(() => this._participantCount());
-  readonly participantNames = computed(() => this._participantNames());
-  readonly currentQuestion = computed(() => this._currentQuestion());
-  readonly questionClosed = computed(() => this._questionClosed());
-  readonly finalLeaderboard = computed(() => this._finalLeaderboard());
-  readonly answeredCount = computed(() => this._answeredCount());
-  readonly error = computed(() => this._error());
-  readonly actionError = computed(() => this._actionError());
-  readonly actionPending = computed(() => this._actionPending());
-  readonly timeLeftSeconds = computed(() => this._timeLeftSeconds());
+  readonly phase = this._phase.asReadonly();
+  readonly roomId = this._roomId.asReadonly();
+  readonly quizTitle = this._quizTitle.asReadonly();
+  readonly groupName = this._groupName.asReadonly();
+  readonly joinCode = this._joinCode.asReadonly();
+  readonly questionCount = this._questionCount.asReadonly();
+  readonly participantCount = this._participantCount.asReadonly();
+  readonly participantNames = this._participantNames.asReadonly();
+  readonly currentQuestion = this._currentQuestion.asReadonly();
+  readonly questionClosed = this._questionClosed.asReadonly();
+  readonly finalLeaderboard = this._finalLeaderboard.asReadonly();
+  readonly answeredCount = this._answeredCount.asReadonly();
+  readonly error = this._error.asReadonly();
+  readonly actionError = this._actionError.asReadonly();
+  readonly actionPending = this._actionPending.asReadonly();
+  readonly timeLeftSeconds = this._timeLeftSeconds.asReadonly();
   readonly isReconnecting = this.signalr.isReconnecting;
 
   /** Van-e még hátralévő kérdés a mostani után. */

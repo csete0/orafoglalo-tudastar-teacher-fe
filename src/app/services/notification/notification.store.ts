@@ -3,14 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs/operators';
 import { Notification } from '../../models/notification.model';
 import { NotificationService } from './notification.service';
-
-function extractErrorMessage(err: any, fallback: string): string {
-  const body = err?.error;
-  if (typeof body?.errorMessage === 'string' && body.errorMessage.trim()) {
-    return body.errorMessage;
-  }
-  return fallback;
-}
+import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /**
  * UI-TT-82: a teacher-fe-nek eddig egyáltalán nem volt értesítés-felülete,
@@ -29,9 +22,9 @@ export class NotificationStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
-  readonly notifications = computed(() => this._notifications());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
+  readonly notifications = this._notifications.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
 
   // UI-TT-96: a diák-fe UI-TS-69 fixe óta már kiszűri a lejárt (expiryDate <
   // ma) sorokat a jelvényből ÉS a listából egyaránt - ez a store nulláról

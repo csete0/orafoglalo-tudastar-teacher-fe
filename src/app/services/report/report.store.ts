@@ -77,15 +77,15 @@ export class ReportStore {
   private _schoolActivityId: number | null = null;
   private _studentDetailId: number | null = null;
 
-  readonly groupActivity = computed(() => this._groupActivity());
-  readonly schoolActivity = computed(() => this._schoolActivity());
-  readonly studentDetail = computed(() => this._studentDetail());
-  readonly taskSetResults = computed(() => this._taskSetResults());
-  readonly attemptReview = computed(() => this._attemptReview());
-  readonly groupActivityLoading = computed(() => this._groupActivityLoading());
-  readonly schoolActivityLoading = computed(() => this._schoolActivityLoading());
-  readonly studentDetailLoading = computed(() => this._studentDetailLoading());
-  readonly taskSetResultsLoading = computed(() => this._taskSetResultsLoading());
+  readonly groupActivity = this._groupActivity.asReadonly();
+  readonly schoolActivity = this._schoolActivity.asReadonly();
+  readonly studentDetail = this._studentDetail.asReadonly();
+  readonly taskSetResults = this._taskSetResults.asReadonly();
+  readonly attemptReview = this._attemptReview.asReadonly();
+  readonly groupActivityLoading = this._groupActivityLoading.asReadonly();
+  readonly schoolActivityLoading = this._schoolActivityLoading.asReadonly();
+  readonly studentDetailLoading = this._studentDetailLoading.asReadonly();
+  readonly taskSetResultsLoading = this._taskSetResultsLoading.asReadonly();
   /** Durva, összesített "van-e BÁRMI folyamatban" jelző - entitás-specifikus UI-nak a
    *  fenti négy dedikált jelző egyikét kell olvasnia, nem ezt (UI-TT-165). */
   readonly loading = computed(
@@ -95,8 +95,8 @@ export class ReportStore {
       this._studentDetailLoading() ||
       this._taskSetResultsLoading(),
   );
-  readonly reviewLoading = computed(() => this._reviewLoading());
-  readonly error = computed(() => this._error());
+  readonly reviewLoading = this._reviewLoading.asReadonly();
+  readonly error = this._error.asReadonly();
 
   loadGroupActivity(groupId: number, from?: Date, to?: Date): void {
     const generation = ++this._groupActivityGeneration;

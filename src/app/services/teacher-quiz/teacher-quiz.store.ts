@@ -1,4 +1,4 @@
-import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
@@ -15,6 +15,7 @@ import {
   TeacherQuizDto,
 } from '../../models/teacher-quiz.model';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { DetailReloadTarget, mutateAndReload, publishAndReload } from '../detail-reload.util';
 import { TeacherQuizService } from './teacher-quiz.service';
 
 /**
@@ -59,24 +60,35 @@ export class TeacherQuizStore {
 
   private _detailGeneration = 0;
   private _detailQuizId: number | null = null;
+
+  /** A mutáció+újratöltés közös folyamata (`detail-reload.util`) ezen a szeleten dolgozik. */
+  private readonly detailReload: DetailReloadTarget = {
+    destroyRef: this.destroyRef,
+    loading: this._loading,
+    error: this._error,
+    publishResult: this._publishResult,
+    currentId: () => this._detailQuizId,
+    reload: (id, onSuccess) => this.loadDetail(id, onSuccess),
+  };
+
   // UI-TT-226: minden searchBankQuestions()-hívás saját, független subscribe()-ot
   // indított, cél-generáció/id-ellenőrzés nélkül - egy lassabb, tág keresés KÉSVE
   // érkező válasza csendben felülírhatta egy közben indított, szűkített keresés
   // már megjelenő, helyes találatait. A _detailQuizId mintáját követve.
   private _bankSearchRequestId = 0;
 
-  readonly scope = computed(() => this._scope());
-  readonly quizzes = computed(() => this._quizzes());
-  readonly selectedDetail = computed(() => this._selectedDetail());
-  readonly publishResult = computed(() => this._publishResult());
-  readonly loading = computed(() => this._loading());
-  readonly mineLoading = computed(() => this._mineLoading());
+  readonly scope = this._scope.asReadonly();
+  readonly quizzes = this._quizzes.asReadonly();
+  readonly selectedDetail = this._selectedDetail.asReadonly();
+  readonly publishResult = this._publishResult.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly mineLoading = this._mineLoading.asReadonly();
   /** Az AI-generálás külön jelzőt kap: hosszabb, és saját gombot tilt le. */
-  readonly generating = computed(() => this._generating());
-  readonly error = computed(() => this._error());
-  readonly bankResults = computed(() => this._bankResults());
-  readonly bankSearching = computed(() => this._bankSearching());
-  readonly bankSearchError = computed(() => this._bankSearchError());
+  readonly generating = this._generating.asReadonly();
+  readonly error = this._error.asReadonly();
+  readonly bankResults = this._bankResults.asReadonly();
+  readonly bankSearching = this._bankSearching.asReadonly();
+  readonly bankSearchError = this._bankSearchError.asReadonly();
 
   /**
    * C5: a szerkesztő-oldalak minden belépéskor beállítják, hogy tanári vagy admin
@@ -162,7 +174,7 @@ export class TeacherQuizStore {
   }
 
   updateQuiz(id: number, request: CreateTeacherQuizRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.update(id, request, this._scope()), id, onSuccess);
+    mutateAndReload(this.detailReload, this.service.update(id, request, this._scope()), id, onSuccess);
   }
 
   deleteQuiz(id: number, onSuccess?: () => void): void {
@@ -174,37 +186,7 @@ export class TeacherQuizStore {
   }
 
   publish(id: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
-
-    this.service
-      .publish(id, this._scope())
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (result) => {
-          // Cél-ellenőrzés: egy elhagyott kvíz publikálásának KÉSVE érkező válasza nem
-          // írhatja felül a közben megnyitott másik kvíz nézetét (sem a validációs
-          // hibalistát, sem a sikeres ág újratöltését).
-          if (this._detailQuizId !== null && this._detailQuizId !== id) return;
-
-          this._publishResult.set(result);
-          if (result.success) {
-            // A loading szándékosan true marad, amíg az újratöltés be nem fejeződik -
-            // különben a jelvény átmenetileg úgy mutatná, mintha nem sikerült volna.
-            this.loadDetail(id, onSuccess);
-          } else {
-            this._loading.set(false);
-          }
-        },
-        error: (err) => {
-          if (this._detailQuizId !== null && this._detailQuizId !== id) return;
-
-          this._error.set(extractErrorMessage(err, 'A publikálás sikertelen.'));
-          this._loading.set(false);
-        },
-      });
+    publishAndReload(this.detailReload, () => this.service.publish(id, this._scope()), id, onSuccess);
   }
 
   /**
@@ -212,13 +194,13 @@ export class TeacherQuizStore {
    * tanári nézet ezt nem is kínálja.
    */
   unpublish(id: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.unpublish(id, this._scope()), id, onSuccess);
+    mutateAndReload(this.detailReload, this.service.unpublish(id, this._scope()), id, onSuccess);
   }
 
   // ── Kérdések ────────────────────────────────────────────────
 
   addQuestion(quizId: number, request: CreateTeacherQuizQuestionRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addQuestion(quizId, request, this._scope()), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.addQuestion(quizId, request, this._scope()), quizId, onSuccess);
   }
 
   updateQuestion(
@@ -227,11 +209,11 @@ export class TeacherQuizStore {
     request: CreateTeacherQuizQuestionRequest,
     onSuccess?: () => void,
   ): void {
-    this.mutateAndReload(this.service.updateQuestion(questionId, request, this._scope()), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.updateQuestion(questionId, request, this._scope()), quizId, onSuccess);
   }
 
   deleteQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteQuestion(questionId, this._scope()), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.deleteQuestion(questionId, this._scope()), quizId, onSuccess);
   }
 
   /**
@@ -240,16 +222,16 @@ export class TeacherQuizStore {
    * a második lépése hálózati/átmeneti hibával duplikált DisplayOrder-t hagyhatott hátra.
    */
   reorderQuestion(quizId: number, questionId: number, neighbourQuestionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(
-      this.service.reorderQuestion(questionId, neighbourQuestionId, this._scope()), quizId, onSuccess);
+    mutateAndReload(
+      this.detailReload, this.service.reorderQuestion(questionId, neighbourQuestionId, this._scope()), quizId, onSuccess);
   }
 
   approveQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.approveQuestion(questionId, this._scope()), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.approveQuestion(questionId, this._scope()), quizId, onSuccess);
   }
 
   duplicateQuestion(quizId: number, questionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.duplicateQuestion(questionId), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.duplicateQuestion(questionId), quizId, onSuccess);
   }
 
   cloneQuiz(quizId: number, onSuccess?: (newQuizId: number) => void): void {
@@ -334,18 +316,18 @@ export class TeacherQuizStore {
 
   /** A kiválasztott bank-kérdés MÁSOLATÁNAK felvétele a kvízbe. */
   addExistingQuestion(quizId: number, bankQuestionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(
-      this.service.addExistingQuestion(quizId, bankQuestionId, this._scope()), quizId, onSuccess);
+    mutateAndReload(
+      this.detailReload, this.service.addExistingQuestion(quizId, bankQuestionId, this._scope()), quizId, onSuccess);
   }
 
   // ── Kiadás ──────────────────────────────────────────────────
 
   assignToGroup(quizId: number, request: AssignTeacherQuizRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.assignToGroup(quizId, request), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.assignToGroup(quizId, request), quizId, onSuccess);
   }
 
   revokeAssignment(quizId: number, assignmentId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.revokeAssignment(assignmentId), quizId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.revokeAssignment(assignmentId), quizId, onSuccess);
   }
 
   clearError(): void {
@@ -370,31 +352,5 @@ export class TeacherQuizStore {
         next: onSuccess,
         error: (err) => this._error.set(extractErrorMessage(err, 'A művelet sikertelen.')),
       });
-  }
-
-  private mutateAndReload<T>(observable: Observable<T>, quizId: number, onSuccess?: () => void): void {
-    this._loading.set(true);
-    this._error.set(null);
-
-    observable.pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        // Csak akkor töltünk újra, ha a mutáció célpontja MÉG MINDIG a betöltő aktuális
-        // célpontja. A generáció-számláló ezt önmagában nem akadályozná meg: az elhagyott
-        // kvíz újratöltése indulna utoljára, tehát ő kapná a legmagasabb generációt.
-        //
-        // A loading-ot itt SZÁNDÉKOSAN nem állítjuk vissza: a cél-id kizárólag a
-        // loadDetail()-ben változik, ami mindig lezáródó finalize()-t kap - a loading
-        // ekkor már annak a frissebb betöltésnek a tulajdona.
-        if (this._detailQuizId !== null && this._detailQuizId !== quizId) return;
-
-        this.loadDetail(quizId, onSuccess);
-      },
-      error: (err) => {
-        if (this._detailQuizId !== null && this._detailQuizId !== quizId) return;
-
-        this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
-        this._loading.set(false);
-      },
-    });
   }
 }

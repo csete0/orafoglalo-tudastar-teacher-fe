@@ -35,10 +35,10 @@ export class AuthStore {
   private initializationPromise?: Promise<void>;
   private suppressAutoRedirectOnRefreshFailure = false;
 
-  readonly authCheckComplete = computed(() => this._authCheckComplete());
-  readonly isAuthenticated = computed(() => this._isAuthenticated());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
+  readonly authCheckComplete = this._authCheckComplete.asReadonly();
+  readonly isAuthenticated = this._isAuthenticated.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
   readonly currentUser = computed<TeacherUserLoginDto | null>(() => this._loginResponse()?.user ?? null);
   readonly roles = computed<string[]>(() => this.currentUser()?.roles ?? []);
   readonly hasTeacherRole = computed(() => this.roles().includes('teacher'));

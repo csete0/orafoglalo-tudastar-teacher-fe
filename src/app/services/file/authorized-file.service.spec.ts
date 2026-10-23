@@ -82,7 +82,7 @@ describe('AuthorizedFileService', () => {
     service.revoke('blob:mock-0');
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-0');
 
-    (URL.revokeObjectURL as any).mockClear();
+    vi.mocked(URL.revokeObjectURL).mockClear();
     service.revoke('blob:not-tracked');
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });

@@ -42,12 +42,12 @@ export class SchoolStore {
   // viselkedése (ld. UI-TT-147/149/157 kommentek) szándékosan VÁLTOZATLAN marad.
   private readonly _regenerateInviteInFlight = signal<ReadonlySet<number>>(new Set<number>());
 
-  readonly schools = computed(() => this._schools());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
-  readonly members = computed(() => this._members());
-  readonly schoolGroups = computed(() => this._schoolGroups());
-  readonly licenseOverview = computed(() => this._licenseOverview());
+  readonly schools = this._schools.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
+  readonly members = this._members.asReadonly();
+  readonly schoolGroups = this._schoolGroups.asReadonly();
+  readonly licenseOverview = this._licenseOverview.asReadonly();
 
   readonly selectedSchool = computed<SchoolDto | null>(
     () => this._schools().find((s) => s.id === this._selectedSchoolId()) ?? null,
