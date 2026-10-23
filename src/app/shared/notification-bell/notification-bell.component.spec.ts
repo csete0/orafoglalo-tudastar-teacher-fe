@@ -240,8 +240,8 @@ describe('NotificationBellComponent', () => {
     fixture.detectChanges();
 
     expect(
-      Array.from(fixture.nativeElement.querySelectorAll('button')).some((b: any) =>
-        b.textContent.includes('Összes megjelölése'),
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).some((b) =>
+        b.textContent!.includes('Összes megjelölése'),
       ),
     ).toBe(false);
   });
@@ -252,8 +252,8 @@ describe('NotificationBellComponent', () => {
     fixture.detectChanges();
 
     expect(
-      Array.from(fixture.nativeElement.querySelectorAll('button')).some((b: any) =>
-        b.textContent.includes('Összes megjelölése'),
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).some((b) =>
+        b.textContent!.includes('Összes megjelölése'),
       ),
     ).toBe(true);
   });
