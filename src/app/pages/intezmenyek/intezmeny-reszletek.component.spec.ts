@@ -1,7 +1,9 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { IntezmenyReszletekComponent } from './intezmeny-reszletek.component';
+import { IntezmenyTanarokComponent } from './intezmeny-tanarok.component';
 import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
@@ -21,6 +23,11 @@ function makeSchool(overrides: Partial<SchoolDto> = {}): SchoolDto {
     teacherCount: 2,
     ...overrides,
   };
+}
+
+/** A „Tanárok” fül (alapértelmezett) alkomponense - a tag- és intézmény-műveletek itt élnek. */
+function tanarok(fixture: ComponentFixture<IntezmenyReszletekComponent>): IntezmenyTanarokComponent {
+  return fixture.debugElement.query(By.directive(IntezmenyTanarokComponent)).componentInstance;
 }
 
 describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
@@ -206,6 +213,60 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(schoolStoreMock.clearError).toHaveBeenCalled();
   });
 
+  it('a Ranglista fül az intézmény-ranglistát tölti, a választó váltása a választott kategóriával tölt újra', () => {
+    configure(makeSchool({ myRole: 'Teacher' }), false);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('ranglista');
+    fixture.detectChanges();
+    expect(leaderboardStoreMock.loadSchoolLeaderboard).toHaveBeenLastCalledWith(1, 'quiz', 'weekly');
+
+    const select = fixture.nativeElement.querySelector('select[aria-label="Ranglista kategória"]') as HTMLSelectElement;
+    select.value = 'exam';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(leaderboardStoreMock.loadSchoolLeaderboard).toHaveBeenLastCalledWith(1, 'exam', 'weekly');
+
+    // A választás fülváltás után is megmarad (a szülőben él).
+    fixture.componentInstance.setTab('tanarok');
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('ranglista');
+    expect(leaderboardStoreMock.loadSchoolLeaderboard).toHaveBeenLastCalledWith(1, 'exam', 'weekly');
+  });
+
+  // UI-TT-62: friss betöltésnél az intézmény később érkezik - az átnevezés mezője ekkor veszi át a nevet,
+  // utána a tanár piszkozata marad (egy újratöltött intézmény-lista sem írja felül, és a fülváltást is túléli).
+  it('UI-TT-62: az átnevezés mezője a később megérkező névvel indul, a piszkozatot újratöltés és fülváltás nem írja felül', async () => {
+    configure(makeSchool({ myRole: 'Admin' }), true);
+    schoolStoreMock.selectedSchool.set(null);
+
+    const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editName()).toBe('');
+
+    schoolStoreMock.selectedSchool.set(makeSchool({ myRole: 'Admin', name: 'Betöltött Iskola' }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input.input.flex-1');
+    expect(input.value).toBe('Betöltött Iskola');
+
+    input.value = 'Új név';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editName()).toBe('Új név');
+
+    // Pl. szerepváltás utáni loadMine(): új objektum, ugyanaz az intézmény.
+    schoolStoreMock.selectedSchool.set(makeSchool({ myRole: 'Admin', name: 'Betöltött Iskola' }));
+    fixture.componentInstance.setTab('ranglista');
+    fixture.detectChanges();
+    fixture.componentInstance.setTab('tanarok');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editName()).toBe('Új név');
+    expect((fixture.nativeElement.querySelector('input.input.flex-1') as HTMLInputElement).value).toBe('Új név');
+  });
+
   // BUG UI-TT-24: "Igazgatóvá tétel"/"Lefokozás" korábban megerősítés nélkül azonnal hívta a mutációt.
   it('toggleRole() a ConfirmService.ask()-ot hívja meg, mielőtt changeMemberRole()-t hívna', async () => {
     configure(makeSchool({ myRole: 'Admin' }), true);
@@ -213,7 +274,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
     fixture.detectChanges();
 
-    await fixture.componentInstance.toggleRole(1, 42, 'Teacher', 'Kolléga Tanár');
+    await tanarok(fixture).toggleRole(1, 42, 'Teacher', 'Kolléga Tanár');
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(schoolStoreMock.changeMemberRole).toHaveBeenCalledWith(1, 42, { role: 'Admin' }, expect.any(Function));
@@ -226,7 +287,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
     fixture.detectChanges();
 
-    await fixture.componentInstance.toggleRole(1, 42, 'Admin', 'Kolléga Igazgató');
+    await tanarok(fixture).toggleRole(1, 42, 'Admin', 'Kolléga Igazgató');
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     expect(schoolStoreMock.changeMemberRole).not.toHaveBeenCalled();
@@ -244,7 +305,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     const fixture = TestBed.createComponent(IntezmenyReszletekComponent);
     fixture.detectChanges();
 
-    await fixture.componentInstance.deleteSchool(1, 0);
+    await tanarok(fixture).deleteSchool(1, 0);
 
     expect(confirmServiceMock.ask).toHaveBeenCalled();
     const askArg = confirmServiceMock.ask.mock.calls[0][0];
@@ -271,14 +332,14 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.editName.length).toBe(256);
+    expect(fixture.componentInstance.editName().length).toBe(256);
     const saveButton = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Mentés'),
     ) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Az intézmény neve legfeljebb 255 karakter hosszú lehet.');
 
-    fixture.componentInstance.saveEdit(1);
+    tanarok(fixture).saveEdit(1);
     expect(schoolStoreMock.update).not.toHaveBeenCalled();
   });
 
@@ -293,13 +354,13 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.editName.length).toBe(255);
+    expect(fixture.componentInstance.editName().length).toBe(255);
     const saveButton = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Mentés'),
     ) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(false);
 
-    fixture.componentInstance.saveEdit(1);
+    tanarok(fixture).saveEdit(1);
     expect(schoolStoreMock.update).toHaveBeenCalledWith(1, { name: 'a'.repeat(255) }, expect.any(Function));
   });
 

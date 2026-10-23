@@ -1,19 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SchoolStore } from '../../services/school/school.store';
 import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { LeaderboardCategory, LeaderboardPeriod } from '../../models/leaderboard.model';
-import { SchoolTeacherRole } from '../../models/school.model';
+import { SchoolDto } from '../../models/school.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
-import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { LeaderboardPanelComponent } from '../../shared/leaderboard-panel/leaderboard-panel.component';
 import { IntezmenyOsztalyokComponent } from './intezmeny-osztalyok.component';
+import { IntezmenyTanarokComponent } from './intezmeny-tanarok.component';
+import { IntezmenyLicencComponent } from './intezmeny-licenc.component';
 import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
@@ -29,7 +28,8 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent, IntezmenyOsztalyokComponent],
+  imports: [RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, SortHeaderComponent, LeaderboardPanelComponent,
+    IntezmenyOsztalyokComponent, IntezmenyTanarokComponent, IntezmenyLicencComponent],
   template: `
     @if (school.selectedSchool(); as s) {
       <div class="mx-auto px-4 py-10" [class.max-w-3xl]="tab() !== 'csoportok'" [class.max-w-6xl]="tab() === 'csoportok'">
@@ -81,99 +81,12 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
         @switch (tab()) {
           @case ('tanarok') {
-            @if (school.isSelectedAdmin() && s.teacherInviteCode) {
-              <div class="card !rounded-xl bg-bg-element p-3 mb-4 flex justify-between items-center text-sm">
-                <span class="flex items-center gap-2">
-                  <app-icon name="link" class="w-4 h-4 block text-primary" />
-                  Tanári meghívó kód: <code class="font-bold">{{ s.teacherInviteCode }}</code>
-                  <app-copy-button [value]="s.teacherInviteCode" label="Tanári meghívó kód" />
-                </span>
-                <button (click)="regenerateInvite(s.id)" [disabled]="school.loading()" class="text-primary hover:underline">Új kód generálása</button>
-              </div>
-            }
-
-            <ul class="space-y-2 mb-6">
-              @for (member of school.members(); track member.teacherProfileId) {
-                <li class="flex justify-between items-center card !rounded-xl p-3">
-                  <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-9 h-9 rounded-full bg-primary-subtle text-primary text-xs font-bold flex items-center justify-center shrink-0">
-                      {{ initials(member.displayName) }}</div>
-                    <div class="min-w-0">
-                      <p class="truncate">{{ member.displayName }}</p>
-                      <p class="text-xs text-text-muted">{{ member.groupCount }} csoport</p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2 text-sm shrink-0">
-                    <span class="badge" [class]="member.role === 'Admin' ? 'badge-primary' : 'badge-neutral'">
-                      {{ member.role === 'Admin' ? 'Igazgató' : 'Tanár' }}</span>
-                    @if (school.isSelectedAdmin()) {
-                      <button (click)="toggleRole(s.id, member.teacherProfileId, member.role, member.displayName)" class="text-primary hover:underline">
-                        {{ member.role === 'Admin' ? 'Lefokozás' : 'Igazgatóvá tétel' }}
-                      </button>
-                      <button (click)="removeMember(s.id, member.teacherProfileId, member.displayName)" class="text-danger hover:underline">Eltávolítás</button>
-                    }
-                  </div>
-                </li>
-              }
-            </ul>
-
-            @if (school.isSelectedAdmin()) {
-              <div class="card p-5">
-                <h2 class="font-bold mb-3">Intézmény szerkesztése</h2>
-                <div class="flex gap-2 mb-3">
-                  <input [(ngModel)]="editName" placeholder="Név" maxlength="255" class="input flex-1" />
-                  <button (click)="saveEdit(s.id)" [disabled]="!editName.trim() || editName.length > 255" class="btn btn-primary">Mentés</button>
-                </div>
-                @if (editName.length > 255) {
-                  <p class="text-sm text-danger mb-3">Az intézmény neve legfeljebb 255 karakter hosszú lehet.</p>
-                }
-                <button (click)="deleteSchool(s.id, s.groupCount)" class="text-sm text-danger hover:underline">
-                  Intézmény törlése
-                </button>
-              </div>
-            }
+            <app-intezmeny-tanarok [school]="s" [(editName)]="editName" />
           }
 
           @case ('ranglista') {
-            <div class="flex gap-2 mb-4">
-              <select [(ngModel)]="category" (ngModelChange)="loadLeaderboard(s.id)" class="input !w-auto">
-                <option value="quiz">Kvíz</option>
-                <option value="exam">Vizsga</option>
-              </select>
-              <select [(ngModel)]="period" (ngModelChange)="loadLeaderboard(s.id)" class="input !w-auto">
-                <option value="weekly">Heti</option>
-                <option value="monthly">Havi</option>
-                <option value="alltime">Összes idő</option>
-              </select>
-            </div>
-
-            @if (leaderboard.error()) {
-              <p class="text-danger text-sm mb-4">{{ leaderboard.error() }}</p>
-            } @else {
-              <ol class="space-y-2">
-                @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-                  <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm"
-                    [class.!border-primary]="entry.isCurrentUser">
-                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                      [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                    <span class="flex-1 truncate">
-                      {{ entry.realName ?? entry.nickname }}
-                      @if (entry.realName && entry.realName !== entry.nickname) {
-                        <span class="text-text-muted text-xs">({{ entry.nickname }})</span>
-                      }
-                    </span>
-                    <span class="font-bold">{{ entry.score }}</span>
-                  </li>
-                } @empty {
-                  <li class="flex flex-col items-center py-10 gap-3">
-                    <div class="icon-tile icon-tile-neutral">
-                      <app-icon name="trophy" class="w-6 h-6 block" />
-                    </div>
-                    <p class="font-semibold">Még nincs ranglista-adat.</p>
-                  </li>
-                }
-              </ol>
-            }
+            <app-leaderboard-panel [(category)]="category" [(period)]="period" (selectionChange)="loadLeaderboard(s.id)"
+              [entries]="leaderboard.leaderboard()?.topEntries" [error]="leaderboard.error()" />
           }
 
           @case ('attekintes') {
@@ -252,81 +165,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
           @case ('licenc') {
             @if (school.isSelectedAdmin()) {
-              @for (lic of school.licenseOverview(); track lic.licenseId) {
-                <div class="card p-5 mb-6" data-testid="license-overview-card">
-                  <div class="flex flex-wrap gap-4 mb-4">
-                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
-                      <span class="text-xs text-text-muted mb-1">Tier</span>
-                      <span class="font-bold capitalize">{{ lic.tier }}</span>
-                    </div>
-                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
-                      <span class="text-xs text-text-muted mb-1">Helyek</span>
-                      <span class="font-bold">{{ lic.usedSeats }} / {{ lic.capacity }}</span>
-                    </div>
-                    <div class="flex flex-col items-center bg-bg-element rounded-xl p-3 min-w-24">
-                      <span class="text-xs text-text-muted mb-1">Érvényes</span>
-                      <span class="font-bold text-sm">{{ lic.validFrom | date:'yyyy.MM.dd' }} – {{ lic.validTo | date:'yyyy.MM.dd' }}</span>
-                    </div>
-                  </div>
-
-                  @if (lic.groups.length > 0) {
-                    <h3 class="font-semibold text-sm mb-2">Csoportok szerinti megoszlás</h3>
-                    <div class="data-table-scroll mb-4">
-                      <table class="data-table">
-                        <thead>
-                          <tr>
-                            <th>Csoport</th>
-                            <th>Tanár</th>
-                            <th class="text-right">Aktív helyek</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @for (g of lic.groups; track g.groupId) {
-                            <tr>
-                              <td>{{ g.groupName }}</td>
-                              <td class="text-text-muted">{{ g.teacherName }}</td>
-                              <td class="num text-right">{{ g.activeSeatCount }}</td>
-                            </tr>
-                          }
-                        </tbody>
-                      </table>
-                    </div>
-                  }
-
-                  @if (lic.seats.length > 0) {
-                    <h3 class="font-semibold text-sm mb-2">Diákok ({{ lic.seats.length }} aktív hely)</h3>
-                    <div class="data-table-scroll">
-                      <table class="data-table">
-                        <thead>
-                          <tr>
-                            <th>Diák</th>
-                            <th>Csoportok</th>
-                            <th>Utolsó aktivitás</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @for (seat of lic.seats; track seat.userId) {
-                            <tr>
-                              <td class="whitespace-nowrap">{{ seat.studentName }}</td>
-                              <td class="text-text-muted">{{ seat.groupNames.join(', ') || '–' }}</td>
-                              <td class="num whitespace-nowrap text-text-muted">{{ seat.lastActivityAt | date:'yyyy.MM.dd HH:mm' }}</td>
-                            </tr>
-                          }
-                        </tbody>
-                      </table>
-                    </div>
-                  } @else {
-                    <p class="text-text-muted text-sm text-center py-4">Nincs aktív helyfoglalás.</p>
-                  }
-                </div>
-              } @empty {
-                <div class="flex flex-col items-center py-10 gap-3">
-                  <div class="icon-tile icon-tile-neutral">
-                    <app-icon name="document" class="w-6 h-6 block" />
-                  </div>
-                  <p class="font-semibold">Az intézményhez nincs aktív licenc.</p>
-                </div>
-              }
+              <app-intezmeny-licenc [licenses]="school.licenseOverview()" />
             } @else {
               <p class="text-text-muted text-center py-10" data-testid="admin-tab-lost-access">
                 Már nincs igazgatói jogosultságod ehhez az intézményhez.
@@ -346,7 +185,6 @@ export class IntezmenyReszletekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly confirmService = inject(ConfirmService);
-  private readonly toastService = inject(ToastService);
   readonly school = inject(SchoolStore);
   readonly report = inject(ReportStore);
   readonly leaderboard = inject(LeaderboardStore);
@@ -366,30 +204,23 @@ export class IntezmenyReszletekComponent implements OnInit {
   ariaSort(key: string): string | null {
     return ariaSort(this.overviewSort(), key);
   }
-  category: LeaderboardCategory = 'quiz';
-  period: LeaderboardPeriod = 'weekly';
-  editName = '';
+
+  readonly category = signal<LeaderboardCategory>('quiz');
+  readonly period = signal<LeaderboardPeriod>('weekly');
   // UI-TT-62: friss (nem cache-elt) oldalbetöltésnél a selectedSchool() még null a
   // ngOnInit szinkron lefutásakor (a store csak ezután tölti be aszinkron) — az
-  // editName-et emiatt egy effect()-ben szinkronizáljuk, amint a tényleges adat
-  // megérkezik, nem csak egyetlen, esetlegesen korai ngOnInit-beli olvasással.
-  private nameSynced = false;
+  // átnevezés piszkozata ezért akkor veszi át a nevet, amikor a tényleges adat
+  // megérkezik. Utána a tanár szerkesztése marad (egy későbbi loadMine() — pl.
+  // szerepváltás után — nem írja felül), és a fülváltást is túléli.
+  readonly editName = linkedSignal<SchoolDto | null, string>({
+    source: this.school.selectedSchool,
+    computation: (school, previous) => (previous?.source ? previous.value : school?.name ?? ''),
+  });
 
   private schoolId = 0;
 
-  constructor() {
-    effect(() => {
-      const school = this.school.selectedSchool();
-      if (school && !this.nameSynced) {
-        this.editName = school.name;
-        this.nameSynced = true;
-      }
-    });
-  }
-
   ngOnInit(): void {
     this.schoolId = Number(this.route.snapshot.paramMap.get('id'));
-    this.nameSynced = false;
     if (this.school.schools().length === 0) {
       this.school.loadMine();
     }
@@ -410,7 +241,7 @@ export class IntezmenyReszletekComponent implements OnInit {
   }
 
   loadLeaderboard(schoolId: number): void {
-    this.leaderboard.loadSchoolLeaderboard(schoolId, this.category, this.period);
+    this.leaderboard.loadSchoolLeaderboard(schoolId, this.category(), this.period());
   }
 
   /** A kiválasztott szűrő megmarad fülváltáskor is, ezért signalban tartjuk. */
@@ -428,92 +259,6 @@ export class IntezmenyReszletekComponent implements OnInit {
     this.report.loadSchoolActivity(this.schoolId, event.range.from, event.range.to);
   }
 
-  initials(name: string): string {
-    return name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase();
-  }
-
-  rankClass(rank: number): string {
-    if (rank === 1) return 'bg-warning-subtle text-warning';
-    if (rank === 2) return 'bg-primary-subtle text-primary';
-    if (rank === 3) return 'bg-secondary-subtle text-secondary';
-    return 'bg-bg-element text-text-muted';
-  }
-
-  async toggleRole(
-    schoolId: number,
-    teacherProfileId: number,
-    currentRole: SchoolTeacherRole,
-    displayName: string,
-  ): Promise<void> {
-    const newRole: SchoolTeacherRole = currentRole === 'Admin' ? 'Teacher' : 'Admin';
-    const ok = await this.confirmService.ask({
-      message:
-        newRole === 'Admin'
-          ? `Biztosan igazgatóvá teszed ${displayName} tanárt? Ezzel teljes intézmény-admin jogkört kap.`
-          : `Biztosan lefokozod ${displayName} tanárt? Elveszíti az intézmény-admin jogkörét.`,
-      danger: true,
-      confirmLabel: newRole === 'Admin' ? 'Igazgatóvá tétel' : 'Lefokozás',
-    });
-    if (!ok) return;
-    this.school.changeMemberRole(schoolId, teacherProfileId, { role: newRole }, () =>
-      this.toastService.success('Szerepkör módosítva.'),
-    );
-  }
-
-  async removeMember(schoolId: number, teacherProfileId: number, teacherName: string): Promise<void> {
-    // UI-TT-140 (UI-TT-29 testvér-előfordulása): a megerősítő szöveg korábban sosem
-    // nevezte meg az érintett tanárt - egy hosszú listán a tanár nem tudta a
-    // dialógusból ellenőrizni, hogy valóban a kattintott sorra vonatkozik-e.
-    const ok = await this.confirmService.ask({
-      message: `Biztosan eltávolítod ${teacherName} tanárt az intézményből? A csoportjai lekerülnek az intézményről.`,
-      danger: true,
-      confirmLabel: 'Eltávolítás',
-    });
-    if (!ok) return;
-    this.school.removeMember(schoolId, teacherProfileId, () =>
-      this.toastService.success('Tanár eltávolítva az intézményből.'),
-    );
-  }
-
-  saveEdit(schoolId: number): void {
-    if (!this.editName.trim() || this.editName.length > 255) return;
-    this.school.update(schoolId, { name: this.editName.trim() }, () =>
-      this.toastService.success('Intézmény átnevezve.'),
-    );
-  }
-
-  async deleteSchool(schoolId: number, groupCount: number): Promise<void> {
-    if (groupCount > 0) {
-      this.toastService.warning('Az intézmény csak akkor törölhető, ha nincs hozzá kötött csoport.', 5000);
-      return;
-    }
-    // UI-TT-35 (mis-triage correction): a BE (SchoolService.DeleteAsync) már értesíti a
-    // többi aktív tanár-tagot a törlésről, de a megerősítő dialógus ezt eddig nem
-    // nevezte meg - a szomszédos leave() explicit szól a következményről, ez a
-    // törlés-ág viszont a generikus szöveget adta, függetlenül attól, van-e másik
-    // aktív tag, aki elveszíti a tagságát.
-    const otherActiveTeacherCount = (this.school.selectedSchool()?.teacherCount ?? 1) - 1;
-    const message = otherActiveTeacherCount > 0
-      ? `Biztosan törlöd az intézményt? A(z) ${otherActiveTeacherCount} másik aktív tanár kolléga is elveszíti a tagságát.`
-      : 'Biztosan törlöd az intézményt?';
-    const ok = await this.confirmService.ask({
-      message,
-      danger: true,
-      confirmLabel: 'Törlés',
-    });
-    if (!ok) return;
-    this.school.delete(schoolId, () => {
-      this.toastService.success('Intézmény törölve.');
-      this.router.navigateByUrl('/intezmenyek');
-    });
-  }
-
   async leave(schoolId: number): Promise<void> {
     const ok = await this.confirmService.ask({
       message:
@@ -523,10 +268,5 @@ export class IntezmenyReszletekComponent implements OnInit {
     });
     if (!ok) return;
     this.school.leave(schoolId, () => this.router.navigateByUrl('/intezmenyek'));
-  }
-
-  regenerateInvite(schoolId: number): void {
-    if (this.school.loading()) return;
-    this.school.regenerateInvite(schoolId, () => this.toastService.success('Új tanári meghívó kód generálva.'));
   }
 }
