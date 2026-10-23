@@ -87,16 +87,13 @@ describe('SzobeliTemaSzerkesztoComponent', () => {
 
   it('szerkesztés után a mentés a teljes cserét küldi (kulcsszavak vesszővel, elvárt elemek soronként, rendezett hosszak)', () => {
     const { fixture, c, q, api } = setup();
-    const m = c.model()!;
-    m.title = ' Fotoszintézis – javított ';
-    m.items[0].keywords = 'klorofill, , ATP ,NADPH';
-    m.items[0].questions[1].expected = 'tilakoid\n\n kloroplasztisz ';
+    c.patch({ title: ' Fotoszintézis – javított ' });
+    c.patchItem(0, { keywords: 'klorofill, , ATP ,NADPH' });
+    c.patchQuestion(0, 1, { expected: 'tilakoid\n\n kloroplasztisz ' });
     c.toggleMinutes(15);
     c.toggleMinutes(5);
     c.addRubric();
-    m.rubric[2].title = 'Felépítés';
-    m.rubric[2].points = 4;
-    c.touch();
+    c.patchRubric(2, { title: 'Felépítés', points: 4 });
     fixture.detectChanges();
     expect(q('oral-rubric-sum')!.textContent).toContain('összesen 26 pont');
     expect((q('oral-topic-approve') as HTMLButtonElement).disabled).toBe(true);
@@ -112,6 +109,36 @@ describe('SzobeliTemaSzerkesztoComponent', () => {
     expect(body.items[0].slug).toBe('t-1');
     expect(body.rubric[2]).toEqual({ key: 'szempont-1', title: 'Felépítés', points: 4, description: '' });
     expect(c.dirty()).toBe(false);
+  });
+
+  it('a mezők szerkesztése új modellt ad (a betöltöttet nem mutálja), mentetlennek jelöl, és frissíti az összeget', async () => {
+    const { fixture, c, q } = setup();
+    await fixture.whenStable();
+    const before = c.model()!;
+    const type = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+      el.value = value;
+      el.dispatchEvent(new Event('input'));
+    };
+    type(q('oral-item-0')!.querySelector('input') as HTMLInputElement, 'Fényszakasz (javított)');
+    type(q('oral-question-0-1')!.querySelectorAll('textarea')[1] as HTMLTextAreaElement, 'tilakoid');
+    type(q('oral-rubric-1')!.querySelector('input[type=number]') as HTMLInputElement, '7');
+    type(q('oral-topic-title') as HTMLInputElement, 'Új cím');
+    fixture.detectChanges();
+
+    const after = c.model()!;
+    expect(after).not.toBe(before);
+    expect(before.title).toBe('A fotoszintézis');
+    expect(before.items[0].title).toBe('A fényszakasz');
+    expect(before.items[0].questions[1].expected).toBe('tilakoid\nkloroplasztisz');
+    expect(before.rubric[1].points).toBe(4);
+    expect(after.title).toBe('Új cím');
+    expect(after.items[0].title).toBe('Fényszakasz (javított)');
+    expect(after.items[0].questions[1].expected).toBe('tilakoid');
+    expect(after.items[0].questions[0]).toBe(before.items[0].questions[0]);
+    expect(after.rubric[1].points).toBe(7);
+    expect(c.dirty()).toBe(true);
+    expect(q('oral-rubric-sum')!.textContent).toContain('összesen 25 pont');
+    expect((q('oral-topic-save') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('tétel és kérdés felvétele, törlése; az alapértelmezett hossz a kiválasztottak közül', () => {
@@ -147,7 +174,7 @@ describe('SzobeliTemaSzerkesztoComponent', () => {
     });
     const { fixture, c, q } = setup();
     TestBed.inject(TeacherOralExamService).updateTopic = vi.fn(() => throwError(() => err));
-    c.touch();
+    c.patch({ title: 'A fotoszintézis 2' });
     c.save();
     fixture.detectChanges();
     expect(q('oral-question-0-1')!.textContent).toContain('legalább 2 elvárt elem kell');
@@ -186,7 +213,7 @@ describe('SzobeliTemaSzerkesztoComponent', () => {
 
     TestBed.resetTestingModule();
     const staying = setup(of(topic()), false);
-    staying.c.touch();
+    staying.c.patch({ title: 'Új cím' });
     expect(await staying.c.canLeave()).toBe(false);
     expect(TestBed.inject(ConfirmService).ask).toHaveBeenCalled();
   });

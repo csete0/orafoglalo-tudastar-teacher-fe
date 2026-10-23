@@ -97,6 +97,24 @@ describe('SzobeliKiadasDialogComponent', () => {
     expect(assigned).toHaveBeenCalledWith({ id: 9, groupName: '9.A' });
   });
 
+  it('a dátummezők change-eseménye a nyitást és a határidőt állítja; az Escape bezár; a párbeszédablak címkézett', () => {
+    const { c, q, closed } = setup();
+    const opens = q('oral-assign-opens') as HTMLInputElement;
+    opens.value = '2026-11-02T08:00';
+    opens.dispatchEvent(new Event('change'));
+    const due = q('oral-assign-due') as HTMLInputElement;
+    due.value = '2026-11-09T08:00';
+    due.dispatchEvent(new Event('change'));
+    expect(c.opensAt()).toBe('2026-11-02T08:00');
+    expect(c.dueAt()).toBe('2026-11-09T08:00');
+
+    const dialog = q('oral-assign-dialog');
+    expect(dialog.getAttribute('role')).toBe('dialog');
+    expect(dialog.getAttribute('aria-labelledby')).toBe('oral-assign-title');
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toHaveBeenCalled();
+  });
+
   it('a nyitás utáni határidőt helyben ellenőrzi; a szerver hibája megjelenik; a háttér bezár', () => {
     const err = new HttpErrorResponse({ status: 400, error: { errorMessage: 'A téma még nincs jóváhagyva.' } });
     const { fixture, c, q, api, closed } = setup(throwError(() => err));

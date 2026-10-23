@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import {
@@ -216,6 +217,7 @@ export class SzempontlistaComponent {
   private readonly rubricService = inject(TeacherRubricService);
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly taskSetId = input.required<number>();
   readonly task = input.required<TeacherTaskDto>();
@@ -308,7 +310,7 @@ export class SzempontlistaComponent {
   private load(taskSetId: number, taskId: number): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.rubricService.getRubric(taskSetId, taskId).subscribe({
+    this.rubricService.getRubric(taskSetId, taskId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (rubric) => {
         this.setRubric(rubric);
         this.loading.set(false);
@@ -323,7 +325,7 @@ export class SzempontlistaComponent {
 
   private loadQuota(): void {
     // A keret-kijelzés hiánya nem akadályozhatja a munkát - hiba esetén általános szöveg marad.
-    this.rubricService.getRubricQuota().subscribe({
+    this.rubricService.getRubricQuota().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (quota) => this.quota.set(quota),
       error: () => this.quota.set(null),
     });
@@ -409,8 +411,8 @@ export class SzempontlistaComponent {
     });
   }
 
-  private draftErrorMessage(err: any): string {
-    switch (err?.error?.errorType) {
+  private draftErrorMessage(err: unknown): string {
+    switch ((err as { error?: { errorType?: unknown } } | null)?.error?.errorType) {
       case 'RubricDraftQuotaExceeded':
         return 'Elfogyott a havi szempontlista-keret – a következő hónap elején újra készíthetsz vázlatot.';
       case 'RubricDraftNeedsSolution':

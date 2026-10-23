@@ -42,6 +42,15 @@ describe('MiSegitoPanelComponent', () => {
     getQuota = vi.fn(() => of({ used: 1, limit: 30, month: '2026-10', isPremium: true }));
   });
 
+  it('megszűnéskor a függő keret-kérések lemondva', () => {
+    const pending = new Subject<AiHelperQuotaDto>();
+    getAiHelperQuota = vi.fn(() => pending);
+    const { fixture } = render();
+    expect(pending.observed).toBe(true);
+    fixture.destroy();
+    expect(pending.observed).toBe(false);
+  });
+
   it('a három keretet egyszer tölti, és „used/limit” formában mutatja; elfogyott keretnél tilt, a BE-szöveggel', () => {
     const { el } = render({ selection: { label: '1. Prog', programming: true, sql: false } });
     expect(getAiHelperQuota).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { SzobeliEredmenyekComponent, transcriptSections } from './szobeli-eredmenyek.component';
 import { TeacherOralExamService } from '../../services/teacher-oral-exam/teacher-oral-exam.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
@@ -197,5 +197,22 @@ describe('SzobeliEredmenyekComponent', () => {
     TestBed.resetTestingModule();
     const failing = setup({ results: throwError(() => new HttpErrorResponse({ status: 404, error: { errorMessage: 'A kiadás nem található.' } })) });
     expect(failing.q('oral-results-error')!.textContent).toContain('nem található');
+  });
+
+  it('az oldal elhagyásakor a függő olvasások (eredmények, kiválasztott szóbeli) lemondva', () => {
+    const results = new Subject<TeacherOralResultsDto>();
+    const pendingResults = setup({ results });
+    expect(results.observed).toBe(true);
+    pendingResults.fixture.destroy();
+    expect(results.observed).toBe(false);
+
+    TestBed.resetTestingModule();
+    const { fixture, c, api } = setup();
+    const pendingSession = new Subject<TeacherOralSessionDto>();
+    api.session.mockReturnValue(pendingSession);
+    c.select(RESULTS.rows[0]);
+    expect(pendingSession.observed).toBe(true);
+    fixture.destroy();
+    expect(pendingSession.observed).toBe(false);
   });
 });

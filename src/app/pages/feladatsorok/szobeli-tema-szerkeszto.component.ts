@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, take } from 'rxjs';
@@ -22,24 +23,30 @@ import { OralAssignTarget, SzobeliKiadasDialogComponent } from './szobeli-kiadas
 
 /** Szerkeszthető kérdés: az elvárt elemek soronként egy. */
 interface EditQuestion {
-  text: string;
-  expected: string;
+  readonly text: string;
+  readonly expected: string;
 }
 
 /** Szerkeszthető tétel: a kulcsszavak vesszővel elválasztva. */
 interface EditItem {
-  slug: string | null;
-  title: string;
-  keywords: string;
-  questions: EditQuestion[];
+  readonly slug: string | null;
+  readonly title: string;
+  readonly keywords: string;
+  readonly questions: readonly EditQuestion[];
 }
 
+/** A szerkesztett másolat: immutábilis - minden módosítás új objektumot ad a `model` signalba. */
 interface EditModel {
-  title: string;
-  voiceMinutes: Set<number>;
-  defaultVoiceMinutes: number;
-  items: EditItem[];
-  rubric: TeacherOralRubricItemDto[];
+  readonly title: string;
+  readonly voiceMinutes: ReadonlySet<number>;
+  readonly defaultVoiceMinutes: number;
+  readonly items: readonly EditItem[];
+  readonly rubric: readonly Readonly<TeacherOralRubricItemDto>[];
+}
+
+/** A lista `index`-edik elemét cseréli `fn` eredményére (új tömb). */
+function replaceAt<T>(list: readonly T[], index: number, fn: (value: T) => T): T[] {
+  return list.map((value, i) => (i === index ? fn(value) : value));
 }
 
 function toModel(topic: TeacherOralTopicDto): EditModel {
@@ -120,7 +127,7 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
 
         <fieldset [disabled]="readOnly()" class="space-y-6 min-w-0">
           <label class="block text-sm">Cím
-            <input class="input mt-1" maxlength="200" [(ngModel)]="m.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()"
+            <input class="input mt-1" maxlength="200" [ngModel]="m.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patch({ title: $event })"
               data-testid="oral-topic-title" />
           </label>
 
@@ -135,7 +142,7 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
               }
             </div>
             <label class="block text-sm mt-2 max-w-xs">Alapértelmezett
-              <select class="input mt-1" [(ngModel)]="m.defaultVoiceMinutes" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()"
+              <select class="input mt-1" [ngModel]="m.defaultVoiceMinutes" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patch({ defaultVoiceMinutes: $event })"
                 data-testid="oral-topic-default-minutes">
                 @for (min of selectedMinutes(); track min) { <option [ngValue]="min">{{ min }} perc</option> }
               </select>
@@ -149,13 +156,13 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
                 <li class="card p-4 space-y-3" [attr.data-testid]="'oral-item-' + i">
                   <div class="flex items-start gap-2">
                     <label class="block text-sm flex-1 min-w-0">{{ i + 1 }}. tétel címe
-                      <input class="input mt-1" [(ngModel)]="item.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()" />
+                      <input class="input mt-1" [ngModel]="item.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchItem(i, { title: $event })" />
                     </label>
                     <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs mt-5" (click)="removeItem(i)"
                       [attr.aria-label]="(i + 1) + '. tétel törlése'">Tétel törlése</button>
                   </div>
                   <label class="block text-sm">Kulcsszavak (vesszővel elválasztva)
-                    <input class="input mt-1" [(ngModel)]="item.keywords" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()" />
+                    <input class="input mt-1" [ngModel]="item.keywords" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchItem(i, { keywords: $event })" />
                   </label>
                   @for (e of itemErrors(i); track $index) { <p class="text-xs text-danger" data-testid="oral-field-error">{{ e }}</p> }
 
@@ -164,13 +171,13 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
                       <li class="bg-bg-element rounded-xl p-3 space-y-2" [attr.data-testid]="'oral-question-' + i + '-' + qi">
                         <div class="flex items-start gap-2">
                           <label class="block text-sm flex-1 min-w-0">{{ qi + 1 }}. kérdés
-                            <textarea rows="2" class="input mt-1" [(ngModel)]="q.text" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()"></textarea>
+                            <textarea rows="2" class="input mt-1" [ngModel]="q.text" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchQuestion(i, qi, { text: $event })"></textarea>
                           </label>
                           <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs mt-5" (click)="removeQuestion(i, qi)"
                             [attr.aria-label]="(qi + 1) + '. kérdés törlése'">Törlés</button>
                         </div>
                         <label class="block text-sm">Elvárt elemek (soronként egy)
-                          <textarea rows="3" class="input mt-1 !text-sm" [(ngModel)]="q.expected" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()"></textarea>
+                          <textarea rows="3" class="input mt-1 !text-sm" [ngModel]="q.expected" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchQuestion(i, qi, { expected: $event })"></textarea>
                         </label>
                         @for (e of questionErrors(i, qi); track $index) { <p class="text-xs text-danger" data-testid="oral-field-error">{{ e }}</p> }
                       </li>
@@ -192,15 +199,15 @@ export function toUpdateRequest(model: EditModel): TeacherOralTopicUpdateRequest
                 <li class="card p-3 space-y-2" [attr.data-testid]="'oral-rubric-' + ri">
                   <div class="grid grid-cols-[1fr_6rem_auto] gap-2 items-end">
                     <label class="block text-sm min-w-0">Szempont
-                      <input class="input mt-1" [(ngModel)]="r.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()" />
+                      <input class="input mt-1" [ngModel]="r.title" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchRubric(ri, { title: $event })" />
                     </label>
                     <label class="block text-sm">Pont
-                      <input type="number" min="1" class="input mt-1" [(ngModel)]="r.points" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()" />
+                      <input type="number" min="1" class="input mt-1" [ngModel]="r.points" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchRubric(ri, { points: $event })" />
                     </label>
                     <button type="button" class="btn btn-ghost !px-2 !py-1 !text-xs" (click)="removeRubric(ri)" [attr.aria-label]="r.title + ' törlése'">Törlés</button>
                   </div>
                   <label class="block text-sm">Leírás
-                    <textarea rows="2" class="input mt-1 !text-sm" [(ngModel)]="r.description" [ngModelOptions]="{ standalone: true }" (ngModelChange)="touch()"></textarea>
+                    <textarea rows="2" class="input mt-1 !text-sm" [ngModel]="r.description" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchRubric(ri, { description: $event })"></textarea>
                   </label>
                   @for (e of rubricErrors(ri); track $index) { <p class="text-xs text-danger" data-testid="oral-field-error">{{ e }}</p> }
                 </li>
@@ -245,6 +252,7 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly statusLabels = ORAL_TOPIC_STATUS_LABELS;
   readonly minuteOptions = ORAL_TOPIC_VOICE_MINUTE_OPTIONS;
@@ -252,9 +260,8 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
 
   private readonly topicId = Number(this.route.snapshot.paramMap.get('id'));
   readonly topic = signal<TeacherOralTopicDto | null>(null);
-  /** A szerkesztett másolat (a mezők közvetlenül írják; a `version` jelzi a változást a számított értékeknek). */
+  /** A szerkesztett másolat (immutábilis: a mezők a `patch*` metódusokon át új modellt adnak). */
   readonly model = signal<EditModel | null>(null);
-  private readonly version = signal(0);
   readonly dirty = signal(false);
   readonly busy = signal(false);
   readonly loadError = signal<string | null>(null);
@@ -263,19 +270,13 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
   readonly assignTarget = signal<OralAssignTarget | null>(null);
 
   readonly readOnly = computed(() => this.topic()?.hasSessions ?? false);
-  readonly selectedMinutes = computed(() => {
-    this.version();
-    return [...(this.model()?.voiceMinutes ?? [])].sort((a, b) => a - b);
-  });
-  readonly rubricSum = computed(() => {
-    this.version();
-    return (this.model()?.rubric ?? []).reduce((sum, r) => sum + (Number(r.points) || 0), 0);
-  });
+  readonly selectedMinutes = computed(() => [...(this.model()?.voiceMinutes ?? [])].sort((a, b) => a - b));
+  readonly rubricSum = computed(() => (this.model()?.rubric ?? []).reduce((sum, r) => sum + (Number(r.points) || 0), 0));
   /** A tételhez / kérdéshez / szemponthoz nem köthető hibák (a hibasávban, útvonallal). */
   readonly generalErrors = computed(() => this.errors().filter((e) => !/^(items|rubric)\[\d+\]/.test(e.path)));
 
   ngOnInit(): void {
-    this.api.topic(this.topicId).pipe(take(1)).subscribe({
+    this.api.topic(this.topicId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (topic) => this.apply(topic),
       error: (err) => this.loadError.set(extractErrorMessage(err, 'A téma betöltése sikertelen.')),
     });
@@ -299,11 +300,6 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
     event.returnValue = '';
   }
 
-  touch(): void {
-    this.dirty.set(true);
-    this.version.update((v) => v + 1);
-  }
-
   itemErrors(i: number): string[] {
     return this.messages((p) => (p === `items[${i}]` || p.startsWith(`items[${i}].`)) && !p.startsWith(`items[${i}].questions[`));
   }
@@ -316,45 +312,64 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
     return this.messages((p) => p.startsWith(`rubric[${r}]`));
   }
 
+  patch(changes: Partial<Pick<EditModel, 'title' | 'defaultVoiceMinutes'>>): void {
+    this.edit((m) => ({ ...m, ...changes }));
+  }
+
+  patchItem(i: number, changes: Partial<Pick<EditItem, 'title' | 'keywords'>>): void {
+    this.edit((m) => ({ ...m, items: replaceAt(m.items, i, (item) => ({ ...item, ...changes })) }));
+  }
+
+  patchQuestion(i: number, q: number, changes: Partial<EditQuestion>): void {
+    this.edit((m) => ({
+      ...m,
+      items: replaceAt(m.items, i, (item) => ({ ...item, questions: replaceAt(item.questions, q, (question) => ({ ...question, ...changes })) })),
+    }));
+  }
+
+  patchRubric(r: number, changes: Partial<Omit<TeacherOralRubricItemDto, 'key'>>): void {
+    this.edit((m) => ({ ...m, rubric: replaceAt(m.rubric, r, (item) => ({ ...item, ...changes })) }));
+  }
+
   toggleMinutes(min: number): void {
-    const m = this.model()!;
-    if (m.voiceMinutes.has(min)) m.voiceMinutes.delete(min);
-    else m.voiceMinutes.add(min);
-    if (!m.voiceMinutes.has(m.defaultVoiceMinutes) && m.voiceMinutes.size) m.defaultVoiceMinutes = Math.min(...m.voiceMinutes);
-    this.touch();
+    this.edit((m) => {
+      const voiceMinutes = new Set(m.voiceMinutes);
+      if (!voiceMinutes.delete(min)) voiceMinutes.add(min);
+      const keepDefault = voiceMinutes.has(m.defaultVoiceMinutes) || !voiceMinutes.size;
+      return { ...m, voiceMinutes, defaultVoiceMinutes: keepDefault ? m.defaultVoiceMinutes : Math.min(...voiceMinutes) };
+    });
   }
 
   addItem(): void {
-    this.model()!.items.push({ slug: null, title: '', keywords: '', questions: [{ text: '', expected: '' }] });
-    this.structureChanged();
+    this.restructure((m) => ({ ...m, items: [...m.items, { slug: null, title: '', keywords: '', questions: [{ text: '', expected: '' }] }] }));
   }
 
   removeItem(i: number): void {
-    this.model()!.items.splice(i, 1);
-    this.structureChanged();
+    this.restructure((m) => ({ ...m, items: m.items.filter((_, idx) => idx !== i) }));
   }
 
   addQuestion(i: number): void {
-    this.model()!.items[i].questions.push({ text: '', expected: '' });
-    this.structureChanged();
+    this.restructure((m) => ({ ...m, items: replaceAt(m.items, i, (item) => ({ ...item, questions: [...item.questions, { text: '', expected: '' }] })) }));
   }
 
   removeQuestion(i: number, q: number): void {
-    this.model()!.items[i].questions.splice(q, 1);
-    this.structureChanged();
+    this.restructure((m) => ({
+      ...m,
+      items: replaceAt(m.items, i, (item) => ({ ...item, questions: item.questions.filter((_, idx) => idx !== q) })),
+    }));
   }
 
   addRubric(): void {
-    const keys = new Set(this.model()!.rubric.map((r) => r.key));
-    let n = 1;
-    while (keys.has(`szempont-${n}`)) n++;
-    this.model()!.rubric.push({ key: `szempont-${n}`, title: '', points: 1, description: '' });
-    this.structureChanged();
+    this.restructure((m) => {
+      const keys = new Set(m.rubric.map((r) => r.key));
+      let n = 1;
+      while (keys.has(`szempont-${n}`)) n++;
+      return { ...m, rubric: [...m.rubric, { key: `szempont-${n}`, title: '', points: 1, description: '' }] };
+    });
   }
 
   removeRubric(r: number): void {
-    this.model()!.rubric.splice(r, 1);
-    this.structureChanged();
+    this.restructure((m) => ({ ...m, rubric: m.rubric.filter((_, idx) => idx !== r) }));
   }
 
   save(): void {
@@ -433,7 +448,6 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
     this.dirty.set(false);
     this.error.set(null);
     this.errors.set([]);
-    this.version.update((v) => v + 1);
   }
 
   private fail(err: unknown, fallback: string): void {
@@ -441,10 +455,16 @@ export class SzobeliTemaSzerkesztoComponent implements OnInit {
     this.errors.set(oralTopicErrors(err));
   }
 
+  /** Mezőszerkesztés: új modell (a régit nem mutáljuk), és mentetlen állapot. */
+  private edit(change: (model: EditModel) => EditModel): void {
+    this.model.update((m) => (m ? change(m) : m));
+    this.dirty.set(true);
+  }
+
   /** Tétel / kérdés / szempont felvétele vagy törlése: a régi hibák útvonalai elcsúsznának, ezért törlődnek. */
-  private structureChanged(): void {
+  private restructure(change: (model: EditModel) => EditModel): void {
     this.errors.set([]);
-    this.touch();
+    this.edit(change);
   }
 
   private messages(match: (path: string) => boolean): string[] {
