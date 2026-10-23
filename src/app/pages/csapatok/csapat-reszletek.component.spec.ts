@@ -242,6 +242,66 @@ describe('CsapatReszletekComponent', () => {
     expect((Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('MI-átnézés kérése')) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('mérföldkő-mezők a DOM-ból: pipa, határidő, várt fájlok, tesztmappa; a szerkesztő megnyitásakor a csapat adatai töltődnek', async () => {
+    const { fixture, c, api, el } = setup();
+    api.milestones.mockReturnValue(of([{ ...ms, kind: 'tests', testPreset: 'nunit', testDir: 'backend' }]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await c.setTab('merfoldkovek');
+    fixture.detectChanges();
+    const dir = el.querySelector<HTMLInputElement>('[data-testid="ms-11"] input[placeholder="pl. backend/tests"]')!;
+    dir.value = 'backend/Api.Tests';
+    dir.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.updateMilestone).toHaveBeenLastCalledWith(3, 11, { testPreset: 'nunit', testDir: 'backend/Api.Tests' });
+    fixture.detectChanges();
+
+    const due = el.querySelector<HTMLInputElement>('[data-testid="ms-11"] input[type="date"]')!;
+    due.value = '2027-04-01';
+    due.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.updateMilestone).toHaveBeenLastCalledWith(3, 11, { dueDate: '2027-04-01' });
+    fixture.detectChanges();
+
+    const paths = el.querySelector<HTMLTextAreaElement>('[data-testid="ms-11"] textarea')!;
+    paths.value = 'README.md\n\n  docs/** ';
+    paths.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.updateMilestone).toHaveBeenLastCalledWith(3, 11, { requiredPaths: ['README.md', 'docs/**'] });
+    fixture.detectChanges();
+
+    const box = el.querySelector<HTMLInputElement>('[data-testid="ms-11"] input[type="checkbox"]')!;
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.tickMilestone).toHaveBeenCalledWith(3, 11, true, null);
+
+    const details = el.querySelector<HTMLDetailsElement>('details.card')!;
+    c.editName.set('');
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    expect(c.editName()).toBe('Büfé');
+    expect(c.editRoles()).toEqual({ 1: 'backend' });
+    c.editName.set('Más');
+    details.open = false;
+    details.dispatchEvent(new Event('toggle'));
+    expect(c.editName()).toBe('Más'); // csak nyitáskor töltődik újra
+  });
+
+  it('a komponens megszűnése után a futó átnézés frissítése leáll', async () => {
+    vi.useFakeTimers();
+    const { fixture, c, api } = setup();
+    api.reviews.mockReturnValue(of({ used: 1, limit: 4, month: '2027-03', items: [review({ status: 'running' })] }));
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    await c.setTab('mi');
+    await vi.advanceTimersByTimeAsync(5000 * 2);
+    const calls = api.reviews.mock.calls.length;
+    fixture.destroy();
+    await vi.advanceTimersByTimeAsync(5000 * 5);
+    expect(api.reviews).toHaveBeenCalledTimes(calls);
+  });
+
   it('a csoportra mutató vissza-link a csoportoldal Technikum fülének Csapatok szakaszára visz', async () => {
     const { fixture, el } = setup();
     fixture.detectChanges();

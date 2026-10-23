@@ -88,4 +88,18 @@ describe('CsoportCsapatokComponent', () => {
     expect(confirm.ask).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
     expect(api.removeMember).toHaveBeenCalledWith(10, 3);
   });
+
+  it('tag felvétele a legördülőből: a választott diák azonosítója megy, utána a legördülő újra „Válassz…”', async () => {
+    const active: Team = { ...proposed, status: 'active', repo: { id: 1, name: 't9-c-mozi', cloneUrl: 'x', sizeKb: 1, quotaKb: 51200, locked: false } };
+    const { fixture, api, el } = setup([active]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = el.querySelector<HTMLSelectElement>('[data-testid="team-9"] select')!;
+    select.value = '3';
+    select.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(api.addMember).toHaveBeenCalledWith(9, 3);
+    expect(select.value).toBe('');
+  });
 });

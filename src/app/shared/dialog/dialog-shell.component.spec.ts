@@ -8,7 +8,7 @@ import { DialogShellComponent } from './dialog-shell.component';
   template: `
     @if (open()) {
       <app-dialog-shell labelledBy="t-title" describedBy="t-help" testId="t-dialog" backdropTestId="t-backdrop"
-                        panelClass="card max-w-lg" [closeOnBackdrop]="closeOnBackdrop()" [align]="align()"
+                        panelClass="card max-w-lg" [closeOnBackdrop]="closeOnBackdrop()" [align]="align()" [backdropClass]="backdropClass()"
                         (closed)="closedCount = closedCount + 1">
         <h2 id="t-title">Cím</h2>
         <p id="t-help">Súgó</p>
@@ -25,6 +25,7 @@ class HostComponent {
   readonly closeOnBackdrop = signal(true);
   readonly align = signal<'center' | 'top'>('top');
   readonly withAutofocus = signal(false);
+  readonly backdropClass = signal('bg-black/40');
   closedCount = 0;
 }
 
@@ -60,6 +61,17 @@ describe('DialogShellComponent', () => {
     const center = setup((h) => h.align.set('center')).el.querySelector('.fixed.inset-0') as HTMLElement;
     expect(center.classList).toContain('items-center');
     expect(center.classList).not.toContain('overflow-y-auto');
+  });
+
+  it('a háttér alapból bg-black/40, a hívó felülírhatja (pl. képnagyító)', () => {
+    const backdrop = setup().el.querySelector('[data-testid="t-backdrop"]') as HTMLElement;
+    expect(backdrop.classList).toContain('fixed');
+    expect(backdrop.classList).toContain('bg-black/40');
+
+    const dark = setup((h) => h.backdropClass.set('bg-black/80')).el.querySelector('[data-testid="t-backdrop"]') as HTMLElement;
+    expect(dark.classList).toContain('inset-0');
+    expect(dark.classList).toContain('bg-black/80');
+    expect(dark.classList).not.toContain('bg-black/40');
   });
 
   it('Escape a dialógusban closed-ot emittál', () => {

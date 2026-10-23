@@ -68,7 +68,7 @@ const MAX_MEMBERS = 3;
                   <span class="text-xs text-text-muted" data-testid="no-free-member">Nincs szabad tag</span>
                 } @else if (t.members.length < maxMembers) {
                   <label class="text-sm">Tag felvétele
-                    <select class="input" [disabled]="busy()" (change)="addMember(t, +$any($event.target).value); $any($event.target).value = ''">
+                    <select #addSelect class="input" [disabled]="busy()" (change)="addMember(t, +addSelect.value); addSelect.value = ''">
                       <option value="">Válassz…</option>
                       @for (m of freeMembers(); track m.userId) { <option [value]="m.userId">{{ m.name }}</option> }
                     </select></label>

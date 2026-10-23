@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, injec
 import { DatePipe, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subscription, firstValueFrom, timer } from 'rxjs';
 import { TeacherTeamService, TeamUpdate } from '../../services/team/teacher-team.service';
 import { ReportService } from '../../services/report/report.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
@@ -10,8 +11,9 @@ import { extractErrorMessage } from '../../shared/http-error/extract-error-messa
 import { AiHelperQuotaItemDto } from '../../shared/ai-helper-quota.util';
 import { KodOlvasoComponent } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { HetiAktivitasComponent } from './heti-aktivitas.component';
+import { CsapatAtnezesComponent } from './csapat-atnezes.component';
 import {
-  CodeSuggestion, MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamDocsCheckItem, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest, TeamRepoReview,
+  MILESTONE_KIND_LABEL, SYNC_LABEL, Team, TeamActivity, TeamDocsCheckItem, TeamGithubStatus, TeamMilestone, TeamMilestoneEdit, TeamMilestoneTest,
   TeamReviews, TeamTree, TestRunnerOption,
 } from '../../models/team.model';
 
@@ -27,7 +29,7 @@ const MAX_POLLS = 36;
  */
 @Component({
   selector: 'app-csapat-reszletek',
-  imports: [DatePipe, FormsModule, RouterLink, KodOlvasoComponent, HetiAktivitasComponent],
+  imports: [DatePipe, FormsModule, RouterLink, KodOlvasoComponent, HetiAktivitasComponent, CsapatAtnezesComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (team(); as t) {
@@ -48,7 +50,7 @@ const MAX_POLLS = 36;
         }
 
         @if (editable()) {
-          <details class="card p-4 text-sm" (toggle)="$any($event.target).open && startEdit(t)">
+          <details #editDetails class="card p-4 text-sm" (toggle)="editDetails.open && startEdit(t)">
             <summary class="cursor-pointer font-bold min-h-8">Csapatadatok szerkesztése</summary>
             <form class="mt-3 grid gap-3 sm:grid-cols-2" (ngSubmit)="saveDetails()">
               <label class="block">Csapatnév <input class="input w-full" name="name" maxlength="80" [ngModel]="editName()" (ngModelChange)="editName.set($event)" /></label>
@@ -94,8 +96,8 @@ const MAX_POLLS = 36;
                 <li class="card p-3 space-y-2 min-w-0" [attr.data-testid]="'ms-' + m.id">
                   <div class="flex flex-wrap items-center gap-2">
                     @if (m.canTick) {
-                      <label class="font-bold flex items-center gap-2 min-h-8"><input type="checkbox" [checked]="!!m.tickedAt" [disabled]="busy()"
-                        (change)="tick(m, $any($event.target).checked)" /> {{ m.title }}</label>
+                      <label class="font-bold flex items-center gap-2 min-h-8"><input #tickBox type="checkbox" [checked]="!!m.tickedAt" [disabled]="busy()"
+                        (change)="tick(m, tickBox.checked)" /> {{ m.title }}</label>
                     } @else { <span class="font-bold">{{ m.tickedAt ? '✓ ' : '' }}{{ m.title }}</span> }
                     <span class="text-xs text-text-muted">{{ kindLabel(m.kind) }}</span>
                     @if (m.overdue) { <span class="badge badge-danger">lejárt</span> }
@@ -104,21 +106,21 @@ const MAX_POLLS = 36;
                     @if (m.kind === 'submit' && !m.dueDate && m.effectiveDueDate) { <span class="text-xs text-text-muted"> (14 nappal a vizsga előtt)</span> }</p>
                   @if (m.canEdit) {
                     <div class="grid gap-2 sm:grid-cols-2">
-                      <label class="text-sm block">Határidő módosítása <input class="input w-full" type="date" [value]="m.dueDate ?? ''" [disabled]="busy()"
-                        (change)="saveDue(m, $any($event.target).value)" /></label>
+                      <label class="text-sm block">Határidő módosítása <input #dueInput class="input w-full" type="date" [value]="m.dueDate ?? ''" [disabled]="busy()"
+                        (change)="saveDue(m, dueInput.value)" /></label>
                       @if (m.kind !== 'submit') {
                         <label class="text-sm block">Tesztfuttató
-                          <select class="input w-full" [disabled]="busy()" (change)="savePreset(m, $any($event.target).value, m.testDir)">
+                          <select #presetSelect class="input w-full" [disabled]="busy()" (change)="savePreset(m, presetSelect.value, m.testDir)">
                             <option value="" [selected]="!m.testPreset">nincs (csak a fájlok megléte)</option>
                             @for (r of runners(); track r.key) {
                               <option [value]="r.key" [disabled]="!r.available" [selected]="m.testPreset === r.key">{{ r.label }}{{ r.available ? '' : ' (hamarosan)' }}</option>
                             }
                           </select></label>
                         <label class="text-sm block sm:col-span-2">Várt fájlok/mappák (soronként egy minta, pl. **/*.sql)
-                          <textarea class="input w-full" rows="2" [value]="m.requiredPaths.join('\\n')" [disabled]="busy()" (change)="savePaths(m, $any($event.target).value)"></textarea></label>
+                          <textarea #pathsBox class="input w-full" rows="2" [value]="m.requiredPaths.join('\\n')" [disabled]="busy()" (change)="savePaths(m, pathsBox.value)"></textarea></label>
                         @if (m.testPreset) {
-                          <label class="text-sm block">Tesztmappa <input class="input w-full" [value]="m.testDir ?? ''" [disabled]="busy()" placeholder="pl. backend/tests"
-                            (change)="savePreset(m, m.testPreset, $any($event.target).value)" /></label>
+                          <label class="text-sm block">Tesztmappa <input #dirInput class="input w-full" [value]="m.testDir ?? ''" [disabled]="busy()" placeholder="pl. backend/tests"
+                            (change)="savePreset(m, m.testPreset, dirInput.value)" /></label>
                         }
                       }
                     </div>
@@ -183,33 +185,7 @@ const MAX_POLLS = 36;
               }
               @if (stalled()) { <p class="text-sm" role="status">Még fut – <button class="underline" type="button" (click)="refreshReviews()">frissítés</button></p> }
               @for (x of r.items; track x.id) {
-                <article class="card p-3 space-y-2 text-sm min-w-0" [attr.data-testid]="'review-' + x.id">
-                  <h3 class="font-bold break-words">{{ x.createdAt | date: 'yyyy.MM.dd. HH:mm' }} · ág: {{ x.branch }}{{ x.requestedByName ? ' · ' + x.requestedByName : '' }}
-                    @if (notCounted(x)) { <span class="badge badge-neutral font-normal">nem számít bele a keretbe</span> }</h3>
-                  @if (x.status === 'queued') { <p role="status">Sorban áll…</p> }
-                  @else if (x.status === 'running') { <p role="status">Az MI átnézi a tárolót…</p> }
-                  @else {
-                    @if (x.error) { <p class="text-danger">{{ x.error }}</p> }
-                    @if (x.result; as res) {
-                      @if (res.summary) { <p>{{ res.summary }}</p> }
-                      <ul class="list-disc pl-5">@for (c of res.criteria; track c.key) { <li><strong>{{ c.label }}: {{ c.score }}/5</strong> – {{ c.text }}</li> }</ul>
-                      @if (res.docsChecklist; as docs) {
-                        <p class="font-semibold">Dokumentáció – a 7 kötelező elem</p>
-                        <ul class="break-words" data-testid="review-docs">
-                          @for (i of docs; track i.key) {
-                            <li><span [class]="i.present ? 'text-success' : 'text-danger'" aria-hidden="true">{{ i.present ? '✔' : '✘' }}</span> {{ i.label }} – {{ i.present ? 'megvan' : 'hiányzik' }}
-                              @if (i.note) { <span class="block text-xs text-text-muted">{{ i.note }}</span> }</li>
-                          }
-                        </ul>
-                      }
-                      @for (s of res.suggestions; track $index) {
-                        <p class="break-words" [class.text-danger]="s.severity === 'hiba'"><code>{{ s.path }}:{{ s.line }}</code> {{ severityLabel(s) }}: {{ s.text }}</p>
-                      }
-                      <p class="text-xs text-text-muted">Átnézett fájlok: {{ res.reviewedPaths.length }}{{ res.truncatedPaths.length ? ' (ebből ' + res.truncatedPaths.length + ' csak részben)' : '' }};
-                        kihagyva (függőség, generált, bináris, keret): {{ res.skippedFiles }}.</p>
-                    } @else if (!x.error) { <p class="text-danger">Az átnézés nem sikerült.</p> }
-                  }
-                </article>
+                <app-csapat-atnezes [review]="x" />
               } @empty { <p class="text-sm text-text-muted">Még nem volt átnézés.</p> }
             }
           }
@@ -299,17 +275,11 @@ export class CsapatReszletekComponent implements OnInit {
   readonly running = computed(() => !!this.reviews()?.items.some((r) => r.status === 'queued' || r.status === 'running'));
   readonly quotaFull = computed(() => { const q = this.quota(); return !!q && q.used >= q.limit; });
 
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private readonly destroyRef = inject(DestroyRef);
+  /** A következő frissítés időzítője (fülváltáskor / új betöltéskor leállítva, a komponenssel együtt megszűnik). */
+  private poll: Subscription | undefined;
   private polls = 0;
-  private destroyed = false;
   private get id(): number { return Number(this.route.snapshot.paramMap.get('id')); }
-
-  constructor() {
-    inject(DestroyRef).onDestroy(() => {
-      this.destroyed = true;
-      clearTimeout(this.timer);
-    });
-  }
 
   async ngOnInit(): Promise<void> {
     await this.run(async () => {
@@ -323,7 +293,7 @@ export class CsapatReszletekComponent implements OnInit {
   async setTab(tab: Fül): Promise<void> {
     this.tab.set(tab);
     this.error.set(null);
-    clearTimeout(this.timer); // a fülről elnavigálva a frissítés leáll (visszatéréskor újraindul)
+    this.poll?.unsubscribe(); // a fülről elnavigálva a frissítés leáll (visszatéréskor újraindul)
     this.stalled.set(false);
     if (tab === 'merfoldkovek') await Promise.all([this.loadMilestones(), this.loadRunners()]);
     if (tab === 'mi') {
@@ -336,11 +306,6 @@ export class CsapatReszletekComponent implements OnInit {
   memberLine(t: Team): string { return t.members.map((m) => m.name + (m.role ? ` (${m.role})` : '')).join(', '); }
   kindLabel(kind: TeamMilestone['kind']): string { return MILESTONE_KIND_LABEL[kind]; }
   syncLabel(s: string | null): string { return s ? (SYNC_LABEL[s] ?? s) : 'még nem futott'; }
-  /** A sikertelen / csonka (és a BE szerint nem számolt) befejezett átnézés sem a csapat, sem a tanár keretéből nem fogy. */
-  notCounted(x: TeamRepoReview): boolean {
-    return x.status !== 'queued' && x.status !== 'running' && (x.status === 'failed' || x.status === 'truncated' || !x.counted);
-  }
-  severityLabel(s: CodeSuggestion): string { return s.severity === 'hiba' ? 'Hiba' : s.severity === 'dicséret' ? 'Dicséret' : 'Javaslat'; }
 
   // ---- csapatadatok ----
 
@@ -453,14 +418,14 @@ export class CsapatReszletekComponent implements OnInit {
     } catch (e) {
       this.error.set(extractErrorMessage(e, 'Az átnézések nem tölthetők be.'));
     }
-    clearTimeout(this.timer);
+    this.poll?.unsubscribe();
     this.stalled.set(false);
-    if (this.destroyed || this.tab() !== 'mi') return;
+    if (this.destroyRef.destroyed || this.tab() !== 'mi') return;
     if (!this.running()) {
       if (wasRunning) await this.loadQuota(); // a lefutott átnézés után a keret változhatott
       return;
     }
-    if (this.polls++ < MAX_POLLS) this.timer = setTimeout(() => void this.loadReviews(), POLL_MS);
+    if (this.polls++ < MAX_POLLS) this.poll = timer(POLL_MS).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => void this.loadReviews());
     else this.stalled.set(true);
   }
 

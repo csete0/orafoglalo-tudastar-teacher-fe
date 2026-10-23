@@ -30,7 +30,7 @@ import {
          [class.overflow-y-auto]="align() === 'top'"
          (keydown.escape)="closed.emit()">
       <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
-      <div class="fixed inset-0 bg-black/40" [attr.data-testid]="backdropTestId()" (click)="onBackdropClick()"></div>
+      <div class="fixed inset-0" [class]="backdropClass()" [attr.data-testid]="backdropTestId()" (click)="onBackdropClick()"></div>
       <div #panel [attr.role]="role()" aria-modal="true" tabindex="-1"
            [attr.aria-labelledby]="labelledBy()" [attr.aria-label]="label()" [attr.aria-describedby]="describedBy()"
            [attr.data-testid]="testId()"
@@ -52,6 +52,8 @@ export class DialogShellComponent {
   readonly closeOnBackdrop = input(true);
   /** A panel osztályai (méret, padding, kártya-stílus). */
   readonly panelClass = input('');
+  /** A háttér színe (pl. képnagyítónál sötétebb). */
+  readonly backdropClass = input('bg-black/40');
   readonly testId = input<string | null>(null);
   readonly backdropTestId = input<string | null>(null);
 
