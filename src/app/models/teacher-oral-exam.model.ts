@@ -153,6 +153,8 @@ export interface TeacherOralResultRowDto {
   startedAt: string | null;
   /** Szóbeli dolgozatnál: azóta kilépett a csoportból, de tagként kezdte el - csak olvasható sor. */
   leftGroup?: boolean;
+  /** 16 év alatti (vagy ismeretlen korú) diák, akinek a szóbelijéhez még nincs jóváhagyott szülői hozzájárulás - addig nem indíthat. */
+  awaitingParentConsent?: boolean;
 }
 
 export interface TeacherOralResultsDto {

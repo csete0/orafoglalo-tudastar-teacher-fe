@@ -15,7 +15,7 @@ const RESULTS: TeacherOralResultsDto = {
   },
   rows: [
     { userId: 5, studentName: 'Kiss Anna', sessionId: 11, status: 'graded', totalPoints: 20, maxPoints: 30, teacherTotalPoints: null, startedAt: '2026-10-22T09:00:00' },
-    { userId: 6, studentName: 'Nagy Béla', sessionId: null, status: null, totalPoints: null, maxPoints: null, teacherTotalPoints: null, startedAt: null },
+    { userId: 6, studentName: 'Nagy Béla', sessionId: null, status: null, totalPoints: null, maxPoints: null, teacherTotalPoints: null, startedAt: null, awaitingParentConsent: true },
     { userId: 7, studentName: 'Tóth Cili', sessionId: 12, status: 'graded', totalPoints: 18, maxPoints: 30, teacherTotalPoints: null, startedAt: '2026-10-22T09:00:00', leftGroup: true },
   ],
 };
@@ -94,6 +94,9 @@ describe('SzobeliEredmenyekComponent', () => {
     // A tagként írt, azóta kilépett diák sora jelölve (BE-ORALEXAM-RESULTS-REMOVEDMEMBER-INVISIBLE).
     expect(q('left-group-7')).not.toBeNull();
     expect(q('left-group-5')).toBeNull();
+    // 16 év alatti diák szülői hozzájárulás nélkül: jelölve.
+    expect(q('awaiting-consent-6')?.textContent).toContain('szülői hozzájárulásra vár');
+    expect(q('awaiting-consent-5')).toBeNull();
     expect(q('oral-results-meta')!.textContent).toContain('Szóbeli dolgozat');
   });
 
