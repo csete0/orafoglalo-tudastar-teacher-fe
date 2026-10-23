@@ -88,11 +88,11 @@ export function transcriptSections(turns: OralTurnDto[]): { segment: string | nu
                         {{ row.studentName }}
                       }
                       @if (row.leftGroup) {
-                        <span class="badge badge-neutral !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-group-' + row.userId"
+                        <span class="badge badge-neutral whitespace-nowrap !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'left-group-' + row.userId"
                             title="A diák azóta kilépett vagy kikerült a csoportból - a tagként írt dolgozata csak olvasható">kilépett a csoportból</span>
                       }
                       @if (row.awaitingParentConsent) {
-                        <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'awaiting-consent-' + row.userId"
+                        <span class="badge badge-warning whitespace-nowrap !text-[10px] !px-1.5 !py-0.5" [attr.data-testid]="'awaiting-consent-' + row.userId"
                             title="16 év alatti diák: a szóbelihez (a hangja az OpenAI-hoz jut) a szülője hozzájárulása kell. A diák a Szóbeli oldalon adhatja meg a szülője e-mail-címét.">szülői hozzájárulásra vár</span>
                       }
                     </td>

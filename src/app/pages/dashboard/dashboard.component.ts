@@ -147,12 +147,16 @@ const ADMIN_CARDS: DashboardCard[] = [
                       <a [routerLink]="['/feladatsorok/projektek/kiadas', deadline.assignmentId]"
                          class="font-semibold text-primary hover:underline">{{ deadline.projectTitle }}</a>
                       {{ deadline.isTest ? '(dolgozat)' : '(projekt)' }}
+                    } @else if (deadline.kind === 'oral') {
+                      <a [routerLink]="['/feladatsorok/szobeli/kiadas', deadline.assignmentId]"
+                         class="font-semibold text-primary hover:underline">{{ deadline.oralTitle }}</a>
+                      {{ deadline.isTest ? '(szóbeli dolgozat)' : '(szóbeli)' }}
                     } @else {
                       <a [routerLink]="['/feladatsorok/kvizek', deadline.quizId, 'eredmenyek']"
                          class="font-semibold text-primary hover:underline">{{ deadline.quizTitle }}</a>
                     }
                     · {{ deadline.groupName }}
-                    · {{ deadline.kind === 'project' && !deadline.isTest ? 'befejezte' : 'megírta' }}: {{ deadline.completedMemberCount }} / {{ deadline.memberCount }}
+                    · {{ deadline.kind === 'oral' ? 'felelt' : deadline.kind === 'project' && !deadline.isTest ? 'befejezte' : 'megírta' }}: {{ deadline.completedMemberCount }} / {{ deadline.memberCount }}
                   </span>
                   <span class="shrink-0 text-xs"
                         [class.text-danger]="isDueSoon(deadline.dueAt)"

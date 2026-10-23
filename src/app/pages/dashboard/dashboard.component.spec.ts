@@ -128,6 +128,8 @@ describe('DashboardComponent - Közelgő határidők (UI-TT-240)', () => {
               dueAt: '2026-10-22T10:00:00Z', completedMemberCount: 1, memberCount: 8 },
             { assignmentId: 28, kind: 'quiz', quizId: 3, quizTitle: 'Hálózatok', groupId: 127, groupName: '12.B',
               dueAt: '2026-10-28T18:00:00Z', completedMemberCount: 0, memberCount: 8 },
+            { assignmentId: 28, kind: 'oral', oralTitle: 'Digitális kultúra szóbeli', isTest: false, groupId: 127, groupName: '12.B',
+              dueAt: '2026-10-29T18:00:00Z', completedMemberCount: 2, memberCount: 8 },
           ],
         } as TeacherDashboardDto)) } },
       ],
@@ -141,6 +143,9 @@ describe('DashboardComponent - Közelgő határidők (UI-TT-240)', () => {
     expect(project?.closest('li')?.textContent).toContain('(dolgozat)');
     expect(project?.closest('li')?.textContent).toContain('megírta: 1 / 8');
     expect(el.querySelector('a[href="/feladatsorok/kvizek/3/eredmenyek"]')).not.toBeNull();
+    const oral = el.querySelector('a[href="/feladatsorok/szobeli/kiadas/28"]');
+    expect(oral?.textContent?.trim()).toBe('Digitális kultúra szóbeli');
+    expect(oral?.closest('li')?.textContent).toContain('felelt: 2 / 8');
   });
 });
 
