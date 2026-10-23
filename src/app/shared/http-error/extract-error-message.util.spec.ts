@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { extractErrorMessage } from './extract-error-message.util';
 
 describe('extractErrorMessage', () => {
@@ -32,5 +33,20 @@ describe('extractErrorMessage', () => {
     expect(extractErrorMessage({ error: {} }, 'fallback szöveg')).toBe('fallback szöveg');
     expect(extractErrorMessage({}, 'fallback szöveg')).toBe('fallback szöveg');
     expect(extractErrorMessage(null, 'fallback szöveg')).toBe('fallback szöveg');
+  });
+
+  it('valódi HttpErrorResponse-ból is kiolvassa az üzenetet és a 413-at', () => {
+    const withBody = new HttpErrorResponse({ status: 400, error: { errorMessage: 'Hibás kérés.' } });
+    expect(extractErrorMessage(withBody, 'fallback')).toBe('Hibás kérés.');
+    expect(extractErrorMessage(new HttpErrorResponse({ status: 413, error: '<html>' }), 'fallback')).toBe(
+      'A feltöltött fájl mérete meghaladja a megengedett korlátot.',
+    );
+  });
+
+  it('nem objektum hiba vagy body esetén a fallbacket adja vissza', () => {
+    expect(extractErrorMessage('szöveges hiba', 'fallback')).toBe('fallback');
+    expect(extractErrorMessage(undefined)).toBe('Hiba történt.');
+    expect(extractErrorMessage({ error: 'nem JSON' }, 'fallback')).toBe('fallback');
+    expect(extractErrorMessage({ error: { errorMessage: '   ', errors: [1, ' '] } }, 'fallback')).toBe('fallback');
   });
 });
