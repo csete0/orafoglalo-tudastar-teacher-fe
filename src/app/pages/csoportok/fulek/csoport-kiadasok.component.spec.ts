@@ -112,4 +112,12 @@ describe('CsoportKiadasokComponent', () => {
     fixture.detectChanges();
     expect(el.textContent).toContain('Nincs kiadott szóbeli.');
   });
+
+  it('a fül elhagyásakor a még futó olvasás leiratkozik (a válasz már nem ír a megszűnt komponensbe)', () => {
+    const pending = new Subject<TeacherOralAssignmentDto[]>();
+    const { fixture } = setup([], { oral: pending });
+    expect(pending.observed).toBe(true);
+    fixture.destroy();
+    expect(pending.observed).toBe(false);
+  });
 });

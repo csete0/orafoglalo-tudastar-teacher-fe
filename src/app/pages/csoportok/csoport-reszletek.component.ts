@@ -229,6 +229,7 @@ export class CsoportReszletekComponent implements OnInit {
     this.mockExamService.getCurrent().pipe(
       switchMap((current) => (current ? this.mockExamService.get(current.slug) : of(null))),
       take(1),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: (ev) => this.mockExamRegistered.set(!!ev?.groups.find((g) => g.groupId === groupId)?.registered),
       error: () => this.mockExamRegistered.set(false),
