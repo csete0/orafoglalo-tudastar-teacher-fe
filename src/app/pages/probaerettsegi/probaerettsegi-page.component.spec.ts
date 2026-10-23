@@ -64,6 +64,19 @@ describe('ProbaerettsegiPageComponent', () => {
     expect(api.registerGroup).toHaveBeenCalledWith('osz-2026', 1, 'emelt');
   });
 
+  it('az alapszint-választó csak a két ismert szintet fogadja el', async () => {
+    const { fixture, el, api } = await render(EVENT);
+    const row = el.querySelectorAll('[data-testid="mock-group-row"]')[1];
+    const select = row.querySelector('select') as HTMLSelectElement;
+    expect(select.value).toBe('emelt');
+    select.value = 'kozep';
+    select.dispatchEvent(new Event('change'));
+    fixture.componentInstance.setLevel(EVENT.groups[1], 'ismeretlen');
+    (Array.from(row.querySelectorAll('button')).find((b) => b.textContent?.includes('Szint mentése')) as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(api.registerGroup).toHaveBeenCalledWith('osz-2026', 2, 'kozep');
+  });
+
   it('visszavonás csak megerősítés után', async () => {
     const { fixture, el, api, confirm } = await render(EVENT);
     const row = el.querySelectorAll('[data-testid="mock-group-row"]')[1];

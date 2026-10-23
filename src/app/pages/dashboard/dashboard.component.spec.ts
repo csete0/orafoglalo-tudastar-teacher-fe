@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { DashboardComponent } from './dashboard.component';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
@@ -146,6 +146,28 @@ describe('DashboardComponent - Közelgő határidők (UI-TT-240)', () => {
     const oral = el.querySelector('a[href="/feladatsorok/szobeli/kiadas/28"]');
     expect(oral?.textContent?.trim()).toBe('Digitális kultúra szóbeli');
     expect(oral?.closest('li')?.textContent).toContain('felelt: 2 / 8');
+  });
+});
+
+describe('DashboardComponent - leiratkozás', () => {
+  it('a vezérlőpult elhagyásakor a még futó olvasásokról leiratkozik', () => {
+    const rooms = new Subject<KahootActiveRoomDto[]>();
+    const dashboard = new Subject<TeacherDashboardDto>();
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent],
+      providers: [
+        provideRouter([]),
+        { provide: AuthStore, useValue: { currentUser: signal({ firstName: 'Anna' }), hasAdminRole: signal(false) } },
+        { provide: KahootHostService, useValue: { getActiveRooms: () => rooms } },
+        { provide: ReportService, useValue: { getDashboard: () => dashboard } },
+      ],
+    });
+    const fixture = TestBed.createComponent(DashboardComponent);
+    fixture.detectChanges();
+    expect(rooms.observed && dashboard.observed).toBe(true);
+    fixture.destroy();
+    expect(rooms.observed).toBe(false);
+    expect(dashboard.observed).toBe(false);
   });
 });
 

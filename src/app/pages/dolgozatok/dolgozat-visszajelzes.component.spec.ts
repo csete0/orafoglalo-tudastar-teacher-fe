@@ -295,6 +295,35 @@ describe('DolgozatVisszajelzesComponent', () => {
     expect(c.rows()[0].draft).toBeNull();
   });
 
+  it('a közös dialógus-héjon: ARIA-címke és -leírás, Escape és háttérkattintás a bezárást (megerősítéssel) indítja', async () => {
+    const { fixture, closed } = create([student(1)], [of(drafts([item(1)]))]);
+    const dialog = q(fixture, 'feedback-dialog')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-labelledby')).toBe('feedback-title');
+    expect(dialog.getAttribute('aria-describedby')).toBe('feedback-help');
+    expect(fixture.nativeElement.querySelector('#feedback-title')!.textContent).toContain('Visszajelzések AI-vázlattal');
+
+    // Módosítás van (a vázlat a mezőben): Escape-re és háttérre is rákérdez, „Vissza” után nyitva marad.
+    confirm.ask.mockResolvedValue(false);
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await fixture.whenStable();
+    q(fixture, 'feedback-backdrop')!.click();
+    await fixture.whenStable();
+    expect(confirm.ask).toHaveBeenCalledTimes(2);
+    expect(closed).not.toHaveBeenCalled();
+
+    confirm.ask.mockResolvedValue(true);
+    q(fixture, 'feedback-backdrop')!.click();
+    await fixture.whenStable();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('megnyitáskor a fókusz a dialógusra kerül', async () => {
+    const { fixture } = create([student(1)], [], false, { generate: false });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(document.activeElement).toBe(q(fixture, 'feedback-dialog'));
+  });
+
   it('nem mentett módosítás mellett a bezárás megerősítést kér', async () => {
     const { c, closed } = create([student(1)], [of(drafts([item(1)]))]);
     confirm.ask.mockResolvedValue(false);

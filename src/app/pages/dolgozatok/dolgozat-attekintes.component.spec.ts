@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { DolgozatAttekintesComponent } from './dolgozat-attekintes.component';
 import { ClassTestService } from '../../services/class-test/class-test.service';
 import { ClassTestOverview } from '../../models/class-test.model';
@@ -161,6 +161,28 @@ describe('DolgozatAttekintesComponent', () => {
     expect(el.querySelector('app-dolgozat-visszajelzes')).not.toBeNull();
     expect(classTests.draftFeedback).not.toHaveBeenCalled();
     expect(component.feedbackOpen()).toBe(true);
+  });
+
+  it('a visszajelzés-ablak Escape-re (módosítás nélkül) bezárul', async () => {
+    const { fixture, el, component } = setup();
+    (el.querySelector('[data-testid="feedback-open"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    el.querySelector('[data-testid="feedback-dialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    // (whenStable nem jó: az élő frissítés setInterval-ja miatt a zóna sosem stabil.)
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(component.feedbackOpen()).toBe(false);
+    expect(el.querySelector('app-dolgozat-visszajelzes')).toBeNull();
+  });
+
+  it('az oldal elhagyása után a késve érkező áttekintés nem íródik be', () => {
+    const { fixture, component, classTests } = setup();
+    const late = new Subject<ClassTestOverview>();
+    classTests.getOverview.mockReturnValue(late);
+    component.load();
+    expect(late.observed).toBe(true);
+    fixture.destroy();
+    expect(late.observed).toBe(false);
   });
 
   it('a CSV-export a meglévő exportálót kapja a dolgozat adataival', () => {

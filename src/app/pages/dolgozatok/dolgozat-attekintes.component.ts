@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ClassTestService } from '../../services/class-test/class-test.service';
 import { ClassTestCell, ClassTestOverview, ClassTestStudentRow } from '../../models/class-test.model';
@@ -250,7 +251,7 @@ export class DolgozatAttekintesComponent implements OnInit {
   }
 
   load(): void {
-    this.classTests.getOverview(this.assignmentId).subscribe({
+    this.classTests.getOverview(this.assignmentId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (o) => this.overview.set(o),
       error: (err) => this.error.set(extractErrorMessage(err, 'A dolgozat betöltése nem sikerült.')),
     });

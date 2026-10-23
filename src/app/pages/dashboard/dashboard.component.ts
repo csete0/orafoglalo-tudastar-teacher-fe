@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../../services/auth/store/auth.store';
 import { IconComponent, IconName, isIconName } from '../../shared/icon/icon.component';
@@ -228,6 +229,7 @@ export class DashboardComponent implements OnInit {
   readonly activeRooms = signal<KahootActiveRoomDto[]>([]);
   private readonly reportService = inject(ReportService);
   readonly dashboard = signal<TeacherDashboardDto | null>(null);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** 48 órán belül lejáró határidő - vizuális sürgősség. */
   isDueSoon(dueAt: string): boolean {
@@ -238,13 +240,13 @@ export class DashboardComponent implements OnInit {
   ngOnInit(): void {
     // Nem kritikus dísz-elem - a hibája (pl. átmeneti hálózati gond) nem
     // akaszthatja meg a vezérlőpult többi részét, ezért csendben nyeljük.
-    this.kahootHostService.getActiveRooms().subscribe({
+    this.kahootHostService.getActiveRooms().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (rooms) => this.activeRooms.set(rooms),
       error: () => this.activeRooms.set([]),
     });
     // UI-UX-T2: az élő blokkok ugyanígy nem kritikusak - hibánál egyszerűen
     // nem jelennek meg, a navigációs kártyák működnek tovább.
-    this.reportService.getDashboard().subscribe({
+    this.reportService.getDashboard().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (dashboard) => this.dashboard.set(dashboard),
       error: () => this.dashboard.set(null),
     });

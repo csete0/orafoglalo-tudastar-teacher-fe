@@ -62,7 +62,7 @@ import {
                     </td>
                     <td>
                       <select class="input !py-1" [attr.aria-label]="g.name + ' alapszintje'" [value]="levelOf(g)"
-                              [disabled]="!ev.registrationOpen" (change)="setLevel(g, $any($event.target).value)">
+                              [disabled]="!ev.registrationOpen" (change)="setLevel(g, levelSelect.value)" #levelSelect>
                         <option value="kozep">közép</option>
                         <option value="emelt">emelt</option>
                       </select>
@@ -178,7 +178,9 @@ export class ProbaerettsegiPageComponent implements OnInit {
     }
   }
 
-  setLevel(g: MockExamTeacherGroup, level: MockExamLevel): void {
+  /** A `<select>` értéke csak a két opció lehet; ismeretlen értéket figyelmen kívül hagyunk. */
+  setLevel(g: MockExamTeacherGroup, level: string): void {
+    if (level !== 'kozep' && level !== 'emelt') return;
     this.levels.update((all) => ({ ...all, [g.groupId]: level }));
   }
 
