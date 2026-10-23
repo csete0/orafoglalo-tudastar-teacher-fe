@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnDestroy, OnInit, signal, viewChildren } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, filter, firstValueFrom, forkJoin, of, take } from 'rxjs';
@@ -13,23 +13,26 @@ import { AuthorizedFileService } from '../../services/file/authorized-file.servi
 import { CategoryService } from '../../services/category/category.service';
 import { PublicCategoryDto } from '../../models/category.model';
 import { OfficeFileKind } from '../../models/office-task.model';
-import { SnippetDto, TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherSubTaskDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
+import { TaskSetAssignmentDto, TeacherFileDto, TeacherFileKind, TeacherSkillDto, TeacherTaskDto, TeacherTaskSetDetailDto } from '../../models/teacher-content.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
-import { IconComponent, IconName } from '../../shared/icon/icon.component';
+import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { environment } from '../../../environments/environment';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
-import { AutomatikusJavitasComponent, gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
-import { TesztbemenetComponent } from './tesztbemenet.component';
+import { gradingCheckHint, gradingQualityHeadline } from './automatikus-javitas.component';
 import { SqlGeneralasComponent } from './sql-generalas.component';
-import { SqlLekerdezesekComponent } from './sql-lekerdezesek.component';
 import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
 import { AiFeladatComponent } from './ai-feladat.component';
 import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
 import { AsztaliFeladatComponent } from './asztali-feladat.component';
-import { allocatedPoints, FeladatVazlatComponent, FeladatVazlatSection } from './feladat-vazlat.component';
+import { FeladatVazlatComponent } from './feladatsor-szerkeszto/feladat-vazlat.component';
+import { SnippetDraftsState } from './feladatsor-szerkeszto/snippet-drafts.state';
+import { TaskEditState } from './feladatsor-szerkeszto/task-edit.state';
+import { TaskSectionComponent } from './feladatsor-szerkeszto/task-section.component';
+import { TaskSectionState } from './feladatsor-szerkeszto/task-section.state';
+import { isOfficeTask, isProgrammingTask, isSqlTask, SQL_LANGUAGE_ID, SQL_TASK_TYPE_ID } from './feladatsor-szerkeszto/task-types';
 import { MiSegitoPanelComponent, MiSegitoSelection } from './mi-segito-panel.component';
 import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
@@ -38,34 +41,6 @@ const LEVELS: { id: number; label: string }[] = [
   { id: 2, label: 'Középhaladó' },
   { id: 3, label: 'Haladó' },
 ];
-
-const LANGUAGES: { id: number; name: string }[] = [
-  { id: 2, name: 'Python' },
-  { id: 5, name: 'C#' },
-  { id: 7, name: 'JavaScript' },
-  { id: 8, name: 'C++' },
-  { id: 10, name: 'Java' },
-  { id: 6, name: 'SQL' },
-  { id: 12, name: 'C' },
-];
-const SQL_LANGUAGE_ID = 6;
-
-/** A tanár által létrehozható feladattípusok (TaskTypes tábla). Az irodai típusokat a gépi
- *  javítás a beadott fájlból ellenőrzi (szempontlista gépi szabályaival), nem futtatással. */
-const TASK_TYPES: { id: number; label: string; icon: IconName }[] = [
-  { id: 6, label: 'Programozás', icon: 'code' },
-  { id: 5, label: 'SQL', icon: 'database' },
-  { id: 1, label: 'Szövegszerkesztés', icon: 'document' },
-  { id: 2, label: 'Táblázatkezelés', icon: 'chart' },
-  { id: 3, label: 'Prezentáció', icon: 'academic-cap' },
-  { id: 4, label: 'Grafika', icon: 'eye' },
-  { id: 7, label: 'Weblap', icon: 'link' },
-  { id: 9, label: 'Asztali alkalmazás', icon: 'code' },
-];
-/** Fájlos beadású típusok (az asztali alkalmazás is: zip + képernyőképek, MI-értékelés a szempontlista szerint). */
-const OFFICE_TASK_TYPE_IDS = new Set([1, 2, 3, 4, 7, 9]);
-const SQL_TASK_TYPE_ID = 5;
-const PROGRAMMING_TASK_TYPE_ID = 6;
 
 /** Irodai feladat forrás- és megoldásfájljai (szerződés: TANARI-SZEMPONTLISTA-API.md, F). */
 const OFFICE_FILE_ACCEPT = '.docx,.xlsx,.pptx,.odt,.ods,.odp,.txt,.csv,.png,.jpg,.jpeg,.gif,.svg,.html,.css';
@@ -85,15 +60,14 @@ const OTHER_FILE_KIND_LABELS: Partial<Record<TeacherFileKind, string>> = {
   Image: 'Kép',
 };
 
-/** {solutionId vagy taskId (complete-solution-höz negatív előjellel)}: {languageId: code} */
-type SnippetDraft = Record<number, Record<number, string>>;
-
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, MiSegitoPanelComponent, VideoHelpComponent],
+  // A „Feladatok” rész állapota a szerkesztőé: a csukott blokkok / feladatok piszkozatai így nem vesznek el.
+  providers: [TaskSectionState, TaskEditState, SnippetDraftsState],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, SqlGeneralasComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, TaskSectionComponent, MiSegitoPanelComponent, VideoHelpComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="page-wide max-w-[100rem] mx-auto">
@@ -201,302 +175,16 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
         <!-- Háromhasábos szerkesztő xl-től (vázlat · tartalom · MI-segítő); alatta egy oszlop, a vázlat felül. -->
         <div class="grid grid-cols-1 gap-6 xl:grid-cols-[15rem_minmax(0,1fr)_18rem] xl:items-start">
-        <app-feladat-vazlat [sections]="typeSections()" [selectedTaskId]="expandedTaskId()"
+        <app-feladat-vazlat [sections]="tasks.typeSections()" [selectedTaskId]="tasks.expandedTaskId()"
           (taskSelected)="selectTask($event)" (addTaskRequested)="focusNewTask($event)" />
 
         <div class="min-w-0">
         <!-- ── Feladatok, típusonként összecsukható blokkokban ─────── -->
         <section class="mb-8">
           <h2 class="font-bold mb-3">Feladatok</h2>
-
-          @for (section of typeSections(); track section.id) {
-            <div class="card !rounded-xl mb-4 overflow-hidden">
-              <button (click)="toggleSection(section.id)" [attr.aria-expanded]="isSectionExpanded(section.id)"
-                class="w-full flex items-center justify-between gap-2 p-4 text-left group">
-                <span class="flex items-center gap-3 min-w-0">
-                  <div class="icon-tile shrink-0"
-                    [class]="section.isOther ? 'icon-tile-neutral' : (isOfficeType(section.id) ? 'icon-tile-secondary' : 'icon-tile-primary')">
-                    <app-icon [name]="section.icon" class="w-5 h-5 block" />
-                  </div>
-                  <span class="font-bold group-hover:text-primary transition-colors truncate">{{ section.label }}</span>
-                  <span class="badge badge-neutral shrink-0">{{ section.tasks.length }} db</span>
-                </span>
-                <app-icon name="chevron-down" class="w-5 h-5 block text-text-muted transition-transform shrink-0"
-                  [class.-rotate-90]="!isSectionExpanded(section.id)" />
-              </button>
-
-              @if (isSectionExpanded(section.id)) {
-                <div class="px-4 pb-4 space-y-3">
-                  @for (task of section.tasks; track task.id) {
-                    <div class="bg-bg-element rounded-xl p-4 scroll-mt-20 lg:scroll-mt-4" [attr.id]="'task-' + task.id">
-                      @if (editingTaskId() === task.id) {
-                        <!-- UI-TT-214: inline szerkesztő - a UI-TT-193 részfeladat-mintáját
-                             tükrözi (cím/leírás/pont, ITT + sorrend-mező is), ugyanazokra a
-                             store-metódusokra (updateTask) kötve, amit eddig egyetlen
-                             komponens sem hívott. A sorrend-mező (taskOrder) adja a
-                             legkisebb konzisztens lépést az átrendezéshez, teljes drag&drop
-                             nélkül - a backend UpdateTaskAsync már elfogadja. -->
-                        <div class="space-y-2">
-                          <div>
-                            <label class="text-xs text-text-muted">Cím</label>
-                            <input [ngModel]="editTaskDraft(task).title"
-                              (ngModelChange)="setEditTaskTitle(task.id, $event)"
-                              [ngModelOptions]="{standalone: true}"
-                              class="input !px-2 !py-1" />
-                          </div>
-                          <div>
-                            <label class="text-xs text-text-muted">Leírás</label>
-                            <textarea rows="2"
-                              [ngModel]="editTaskDraft(task).description"
-                              (ngModelChange)="setEditTaskDescription(task.id, $event)"
-                              [ngModelOptions]="{standalone: true}"
-                              class="input !px-2 !py-1"></textarea>
-                          </div>
-                          <!-- UI-TT-215: kategória-választó - a UI-TT-214 saját indoklása
-                               (rossz kategóriájú feladat javítása) eddig nem volt
-                               megvalósítva, a mentés a task EREDETI taskTypeIds-ét küldte
-                               vissza változatlanul. -->
-                          <div>
-                            <label class="text-xs text-text-muted block mb-1">Kategória</label>
-                            <div class="flex flex-wrap gap-x-3 gap-y-1">
-                              @for (type of taskTypes; track type.id) {
-                                <label class="flex items-center gap-1 text-sm cursor-pointer">
-                                  <input type="radio" [name]="'editTaskCategory-' + task.id"
-                                    [checked]="editTaskDraft(task).taskTypeId === type.id"
-                                    (change)="setEditTaskCategory(task.id, type.id)" />
-                                  {{ type.label }}
-                                </label>
-                              }
-                            </div>
-                          </div>
-                          <div class="flex gap-2 items-end">
-                            <div class="w-24">
-                              <label class="text-xs text-text-muted">Max pont</label>
-                              <input type="number" min="1" max="1000"
-                                [ngModel]="editTaskDraft(task).maxPoints"
-                                (ngModelChange)="setEditTaskMaxPoints(task.id, $event)"
-                                [ngModelOptions]="{standalone: true}"
-                                class="input !px-2 !py-1" />
-                            </div>
-                            <div class="w-24">
-                              <label class="text-xs text-text-muted">Sorrend</label>
-                              <input type="number" min="1"
-                                [ngModel]="editTaskDraft(task).taskOrder"
-                                (ngModelChange)="setEditTaskOrder(task.id, $event)"
-                                [ngModelOptions]="{standalone: true}"
-                                class="input !px-2 !py-1" />
-                            </div>
-                            <button (click)="saveEditTask(detail.id, task)"
-                              [disabled]="isEditTaskDraftInvalid(task.id) || store.loading()"
-                              class="btn btn-primary !px-3 !py-1.5">
-                              Mentés
-                            </button>
-                            <button (click)="cancelEditTask()" class="btn btn-ghost !px-3 !py-1.5">
-                              Mégsem
-                            </button>
-                          </div>
-                        </div>
-                      } @else {
-                        <!-- min-w-0: enélkül a cím-gomb flex-elemként nem zsugorodhat a cím szélessége alá, így
-                             a truncate nem rövidít, és 375 px-en a „Törlés” kilóg a kártyából. -->
-                        <div class="flex justify-between items-start gap-2">
-                          <button (click)="toggleTask(task.id)" [attr.aria-expanded]="expandedTaskId() === task.id"
-                            class="text-left flex-1 min-w-0 flex items-start gap-2 group" data-testid="task-toggle">
-                            <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
-                              [class.-rotate-90]="expandedTaskId() !== task.id" />
-                            <span class="min-w-0 flex-1">
-                              <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
-                              <!-- Beadáskor a részfeladatok pontösszege a feladat pontszáma; a maxPoints csak felső korlát. -->
-                              @if (task.subTasks.length === 0) {
-                                <p class="text-sm text-warning" data-testid="task-points-summary">{{ task.maxPoints }} pont · nincs részfeladat - beadáskor nem pontozható</p>
-                              } @else if (allocatedPoints(task) !== task.maxPoints) {
-                                <p class="text-sm text-warning" data-testid="task-points-summary"
-                                   title="Beadáskor a részfeladatok pontösszege számít">{{ allocatedPoints(task) }} / {{ task.maxPoints }} pont kiosztva · {{ task.subTasks.length }} részfeladat</p>
-                              } @else {
-                                <p class="text-sm text-text-muted" data-testid="task-points-summary">{{ task.maxPoints }} pont · {{ task.subTasks.length }} részfeladat</p>
-                              }
-                              @if (task.aiAssisted) {
-                                <span class="badge badge-primary mt-1" data-testid="task-ai-assisted">AI-val készült</span>
-                              }
-                            </span>
-                          </button>
-                          <div class="flex items-center gap-3 shrink-0">
-                            <button (click)="startEditTask(task)" class="text-sm text-primary hover:underline">Szerkesztés</button>
-                            <button (click)="deleteTask(detail.id, task.id, task.title)" class="text-sm text-danger hover:underline">Törlés</button>
-                          </div>
-                        </div>
-                      }
-
-                      @if (expandedTaskId() === task.id) {
-                        <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
-                          <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
-                          <app-automatikus-javitas #autoGrading [taskSetId]="detail.id" [task]="task"
-                            (stdinRequested)="openRunInput(task.id)" (rubricChanged)="aiPanel.reload()" />
-                          <!-- SQL-feladat megoldó lekérdezései MI-vel: a MI-segítő panelről nyílik. -->
-                          @if (sqlQueriesTaskId() === task.id) {
-                            <app-sql-lekerdezesek [taskSetId]="detail.id" [task]="task" [hasLiteSql]="hasLiteSqlFor(task.id)"
-                              (closed)="sqlQueriesTaskId.set(null)" (saved)="onSqlQueriesSaved(detail.id, $event)"
-                              (openSqlFiles)="sqlQueriesTaskId.set(null); openSqlGeneration(task.id)" />
-                          }
-
-                          <!-- Részfeladatok -->
-                          @for (solution of task.subTasks; track solution.id) {
-                            <div class="bg-bg-panel rounded-xl p-3">
-                              @if (editingSolutionId() === solution.id) {
-                                <!-- UI-TT-193: inline szerkesztő - a "Új részfeladat" form
-                                     mezőit tükrözi (leírás + pont), ugyanazokra a store-
-                                     metódusokra (updateSubTask) kötve, amiket eddig egyetlen
-                                     komponens sem hívott. -->
-                                <div class="mb-2 space-y-2">
-                                  <div>
-                                    <label class="text-xs text-text-muted">Leírás</label>
-                                    <textarea rows="2"
-                                      [ngModel]="editSolutionDraft(solution).description"
-                                      (ngModelChange)="setEditSolutionDescription(solution.id, $event)"
-                                      [ngModelOptions]="{standalone: true}"
-                                      class="input !px-2 !py-1"></textarea>
-                                  </div>
-                                  <div class="flex gap-2 items-end">
-                                    <div class="w-24">
-                                      <label class="text-xs text-text-muted">Pont</label>
-                                      <input type="number"
-                                        [ngModel]="editSolutionDraft(solution).points"
-                                        (ngModelChange)="setEditSolutionPoints(solution.id, $event)"
-                                        [ngModelOptions]="{standalone: true}"
-                                        class="input !px-2 !py-1" />
-                                    </div>
-                                    <button (click)="saveEditSolution(detail.id, solution)"
-                                      [disabled]="isEditSolutionDraftDescriptionBlank(solution.id) || store.loading()"
-                                      class="btn btn-primary !px-3 !py-1.5">
-                                      Mentés
-                                    </button>
-                                    <button (click)="cancelEditSolution()" class="btn btn-ghost !px-3 !py-1.5">
-                                      Mégsem
-                                    </button>
-                                  </div>
-                                </div>
-                              } @else {
-                                <div class="flex justify-between items-start gap-2 mb-2">
-                                  <p class="text-sm font-medium min-w-0 flex-1 truncate">{{ solution.label || ('#' + solution.id) }} ({{ solution.points ?? 0 }} pont)</p>
-                                  <div class="flex items-center gap-3 shrink-0">
-                                    <button (click)="startEditSolution(solution)" class="text-sm text-primary hover:underline">Szerkesztés</button>
-                                    <button (click)="deleteSubTask(detail.id, solution.id, solution.label || ('#' + solution.id))" class="text-sm text-danger hover:underline">Törlés</button>
-                                  </div>
-                                </div>
-                                <p class="text-sm text-text-muted mb-2 break-words">{{ solution.description }}</p>
-                              }
-
-                              <!-- Irodai feladatnál nincs kódrészlet: a referencia a feltöltött megoldásfájl. -->
-                              @if (!isOfficeTask(task)) {
-                                <div class="grid grid-cols-2 gap-2">
-                                  @for (lang of languages; track lang.id) {
-                                    <div>
-                                      <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                                      <textarea rows="3"
-                                        [ngModel]="draftCode(solution.id, lang.id)"
-                                        (ngModelChange)="setDraftCode(solution.id, lang.id, $event)"
-                                        class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
-                                    </div>
-                                  }
-                                </div>
-                                <!-- UI-TT-141: a store upsertSubTaskSnippets()-je a MINDEN mutáló
-                                     metódus által megosztott loading-jelzőn korai-return-nel véd.
-                                     E kötés nélkül egy MÁSIK feladat/megoldás törlése közben ide
-                                     kattintva a mentés teljesen láthatatlanul no-op maradt: nincs
-                                     hálózati hívás, nincs toast, és a gomb sem tűnt letiltottnak —
-                                     a tanár azt hihette, mentett. -->
-                                <button (click)="saveSnippets(detail.id, solution)"
-                                  [disabled]="store.loading()"
-                                  class="btn btn-primary mt-2 !px-3 !py-1">
-                                  Kódrészletek mentése
-                                </button>
-                              }
-                            </div>
-                          }
-
-                          <form (ngSubmit)="addSubTask(detail.id, task.id)" class="flex gap-2 items-end">
-                            <div class="flex-1">
-                              <label class="text-xs text-text-muted">Új részfeladat szövege</label>
-                              <input [ngModel]="newSolutionDraft(task.id).description"
-                                (ngModelChange)="setNewSolutionDescription(task.id, $event)" name="newSolutionDescription"
-                                class="input !px-2 !py-1" />
-                            </div>
-                            <div class="w-20">
-                              <label class="text-xs text-text-muted">Pont</label>
-                              <input type="number" [ngModel]="newSolutionDraft(task.id).points"
-                                (ngModelChange)="setNewSolutionPoints(task.id, $event)" name="newSolutionPoints"
-                                class="input !px-2 !py-1" />
-                            </div>
-                            <button type="submit" [disabled]="isSolutionDraftDescriptionBlank(task.id) || store.loading()"
-                              class="btn btn-primary !px-3 !py-1.5">
-                              Hozzáadás
-                            </button>
-                          </form>
-
-                          @if (isOfficeTask(task)) {
-                            <p class="text-sm text-text-muted" data-testid="office-files-hint">
-                              A feladat forrásfájljait és a saját megoldásodat a lenti „Fájlok” részen töltheted fel.
-                            </p>
-                          } @else {
-                            <!-- Összevont megoldás -->
-                            <div class="bg-bg-panel rounded-xl p-3">
-                              <p class="text-sm font-medium mb-2">Összevont megoldás</p>
-                              <div class="grid grid-cols-2 gap-2">
-                                @for (lang of languages; track lang.id) {
-                                  <div>
-                                    <label class="text-xs text-text-muted">{{ lang.name }}</label>
-                                    <textarea rows="3"
-                                      [ngModel]="draftCode(completeSolutionKey(task.id), lang.id)"
-                                      (ngModelChange)="setDraftCode(completeSolutionKey(task.id), lang.id, $event)"
-                                      class="input !bg-bg-element !px-2 !py-1 !text-xs font-mono"></textarea>
-                                  </div>
-                                }
-                              </div>
-                              <!-- UI-TT-141 testvér-esete, ld. a "Kódrészletek mentése" gomb
-                                   kommentjét: ugyanaz a láthatatlan no-op a megosztott
-                                   loading-guardon. -->
-                              <button (click)="saveCompleteSolutionSnippets(detail.id, task)"
-                                [disabled]="store.loading()"
-                                class="btn btn-primary mt-2 !px-3 !py-1">
-                                Összevont megoldás mentése
-                              </button>
-                            </div>
-                            @if (isCodeTask(task)) {
-                              <!-- A billentyűzetről olvasó megoldás tárolt bemenete; mentés után a javítás-minőség újratöltődik. -->
-                              <app-tesztbemenet [taskSetId]="detail.id" [task]="task" (saved)="autoGrading.loadQuality()" />
-                            }
-                          }
-                        </div>
-                      }
-                    </div>
-                  } @empty {
-                    <p class="text-sm text-text-muted">Még nincs ilyen típusú feladat.</p>
-                  }
-
-                  @if (!section.isOther) {
-                    <form (ngSubmit)="addTask(detail.id, section.id)" class="bg-bg-element rounded-xl p-4 space-y-2 scroll-mt-20 lg:scroll-mt-4"
-                      [attr.id]="'new-task-' + section.id">
-                      <p class="font-semibold text-sm">Új {{ section.label }} feladat</p>
-                      <input [(ngModel)]="newTaskDrafts[section.id].title" [attr.name]="'newTaskTitle-' + section.id" [attr.id]="'new-task-title-' + section.id"
-                        [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
-                      <textarea [(ngModel)]="newTaskDrafts[section.id].description" [attr.name]="'newTaskDescription-' + section.id"
-                        [ngModelOptions]="{standalone: true}" placeholder="Leírás" rows="2" class="input !bg-bg-panel !px-2 !py-1.5"></textarea>
-                      <div class="flex gap-2 items-end">
-                        <div>
-                          <label class="text-xs text-text-muted">Max pont</label>
-                          <input type="number" min="1" max="1000" [(ngModel)]="newTaskDrafts[section.id].maxPoints" [attr.name]="'newTaskMaxPoints-' + section.id"
-                            [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
-                        </div>
-                        <button type="submit" [disabled]="isTaskDraftTitleBlank(section.id) || isTaskDraftMaxPointsInvalid(section.id) || store.loading()"
-                          class="btn btn-primary !px-3 !py-1.5">
-                          Hozzáadás
-                        </button>
-                      </div>
-                    </form>
-                  }
-                </div>
-              }
-            </div>
+          @for (section of tasks.typeSections(); track section.id) {
+            <app-task-section [section]="section" [taskSetId]="detail.id"
+              (rubricChanged)="aiPanel.reload()" (sqlFilesRequested)="openSqlGeneration($event)" />
           }
         </section>
 
@@ -804,7 +492,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
         <app-mi-segito-panel #aiPanel [takedown]="!!detail.takedownAt" [selection]="panelSelection()" [dialogOpen]="aiDialogOpen()" [busy]="store.loading()"
           [sqlAvailable]="showSqlGeneration()"
           (rubricRequested)="openRubric()" (aiTaskRequested)="openAiTask($event, $event === 'complete' ? selectedTask() : null)"
-          (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(panelSelection()?.sql ? expandedTaskId() : null)"
+          (sqlQueriesRequested)="openSqlQueries()" (sqlFilesRequested)="openSqlGeneration(panelSelection()?.sql ? tasks.expandedTaskId() : null)"
           (officeTaskRequested)="officeTaskDialog.set($event)" (desktopTaskRequested)="desktopTaskDialog.set(true)" />
         </div>
       </div>
@@ -827,6 +515,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private readonly rubricService = inject(TeacherRubricService);
   readonly groupStore = inject(GroupStore);
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
+  readonly tasks = inject(TaskSectionState);
   // A publish()-nek meg kell várnia, hogy a schoolStore.loading() lezáruljon, mielőtt
   // a schools() alapján dönt a megerősítő dialógusról (UI-TT-47 load-order race).
   private readonly schoolStoreLoading$ = toObservable(this.schoolStore.loading);
@@ -845,8 +535,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private readonly categoryService = inject(CategoryService);
 
   readonly levels = LEVELS;
-  readonly languages = LANGUAGES;
-  readonly taskTypes = TASK_TYPES;
   readonly fileKinds = FILE_KINDS;
   readonly officeFileAccept = OFFICE_FILE_ACCEPT;
   readonly officeFileAcceptLabel = OFFICE_FILE_ACCEPT.split(',').join(', ');
@@ -946,12 +634,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   );
   // ────────────────────────────────────────────────────────────────
 
-  readonly expandedTaskId = signal<number | null>(null);
-  private readonly drafts = signal<SnippetDraft>({});
-  // Azon draft-kulcsok (solutionId / completeSolutionKey), amelyeken a tanár MÉG NEM
-  // mentett módosítást gépelt be — az effect() ezeket nem írja felül egy FÜGGETLEN,
-  // máshol lezajlott sikeres mentés/hozzáadás utáni újratöltéskor (UI-TT-40).
-  private readonly dirtyDraftKeys = signal<Set<number>>(new Set());
   // A "Megnyitás" link sima <a href> lenne, a token viszont localStorage-ban
   // van (nem cookie-ban) — nyers navigáció nem viszi magával, 401-et adna.
   // Ezért bearer tokennel lekért blob URL-re oldjuk fel, fileId -> blob URL.
@@ -964,115 +646,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   // vesztes blob URL-t soha senki nem revoke()-olná (permanens szivárgás).
   private readonly inFlightResolveKeys = new Set<string>();
 
-  /** Típusonként (Programozás/SQL) külön "Új feladat" űrlap-draft — a szerkesztő a feladatokat
-   *  típus szerint csoportosítja, összecsukható blokkokban (nincs jelenleg vegyes-típusú
-   *  feladatsor-igény, ezért a típus a blokk szintjén implicit, nem választógomb). */
-  newTaskDrafts: Record<number, { title: string; description: string; maxPoints: number }> = Object.fromEntries(
-    TASK_TYPES.map((t) => [t.id, { title: '', description: '', maxPoints: 10 }]),
-  );
-
-  /** A tanár által kézzel nyitott/zárt típus-blokkok. Alapból nyitva (a tanár azonnal lássa a
-   *  meglévő feladatait, ne kelljen minden megnyitáskor kattintania) - kivéve az ÜRES irodai
-   *  blokkokat: hét nyitott „Új feladat” űrlap egymás alatt áttekinthetetlen lenne. */
-  private readonly sectionToggles = signal<Record<number, boolean>>({});
-
-  /** Feladatonként (task.id) külön "Új részfeladat" űrlap-draft — enélkül a mentetlen
-   *  szöveg/pont a task-váltáskor csendben átkerülne az újonnan kiválasztott feladathoz
-   *  (UI-TT-66). Lazy-létrehozott bejegyzések, sima objektum (a newTaskDrafts mintáját
-   *  követve — OnPush mellett is frissül, mert a bekötő esemény ebben a komponensben
-   *  keletkezik). */
-  private readonly newSolutionDrafts: Record<number, { description: string; points: number }> = {};
-
-  // UI-TT-193: egy MEGLÉVŐ részfeladat pontszámának/leírásának eddig NEM volt UI-
-  // belépési pontja - kizárólag "Törlés" gomb volt, a teljesen kiépített és guardolt
-  // backend UpdateSolutionAsync-ot semelyik komponens nem hívta. Az `editingSolutionId`
-  // (solution.id-vel kulcsolva, az `expandedTaskId` mintáját követve) jelöli, melyik sor
-  // van éppen inline-szerkesztés alatt - egyszerre legfeljebb egy.
-  readonly editingSolutionId = signal<number | null>(null);
-  private readonly editSolutionDrafts: Record<number, { description: string; points: number }> = {};
-
-  // UI-TT-214: a UI-TT-193 mintájának a FELADAT (nem részfeladat) szintre vitele - a
-  // feladat-kártyának eddig kizárólag "Törlés" gombja volt, a teljesen kiépített és
-  // guardolt backend UpdateTaskAsync-ot (cím/leírás/pont ÉS taskOrder is elfogadja)
-  // semelyik komponens nem hívta. Típó/rossz kategória/rossz sorrend javítása emiatt
-  // csak a részfeladatokat is elvesztő Törlés+újralétrehozással volt lehetséges. A
-  // sorrend-mezőt (`taskOrder`) is ide vettük fel, NEM külön fel/le gomb-párként - a
-  // meglévő `UpdateTaskAsync` már elfogadja, ez a legkisebb konzisztens lépés teljes
-  // drag&drop/reorder-végpont építése nélkül.
-  readonly editingTaskId = signal<number | null>(null);
-  private readonly editTaskDrafts: Record<number, { title: string; description: string; maxPoints: number; taskOrder: number; taskTypeId: number | null }> = {};
-
-  /** A feladatokat típusonként (Programozás/SQL) csoportosítja a blokkos megjelenítéshez.
-   *  A "Egyéb" (id=0) csoport a korábbi, több/nulla típussal mentett feladatoknak ad helyet
-   *  (pl. a checkbox→radio váltás előtti adatok) — ezekhez nincs típus-scope-olt hozzáadó űrlap. */
-  readonly typeSections = computed<FeladatVazlatSection[]>(() => {
-    const detail = this.store.selectedDetail();
-    if (!detail) return [];
-
-    // UI-TT-3: a checkbox→radio átállás előtt KÉT típussal (SQL+Programozás) is
-    // menthető volt egy feladat — az .includes()-alapú szűrés ilyenkor mindkét
-    // típus-blokkba besorolta ugyanazt a feladatot (duplikáció). Csak a PONTOSAN
-    // egy típussal rendelkező feladatok kerülnek a saját típus-blokkjukba; minden
-    // más (0 vagy 2+ típus) az "Egyéb" gyűjtő-blokkba esik, ahogy azt már a fenti
-    // komment is dokumentálja.
-    const sections = this.taskTypes.map((type) => ({
-      id: type.id,
-      label: type.label,
-      icon: type.icon,
-      isOther: false,
-      tasks: detail.tasks.filter((t) => t.taskTypeIds.length === 1 && t.taskTypeIds[0] === type.id),
-    }));
-
-    const categorizedTaskIds = new Set(sections.flatMap((s) => s.tasks.map((t) => t.id)));
-    const otherTasks = detail.tasks.filter((t) => !categorizedTaskIds.has(t.id));
-    if (otherTasks.length > 0) {
-      sections.push({
-        id: 0,
-        label: 'Egyéb',
-        icon: 'clipboard-list' as IconName,
-        isOther: true,
-        tasks: otherTasks,
-      });
-    }
-
-    return sections;
-  });
-
-  toggleSection(id: number): void {
-    const open = this.isSectionExpanded(id);
-    this.sectionToggles.update((current) => ({ ...current, [id]: !open }));
-  }
-
-  isSectionExpanded(id: number): boolean {
-    const toggled = this.sectionToggles()[id];
-    if (toggled !== undefined) return toggled;
-    if (!this.isOfficeType(id)) return true;
-    return (this.typeSections().find((s) => s.id === id)?.tasks.length ?? 0) > 0;
-  }
-
-  isOfficeType(typeId: number): boolean {
-    return OFFICE_TASK_TYPE_IDS.has(typeId);
-  }
-
-  /** Irodai feladat: pontosan egy, irodai típus. Ennél nincs kódrészlet/referencia-kód, a
-   *  javítás a tanár feltöltött megoldásfájljából készült szempontlistával történik. */
-  isOfficeTask(task: TeacherTaskDto): boolean {
-    return task.taskTypeIds.length === 1 && this.isOfficeType(task.taskTypeIds[0]);
-  }
-
-  // A „Tesztbemenet” részek (a kinyitott kód-feladatoké) - az „Automatikus javítás” „stdin” teendője ide vezet.
-  private readonly runInputPanels = viewChildren(TesztbemenetComponent);
-
-  openRunInput(taskId: number): void {
-    this.runInputPanels().find((p) => p.task().id === taskId)?.open();
-  }
-
-  /** Programozási feladat (nem irodai, nem SQL): ehhez adható meg tárolt billentyűzetes bemenet. */
-  isCodeTask(task: TeacherTaskDto): boolean {
-    return !this.isOfficeTask(task) && !task.taskTypeIds.includes(SQL_TASK_TYPE_ID);
-  }
-
-  readonly officeTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => this.isOfficeTask(t)));
+  readonly officeTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => isOfficeTask(t)));
 
   /** A feladatsor-szintű fájlok; egy (még meglévő) feladathoz kötött fájl a feladat saját blokkjában jelenik meg. */
   readonly taskSetFiles = computed(() => {
@@ -1096,7 +670,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     return task ? ` · ${task.taskOrder}. feladat` : '';
   }
 
-  readonly sqlTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => this.isSqlTask(t)));
+  readonly sqlTasks = computed(() => (this.store.selectedDetail()?.tasks ?? []).filter((t) => isSqlTask(t)));
 
   isSchemaKind(kind: TeacherFileKind): boolean {
     return kind === 'CreateSql' || kind === 'CreateLiteSql';
@@ -1154,28 +728,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   readonly paidAccessText = PAID_ACCESS_TEXT;
   readonly freeAccessText = FREE_ACCESS_TEXT;
 
-  /** Melyik SQL-feladat „SQL megoldó lekérdezések MI-vel” ablaka van nyitva. */
-  readonly sqlQueriesTaskId = signal<number | null>(null);
-
-  isSqlTask(task: TeacherTaskDto): boolean {
-    return task.taskTypeIds.includes(SQL_TASK_TYPE_ID);
-  }
-
-  /** A futtató a feladatra kötött, különben a feladatsor-szintű create_lite.sql-t használja. */
-  hasLiteSqlFor(taskId: number): boolean {
-    return (this.store.selectedDetail()?.files ?? []).some((f) => f.kind === 'CreateLiteSql' && (f.taskId == null || f.taskId === taskId));
-  }
-
-  /** Mentés után a mentett részfeladatok kódrészlet-piszkozatai a szerver állapotára állnak (a tanár ezt választotta). */
-  onSqlQueriesSaved(taskSetId: number, subTaskIds: number[]): void {
-    this.dirtyDraftKeys.update((current) => {
-      const next = new Set(current);
-      for (const id of subTaskIds) next.delete(id);
-      return next;
-    });
-    this.store.loadDetail(taskSetId);
-  }
-
   /** Az „AI programozási feladat” párbeszédablak: meglévő feladat kiegészítése vagy új feladat. */
   readonly aiTaskDialog = signal<{ mode: 'complete' | 'new'; task: TeacherTaskDto | null } | null>(null);
   /** „Asztali feladatsor témából” párbeszédablak. */
@@ -1185,11 +737,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   /** Az irodai ablakból legutóbb mentett feladat (feladatsoronként) - újranyitáskor az ablak jelzi, és oda lehet ugrani. */
   readonly lastOfficeSave = signal<{ taskSetId: number; taskId: number; title: string } | null>(null);
 
-  /** Csak a Programozás típusú (nem SQL, nem irodai, nem vegyes) feladatokhoz kérhető AI-kiegészítés. */
-  isProgrammingTask(task: TeacherTaskDto): boolean {
-    return task.taskTypeIds.length === 1 && task.taskTypeIds[0] === PROGRAMMING_TASK_TYPE_ID;
-  }
-
   openAiTask(mode: 'complete' | 'new', task: TeacherTaskDto | null): void {
     this.aiTaskDialog.set({ mode, task });
   }
@@ -1197,7 +744,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   /** Mentés után friss feladatsor; az érintett (új) feladat kinyílik. */
   onAiTaskSaved(taskSetId: number, taskId: number): void {
     this.store.loadDetail(taskSetId);
-    this.expandedTaskId.set(taskId);
+    this.tasks.expandedTaskId.set(taskId);
   }
 
   /** „Ugrás a feladathoz” az irodai ablakból: bezárás, a feladat kinyílik, és odagörgetünk. */
@@ -1207,12 +754,12 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   }
 
   /** A vázlatban kijelölt feladat = a kinyitott feladat; a MI-segítő panel feladatszintű segítségei erre vonatkoznak. */
-  readonly selectedTask = computed(() => this.store.selectedDetail()?.tasks.find((t) => t.id === this.expandedTaskId()) ?? null);
+  readonly selectedTask = computed(() => this.store.selectedDetail()?.tasks.find((t) => t.id === this.tasks.expandedTaskId()) ?? null);
 
   readonly panelSelection = computed<MiSegitoSelection | null>(() => {
     const task = this.selectedTask();
     if (!task) return null;
-    return { label: `${task.taskOrder}. ${task.title}`, programming: this.isProgrammingTask(task), sql: this.isSqlTask(task) };
+    return { label: `${task.taskOrder}. ${task.title}`, programming: isProgrammingTask(task), sql: isSqlTask(task) };
   });
 
   /** Nyitva van-e valamelyik MI-dialógus - a panel a bezáráskor újratölti a kereteket. */
@@ -1222,20 +769,20 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       this.officeTaskDialog() !== null ||
       this.desktopTaskDialog() ||
       this.sqlGenerationOpen() ||
-      this.sqlQueriesTaskId() !== null,
+      this.tasks.sqlQueriesTaskId() !== null,
   );
 
   /** Kijelölés a vázlatból: a típus-blokk és a feladat kinyílik, és odagörgetünk. */
   selectTask(taskId: number): void {
-    const section = this.typeSections().find((s) => s.tasks.some((t) => t.id === taskId));
-    if (section) this.sectionToggles.update((current) => ({ ...current, [section.id]: true }));
-    this.expandedTaskId.set(taskId);
+    const section = this.tasks.typeSections().find((s) => s.tasks.some((t) => t.id === taskId));
+    if (section) this.tasks.expandSection(section.id);
+    this.tasks.expandedTaskId.set(taskId);
     this.scrollTo(`task-${taskId}`);
   }
 
   /** „+ Új feladat” a vázlatból: a típus-blokk kinyílik, a blokk „Új feladat” űrlapjához görgetünk, és a címre fókuszálunk. */
   focusNewTask(sectionId: number): void {
-    this.sectionToggles.update((current) => ({ ...current, [sectionId]: true }));
+    this.tasks.expandSection(sectionId);
     this.scrollTo(`new-task-${sectionId}`, `new-task-title-${sectionId}`);
   }
 
@@ -1247,7 +794,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
 
   openSqlQueries(): void {
     const task = this.selectedTask();
-    if (task && this.isSqlTask(task)) this.sqlQueriesTaskId.set(task.id);
+    if (task && isSqlTask(task)) this.tasks.sqlQueriesTaskId.set(task.id);
   }
 
   /** A görgetés a következő renderelés után fut (a blokk / feladat épp most nyílt ki). */
@@ -1291,35 +838,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // A drafteket a szerver-állapotból töltjük — mentés után a store úgyis
-    // újratölti a detailt, ezért az ÉRINTETT draft a legutóbb mentett állapotra
-    // áll vissza (ez a szándékolt, egyszerű viselkedés). DE ez a reload MINDEN
-    // sikeres mutációra lefut (nemcsak az érintett solution/task-éra) — ezért
-    // a még "piszkos" (mentetlen) kulcsokat itt NEM írjuk felül, különben egy
-    // teljesen független mentés/hozzáadás csendben eldobná egy MÁSIK, még el
-    // nem mentett kódrészlet-piszkozatot ugyanazon az oldalon (UI-TT-40).
-    effect(() => {
-      const detail = this.store.selectedDetail();
-      if (!detail) return;
-
-      const dirty = this.dirtyDraftKeys();
-      this.drafts.update((current) => {
-        const next: SnippetDraft = { ...current };
-        for (const task of detail.tasks) {
-          for (const solution of task.subTasks) {
-            if (dirty.has(solution.id)) continue;
-            next[solution.id] = Object.fromEntries(solution.snippets.map((s) => [s.programmingLanguageId, s.code]));
-          }
-          const completeKey = this.completeSolutionKey(task.id);
-          if (dirty.has(completeKey)) continue;
-          next[completeKey] = Object.fromEntries(
-            task.completeSolutionSnippets.map((s) => [s.programmingLanguageId, s.code]),
-          );
-        }
-        return next;
-      });
-    });
-
     effect(() => {
       const files = this.store.selectedDetail()?.files ?? [];
       const currentIds = new Set(files.map((f) => String(f.id)));
@@ -1347,7 +865,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         if (this.inFlightResolveKeys.has(key)) continue;
 
         this.inFlightResolveKeys.add(key);
-        this.authorizedFileService.resolveUrl(this.apiOrigin + file.url).subscribe((url) => {
+        this.authorizedFileService.resolveUrl(this.apiOrigin + file.url).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((url) => {
           this.inFlightResolveKeys.delete(key);
           this.resolvedDownloadUrls.update((current) => ({ ...current, [key]: url }));
         });
@@ -1361,8 +879,8 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
   private leaveWithoutAsking = false;
 
   /**
-   * UI-TT-238: van-e mentetlen módosítás - Alapadatok, nyitott feladat- vagy részfeladat-szerkesztés, kitöltött „Új feladat” /
-   * „Új részfeladat” űrlap, mentetlen kódrészlet.
+   * UI-TT-238: van-e mentetlen módosítás - Alapadatok, vagy a „Feladatok” rész (nyitott feladat- vagy részfeladat-szerkesztés,
+   * kitöltött „Új feladat” / „Új részfeladat” űrlap, mentetlen kódrészlet).
    */
   hasUnsavedChanges(): boolean {
     const detail = this.store.selectedDetail();
@@ -1372,20 +890,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
       || meta.subjectCategoryId !== (detail.subjectCategoryId ?? null)
       || [...meta.requiredSkillIds].sort().join() !== [...(detail.requiredSkillIds ?? [])].sort().join())) return true;
 
-    const task = detail.tasks.find((t) => t.id === this.editingTaskId());
-    const taskDraft = task && this.editTaskDrafts[task.id];
-    if (task && taskDraft && (taskDraft.title !== task.title || taskDraft.description !== (task.description ?? '')
-      || taskDraft.maxPoints !== task.maxPoints || taskDraft.taskOrder !== task.taskOrder
-      || taskDraft.taskTypeId !== this.taskTypeIdFor(task))) return true;
-
-    const solution = detail.tasks.flatMap((t) => t.subTasks).find((s) => s.id === this.editingSolutionId());
-    const solutionDraft = solution && this.editSolutionDrafts[solution.id];
-    if (solution && solutionDraft
-      && (solutionDraft.description !== (solution.description ?? '') || solutionDraft.points !== (solution.points ?? 0))) return true;
-
-    return Object.values(this.newTaskDrafts).some((d) => d.title.trim() || d.description.trim())
-      || Object.values(this.newSolutionDrafts).some((d) => d.description.trim())
-      || this.dirtyDraftKeys().size > 0;
+    return this.tasks.hasUnsavedChanges(detail);
   }
 
   /** Route canDeactivate: mentetlen módosításnál megerősítés (SPA-navigáció). */
@@ -1427,127 +932,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     this.store.loadDetail(id);
     this.groupStore.loadMine();
     this.loadAssignments(id);
-  }
-
-  toggleTask(taskId: number): void {
-    this.expandedTaskId.set(this.expandedTaskId() === taskId ? null : taskId);
-  }
-
-  /** Negatív kulcs, hogy ne ütközzön a valódi (pozitív) solutionId-kal. */
-  completeSolutionKey(taskId: number): number {
-    return -taskId;
-  }
-
-  draftCode(key: number, languageId: number): string {
-    return this.drafts()[key]?.[languageId] ?? '';
-  }
-
-  setDraftCode(key: number, languageId: number, code: string): void {
-    this.drafts.update((current) => ({
-      ...current,
-      [key]: { ...current[key], [languageId]: code },
-    }));
-    // A kulcs "piszkos" marad, amíg a mentése tényleg le nem fut — enélkül egy
-    // MÁSIK, független mutáció utáni újratöltés csendben eldobná ezt a mentetlen
-    // szerkesztést (UI-TT-40).
-    this.dirtyDraftKeys.update((current) => new Set(current).add(key));
-  }
-
-  private clearDirtyDraft(key: number): void {
-    this.dirtyDraftKeys.update((current) => {
-      if (!current.has(key)) return current;
-      const next = new Set(current);
-      next.delete(key);
-      return next;
-    });
-  }
-
-  private snippetsFromDraft(key: number): SnippetDto[] {
-    const entry = this.drafts()[key] ?? {};
-    return Object.entries(entry)
-      .filter(([, code]) => code.trim().length > 0)
-      .map(([languageId, code]) => ({ programmingLanguageId: Number(languageId), code }));
-  }
-
-  saveSnippets(taskSetId: number, solution: TeacherSubTaskDto): void {
-    const snippets = this.snippetsFromDraft(solution.id);
-    // Ha nincs is korábban mentett kódrészlet, egy üres mentés valóban no-op (UI-TT-13) —
-    // de ha VOLT, az üres nyelv-mezők a tanár törlési szándékát jelentik, ezt tényleg
-    // el kell küldeni (a backend upsert teljes-csere szemantikájú, üres tömb = törlés).
-    if (snippets.length === 0 && solution.snippets.length === 0) {
-      this.toastService.warning('Nincs megadva kódrészlet egyik nyelven sem — nincs mit menteni.');
-      return;
-    }
-    this.store.upsertSubTaskSnippets(taskSetId, solution.id, snippets, () => {
-      this.clearDirtyDraft(solution.id);
-      this.toastService.success(snippets.length === 0 ? 'Kódrészletek törölve.' : 'Kódrészletek mentve.');
-    });
-  }
-
-  saveCompleteSolutionSnippets(taskSetId: number, task: TeacherTaskDto): void {
-    const key = this.completeSolutionKey(task.id);
-    const snippets = this.snippetsFromDraft(key);
-    if (snippets.length === 0 && task.completeSolutionSnippets.length === 0) {
-      this.toastService.warning('Nincs megadva kódrészlet egyik nyelven sem — nincs mit menteni.');
-      return;
-    }
-    this.store.upsertCompleteSolutionSnippets(taskSetId, task.id, snippets, () => {
-      this.clearDirtyDraft(key);
-      this.toastService.success(snippets.length === 0 ? 'Összevont megoldás törölve.' : 'Összevont megoldás mentve.');
-    });
-  }
-
-  addTask(taskSetId: number, typeId: number): void {
-    // UI-TT-115: a publish()/csoport-létrehozó formok mintáját követve — dupla-kattintás/
-    // gyors kettős Enter védelme, amíg az első kérés még folyamatban van (store.loading()),
-    // különben a mögöttes mutateAndReload()-os POST nem idempotens, duplikált sort szúrna be.
-    if (this.store.loading()) return;
-    const draft = this.newTaskDrafts[typeId];
-    // UI-TT-90: a backend CreateTeacherTaskRequest.Description mezője [Required] -
-    // a leírás nélküli beküldés korábban csak egy 400-zal derült ki, mert ez a guard
-    // (és az alábbi isTaskDraftTitleBlank()) kizárólag a címet ellenőrizte.
-    if (!draft?.title.trim() || !draft?.description.trim()) return;
-    // UI-TT-191: a backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-je
-    // korábban a beküldés utáni 400-zal jelentkezett csak, egy nyers, angol
-    // DataAnnotations-sablonszöveggel ("The field MaxPoints must be between 1
-    // and 1000.") a különben teljesen magyar felületen - kliens-oldalon ez a
-    // mező eddig egyáltalán nem volt ellenőrizve.
-    if (this.isTaskDraftMaxPointsInvalid(typeId)) return;
-    this.store.addTask(
-      taskSetId,
-      {
-        title: draft.title.trim(),
-        description: draft.description.trim(),
-        maxPoints: draft.maxPoints,
-        taskTypeIds: [typeId],
-      },
-      () => {
-        // UI-TT-25: a draftot csak SIKERES mentés után ürítjük — korábban ez a hívás ELŐTT,
-        // optimistán futott le, így egy lassú/sikertelen kérésnél a tanár visszavonhatatlanul
-        // elveszítette a begépelt cím/leírás/pontszám szöveget.
-        this.newTaskDrafts[typeId] = { title: '', description: '', maxPoints: 10 };
-        this.toastService.success('Feladat hozzáadva.');
-      },
-    );
-  }
-
-  /** UI-TT-61: a "Hozzáadás" gomb [disabled] állapotának is trim-elnie kell, hogy ne
-   *  maradjon kattintható whitespace-only cím mellett — a mögöttes addTask() guard-ja
-   *  már helyesen trim-el, csendben visszatérne, a gomb tehát néma no-opot mutatna.
-   *  UI-TT-90: a backend a leírást is kötelezővé teszi ([Required] Description), ezért
-   *  ez a gomb-gate innentől azt is ellenőrzi — enélkül a tanár csak a 400-as
-   *  válaszból tudta meg, hogy leírás nélkül nem menthető a feladat. */
-  isTaskDraftTitleBlank(typeId: number): boolean {
-    const draft = this.newTaskDrafts[typeId];
-    return !draft?.title.trim() || !draft?.description.trim();
-  }
-
-  // UI-TT-191: a backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-jét
-  // tükrözi kliens-oldalon, hogy a "Hozzáadás" gomb ne engedjen egy garantáltan
-  // 400-at eredményező (0/negatív/1000 fölötti) értéket beküldeni.
-  isTaskDraftMaxPointsInvalid(typeId: number): boolean {
-    const maxPoints = this.newTaskDrafts[typeId]?.maxPoints;
-    return maxPoints == null || maxPoints < 1 || maxPoints > 1000;
   }
 
   /** Visszavonás: a publikálás párja. Megerősítést kér - a diákok elvesztik a hozzáférést. */
@@ -1602,252 +986,10 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     });
   }
 
-  async deleteTask(taskSetId: number, taskId: number, taskTitle: string): Promise<void> {
-    // UI-TT-140 (UI-TT-29 testvér-előfordulása): a megerősítő szöveg korábban sosem
-    // nevezte meg a törlendő feladatot, pedig az ÖSSZES részfeladatát is törli - egy
-    // sok feladatos feladatsoron a tanár nem tudta a dialógusból ellenőrizni, hogy
-    // valóban a kattintott sorra vonatkozik-e.
-    const ok = await this.confirmService.ask({
-      message: `Biztosan törlöd a(z) "${taskTitle}" feladatot a részfeladataival együtt?`,
-      danger: true,
-      confirmLabel: 'Törlés',
-    });
-    if (!ok) return;
-    // UI-TT-115/123 testvér-hiánya: az add/upload műveletek dupla-kattintás guardja
-    // hiányzott a törlésekről — a megerősítő dialógus alatt egy másik mutáció
-    // (pl. egy másik törlés) elindulhatott, a mögöttes mutateAndReload() pedig nem
-    // idempotens: két egyidejű törlés zavaró, felesleges hibaüzenetet adhat.
-    if (this.store.loading()) return;
-    this.store.deleteTask(taskSetId, taskId, () => this.toastService.success('Feladat törölve.'));
-  }
-
-  readonly allocatedPoints = allocatedPoints;
-
-  /** Lazy-létrehozott, task.id-vel kulcsolt draft — így a "Új részfeladat szövege" mező
-   *  sosem "szivárog át" egy másik feladatra task-váltáskor (UI-TT-66). */
-  newSolutionDraft(taskId: number): { description: string; points: number } {
-    return (this.newSolutionDrafts[taskId] ??= { description: '', points: 5 });
-  }
-
-  /** UI-TT-81: a UI-TT-61 addTask-fixének testvér-hiánya - a "Hozzáadás" (addSubTask)
-   *  gomb [disabled] állapotának is trim-elnie kell, különben whitespace-only leírás
-   *  mellett is kattintható marad, miközben a mögöttes addSubTask() guard-ja már
-   *  helyesen trim-el és csendben visszatér - néma no-op. */
-  isSolutionDraftDescriptionBlank(taskId: number): boolean {
-    return !this.newSolutionDraft(taskId).description.trim();
-  }
-
-  setNewSolutionDescription(taskId: number, value: string): void {
-    this.newSolutionDraft(taskId).description = value;
-  }
-
-  setNewSolutionPoints(taskId: number, value: number): void {
-    this.newSolutionDraft(taskId).points = value;
-  }
-
-  addSubTask(taskSetId: number, taskId: number): void {
-    // UI-TT-115: az addTask() testvér-fixe — ugyanaz a dupla-kattintás/idempotencia guard.
-    if (this.store.loading()) return;
-    const draft = this.newSolutionDraft(taskId);
-    if (!draft.description.trim()) return;
-    this.store.addSubTask(
-      taskSetId,
-      taskId,
-      {
-        description: draft.description.trim(),
-        points: draft.points,
-      },
-      () => {
-        // UI-TT-25 testvér-előfordulása: ugyanaz a fix, a draftot csak sikeres mentés után ürítjük.
-        this.newSolutionDrafts[taskId] = { description: '', points: 5 };
-        this.toastService.success('Részfeladat hozzáadva.');
-      },
-    );
-  }
-
-  async deleteSubTask(taskSetId: number, solutionId: number, solutionLabel: string): Promise<void> {
-    // UI-TT-140 (UI-TT-29 testvér-előfordulása) — ld. deleteTask() fenti kommentje.
-    const ok = await this.confirmService.ask({
-      message: `Biztosan törlöd a(z) "${solutionLabel}" részfeladatot?`,
-      danger: true,
-      confirmLabel: 'Törlés',
-    });
-    if (!ok) return;
-    // UI-TT-115/123 testvér-hiánya — ld. deleteTask() fenti kommentje.
-    if (this.store.loading()) return;
-    this.store.deleteSubTask(taskSetId, solutionId, () => this.toastService.success('Részfeladat törölve.'));
-  }
-
-  // UI-TT-193: lazy-létrehozott draft, a solution AKTUÁLIS (mentett) leírásával/
-  // pontszámával előtöltve - a newSolutionDraft() mintáját követi.
-  editSolutionDraft(solution: TeacherSubTaskDto): { description: string; points: number } {
-    return (this.editSolutionDrafts[solution.id] ??= {
-      description: solution.description ?? '',
-      points: solution.points ?? 0,
-    });
-  }
-
-  startEditSolution(solution: TeacherSubTaskDto): void {
-    // Minden megnyitáskor a JELENLEGI (mentett) értékekről indítunk - ha korábban
-    // már volt egy meg nem mentett, majd elvetett szerkesztés ugyanerre a sorra,
-    // az ne "ragadjon be".
-    this.editSolutionDrafts[solution.id] = {
-      description: solution.description ?? '',
-      points: solution.points ?? 0,
-    };
-    this.editingSolutionId.set(solution.id);
-  }
-
-  cancelEditSolution(): void {
-    this.editingSolutionId.set(null);
-  }
-
-  isEditSolutionDraftDescriptionBlank(solutionId: number): boolean {
-    return !this.editSolutionDrafts[solutionId]?.description.trim();
-  }
-
-  setEditSolutionDescription(solutionId: number, value: string): void {
-    if (this.editSolutionDrafts[solutionId]) this.editSolutionDrafts[solutionId].description = value;
-  }
-
-  setEditSolutionPoints(solutionId: number, value: number): void {
-    if (this.editSolutionDrafts[solutionId]) this.editSolutionDrafts[solutionId].points = value;
-  }
-
-  // A teljes megoldás-DTO-t vesszük át (nem csak az azonosítót), mert a
-  // konkurrencia-token is kell hozzá - ugyanaz a minta, mint a saveEditTask()-nál.
-  saveEditSolution(taskSetId: number, solution: TeacherSubTaskDto): void {
-    // UI-TT-115/123 testvér-guard - ld. addSubTask()/deleteSubTask() fenti kommentje.
-    if (this.store.loading()) return;
-    const draft = this.editSolutionDrafts[solution.id];
-    if (!draft || !draft.description.trim()) return;
-    this.store.updateSubTask(
-      taskSetId,
-      solution.id,
-      {
-        description: draft.description.trim(),
-        points: draft.points,
-        // Konkurrencia-token a betöltött megoldásból - ütközésnél a backend elutasít.
-        rowVersion: solution.rowVersion,
-      },
-      () => {
-        this.editingSolutionId.set(null);
-        this.toastService.success('Részfeladat frissítve.');
-      },
-    );
-  }
-
-  // UI-TT-215: a task.taskTypeIds ELVILEG tömb (a modell szintjén több típus is elférne
-  // rajta), a gyakorlatban viszont (ld. typeSections() "Egyéb"-be gyűjtő komment - "nincs
-  // jelenleg vegyes-típusú feladatsor-igény") pontosan EGY típussal rendelkezik minden
-  // valódi feladat - a "Új feladat" forma is emiatt implicit, szekció-szintű egy-típusú
-  // választással dolgozik. A szerkesztő draft ugyanezt a leegyszerűsítést követi: egyetlen
-  // választható kategória, `null` ha a task kivételesen 0/2+ típussal rendelkezik (ilyenkor
-  // a mentés a task EREDETI taskTypeIds-ét változatlanul hagyja, amíg a tanár tényleg nem
-  // választ egy konkrét kategóriát).
-  private taskTypeIdFor(task: TeacherTaskDto): number | null {
-    return task.taskTypeIds.length === 1 ? task.taskTypeIds[0] : null;
-  }
-
-  // UI-TT-214: lazy-létrehozott draft, a task AKTUÁLIS (mentett) mezőivel előtöltve -
-  // az editSolutionDraft() mintáját követi.
-  editTaskDraft(task: TeacherTaskDto): { title: string; description: string; maxPoints: number; taskOrder: number; taskTypeId: number | null } {
-    return (this.editTaskDrafts[task.id] ??= {
-      title: task.title,
-      description: task.description ?? '',
-      maxPoints: task.maxPoints,
-      taskOrder: task.taskOrder,
-      taskTypeId: this.taskTypeIdFor(task),
-    });
-  }
-
-  startEditTask(task: TeacherTaskDto): void {
-    // Minden megnyitáskor a JELENLEGI (mentett) értékekről indítunk - ld. startEditSolution().
-    this.editTaskDrafts[task.id] = {
-      title: task.title,
-      description: task.description ?? '',
-      maxPoints: task.maxPoints,
-      taskOrder: task.taskOrder,
-      taskTypeId: this.taskTypeIdFor(task),
-    };
-    this.editingTaskId.set(task.id);
-  }
-
-  cancelEditTask(): void {
-    this.editingTaskId.set(null);
-  }
-
-  isEditTaskDraftInvalid(taskId: number): boolean {
-    const draft = this.editTaskDrafts[taskId];
-    if (!draft) return true;
-    // BE-TEACHERCONTENT-UPDATETASK-TASKORDER-NO-LOWER-BOUND: a Sorrend mező a template-ben
-    // ugyanúgy `min="1"`-et deklarál, mint a maxPoints - de az a HTML attribútum önmagában
-    // nem blokkolja a tényleges értékadást egy [ngModelOptions]="{standalone: true}"-dal
-    // kötött mezőnél, ezért ezt is ide, a tényleges guard-ba kell felvenni.
-    return (
-      !draft.title.trim() ||
-      !draft.description.trim() ||
-      draft.maxPoints < 1 ||
-      draft.maxPoints > 1000 ||
-      draft.taskOrder < 1
-    );
-  }
-
-  setEditTaskTitle(taskId: number, value: string): void {
-    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].title = value;
-  }
-
-  setEditTaskDescription(taskId: number, value: string): void {
-    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].description = value;
-  }
-
-  setEditTaskMaxPoints(taskId: number, value: number): void {
-    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].maxPoints = value;
-  }
-
-  setEditTaskOrder(taskId: number, value: number): void {
-    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].taskOrder = value;
-  }
-
-  // UI-TT-215: a UI-TT-214 commit-üzenete kifejezetten a "rossz kategória" javítását
-  // nevezte meg indokként, de a leszállított szerkesztő ezt eddig nem tette lehetővé -
-  // saveEditTask() mindig a task EREDETI taskTypeIds-ét küldte vissza változatlanul.
-  setEditTaskCategory(taskId: number, typeId: number): void {
-    if (this.editTaskDrafts[taskId]) this.editTaskDrafts[taskId].taskTypeId = typeId;
-  }
-
-  saveEditTask(taskSetId: number, task: TeacherTaskDto): void {
-    // UI-TT-115/123 testvér-guard - ld. addSubTask()/deleteSubTask() fenti kommentje.
-    if (this.store.loading()) return;
-    const draft = this.editTaskDrafts[task.id];
-    if (!draft || this.isEditTaskDraftInvalid(task.id)) return;
-    this.store.updateTask(
-      taskSetId,
-      task.id,
-      {
-        title: draft.title.trim(),
-        description: draft.description.trim(),
-        maxPoints: draft.maxPoints,
-        taskOrder: draft.taskOrder,
-        // UI-TT-215: ha a tanár tényleg választott egy konkrét kategóriát, azt küldjük -
-        // egyébként (0/2+ típusú "Egyéb" feladatnál, ahol a draft null marad) a task
-        // EREDETI taskTypeIds-ét hagyjuk változatlanul, hogy egy meg nem érintett mező ne
-        // veszíthessen el legacy adatot.
-        taskTypeIds: draft.taskTypeId != null ? [draft.taskTypeId] : task.taskTypeIds,
-        // Konkurrencia-token a betöltött feladatból - ütközésnél a backend elutasít.
-        rowVersion: task.rowVersion,
-      },
-      () => {
-        this.editingTaskId.set(null);
-        this.toastService.success('Feladat frissítve.');
-      },
-    );
-  }
-
   private loadAssignments(taskSetId: number): void {
     this.assignmentsLoading.set(true);
     this.assignmentsError.set(null);
-    this.taskSetService.getTaskSetAssignments(taskSetId).subscribe({
+    this.taskSetService.getTaskSetAssignments(taskSetId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (list) => {
         this.assignments.set(list);
         this.assignmentsLoading.set(false);
@@ -1871,6 +1013,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         isTest: raw.isTest,
         timeLimitMinutes: raw.isTest ? Number(raw.timeLimitMinutes) : null,
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (dto) => {
           this.assignments.update((list) => [dto, ...list]);
@@ -1891,7 +1034,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
 
-    this.taskSetService.revokeAssignment(assignmentId).subscribe({
+    this.taskSetService.revokeAssignment(assignmentId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.assignments.update((list) =>
           list.map((a) => (a.id === assignmentId ? { ...a, revokedAt: new Date().toISOString() } : a)),

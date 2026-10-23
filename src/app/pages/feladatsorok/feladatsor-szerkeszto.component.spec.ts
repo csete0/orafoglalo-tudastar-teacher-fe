@@ -17,6 +17,7 @@ import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/te
 import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 import { TeacherDesktopTaskService } from '../../services/teacher-desktop-task/teacher-desktop-task.service';
 import { ReportService } from '../../services/report/report.service';
+import { TaskEditState } from './feladatsor-szerkeszto/task-edit.state';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -285,7 +286,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       fixture.componentInstance.onAiTaskSaved(1, 456);
       expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
-      expect(fixture.componentInstance.expandedTaskId()).toBe(456);
+      expect(fixture.componentInstance.tasks.expandedTaskId()).toBe(456);
     });
 
     it('az irodai ablak a panel típusválasztójával nyílik (alapból Excel, átállítva Word)', () => {
@@ -326,7 +327,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       click(el, 'io-last-saved-open');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="io-dialog"]')).toBeNull();
-      expect(c.expandedTaskId()).toBe(456);
+      expect(c.tasks.expandedTaskId()).toBe(456);
       // Másik feladatsor mentése nem látszik ezen.
       c.lastOfficeSave.set({ taskSetId: 99, taskId: 1, title: 'Más' });
       c.officeTaskDialog.set('excel');
@@ -409,22 +410,22 @@ describe('FeladatsorSzerkesztoComponent', () => {
         const c = fixture.componentInstance;
         fixture.detectChanges();
         const el: HTMLElement = fixture.nativeElement;
-        c.toggleSection(6);
+        c.tasks.toggleSection(6);
         fixture.detectChanges();
-        expect(c.isSectionExpanded(6)).toBe(false);
+        expect(c.tasks.isSectionExpanded(6)).toBe(false);
 
         click(el, 'outline-task-1');
         fixture.detectChanges();
-        expect(c.isSectionExpanded(6)).toBe(true);
-        expect(c.expandedTaskId()).toBe(1);
+        expect(c.tasks.isSectionExpanded(6)).toBe(true);
+        expect(c.tasks.expandedTaskId()).toBe(1);
         expect(el.querySelector('[data-testid="outline-task-1"]')!.getAttribute('aria-current')).toBe('true');
 
         // Üres irodai blokk alapból zárva - a „+ Új feladat” kinyitja és a cím-mezőre fókuszál.
-        expect(c.isSectionExpanded(2)).toBe(false);
+        expect(c.tasks.isSectionExpanded(2)).toBe(false);
         click(el, 'outline-add-2');
         fixture.detectChanges();
         vi.runAllTimers();
-        expect(c.isSectionExpanded(2)).toBe(true);
+        expect(c.tasks.isSectionExpanded(2)).toBe(true);
         expect(document.activeElement?.id).toBe('new-task-title-2');
       } finally {
         vi.useRealTimers();
@@ -605,7 +606,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       }],
     }));
     const component = fixture.componentInstance;
-    component.toggleTask(1);
+    component.tasks.toggleTask(1);
     fixture.detectChanges();
 
     const leiras: HTMLElement = fixture.nativeElement.querySelector('p.break-words');
@@ -613,14 +614,15 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
 
-    component.startEditSolution(component.store.selectedDetail()!.tasks[0].subTasks[0]);
+    const edit = fixture.debugElement.injector.get(TaskEditState);
+    edit.startEditSolution(component.store.selectedDetail()!.tasks[0].subTasks[0]);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
     const ertekek = [...fixture.nativeElement.querySelectorAll('textarea')].map((t) => (t as HTMLTextAreaElement).value);
     expect(ertekek).toContain(szoveg);
 
-    component.saveEditSolution(1, component.store.selectedDetail()!.tasks[0].subTasks[0]);
+    edit.saveEditSolution(1, component.store.selectedDetail()!.tasks[0].subTasks[0]);
     expect(taskSetStoreMock.updateSubTask).toHaveBeenCalledWith(1, 7, expect.objectContaining({ description: szoveg }), expect.any(Function));
   });
 
@@ -891,85 +893,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(taskSetStoreMock.publish).toHaveBeenCalledTimes(1);
   });
 
-  it('egy független sikeres mentés/hozzáadás utáni újratöltés NEM dobja el egy másik, még el nem mentett kódrészlet-piszkozatot (UI-TT-40)', () => {
-    configure(
-      makeDetail({
-        tasks: [
-          {
-            id: 1,
-            title: 'F1',
-            description: 'd',
-            maxPoints: 10,
-            taskOrder: 1,
-            taskTypeIds: [],
-            completeSolutionSnippets: [],
-            subTasks: [
-              { id: 101, description: 'A', snippets: [] },
-              { id: 102, description: 'B', snippets: [] },
-            ],
-          },
-        ],
-      }),
-    );
-
-    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-    fixture.detectChanges();
-    const component = fixture.componentInstance;
-
-    component.setDraftCode(101, 2, "def sort_items(items): return sorted(items)");
-    expect(component.draftCode(101, 2)).toContain('sort_items');
-
-    // Egy FÜGGETLEN, sikeres mutáció (pl. egy harmadik, #103 solution hozzáadása) miatt a
-    // store ÚJ selectedDetail referenciát ad (mint egy loadDetail() reload után) — a
-    // #101/#102-t VÁLTOZATLANUL hagyva.
-    taskSetStoreMock.selectedDetail.set(
-      makeDetail({
-        tasks: [
-          {
-            id: 1,
-            title: 'F1',
-            description: 'd',
-            maxPoints: 10,
-            taskOrder: 1,
-            taskTypeIds: [],
-            completeSolutionSnippets: [],
-            subTasks: [
-              { id: 101, description: 'A', snippets: [] },
-              { id: 102, description: 'B', snippets: [] },
-              { id: 103, description: 'C', snippets: [] },
-            ],
-          },
-        ],
-      }),
-    );
-    fixture.detectChanges();
-
-    expect(component.draftCode(101, 2)).toContain('sort_items');
-  });
-
-  it('a "Új részfeladat szövege" piszkozat feladatonként elkülönített, task-váltáskor nem szivárog át (UI-TT-66)', () => {
-    configure(
-      makeDetail({
-        tasks: [
-          { id: 501, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [], completeSolutionSnippets: [], subTasks: [] },
-          { id: 502, title: 'F2', description: 'd', maxPoints: 10, taskOrder: 2, taskTypeIds: [], completeSolutionSnippets: [], subTasks: [] },
-        ],
-      }),
-    );
-
-    const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-    fixture.detectChanges();
-    const component = fixture.componentInstance;
-
-    component.setNewSolutionDescription(501, 'A-hoz szánt piszkozat szöveg');
-    component.setNewSolutionPoints(501, 7);
-
-    expect(component.newSolutionDraft(502).description).toBe('');
-    expect(component.newSolutionDraft(502).points).toBe(5);
-    expect(component.newSolutionDraft(501).description).toBe('A-hoz szánt piszkozat szöveg');
-    expect(component.newSolutionDraft(501).points).toBe(7);
-  });
-
   it('a feladat-kártya címe truncate-elt, hogy a Törlés gomb sose kerüljön a kártya overflow-hidden határa mögé (UI-TT-55)', () => {
     const longTitle = 'X'.repeat(160);
     configure(
@@ -1012,7 +935,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
-    fixture.componentInstance.toggleTask(1);
+    fixture.componentInstance.tasks.toggleTask(1);
     fixture.detectChanges();
 
     const paragraphs = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('p'));
@@ -1142,74 +1065,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
   });
 
   describe('"Új feladat hozzáadása" draft-kezelés (UI-TT-25 / UI-TT-61)', () => {
-    it('BUG UI-TT-25 javítva: sikertelen/folyamatban lévő mentésnél NEM törli a beírt cím/leírás/pont draftot, mielőtt a válasz megérkezne', () => {
-      configure(makeDetail({ tasks: [] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.newTaskDrafts[6] = { title: 'Hosszan kigondolt feladatcím', description: 'Részletes leírás', maxPoints: 7 };
-      // A mock addTask() alapból NEM hívja meg onSuccess-t — folyamatban lévő/sikertelen kérést szimulál.
-      component.addTask(1, 6);
-
-      expect(component.newTaskDrafts[6]).toEqual({
-        title: 'Hosszan kigondolt feladatcím',
-        description: 'Részletes leírás',
-        maxPoints: 7,
-      });
-    });
-
-    it('sikeres mentés (onSuccess meghívása) UTÁN üríti a draftot', () => {
-      configure(makeDetail({ tasks: [] }));
-      taskSetStoreMock.addTask.mockImplementation(
-        (_taskSetId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.newTaskDrafts[6] = { title: 'Hosszan kigondolt feladatcím', description: 'Részletes leírás', maxPoints: 7 };
-      component.addTask(1, 6);
-
-      expect(component.newTaskDrafts[6]).toEqual({ title: '', description: '', maxPoints: 10 });
-    });
-
-    it('whitespace-only cím esetén addTask() csendben visszatér, a store-t nem hívja meg', () => {
-      configure(makeDetail({ tasks: [] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.newTaskDrafts[6] = { title: '   ', description: '', maxPoints: 10 };
-      component.addTask(1, 6);
-
-      expect(taskSetStoreMock.addTask).not.toHaveBeenCalled();
-    });
-
-    // UI-TT-191: élőben megerősítve (kétszer, -5 és 5000 értékkel), hogy a
-    // backend CreateTeacherTaskRequest.MaxPoints [Range(1, 1000)]-je csak a
-    // beküldés UTÁN, egy nyers angol DataAnnotations-hibaüzenettel jelentkezett -
-    // kliens-oldalon a mező eddig egyáltalán nem volt ellenőrizve.
-    it('BUG UI-TT-191: tartományon kívüli (0/negatív/1000 fölötti) maxPoints esetén a "Hozzáadás" gomb letiltva marad ÉS addTask() csendben visszatér', () => {
-      configure(makeDetail({ tasks: [] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      for (const invalid of [0, -5, 5000]) {
-        component.newTaskDrafts[6] = { title: 'Cím', description: 'Leírás', maxPoints: invalid };
-        expect(component.isTaskDraftMaxPointsInvalid(6)).toBe(true);
-
-        component.addTask(1, 6);
-        expect(taskSetStoreMock.addTask).not.toHaveBeenCalled();
-      }
-
-      component.newTaskDrafts[6] = { title: 'Cím', description: 'Leírás', maxPoints: 10 };
-      expect(component.isTaskDraftMaxPointsInvalid(6)).toBe(false);
-      component.addTask(1, 6);
-      expect(taskSetStoreMock.addTask).toHaveBeenCalled();
-    });
-
     it('BUG UI-TT-61 javítva: whitespace-only cím esetén a "Hozzáadás" gomb letiltva marad (nem csendben no-op)', () => {
       configure(makeDetail({ tasks: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
@@ -1274,8 +1129,8 @@ describe('FeladatsorSzerkesztoComponent', () => {
       );
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1); // a részfeladat-lista/hozzáadás form csak kibontott feladatnál renderelődik
-      fixture.componentInstance.setNewSolutionDescription(1, '   ');
+      fixture.componentInstance.tasks.toggleTask(1); // a részfeladat-lista/hozzáadás form csak kibontott feladatnál renderelődik
+      fixture.componentInstance.tasks.setNewSolutionDescription(1, '   ');
       fixture.detectChanges();
 
       const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('input[name="newSolutionDescription"]')
@@ -1293,33 +1148,13 @@ describe('FeladatsorSzerkesztoComponent', () => {
       );
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1);
-      fixture.componentInstance.setNewSolutionDescription(1, 'Valódi részfeladat-leírás');
+      fixture.componentInstance.tasks.toggleTask(1);
+      fixture.componentInstance.tasks.setNewSolutionDescription(1, 'Valódi részfeladat-leírás');
       fixture.detectChanges();
 
       const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('input[name="newSolutionDescription"]')
         .closest('form').querySelector('button[type="submit"]');
       expect(submitButton.disabled).toBe(false);
-    });
-
-    it('addSubTask() sikertelen/folyamatban lévő mentésnél is megőrzi a beírt leírás/pont draftot', () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.setNewSolutionDescription(1, 'Beírt részfeladat-leírás');
-      component.setNewSolutionPoints(1, 8);
-      // A mock addSubTask() alapból NEM hívja meg onSuccess-t.
-      component.addSubTask(1, 1);
-
-      expect(component.newSolutionDraft(1)).toEqual({ description: 'Beírt részfeladat-leírás', points: 8 });
     });
   });
 
@@ -1348,7 +1183,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       const component = fixture.componentInstance;
-      component.toggleTask(1);
+      component.tasks.toggleTask(1);
       fixture.detectChanges();
 
       // UI-TT-214 óta a feladat-kártyának IS van saját "Szerkesztés" gombja (a
@@ -1365,190 +1200,22 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // meglévő tesztek is így tesznek ebben a fájlban) - az ngModel-kötött
       // textarea/input élő DOM `.value`-jának szinkron kiolvasása ebben a
       // teszt-harnessben nem megbízható.
-      expect(component.editingSolutionId()).toBe(5);
-      expect(component.editSolutionDraft({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] }))
+      const edit = fixture.debugElement.injector.get(TaskEditState);
+      expect(edit.editingSolutionId()).toBe(5);
+      expect(edit.editSolutionDraft({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [] }))
         .toEqual({ description: 'Eredeti leírás', points: 5 });
       const labels: HTMLLabelElement[] = Array.from(fixture.nativeElement.querySelectorAll('label'));
       expect(labels.some((l) => l.textContent?.trim() === 'Leírás')).toBe(true);
       expect(labels.some((l) => l.textContent?.trim() === 'Pont')).toBe(true);
     });
-
-    it('"Mégsem" visszazárja a szerkesztőt mentés NÉLKÜL', () => {
-      configureWithSolution();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-      fixture.detectChanges();
-      expect(component.editingSolutionId()).toBe(5);
-
-      component.cancelEditSolution();
-      fixture.detectChanges();
-
-      expect(component.editingSolutionId()).toBeNull();
-      expect(taskSetStoreMock.updateSubTask).not.toHaveBeenCalled();
-    });
-
-    it('whitespace-only leírással a "Mentés" gomb letiltva marad, saveEditSolution() csendben visszatér', () => {
-      configureWithSolution();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-      component.setEditSolutionDescription(5, '   ');
-      fixture.detectChanges();
-
-      expect(component.isEditSolutionDraftDescriptionBlank(5)).toBe(true);
-      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-      expect(taskSetStoreMock.updateSubTask).not.toHaveBeenCalled();
-    });
-
-    it('érvényes szerkesztés esetén store.updateSubTask()-t hívja a helyes (trimmelt leírás + pont) request-tel, siker esetén bezárja a szerkesztőt', () => {
-      configureWithSolution();
-      taskSetStoreMock.updateSubTask.mockImplementation(
-        (_taskSetId: number, _solutionId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-      component.setEditSolutionDescription(5, '  Frissített leírás  ');
-      component.setEditSolutionPoints(5, 3);
-
-      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-
-      expect(taskSetStoreMock.updateSubTask).toHaveBeenCalledWith(
-        1, 5, { description: 'Frissített leírás', points: 3, rowVersion: 'v-sol-1' }, expect.any(Function),
-      );
-      expect(component.editingSolutionId()).toBeNull();
-    });
-
-    it('folyamatban lévő mentésnél (store.loading()===true) saveEditSolution() nem hívja meg a store-t', () => {
-      configureWithSolution();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.toggleTask(1);
-      component.startEditSolution({ id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-      component.setEditSolutionDescription(5, 'Új leírás');
-      taskSetStoreMock.loading.set(true);
-
-      component.saveEditSolution(1, { id: 5, description: 'Eredeti leírás', points: 5, snippets: [], rowVersion: 'v-sol-1' });
-
-      expect(taskSetStoreMock.updateSubTask).not.toHaveBeenCalled();
-    });
   });
 
+  // A feladat/részfeladat hozzáadás és törlés testvér-tesztjei a feladatsor-szerkeszto/task-section.state.spec.ts-ben vannak.
   describe('dupla-kattintás / idempotencia védelem hiánya (ÚJ LELET, még nincs ledger-ID)', () => {
-    // Kontraszt: a publish() gomb helyesen [disabled]="detail.isPublished || store.loading()"
-    // (feladatsor-szerkeszto.component.html:62), a csoport/feladatsor/intézmény-létrehozó
-    // formok és a regenerateInvite()/setJoinEnabled() mind szinkron `if (store.loading())
-    // return;` guard-dal védettek. Az addTask()/addSubTask() párnak ez a mintája HIÁNYZIK:
-    // sem a komponens-metódus nem néz store.loading()-ot, sem a "Hozzáadás" submit-gomb
-    // [disabled]-je nincs hozzá kötve (.html:173, :218 — csak a draft üresség-ellenőrzést
-    // nézik, ld. isTaskDraftTitleBlank()/isSolutionDraftDescriptionBlank()). A mögöttes
-    // TeacherTaskSetStore.addTask()/addSubTask() a mutateAndReload()-on át egy NEM
-    // idempotens POST-ot indít (teacher-taskset.service.ts addTask()/addSubTask() —
-    // mindegyik hívás új sort szúr be), és maga a mutateAndReload() sem védekezik
-    // újrabelépés ellen (teacher-taskset.store.ts:238-257 — nincs "if (this._loading())
-    // return" az elején, csak feltétel nélkül true-ra állítja).
-    it('JAVÍTVA: dupla-kattintás/gyors kettős Enter az "Új feladat hozzáadása" formon CSAK EGYSZER hívja meg a store.addTask()-ot, amíg az első kérés folyamatban van (nincs duplikált feladat-sor a backenden)', () => {
-      configure(makeDetail({ tasks: [] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.newTaskDrafts[6] = { title: 'Duplikált feladat', description: 'Duplikált leírás', maxPoints: 10 };
-
-      // Első kattintás/Enter (a form submitja) — a mock addTask() alapból NEM hívja meg
-      // onSuccess-t, tehát a kérés "folyamatban van". A VALÓS store-ban ez a hívás szinkron
-      // módon már true-ra állítaná a `loading` jelet (mutateAndReload, store.ts:239) —
-      // ezt itt explicit szimuláljuk, mielőtt a második kattintás megtörténne.
-      component.addTask(1, 6);
-      taskSetStoreMock.loading.set(true);
-
-      // Második, gyors egymás-utáni kattintás/Enter, MÍG az első kérés még folyamatban van
-      // (pl. lassú hálózat miatt türelmetlen tanár). Egy idempotencia-védett gombnak ekkor
-      // csendben no-op-nak kellene lennie.
-      component.addTask(1, 6);
-
-      expect(taskSetStoreMock.addTask).toHaveBeenCalledTimes(1);
-    });
-
-    it('JAVÍTVA: dupla-kattintás/gyors kettős Enter az "Új részfeladat" (addSubTask) formon CSAK EGYSZER hívja meg a store.addSubTask()-t, amíg az első kérés folyamatban van (nincs duplikált részfeladat-sor a backenden)', () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      component.setNewSolutionDescription(1, 'Duplikált részfeladat-leírás');
-      component.setNewSolutionPoints(1, 8);
-
-      // Első kattintás/Enter — a mock addSubTask() alapból NEM hívja meg onSuccess-t
-      // (folyamatban lévő kérést szimulál). A valós store ilyenkor már szinkron true-ra
-      // állítaná a `loading` jelet (mutateAndReload, store.ts:239).
-      component.addSubTask(1, 1);
-      taskSetStoreMock.loading.set(true);
-
-      // Második, gyors egymás-utáni kattintás/Enter, MÍG az első kérés még folyamatban van.
-      component.addSubTask(1, 1);
-
-      expect(taskSetStoreMock.addSubTask).toHaveBeenCalledTimes(1);
-    });
-
-    // BE-FELADATSORSZERKESZTO-DELETE-NO-LOADING-GUARD: az addTask()/addSubTask()/uploadFile()
-    // UI-TT-115/123 fixe után a delete* metódusok maradtak az egyetlen kivétel — a
-    // megerősítő dialógus alatt egy másik mutáció elindulhat, és a mögöttes
-    // mutateAndReload() nem idempotens.
-    it('JAVÍTVA: deleteTask() nem hívja meg a store.deleteTask()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-      confirmServiceMock.ask.mockResolvedValue(true);
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      taskSetStoreMock.loading.set(true);
-      await component.deleteTask(1, 1, 'F1');
-
-      expect(taskSetStoreMock.deleteTask).not.toHaveBeenCalled();
-    });
-
-    it('JAVÍTVA: deleteSubTask() nem hívja meg a store.deleteSubTask()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [{ id: 9, description: 'r', points: 5, snippets: [] }] },
-          ],
-        }),
-      );
-      confirmServiceMock.ask.mockResolvedValue(true);
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      taskSetStoreMock.loading.set(true);
-      await component.deleteSubTask(1, 9, 'r');
-
-      expect(taskSetStoreMock.deleteSubTask).not.toHaveBeenCalled();
-    });
-
+    // BE-FELADATSORSZERKESZTO-DELETE-NO-LOADING-GUARD: a megerősítő dialógus alatt egy másik mutáció elindulhat, és a
+    // mögöttes mutateAndReload() nem idempotens.
     it('JAVÍTVA: deleteFile() nem hívja meg a store.deleteFile()-t, ha egy másik mutáció már folyamatban van (store.loading()===true)', async () => {
-      configure(makeDetail({ files: [{ id: 'f1', kind: 'create_sql' as any, originalFileName: 'create.sql', sizeBytes: 10 } as any] }));
+      configure(makeDetail({ files: [{ id: 'f1', kind: 'CreateSql', originalFileName: 'create.sql', contentType: 'application/sql', sizeBytes: 10, createdAt: '', url: '/x' }] }));
       confirmServiceMock.ask.mockResolvedValue(true);
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -1609,52 +1276,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
     });
   });
 
-  // UI-TT-3: a checkbox→radio átállás előtt (9bf10a7 előtt) egy feladat KÉT típussal
-  // (SQL+Programozás) is menthető volt — a régi .includes()-alapú szűrés emiatt mindkét
-  // típus-blokkban megjelenítette ugyanazt a feladatot.
-  describe('typeSections() — kettős típusú feladatok (UI-TT-3)', () => {
-    it('BUG UI-TT-3 javítva: egy [5,6] taskTypeIds-ű feladat NEM jelenik meg sem a Programozás, sem az SQL blokkban, hanem az Egyébben', () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'Kettős típusú feladat', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5, 6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      const sections = component.typeSections();
-      const programozas = sections.find((s) => s.id === 6);
-      const sql = sections.find((s) => s.id === 5);
-      const egyeb = sections.find((s) => s.isOther);
-
-      expect(programozas?.tasks.some((t) => t.id === 1)).toBe(false);
-      expect(sql?.tasks.some((t) => t.id === 1)).toBe(false);
-      expect(egyeb?.tasks.some((t) => t.id === 1)).toBe(true);
-    });
-
-    it('egyetlen típussal rendelkező feladat a saját típus-blokkjában jelenik meg, duplikáció nélkül', () => {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'Programozás feladat', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      const sections = component.typeSections();
-      const totalOccurrences = sections.reduce((sum, s) => sum + s.tasks.filter((t) => t.id === 1).length, 0);
-
-      expect(totalOccurrences).toBe(1);
-      expect(sections.find((s) => s.id === 6)?.tasks.some((t) => t.id === 1)).toBe(true);
-    });
-  });
-
   // UI-TT-114: a UI-TS-117/118/119/120 hibacsalád ("8 támogatott Judge0-nyelv, de nem minden
   // felszínen van végigvezetve") ötödik, teacher-fe-oldali előfordulása. A student-fe
   // `LanguageMapperService.judge0ToBackendLanguageId` térképe szerint a C nyelvnek van érvényes,
@@ -1668,16 +1289,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
   // megadni egyetlen feladathoz sem - a nyelvenkénti textarea-rács egyszerűen nem jelenít meg C
   // mezőt -, miközben a diák-oldali szerkesztő a C-t a többi 7 nyelvvel egyenrangúan kínálja.
   describe('nyelvenkénti kódrészlet-szerkesztő nyelvlistája (UI-TT-114)', () => {
-    it('BUG UI-TT-114: a "languages" lista nem tartalmazza a C nyelvet (érvényes backend id: 12), pedig a többi 6 érvényes Judge0-nyelv (Python/C#/JavaScript/C++/Java/SQL) mind szerepel benne', () => {
-      configure(makeDetail({ tasks: [] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      const cEntry = component.languages.find((l) => l.id === 12);
-      expect(cEntry).toBeDefined();
-    });
-
     it('BUG UI-TT-114: a részfeladat kódrészlet-rácsban nincs C-nyelvű textarea-mező, miközben Python/C#/JavaScript/C++/Java/SQL mind megjelenik', () => {
       configure(
         makeDetail({
@@ -1697,11 +1308,11 @@ describe('FeladatsorSzerkesztoComponent', () => {
       );
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.tasks.toggleTask(1);
       fixture.detectChanges();
 
-      const labels: string[] = Array.from(fixture.nativeElement.querySelectorAll('label')).map(
-        (el: any) => el.textContent?.trim(),
+      const labels = Array.from<HTMLLabelElement>(fixture.nativeElement.querySelectorAll('label')).map(
+        (el) => el.textContent?.trim(),
       );
 
       expect(labels).toContain('Python');
@@ -1741,7 +1352,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(sectionToggleButton).toBeDefined();
       // Alapból nyitva van a Programozás szekció (isSectionExpanded(6) === true) - a komponens
       // állapota szerint a gombnak aria-expanded="true"-t kellene hordoznia.
-      expect(component.isSectionExpanded(6)).toBe(true);
+      expect(component.tasks.isSectionExpanded(6)).toBe(true);
 
       // Bukó elvárás: a valós DOM-ban a gombon NINCS jelen az aria-expanded attribútum, holott a
       // fenti belső állapot szerint jelen kellene lennie, "true" értékkel.
@@ -1758,10 +1369,10 @@ describe('FeladatsorSzerkesztoComponent', () => {
       );
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.tasks.toggleTask(1);
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.expandedTaskId()).toBe(1);
+      expect(fixture.componentInstance.tasks.expandedTaskId()).toBe(1);
 
       const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
       const taskToggleButton = buttons.find((b) => b.dataset['testid'] === 'task-toggle' && b.textContent?.includes('F1'));
@@ -1812,7 +1423,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       configureWithSolution();
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.tasks.toggleTask(1);
       fixture.detectChanges();
 
       // Egy MÁSIK művelet (pl. feladat-törlés) van folyamatban.
@@ -1830,7 +1441,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       configureWithSolution();
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
-      fixture.componentInstance.toggleTask(1);
+      fixture.componentInstance.tasks.toggleTask(1);
       fixture.detectChanges();
 
       const { kodreszletek, osszevont } = snippetButtons(fixture);
@@ -1860,144 +1471,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
       (b) => b.textContent?.trim() === 'Szerkesztés',
     );
     expect(editButtons.length).toBeGreaterThan(0);
-  });
-
-  describe('UI-TT-214: meglévő feladat inline szerkesztése', () => {
-    function configureWithTask() {
-      configure(
-        makeDetail({
-          tasks: [
-            { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] },
-          ],
-        }),
-      );
-    }
-
-    it('"Mégsem" visszazárja a szerkesztőt mentés NÉLKÜL', () => {
-      configureWithTask();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.startEditTask({ id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] });
-      fixture.detectChanges();
-      expect(component.editingTaskId()).toBe(1);
-
-      component.cancelEditTask();
-      fixture.detectChanges();
-
-      expect(component.editingTaskId()).toBeNull();
-      expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
-    });
-
-    it('üres cím/leírással vagy tartományon kívüli max ponttal a draft érvénytelen, saveEditTask() csendben visszatér', () => {
-      configureWithTask();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] };
-      component.startEditTask(task);
-      component.setEditTaskTitle(1, '   ');
-      fixture.detectChanges();
-
-      expect(component.isEditTaskDraftInvalid(1)).toBe(true);
-      component.saveEditTask(1, task);
-      expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
-    });
-
-    // Lost update (BE-TASKEDIT-LOSTUPDATE): a token a betöltött feladatból megy vissza.
-    it('saveEditTask() visszaküldi a betöltött feladat konkurrencia-tokenjét', () => {
-      configureWithTask();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [], rowVersion: 'AAAAAAAAB9k=' };
-      component.startEditTask(task);
-
-      component.saveEditTask(1, task);
-
-      const request = taskSetStoreMock.updateTask.mock.calls[0][2] as { rowVersion?: string };
-      expect(request.rowVersion).toBe('AAAAAAAAB9k=');
-    });
-
-    it('érvényes szerkesztés esetén store.updateTask()-t hívja a helyes (trimmelt cím/leírás + pont + sorrend) request-tel, siker esetén bezárja a szerkesztőt', () => {
-      configureWithTask();
-      taskSetStoreMock.updateTask.mockImplementation(
-        (_taskSetId: number, _taskId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] };
-      component.startEditTask(task);
-      component.setEditTaskTitle(1, '  Frissített cím  ');
-      component.setEditTaskDescription(1, '  Frissített leírás  ');
-      component.setEditTaskMaxPoints(1, 7);
-      component.setEditTaskOrder(1, 2);
-
-      component.saveEditTask(1, task);
-
-      expect(taskSetStoreMock.updateTask).toHaveBeenCalledWith(
-        1, 1,
-        { title: 'Frissített cím', description: 'Frissített leírás', maxPoints: 7, taskOrder: 2, taskTypeIds: [6] },
-        expect.any(Function),
-      );
-      expect(component.editingTaskId()).toBeNull();
-    });
-
-    it('UI-TT-215: a kategória (taskTypeIds) is szerkeszthető, a mentés az ÚJ kategóriát küldi, nem a task eredetijét', () => {
-      configureWithTask();
-      taskSetStoreMock.updateTask.mockImplementation(
-        (_taskSetId: number, _taskId: number, _request: unknown, onSuccess?: () => void) => onSuccess?.(),
-      );
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] };
-      component.startEditTask(task);
-
-      // A draft eredetileg a task jelenlegi (Programozás=6) kategóriáját tükrözi.
-      expect(component.editTaskDraft(task).taskTypeId).toBe(6);
-
-      // A tanár SQL-re (5) váltja - korábban ez sehol nem volt elérhető, a mentés mindig a
-      // task EREDETI taskTypeIds-ét küldte vissza.
-      component.setEditTaskCategory(1, 5);
-      component.saveEditTask(1, task);
-
-      expect(taskSetStoreMock.updateTask).toHaveBeenCalledWith(
-        1, 1,
-        expect.objectContaining({ taskTypeIds: [5] }),
-        expect.any(Function),
-      );
-    });
-
-    it('folyamatban lévő mentésnél (store.loading()===true) saveEditTask() nem hívja meg a store-t', () => {
-      configureWithTask();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] };
-      component.startEditTask(task);
-      component.setEditTaskTitle(1, 'Új cím');
-      taskSetStoreMock.loading.set(true);
-
-      component.saveEditTask(1, task);
-
-      expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
-    });
-
-    it('BE-TEACHERCONTENT-UPDATETASK-TASKORDER-NO-LOWER-BOUND: 0/negatív Sorrend értékkel a draft érvénytelen, mint a tartományhoz kötött maxPoints-nál', () => {
-      configureWithTask();
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      const task = { id: 1, title: 'Eredeti cím', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [6], completeSolutionSnippets: [], subTasks: [] };
-      component.startEditTask(task);
-      component.setEditTaskOrder(1, -3);
-
-      expect(component.isEditTaskDraftInvalid(1)).toBe(true);
-      component.saveEditTask(1, task);
-      expect(taskSetStoreMock.updateTask).not.toHaveBeenCalled();
-    });
   });
 
   // ── A4: feladatsor-metadata szerkesztő ───────────────────────────────────
@@ -2084,27 +1557,10 @@ describe('FeladatsorSzerkesztoComponent', () => {
       return { target: input } as unknown as Event;
     };
 
-    it('a típusválasztó az irodai típusokat is kínálja; az üres irodai blokk alapból csukva, a feladatot tartalmazó nyitva', () => {
-      configure(makeDetail({ tasks: [officeTask()] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-
-      expect(component.taskTypes.map((t) => t.label)).toEqual([
-        'Programozás', 'SQL', 'Szövegszerkesztés', 'Táblázatkezelés', 'Prezentáció', 'Grafika', 'Weblap', 'Asztali alkalmazás',
-      ]);
-      expect(component.taskTypes.map((t) => t.id)).toEqual([6, 5, 1, 2, 3, 4, 7, 9]);
-      expect(component.isSectionExpanded(1)).toBe(true); // van benne feladat
-      expect(component.isSectionExpanded(2)).toBe(false); // üres irodai blokk
-      expect(component.isSectionExpanded(6)).toBe(true);
-      component.toggleSection(2);
-      expect(component.isSectionExpanded(2)).toBe(true);
-    });
-
     it('irodai feladatnál nincs kódrészlet- és összevont-megoldás-szerkesztő, helyette a Fájlok részre utal', () => {
       configure(makeDetail({ tasks: [officeTask()] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(7);
+      fixture.componentInstance.tasks.toggleTask(7);
       fixture.detectChanges();
       const text = fixture.nativeElement.textContent as string;
 
@@ -2160,7 +1616,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('kód-feladatnál az Összevont megoldás alatt megjelenik, SQL-feladatnál nem', () => {
       configure(makeDetail({ tasks: [codeTask([6])] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(9);
+      fixture.componentInstance.tasks.toggleTask(9);
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('app-tesztbemenet')).not.toBeNull();
@@ -2169,7 +1625,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       configure(makeDetail({ tasks: [codeTask([5], 'SELECT 1;')] }));
       const sql = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      sql.componentInstance.toggleTask(9);
+      sql.componentInstance.tasks.toggleTask(9);
       sql.detectChanges();
       expect(sql.nativeElement.querySelector('app-tesztbemenet')).toBeNull();
     });
@@ -2177,7 +1633,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('mentés után az Automatikus javítás blokk újratölti az állapotot', () => {
       configure(makeDetail({ tasks: [codeTask([6])] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(9);
+      fixture.componentInstance.tasks.toggleTask(9);
       fixture.detectChanges();
       const before = rubricServiceMock.getGradingQuality.mock.calls.length;
 
@@ -2208,7 +1664,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
         HTMLElement.prototype.scrollIntoView = original;
       });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(9);
+      fixture.componentInstance.tasks.toggleTask(9);
       fixture.detectChanges();
       // A megoldás nem olvas a billentyűzetről: a rész csukva indul.
       expect(fixture.nativeElement.querySelector('[data-testid="run-input-stdin"]')).toBeNull();
@@ -2250,39 +1706,14 @@ describe('FeladatsorSzerkesztoComponent', () => {
     it('create_lite.sql nélkül az ablak az SQL-fájl generálóhoz irányít', () => {
       configure(makeDetail({ tasks: [sqlTask()], files: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.componentInstance.toggleTask(7);
-      fixture.componentInstance.sqlQueriesTaskId.set(7);
+      fixture.componentInstance.tasks.toggleTask(7);
+      fixture.componentInstance.tasks.sqlQueriesTaskId.set(7);
       fixture.detectChanges();
 
       (fixture.nativeElement.querySelector('[data-testid="sql-q-open-sql-files"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-dialog"]')).toBeNull();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
-    });
-
-    it('a másik feladatra kötött create_lite.sql nem számít; a feladatsor-szintű és a sajátja igen', () => {
-      configure(makeDetail({ tasks: [sqlTask()], files: [liteFile(99)] }));
-      const component = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance;
-      expect(component.hasLiteSqlFor(7)).toBe(false);
-      taskSetStoreMock.selectedDetail.set(makeDetail({ tasks: [sqlTask()], files: [liteFile(7)] }));
-      expect(component.hasLiteSqlFor(7)).toBe(true);
-    });
-
-    it('mentés után újratölt, és a mentett részfeladat piszkozata a szerver állapotára áll', () => {
-      configure(makeDetail({ tasks: [sqlTask()], files: [liteFile(null)] }));
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      fixture.detectChanges();
-      const component = fixture.componentInstance;
-      component.setDraftCode(70, 6, 'régi piszkozat');
-
-      component.onSqlQueriesSaved(1, [70]);
-      taskSetStoreMock.selectedDetail.set(
-        makeDetail({ tasks: [sqlTask({ subTasks: [{ id: 70, label: '2.', snippets: [{ programmingLanguageId: 6, code: 'SELECT 1;' }] }] })], files: [liteFile(null)] }),
-      );
-      fixture.detectChanges();
-
-      expect(taskSetStoreMock.loadDetail).toHaveBeenCalledWith(1);
-      expect(component.draftCode(70, 6)).toBe('SELECT 1;');
     });
   });
 
@@ -2404,10 +1835,13 @@ describe('FeladatsorSzerkesztoComponent', () => {
       id: 4, title: 'F1', description: 'Eredeti leírás', maxPoints: 10, taskOrder: 1, taskTypeIds: [1], completeSolutionSnippets: [], subTasks: [],
     });
 
+    let edit: TaskEditState;
+
     function create() {
       configure(makeDetail({ tasks: [task()] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
+      edit = fixture.debugElement.injector.get(TaskEditState);
       return fixture.componentInstance;
     }
 
@@ -2429,9 +1863,9 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     it('nyitott feladat-szerkesztés módosított leírással: megerősítést kér, „Elvetem”-re elenged', async () => {
       const c = create();
-      c.startEditTask(task());
+      edit.startEditTask(task());
       expect(c.canLeave()).toBe(true); // csak megnyitva, változtatás nélkül nem kérdez
-      c.setEditTaskDescription(4, 'Eredeti leírás - UNSAVED-TASKEDIT');
+      edit.setEditTaskDescription(4, 'Eredeti leírás - UNSAVED-TASKEDIT');
       confirmServiceMock.ask.mockResolvedValue(true);
       expect(await c.canLeave()).toBe(true);
       expect(confirmServiceMock.ask).toHaveBeenCalledTimes(1);
@@ -2439,7 +1873,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
     it('kitöltött „Új feladat” űrlap is mentetlen módosításnak számít', async () => {
       const c = create();
-      c.newTaskDrafts[1].title = 'UNSAVED-QUICKADD';
+      c.tasks.patchNewTaskDraft(1, { title: 'UNSAVED-QUICKADD' });
       expect(await c.canLeave()).toBe(false);
     });
   });

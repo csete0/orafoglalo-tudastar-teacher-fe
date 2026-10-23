@@ -1,0 +1,139 @@
+@let s = section();
+<div class="card !rounded-xl mb-4 overflow-hidden">
+  <button (click)="tasks.toggleSection(s.id)" [attr.aria-expanded]="tasks.isSectionExpanded(s.id)"
+    class="w-full flex items-center justify-between gap-2 p-4 text-left group">
+    <span class="flex items-center gap-3 min-w-0">
+      <div class="icon-tile shrink-0"
+        [class]="s.isOther ? 'icon-tile-neutral' : (isOfficeType(s.id) ? 'icon-tile-secondary' : 'icon-tile-primary')">
+        <app-icon [name]="s.icon" class="w-5 h-5 block" />
+      </div>
+      <span class="font-bold group-hover:text-primary transition-colors truncate">{{ s.label }}</span>
+      <span class="badge badge-neutral shrink-0">{{ s.tasks.length }} db</span>
+    </span>
+    <app-icon name="chevron-down" class="w-5 h-5 block text-text-muted transition-transform shrink-0"
+      [class.-rotate-90]="!tasks.isSectionExpanded(s.id)" />
+  </button>
+
+  @if (tasks.isSectionExpanded(s.id)) {
+    <div class="px-4 pb-4 space-y-3">
+      @for (task of s.tasks; track task.id) {
+        <div class="bg-bg-element rounded-xl p-4 scroll-mt-20 lg:scroll-mt-4" [attr.id]="'task-' + task.id">
+          @if (edit.editingTaskId() === task.id) {
+            <app-task-editor [taskSetId]="taskSetId()" [task]="task" />
+          } @else {
+            <!-- min-w-0: enélkül a cím-gomb flex-elemként nem zsugorodhat a cím szélessége alá, így
+                 a truncate nem rövidít, és 375 px-en a „Törlés” kilóg a kártyából. -->
+            <div class="flex justify-between items-start gap-2">
+              <button (click)="tasks.toggleTask(task.id)" [attr.aria-expanded]="tasks.expandedTaskId() === task.id"
+                class="text-left flex-1 min-w-0 flex items-start gap-2 group" data-testid="task-toggle">
+                <app-icon name="chevron-down" class="w-4 h-4 block mt-1 shrink-0 text-text-muted transition-transform"
+                  [class.-rotate-90]="tasks.expandedTaskId() !== task.id" />
+                <span class="min-w-0 flex-1">
+                  <p class="font-medium group-hover:text-primary transition-colors truncate">{{ task.taskOrder }}. {{ task.title }}</p>
+                  <!-- Beadáskor a részfeladatok pontösszege a feladat pontszáma; a maxPoints csak felső korlát. -->
+                  @if (task.subTasks.length === 0) {
+                    <p class="text-sm text-warning" data-testid="task-points-summary">{{ task.maxPoints }} pont · nincs részfeladat - beadáskor nem pontozható</p>
+                  } @else if (allocatedPoints(task) !== task.maxPoints) {
+                    <p class="text-sm text-warning" data-testid="task-points-summary"
+                       title="Beadáskor a részfeladatok pontösszege számít">{{ allocatedPoints(task) }} / {{ task.maxPoints }} pont kiosztva · {{ task.subTasks.length }} részfeladat</p>
+                  } @else {
+                    <p class="text-sm text-text-muted" data-testid="task-points-summary">{{ task.maxPoints }} pont · {{ task.subTasks.length }} részfeladat</p>
+                  }
+                  @if (task.aiAssisted) {
+                    <span class="badge badge-primary mt-1" data-testid="task-ai-assisted">AI-val készült</span>
+                  }
+                </span>
+              </button>
+              <div class="flex items-center gap-3 shrink-0">
+                <button (click)="edit.startEditTask(task)" class="text-sm text-primary hover:underline">Szerkesztés</button>
+                <button (click)="tasks.deleteTask(taskSetId(), task.id, task.title)" class="text-sm text-danger hover:underline">Törlés</button>
+              </div>
+            </div>
+          }
+
+          @if (tasks.expandedTaskId() === task.id) {
+            <div class="mt-4 pl-4 border-l-2 border-border-default space-y-4">
+              <!-- Milyen pontos lesz a diákok beadásainak gépi javítása, és mi hiányzik hozzá. -->
+              <app-automatikus-javitas #autoGrading [taskSetId]="taskSetId()" [task]="task"
+                (stdinRequested)="openRunInput(task.id)" (rubricChanged)="rubricChanged.emit()" />
+              <!-- SQL-feladat megoldó lekérdezései MI-vel: a MI-segítő panelről nyílik. -->
+              @if (tasks.sqlQueriesTaskId() === task.id) {
+                <app-sql-lekerdezesek [taskSetId]="taskSetId()" [task]="task" [hasLiteSql]="tasks.hasLiteSqlFor(task.id)"
+                  (closed)="tasks.sqlQueriesTaskId.set(null)" (saved)="tasks.onSqlQueriesSaved(taskSetId(), $event)"
+                  (openSqlFiles)="tasks.sqlQueriesTaskId.set(null); sqlFilesRequested.emit(task.id)" />
+              }
+
+              @for (solution of task.subTasks; track solution.id) {
+                <app-subtask-editor [taskSetId]="taskSetId()" [task]="task" [subTask]="solution" />
+              }
+
+              <form (ngSubmit)="tasks.addSubTask(taskSetId(), task.id)" class="flex gap-2 items-end">
+                <div class="flex-1">
+                  <label class="text-xs text-text-muted">Új részfeladat szövege</label>
+                  <input [ngModel]="tasks.newSolutionDraft(task.id).description"
+                    (ngModelChange)="tasks.setNewSolutionDescription(task.id, $event)" name="newSolutionDescription"
+                    class="input !px-2 !py-1" />
+                </div>
+                <div class="w-20">
+                  <label class="text-xs text-text-muted">Pont</label>
+                  <input type="number" [ngModel]="tasks.newSolutionDraft(task.id).points"
+                    (ngModelChange)="tasks.setNewSolutionPoints(task.id, $event)" name="newSolutionPoints"
+                    class="input !px-2 !py-1" />
+                </div>
+                <button type="submit" [disabled]="tasks.isSolutionDraftDescriptionBlank(task.id) || tasks.loading()"
+                  class="btn btn-primary !px-3 !py-1.5">
+                  Hozzáadás
+                </button>
+              </form>
+
+              @if (isOfficeTask(task)) {
+                <p class="text-sm text-text-muted" data-testid="office-files-hint">
+                  A feladat forrásfájljait és a saját megoldásodat a lenti „Fájlok” részen töltheted fel.
+                </p>
+              } @else {
+                <div class="bg-bg-panel rounded-xl p-3">
+                  <p class="text-sm font-medium mb-2">Összevont megoldás</p>
+                  <app-snippet-editor [draftKey]="drafts.completeSolutionKey(task.id)" saveLabel="Összevont megoldás mentése"
+                    (save)="drafts.saveCompleteSolutionSnippets(taskSetId(), task)" />
+                </div>
+                @if (isCodeTask(task)) {
+                  <!-- A billentyűzetről olvasó megoldás tárolt bemenete; mentés után a javítás-minőség újratöltődik. -->
+                  <app-tesztbemenet [taskSetId]="taskSetId()" [task]="task" (saved)="autoGrading.loadQuality()" />
+                }
+              }
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="text-sm text-text-muted">Még nincs ilyen típusú feladat.</p>
+      }
+
+      @if (!s.isOther) {
+        <!-- Dinamikus név: [attr.name] + [ngModelOptions] standalone párban (ld. CLAUDE.md) - a sima [name]-et az NgModel
+             elnyeli, a DOM-ba (és így az E2E-lokátorokhoz) nem jut el; az [attr.name] egymagában NG01352-t dob. -->
+        <form (ngSubmit)="tasks.addTask(taskSetId(), s.id)" class="bg-bg-element rounded-xl p-4 space-y-2 scroll-mt-20 lg:scroll-mt-4"
+          [attr.id]="'new-task-' + s.id">
+          <p class="font-semibold text-sm">Új {{ s.label }} feladat</p>
+          <input [ngModel]="tasks.newTaskDraft(s.id)?.title" (ngModelChange)="tasks.patchNewTaskDraft(s.id, { title: $event })"
+            [attr.name]="'newTaskTitle-' + s.id" [attr.id]="'new-task-title-' + s.id"
+            [ngModelOptions]="{standalone: true}" placeholder="Cím" class="input !bg-bg-panel !px-2 !py-1.5" />
+          <textarea [ngModel]="tasks.newTaskDraft(s.id)?.description" (ngModelChange)="tasks.patchNewTaskDraft(s.id, { description: $event })"
+            [attr.name]="'newTaskDescription-' + s.id"
+            [ngModelOptions]="{standalone: true}" placeholder="Leírás" rows="2" class="input !bg-bg-panel !px-2 !py-1.5"></textarea>
+          <div class="flex gap-2 items-end">
+            <div>
+              <label class="text-xs text-text-muted">Max pont</label>
+              <input type="number" min="1" max="1000" [ngModel]="tasks.newTaskDraft(s.id)?.maxPoints"
+                (ngModelChange)="tasks.patchNewTaskDraft(s.id, { maxPoints: $event })" [attr.name]="'newTaskMaxPoints-' + s.id"
+                [ngModelOptions]="{standalone: true}" class="input !bg-bg-panel !px-2 !py-1.5 !w-24" />
+            </div>
+            <button type="submit" [disabled]="tasks.isTaskDraftTitleBlank(s.id) || tasks.isTaskDraftMaxPointsInvalid(s.id) || tasks.loading()"
+              class="btn btn-primary !px-3 !py-1.5">
+              Hozzáadás
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  }
+</div>

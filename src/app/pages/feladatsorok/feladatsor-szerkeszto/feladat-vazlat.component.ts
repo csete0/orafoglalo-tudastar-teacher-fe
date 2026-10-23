@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
-import { TeacherTaskDto } from '../../models/teacher-content.model';
-import { IconComponent, IconName } from '../../shared/icon/icon.component';
+import { TeacherTaskDto } from '../../../models/teacher-content.model';
+import { IconComponent, IconName } from '../../../shared/icon/icon.component';
 
 /** A szerkesztő egy típus-blokkja (ld. `FeladatsorSzerkesztoComponent.typeSections`). */
 export interface FeladatVazlatSection {

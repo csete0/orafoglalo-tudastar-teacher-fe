@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { TeacherTaskDto } from '../../models/teacher-content.model';
+import { TeacherTaskDto } from '../../../models/teacher-content.model';
 import { allocatedPoints, FeladatVazlatComponent, FeladatVazlatSection, pointIssue } from './feladat-vazlat.component';
 
 const task = (overrides: Partial<TeacherTaskDto> = {}): TeacherTaskDto => ({
