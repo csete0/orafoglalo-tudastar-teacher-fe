@@ -1013,7 +1013,6 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
         isTest: raw.isTest,
         timeLimitMinutes: raw.isTest ? Number(raw.timeLimitMinutes) : null,
       })
-      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (dto) => {
           this.assignments.update((list) => [dto, ...list]);
@@ -1034,7 +1033,7 @@ export class FeladatsorSzerkesztoComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
 
-    this.taskSetService.revokeAssignment(assignmentId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.taskSetService.revokeAssignment(assignmentId).subscribe({
       next: () => {
         this.assignments.update((list) =>
           list.map((a) => (a.id === assignmentId ? { ...a, revokedAt: new Date().toISOString() } : a)),

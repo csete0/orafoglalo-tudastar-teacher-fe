@@ -18,6 +18,8 @@ import { TeacherOfficeTaskService } from '../../services/teacher-office-task/tea
 import { TeacherDesktopTaskService } from '../../services/teacher-desktop-task/teacher-desktop-task.service';
 import { ReportService } from '../../services/report/report.service';
 import { TaskEditState } from './feladatsor-szerkeszto/task-edit.state';
+import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
+import { TaskSetAssignmentDto } from '../../models/teacher-content.model';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -1875,6 +1877,41 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const c = create();
       c.tasks.patchNewTaskDraft(1, { title: 'UNSAVED-QUICKADD' });
       expect(await c.canLeave()).toBe(false);
+    });
+  });
+
+  // A kiadás/visszavonás írás: az oldal elhagyása után is végig kell futnia, és a toastnak
+  // meg kell jelennie (siker vagy hiba) - különben a tanár nem tudja meg, hogy elment-e.
+  describe('kiadás-mutációk az oldal elhagyása után', () => {
+    it('assign(): a komponens megszűnése után érkező válasz is megjeleníti a sikeres toastot', () => {
+      configure(makeDetail());
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      const response = new Subject<TaskSetAssignmentDto>();
+      vi.spyOn(TestBed.inject(TeacherTaskSetService), 'assignToGroup').mockReturnValue(response);
+      const success = vi.spyOn(TestBed.inject(ToastService), 'success');
+      const c = fixture.componentInstance;
+      c.assignForm.setValue({ groupId: 3, opensAt: '', dueAt: '', isTest: false, timeLimitMinutes: 45 });
+
+      c.assign(1);
+      fixture.destroy();
+      response.next({ id: 5, groupId: 3, groupName: 'A', assignedAt: new Date().toISOString(), isTest: false });
+
+      expect(success).toHaveBeenCalledWith('Feladatsor kiadva.');
+    });
+
+    it('revokeAssignment(): a komponens megszűnése után érkező hiba is megjelenik toastként', async () => {
+      configure(makeDetail());
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      const response = new Subject<unknown>();
+      vi.spyOn(TestBed.inject(TeacherTaskSetService), 'revokeAssignment').mockReturnValue(response);
+      const danger = vi.spyOn(TestBed.inject(ToastService), 'danger');
+      confirmServiceMock.ask.mockResolvedValue(true);
+
+      await fixture.componentInstance.revokeAssignment(5);
+      fixture.destroy();
+      response.error(new Error('hálózati hiba'));
+
+      expect(danger).toHaveBeenCalledTimes(1);
     });
   });
 });
