@@ -1,12 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, OnInit, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnInit, output, signal, untracked } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { catchError, defer, forkJoin, from, map, of, repeat, retry, Subscription, switchMap, takeWhile, throwError, timer } from 'rxjs';
+import { catchError, forkJoin, from, map, of, Subscription, switchMap } from 'rxjs';
 import {
-  ExcelUndoOpName,
   OfficeFileKind,
-  OfficeParagraphAnchor,
   OfficeProposalSubtask,
   OfficeRubricItem,
   OfficeSlideShape,
@@ -21,27 +19,22 @@ import {
   OfficeWebElement,
   PptUndoOpName,
   WebUndoOpName,
-  WordUndoOpName,
 } from '../../models/office-task.model';
 import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 import { AiHelperQuotaItemDto, aiHelperBlock, aiHelperErrorMessage } from '../../shared/ai-helper-quota.util';
+import { tablistKeyTarget } from '../../shared/a11y/tablist-keys';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { IconComponent, IconName } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { saveBlob } from '../../shared/save-blob.util';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
-  canonicalOp,
   canonicalPptOp,
   canonicalWebOp,
-  canonicalWordOp,
-  changeUndoOpKind,
   changePptUndoOpKind,
   changeWebUndoOpKind,
-  changeWordUndoOpKind,
   describeUndoOp,
-  EXCEL_UNDO_OP_NAMES,
-  EXCEL_UNDO_OPS,
   MAX_REPLACE,
   newUndoOp,
   isCssFile,
@@ -49,7 +42,6 @@ import {
   newPptUndoOp,
   newWebUndoOp,
   newWordUndoOp,
-  opSpec,
   parseAnchorMismatch,
   parseElementMismatch,
   parseShapeMismatch,
@@ -57,19 +49,16 @@ import {
   PPT_UNDO_OP_NAMES,
   PPT_UNDO_OPS,
   pptOpSpec,
-  STYLE_PARTS,
   validateUndoOp,
-  WORD_FIELDS,
-  WORD_PARTS,
-  WORD_UNDO_OP_NAMES,
-  WORD_UNDO_OPS,
   WEB_UNDO_OP_NAMES,
   WEB_UNDO_OPS,
   webOpSpec,
-  wordOpSpec,
 } from './irodai-undo.util';
+import { ExcelUndoEditorComponent } from './irodai-megoldasbol/excel-undo-editor.component';
+import { emptyToNull, toggledParts, toInt } from './irodai-megoldasbol/office-form.util';
+import { WordUndoEditorComponent } from './irodai-megoldasbol/word-undo-editor.component';
+import { injectAiJobPoller } from './shared/ai-job-poller';
 import { webPreviewFromBlob } from './web-preview.util';
-import { WordParagraphPickerComponent } from './word-paragraph-picker.component';
 
 /** Az állapot-lekérdezés gyakorisága (ms). */
 export const OFFICE_POLL_MS = 2000;
@@ -172,12 +161,10 @@ export function officeFileKind(file: File): OfficeFileKind | null {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-irodai-megoldasbol',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent, WordParagraphPickerComponent],
+  imports: [FormsModule, DialogShellComponent, IconComponent, LocalSpinnerComponent, ExcelUndoEditorComponent, WordUndoEditorComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="absolute inset-0 bg-black/40" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="io-title" tabindex="-1" data-testid="io-dialog"
-        class="card relative w-full max-w-4xl p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none min-w-0">
+    <app-dialog-shell labelledBy="io-title" testId="io-dialog" panelClass="card w-full max-w-4xl p-4 sm:p-6 shadow-xl my-8 sm:my-auto min-w-0"
+      (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-secondary shrink-0"><app-icon [name]="kindIcon()" class="w-5 h-5 block" /></div>
@@ -197,14 +184,14 @@ export function officeFileKind(file: File): OfficeFileKind | null {
           @case ('running') {
             <div class="space-y-3" data-testid="io-running">
               <div role="status" aria-live="polite">
-                <app-local-spinner [label]="progressText() || 'Indítás…'" />
+                <app-local-spinner [label]="poller.progressText() || 'Indítás…'" />
               </div>
               <p class="text-sm text-text-muted text-center">
                 Az AI megírja a feladatot és a szempontokat, a rendszer előállítja a kiinduló fájlt, és ellenőrzi a gépi szabályokat.
                 Ez néhány percig is tarthat. Ha bezárod az ablakot, a készítés a háttérben folytatódik, és a gombbal később újra megnyithatod.
               </p>
-              @if (pollError()) {
-                <p class="text-sm text-danger text-center" role="alert" data-testid="io-poll-error">{{ pollError() }}</p>
+              @if (poller.error()) {
+                <p class="text-sm text-danger text-center" role="alert" data-testid="io-poll-error">{{ poller.error() }}</p>
               }
               <div class="flex justify-center">
                 <button type="button" class="btn btn-ghost" (click)="close()">Bezárás</button>
@@ -524,150 +511,10 @@ export function officeFileKind(file: File): OfficeFileKind | null {
                                       }
                                     </div>
                                   } @else if (isEditing(si, oi) && isWord()) {
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" [attr.data-testid]="'io-undo-editor-' + si + '-' + oi">
-                                      <div class="sm:col-span-2">
-                                        <label [for]="'io-op-' + si + '-' + oi" class="text-xs text-text-muted block">Művelet</label>
-                                        <select [id]="'io-op-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="canonicalWord(o.op)"
-                                          (ngModelChange)="changeWordKind(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-op-' + si + '-' + oi">
-                                          @for (n of wordOpNames; track n) { <option [ngValue]="n">{{ wordOpLabel(n) }}</option> }
-                                        </select>
-                                      </div>
-                                      @if (wordHas(o, 'from')) {
-                                        <div class="sm:col-span-2">
-                                          <app-word-paragraph-picker [testId]="'io-from-' + si + '-' + oi" [anchor]="o.from"
-                                            [label]="canonicalWord(o.op) === 'replaceText' ? 'Bekezdés' : canonicalWord(o.op) === 'removeHyperlinks' ? 'Első bekezdés (elhagyható = az egész dokumentum, élőfejjel, élőlábbal, jegyzetekkel együtt)' : 'Első bekezdés'"
-                                            [optional]="canonicalWord(o.op) === 'removeHyperlinks'" clearLabel="Az egész dokumentum"
-                                            [paragraphs]="paragraphs()" [unavailable]="paragraphsUnavailable()"
-                                            (anchorChange)="setFrom(si, oi, $event)" />
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'to') && canonicalWord(o.op) !== 'replaceText' && o.from) {
-                                        <div class="sm:col-span-2">
-                                          <app-word-paragraph-picker [testId]="'io-to-' + si + '-' + oi" [anchor]="o.to" label="Utolsó bekezdés (elhagyható = csak az első)"
-                                            [optional]="true" clearLabel="Csak az első bekezdés" [minIndex]="o.from.index ?? 0"
-                                            [paragraphs]="paragraphs()" [unavailable]="paragraphsUnavailable()"
-                                            (anchorChange)="setUndo(si, oi, { to: $event })" />
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'find')) {
-                                        <div>
-                                          <label [for]="'io-find-' + si + '-' + oi" class="text-xs text-text-muted block">A megoldásban álló szövegrész (pontosan)</label>
-                                          <textarea [id]="'io-find-' + si + '-' + oi" rows="2" class="input !px-2 !py-1 !text-sm" [maxlength]="maxReplace" [ngModel]="o.find ?? ''"
-                                            (ngModelChange)="setUndo(si, oi, { find: $event })" [ngModelOptions]="{ standalone: true }"
-                                            [attr.data-testid]="'io-find-' + si + '-' + oi"></textarea>
-                                        </div>
-                                        <div>
-                                          <label [for]="'io-original-' + si + '-' + oi" class="text-xs text-text-muted block">Az eredeti szöveg (ezt kapja a diák; üres = törlés; sortörés megengedett, tabulátor nem)</label>
-                                          <textarea [id]="'io-original-' + si + '-' + oi" rows="2" class="input !px-2 !py-1 !text-sm" [maxlength]="maxReplace" [ngModel]="o.original ?? ''"
-                                            (ngModelChange)="setUndo(si, oi, { original: $event })" [ngModelOptions]="{ standalone: true }"
-                                            [attr.data-testid]="'io-original-' + si + '-' + oi"></textarea>
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'index')) {
-                                        <div>
-                                          <label [for]="'io-index-' + si + '-' + oi" class="text-xs text-text-muted block">A(z) {{ wordIndexOf(o) }} sorszáma a dokumentumban (1-től)</label>
-                                          <input [id]="'io-index-' + si + '-' + oi" type="number" min="1" max="1000" class="input !px-2 !py-1 !text-sm"
-                                            [ngModel]="o.index == null ? null : o.index + 1" (ngModelChange)="setChartNumber(si, oi, $event)"
-                                            [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-index-' + si + '-' + oi" />
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'section')) {
-                                        <div>
-                                          <label [for]="'io-section-' + si + '-' + oi" class="text-xs text-text-muted block">Szakasz</label>
-                                          <select [id]="'io-section-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.section ?? null"
-                                            (ngModelChange)="setUndo(si, oi, { section: $event })" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-section-' + si + '-' + oi">
-                                            <option [ngValue]="null">minden szakasz</option>
-                                            @for (n of sectionOptions(o); track n) { <option [ngValue]="n">{{ n + 1 }}. szakasz</option> }
-                                          </select>
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'field')) {
-                                        <div>
-                                          <label [for]="'io-field-' + si + '-' + oi" class="text-xs text-text-muted block">Mező</label>
-                                          <select [id]="'io-field-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="o.field ?? null"
-                                            (ngModelChange)="setUndo(si, oi, { field: $event })" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-field-' + si + '-' + oi">
-                                            <option [ngValue]="null" disabled>válassz…</option>
-                                            @for (f of wordFields; track f.key) { <option [ngValue]="f.key">{{ f.key }} - {{ f.label }}</option> }
-                                          </select>
-                                        </div>
-                                      }
-                                      @if (wordHas(o, 'parts')) {
-                                        <fieldset class="sm:col-span-2">
-                                          <legend class="text-xs text-text-muted">Mit állítson vissza? (semmi bejelölve = mindent)</legend>
-                                          <div class="flex flex-wrap gap-x-4 gap-y-1">
-                                            @for (part of wordParts(o); track part.key) {
-                                              <label class="flex items-center gap-1.5 text-sm">
-                                                <input type="checkbox" [checked]="!!o.parts?.includes(part.key)" (change)="togglePart(si, oi, part.key)"
-                                                  [attr.data-testid]="'io-part-' + si + '-' + oi + '-' + part.key" />
-                                                {{ part.label }}
-                                              </label>
-                                            }
-                                          </div>
-                                        </fieldset>
-                                      }
-                                    </div>
+                                    <app-word-undo-editor [op]="o" [key]="si + '-' + oi" [paragraphs]="paragraphs()" [paragraphsUnavailable]="paragraphsUnavailable()"
+                                      (opChange)="replaceUndo(si, oi, $event)" />
                                   } @else if (isEditing(si, oi)) {
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" [attr.data-testid]="'io-undo-editor-' + si + '-' + oi">
-                                      <div>
-                                        <label [for]="'io-op-' + si + '-' + oi" class="text-xs text-text-muted block">Művelet</label>
-                                        <select [id]="'io-op-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" [ngModel]="canonical(o.op)"
-                                          (ngModelChange)="changeKind(si, oi, $event)" [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-op-' + si + '-' + oi">
-                                          @for (n of opNames; track n) { <option [ngValue]="n">{{ opLabel(n) }}</option> }
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label [for]="'io-sheet-' + si + '-' + oi" class="text-xs text-text-muted block">Munkalap</label>
-                                        <input [id]="'io-sheet-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" maxlength="31" [ngModel]="o.sheet ?? ''"
-                                          (ngModelChange)="setUndo(si, oi, { sheet: emptyToNull($event) })" [ngModelOptions]="{ standalone: true }"
-                                          placeholder="egylapos munkafüzetnél elhagyható" [attr.data-testid]="'io-sheet-' + si + '-' + oi" />
-                                      </div>
-                                      @if (has(o, 'range')) {
-                                        <div>
-                                          <label [for]="'io-range-' + si + '-' + oi" class="text-xs text-text-muted block">Tartomány{{ rangeOptional(o) ? ' (elhagyható = az egész lap)' : '' }}</label>
-                                          <input [id]="'io-range-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" [ngModel]="o.range ?? ''"
-                                            (ngModelChange)="setUndo(si, oi, { range: emptyToNull($event) })" [ngModelOptions]="{ standalone: true }"
-                                            placeholder="pl. B2:D10" [attr.data-testid]="'io-range-' + si + '-' + oi" />
-                                        </div>
-                                      }
-                                      @if (has(o, 'columns')) {
-                                        <div>
-                                          <label [for]="'io-columns-' + si + '-' + oi" class="text-xs text-text-muted block">Oszlopok</label>
-                                          <input [id]="'io-columns-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm font-mono" [ngModel]="o.columns ?? ''"
-                                            (ngModelChange)="setUndo(si, oi, { columns: emptyToNull($event) })" [ngModelOptions]="{ standalone: true }"
-                                            placeholder="pl. B:D" [attr.data-testid]="'io-columns-' + si + '-' + oi" />
-                                        </div>
-                                      }
-                                      @if (has(o, 'name')) {
-                                        <div>
-                                          <label [for]="'io-name-' + si + '-' + oi" class="text-xs text-text-muted block">{{ canonical(o.op) === 'removeChart' ? 'Diagram neve vagy címe' : 'Név' }}</label>
-                                          <input [id]="'io-name-' + si + '-' + oi" class="input !px-2 !py-1 !text-sm" maxlength="255" [ngModel]="o.name ?? ''"
-                                            (ngModelChange)="setUndo(si, oi, { name: emptyToNull($event) })" [ngModelOptions]="{ standalone: true }"
-                                            [attr.data-testid]="'io-name-' + si + '-' + oi" />
-                                        </div>
-                                      }
-                                      @if (has(o, 'index')) {
-                                        <div>
-                                          <label [for]="'io-index-' + si + '-' + oi" class="text-xs text-text-muted block">VAGY: a diagram sorszáma a lapon (1-től)</label>
-                                          <input [id]="'io-index-' + si + '-' + oi" type="number" min="1" max="100" class="input !px-2 !py-1 !text-sm"
-                                            [ngModel]="o.index == null ? null : o.index + 1" (ngModelChange)="setChartNumber(si, oi, $event)"
-                                            [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'io-index-' + si + '-' + oi" />
-                                        </div>
-                                      }
-                                      @if (has(o, 'parts')) {
-                                        <fieldset class="sm:col-span-2">
-                                          <legend class="text-xs text-text-muted">Mit állítson alapra? (semmi bejelölve = mindent)</legend>
-                                          <div class="flex flex-wrap gap-x-4 gap-y-1">
-                                            @for (part of styleParts; track part.key) {
-                                              <label class="flex items-center gap-1.5 text-sm">
-                                                <input type="checkbox" [checked]="!!o.parts?.includes(part.key)" (change)="togglePart(si, oi, part.key)"
-                                                  [attr.data-testid]="'io-part-' + si + '-' + oi + '-' + part.key" />
-                                                {{ part.label }}
-                                              </label>
-                                            }
-                                          </div>
-                                        </fieldset>
-                                      }
-                                    </div>
+                                    <app-excel-undo-editor [op]="o" [key]="si + '-' + oi" (opChange)="replaceUndo(si, oi, $event)" />
                                   }
                                 </div>
                               } @empty {
@@ -979,8 +826,7 @@ export function officeFileKind(file: File): OfficeFileKind | null {
             </div>
           }
         }
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class IrodaiMegoldasbolComponent implements OnInit {
@@ -1010,14 +856,10 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     { value: 'emelt', label: 'Emelt szint' },
   ];
   readonly subtaskCounts = [3, 4, 5, 6, 7, 8];
-  readonly opNames = EXCEL_UNDO_OP_NAMES;
-  readonly wordOpNames = WORD_UNDO_OP_NAMES;
-  readonly wordFields = WORD_FIELDS;
   readonly webOpNames = WEB_UNDO_OP_NAMES;
   readonly pptOpNames = PPT_UNDO_OP_NAMES;
   readonly pptFontParts = PPT_FONT_PARTS;
   readonly maxReplace = MAX_REPLACE;
-  readonly styleParts = STYLE_PARTS;
   readonly maxNotes = MAX_NOTES;
   readonly maxTitle = MAX_TITLE;
   readonly maxDescription = MAX_DESCRIPTION;
@@ -1068,10 +910,14 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   );
 
   // ── Készítés ──
-  readonly jobId = signal<number | null>(null);
+  readonly poller = injectAiJobPoller<OfficeTaskJobDto>({
+    intervalMs: OFFICE_POLL_MS,
+    activeStatuses: ACTIVE_STATUSES,
+    fetch: (jobId) => this.service.getJob(this.taskSetId(), jobId),
+    onJob: (job) => this.onJob(job),
+    onGone: () => this.backToInput('Ez a generálás már nem érhető el (24 óra után lejár). Indíts újat.'),
+  });
   readonly jobFileName = signal<string | null>(null);
-  readonly progressText = signal<string | null>(null);
-  readonly pollError = signal<string | null>(null);
   /** A job fajtája (a szerver mondja; ez dönti el a szókészletet). */
   private readonly jobKind = signal<OfficeFileKind | null>(null);
   /** Job → a kiválasztott fájl → a megnyitó blokk. */
@@ -1099,7 +945,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   );
 
   private startSub: Subscription | null = null;
-  private polling: Subscription | null = null;
 
   // ── Előnézet ──
   private readonly generated = signal<OfficeTaskResultDto | null>(null);
@@ -1171,7 +1016,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   private loadImagePreview(report: OfficeTaskReport | null): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     if (jobId == null || this.previewOf === report) return;
     this.releaseWebPreview();
     this.previewOf = report;
@@ -1190,7 +1035,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   private loadWebPreview(report: OfficeTaskReport | null): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     if (jobId == null || this.previewOf === report) return;
     this.releaseWebPreview();
     this.previewOf = report;
@@ -1253,8 +1098,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     return errors;
   });
 
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
-
   ngOnInit(): void {
     this.loadQuota();
     this.reconnect();
@@ -1262,7 +1105,6 @@ export class IrodaiMegoldasbolComponent implements OnInit {
       .getLastSaved(this.taskSetId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (saved) => this.serverLastSaved.set(saved), error: () => this.serverLastSaved.set(null) });
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   /** Visszakapcsolódás a futó / elkészült, még nem mentett jobhoz (oldal-újratöltés, bezárt ablak után is). */
@@ -1368,35 +1210,14 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   private poll(jobId: number): void {
-    this.stopPolling();
-    this.jobId.set(jobId);
-    this.progressText.set(null);
-    this.pollError.set(null);
+    // A lépés a lekérdezés ELŐTT vált: a szinkron (pl. gyorsítótárazott) kész válasz már az előnézetre lép tovább.
     this.step.set('running');
-    this.polling = defer(() => this.service.getJob(this.taskSetId(), jobId))
-      .pipe(
-        // Átmeneti hálózati hiba: néhányszor újra; a 404 (lejárt / nem a tiéd) végleges.
-        retry({ count: 3, resetOnSuccess: true, delay: (err) => (err?.status === 404 ? throwError(() => err) : timer(OFFICE_POLL_MS)) }),
-        repeat({ delay: OFFICE_POLL_MS }),
-        takeWhile((job) => ACTIVE_STATUSES.has(job.status), true),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (job) => {
-          if (this.jobId() === jobId) this.onJob(job);
-        },
-        error: (err) => {
-          if (this.jobId() !== jobId) return;
-          if (err?.status === 404) this.backToInput('Ez a generálás már nem érhető el (24 óra után lejár). Indíts újat.');
-          else this.pollError.set(extractErrorMessage(err, 'Az állapot lekérdezése nem sikerült - zárd be, és nyisd meg újra később.'));
-        },
-      });
+    this.poller.poll(jobId);
   }
 
   private onJob(job: OfficeTaskJobDto): void {
     this.jobFileName.set(job.fileName || null);
     this.jobKind.set(KINDS.includes(job.fileKind) ? job.fileKind : 'excel');
-    this.progressText.set(job.progressText);
     this.hasOwnSource.set(job.hasOwnSource);
     if (job.status === 'failed') {
       // A szerver üzenete mondja meg, visszajár-e a keret.
@@ -1409,18 +1230,12 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   private backToInput(message: string | null): void {
-    this.stopPolling();
+    this.poller.clear();
     this.resetPreview();
-    this.jobId.set(null);
     this.jobKind.set(null);
     this.jobFileName.set(null);
     this.step.set('input');
     this.startError.set(message);
-  }
-
-  private stopPolling(): void {
-    this.polling?.unsubscribe();
-    this.polling = null;
   }
 
   private showResult(result: OfficeTaskResultDto): void {
@@ -1476,34 +1291,21 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.updateSubtask(si, (s) => ({ ...s, ...patch }));
   }
 
-  toInt(value: unknown): number {
-    return value === null || value === '' || value === undefined ? Number.NaN : Number(value);
-  }
-
-  emptyToNull(value: string): string | null {
-    return value.trim() ? value : null;
-  }
+  readonly toInt = toInt;
+  readonly emptyToNull = emptyToNull;
 
   setUndo(si: number, oi: number, patch: Partial<OfficeUndoOp>): void {
     this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? { ...o, ...patch } : o)) }));
   }
 
+  /** A művelet-szerkesztő (Excel, Word) a teljes, módosított műveletet adja vissza. */
+  replaceUndo(si: number, oi: number, op: OfficeUndoOp): void {
+    this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? op : o)) }));
+  }
+
   toggleUndo(si: number, oi: number): void {
     const op = this.proposal()?.subtasks[si]?.undo[oi];
     if (op) this.setUndo(si, oi, { enabled: !op.enabled });
-  }
-
-  changeKind(si: number, oi: number, next: ExcelUndoOpName): void {
-    this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? changeUndoOpKind(o, next) : o)) }));
-  }
-
-  changeWordKind(si: number, oi: number, next: WordUndoOpName): void {
-    this.updateSubtask(si, (s) => ({ ...s, undo: s.undo.map((o, j) => (j === oi ? changeWordUndoOpKind(o, next) : o)) }));
-  }
-
-  /** A „from” törlésével (removeHyperlinks: az egész dokumentum) a „to” is megszűnik. */
-  setFrom(si: number, oi: number, anchor: OfficeParagraphAnchor | null): void {
-    this.setUndo(si, oi, anchor ? { from: anchor } : { from: null, to: null });
   }
 
   /** Horgony-eltérésnél (szerver) a bekezdés valódi szövegének eleje kerül a horgonyba. */
@@ -1515,21 +1317,10 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.setUndo(si, oi, mm.which === 'from' ? { from: anchor } : { to: anchor });
   }
 
-  /** A diagram / táblázat / rajz / szakasztörés sorszáma a felületen 1-től, a szerződésben 0-alapú index. */
-  setChartNumber(si: number, oi: number, value: unknown): void {
-    const n = this.toInt(value);
-    this.setUndo(si, oi, { index: Number.isNaN(n) ? null : n - 1 });
-  }
-
+  /** PowerPoint: a betű-részek (az Excel- és a Word-szerkesztő a sajátját kezeli). */
   togglePart(si: number, oi: number, part: string): void {
     const op = this.proposal()?.subtasks[si]?.undo[oi];
-    if (!op) return;
-    const current = new Set(op.parts ?? []);
-    if (current.has(part)) current.delete(part);
-    else current.add(part);
-    const order = (this.isWord() ? this.wordParts(op) : this.isPpt() ? PPT_FONT_PARTS : STYLE_PARTS).map((p) => p.key);
-    const parts = order.filter((k) => current.has(k));
-    this.setUndo(si, oi, { parts: parts.length === 0 ? null : parts });
+    if (op) this.setUndo(si, oi, { parts: toggledParts(op.parts, part, PPT_FONT_PARTS) });
   }
 
   removeUndo(si: number, oi: number): void {
@@ -1608,7 +1399,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   discard(): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     if (jobId == null || this.discarding() || this.saving()) return;
     this.discarding.set(true);
     this.saveError.set(null);
@@ -1631,12 +1422,12 @@ export class IrodaiMegoldasbolComponent implements OnInit {
 
   private afterDiscard(jobId: number): void {
     this.discarding.set(false);
-    if (this.jobId() === jobId) this.backToInput(null);
+    if (this.poller.jobId() === jobId) this.backToInput(null);
   }
 
   /** Ellenőrzés a szerveren MI nélkül; a válasz normalizált javaslata lesz a menthető változat. */
   revalidate(): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     const sent = this.proposal();
     const ownFile = this.pendingOwnSource();
     if (this.revalidating() || jobId == null || !sent || this.clientErrors().length > 0) return;
@@ -1651,7 +1442,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
         next: (res) => {
           this.revalidating.set(false);
           // Közben Elvetés / másik job: az elavult válasz eldobva.
-          if (this.generated() !== basis || this.jobId() !== jobId) return;
+          if (this.generated() !== basis || this.poller.jobId() !== jobId) return;
           this.validated.set(res.proposal);
           this.report.set(res.report);
           if (ownFile) {
@@ -1663,7 +1454,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
         },
         error: (err) => {
           this.revalidating.set(false);
-          if (this.generated() !== basis || this.jobId() !== jobId) return;
+          if (this.generated() !== basis || this.poller.jobId() !== jobId) return;
           if (aiHelperBlock(err) === 'premium') this.premiumRejected.set(true);
           this.revalidateError.set(this.errorText(err, 'Az ellenőrzés nem sikerült.'));
         },
@@ -1671,7 +1462,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   save(): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     const proposal = this.validated();
     if (!this.canSave() || this.saving() || jobId == null || !proposal) return;
     this.saving.set(true);
@@ -1693,7 +1484,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   download(kind: OfficeTaskFileKind): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     const r = this.report();
     if (jobId == null || !r || this.downloading()) return;
     const fileName = kind === 'source' ? r.sourceFileName : r.solutionFileName;
@@ -1723,7 +1514,7 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.startSub?.unsubscribe();
     this.startSub = null;
     this.starting.set(false);
-    this.stopPolling();
+    this.poller.stop();
     this.cancelRevalidation();
     this.discardSub?.unsubscribe();
     this.downloadSub?.unsubscribe();
@@ -1731,10 +1522,10 @@ export class IrodaiMegoldasbolComponent implements OnInit {
   }
 
   onTabKey(event: KeyboardEvent, index: number): void {
-    const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    if (!delta) return;
+    const target = tablistKeyTarget(event.key, index, TABS.length);
+    if (target === null) return;
     event.preventDefault();
-    const next = TABS[(index + delta + TABS.length) % TABS.length];
+    const next = TABS[target];
     this.tab.set(next.id);
     setTimeout(() => (document.getElementById(`io-tab-${next.id}`) as HTMLElement | null)?.focus());
   }
@@ -1903,51 +1694,8 @@ export class IrodaiMegoldasbolComponent implements OnInit {
     this.setUndo(si, oi, { shape: { id: sm.id, name: sm.name } });
   }
 
-  canonicalWord(op: string): WordUndoOpName | null {
-    return canonicalWordOp(op);
-  }
-
-  wordOpLabel(name: WordUndoOpName): string {
-    return WORD_UNDO_OPS[name].label;
-  }
-
-  wordHas(op: OfficeUndoOp, field: 'from' | 'to' | 'parts' | 'index' | 'section' | 'field' | 'find' | 'original'): boolean {
-    return !!wordOpSpec(op.op)?.fields.includes(field);
-  }
-
-  wordIndexOf(op: OfficeUndoOp): string {
-    return wordOpSpec(op.op)?.indexOf ?? 'elem';
-  }
-
-  wordParts(op: OfficeUndoOp): { key: string; label: string }[] {
-    const name = canonicalWordOp(op.op);
-    return (name && WORD_PARTS[name]) || [];
-  }
-
-  /** 0-9. szakasz (a felületen 1-10.; és a művelet saját, nagyobb sorszáma, ha van). */
-  sectionOptions(op: OfficeUndoOp): number[] {
-    const count = Math.max(10, (op.section ?? 0) + 1);
-    return Array.from({ length: count }, (_, i) => i);
-  }
-
   mismatch(op: OfficeUndoOp) {
     return op.result === 'error' ? parseAnchorMismatch(op.message) : null;
-  }
-
-  canonical(op: string): ExcelUndoOpName | null {
-    return canonicalOp(op);
-  }
-
-  opLabel(name: ExcelUndoOpName): string {
-    return EXCEL_UNDO_OPS[name].label;
-  }
-
-  has(op: OfficeUndoOp, field: 'range' | 'name' | 'index' | 'columns' | 'parts'): boolean {
-    return !!opSpec(op.op)?.fields.includes(field);
-  }
-
-  rangeOptional(op: OfficeUndoOp): boolean {
-    return !!opSpec(op.op)?.rangeOptional;
   }
 
   undoLabel(op: OfficeUndoOp): string {

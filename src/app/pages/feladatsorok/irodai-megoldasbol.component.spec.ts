@@ -1,10 +1,14 @@
 import { zipSync, strToU8 as encode } from 'fflate';
+import { Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Observable, of, Subject, throwError } from 'rxjs';
 import { IrodaiMegoldasbolComponent, MAX_FILE_BYTES, OFFICE_POLL_MS, OFFICE_PREMIUM_MESSAGE } from './irodai-megoldasbol.component';
 import { TeacherOfficeTaskService } from '../../services/teacher-office-task/teacher-office-task.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { AiHelperQuotaDto } from '../../shared/ai-helper-quota.util';
+import { ExcelUndoEditorComponent } from './irodai-megoldasbol/excel-undo-editor.component';
+import { WordUndoEditorComponent } from './irodai-megoldasbol/word-undo-editor.component';
 import {
   OfficeTaskJobDto,
   OfficeTaskProposal,
@@ -173,6 +177,23 @@ describe('IrodaiMegoldasbolComponent', () => {
 
   function tab(fixture: ReturnType<typeof create>, id: string) {
     q(fixture, `io-tab-${id}`)!.click();
+    fixture.detectChanges();
+  }
+
+  /** A művelet szerkesztője (a Visszacsinálás fülön kinyitva, ha még nincs) - az Excel- és a Word-szerkesztő külön komponens. */
+  function editor<T>(fixture: ReturnType<typeof create>, type: Type<T>, si: number, oi: number): T {
+    const c = fixture.componentInstance;
+    c.tab.set('visszacsinalas');
+    if (!c.isEditing(si, oi)) c.toggleEdit(si, oi);
+    fixture.detectChanges();
+    return fixture.debugElement.query(By.directive(type)).componentInstance as T;
+  }
+
+  /** Szám-mező kitöltése a felületen (a szerkesztő 1-től számoz). */
+  function typeInto(fixture: ReturnType<typeof create>, id: string, value: string) {
+    const el = q(fixture, id) as HTMLInputElement;
+    el.value = value;
+    el.dispatchEvent(new Event('input'));
     fixture.detectChanges();
   }
 
@@ -409,7 +430,7 @@ describe('IrodaiMegoldasbolComponent', () => {
     it('műveletváltáskor a nem megengedett paraméterek törlődnek; új művelet hozzáadható; a stílus-részek váltogathatók', () => {
       const fixture = preview();
       const c = fixture.componentInstance;
-      c.changeKind(0, 1, 'resetColumnWidth');
+      editor(fixture, ExcelUndoEditorComponent, 0, 1).changeKind('resetColumnWidth');
       expect(c.proposal()!.subtasks[0].undo[1]).toMatchObject({ op: 'resetColumnWidth', range: null, parts: null });
       expect(c.clientErrors().some((e) => e.includes('oszloptartomány'))).toBe(true);
       c.setUndo(0, 1, { columns: 'B:D' });
@@ -422,23 +443,24 @@ describe('IrodaiMegoldasbolComponent', () => {
       c.removeUndo(1, 1);
       expect(c.proposal()!.subtasks[1].undo).toHaveLength(1);
 
-      c.changeKind(0, 0, 'resetStyle');
-      c.togglePart(0, 0, 'border');
-      c.togglePart(0, 0, 'numberFormat');
+      editor(fixture, ExcelUndoEditorComponent, 0, 0).changeKind('resetStyle');
+      editor(fixture, ExcelUndoEditorComponent, 0, 0).togglePart('border');
+      editor(fixture, ExcelUndoEditorComponent, 0, 0).togglePart('numberFormat');
       expect(c.proposal()!.subtasks[0].undo[0].parts).toEqual(['numberFormat', 'border']);
-      c.togglePart(0, 0, 'border');
-      c.togglePart(0, 0, 'numberFormat');
+      editor(fixture, ExcelUndoEditorComponent, 0, 0).togglePart('border');
+      editor(fixture, ExcelUndoEditorComponent, 0, 0).togglePart('numberFormat');
       expect(c.proposal()!.subtasks[0].undo[0].parts).toBeNull();
     });
 
     it('diagram: a felület 1-től számoz, a szerződés 0-alapú; név ÉS sorszám együtt hiba', () => {
       const fixture = preview();
       const c = fixture.componentInstance;
-      c.setChartNumber(1, 0, 3);
+      editor(fixture, ExcelUndoEditorComponent, 1, 0);
+      typeInto(fixture, 'io-index-1-0', '3');
       expect(c.proposal()!.subtasks[1].undo[0].index).toBe(2);
       c.setUndo(1, 0, { name: 'Diagram 1' });
       expect(c.clientErrors().some((e) => e.includes('névvel VAGY sorszámmal'))).toBe(true);
-      c.setChartNumber(1, 0, '');
+      typeInto(fixture, 'io-index-1-0', '');
       expect(c.proposal()!.subtasks[1].undo[0].index).toBeNull();
       expect(c.clientErrors()).toEqual([]);
     });
@@ -693,6 +715,18 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(q(fixture, 'io-panel-ellenorzes')).not.toBeNull();
       expect(q(fixture, 'io-tab-ellenorzes')!.getAttribute('aria-selected')).toBe('true');
     });
+
+    it('a közös dialógus-héjon: Escape és háttérkattintás bezár, a cím a dialógus címkéje', () => {
+      const fixture = create();
+      const closed = vi.fn();
+      fixture.componentInstance.closed.subscribe(closed);
+      expect(q(fixture, 'io-dialog')!.getAttribute('aria-labelledby')).toBe('io-title');
+      expect(q(fixture, 'io-dialog')!.getAttribute('role')).toBe('dialog');
+      q(fixture, 'io-dialog')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(closed).toHaveBeenCalledTimes(1);
+      (fixture.nativeElement.querySelector('app-dialog-shell .fixed.inset-0 > .fixed.inset-0') as HTMLElement).click();
+      expect(closed).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('Word', () => {
@@ -824,7 +858,7 @@ describe('IrodaiMegoldasbolComponent', () => {
       c.setUndo(0, 0, { to: { index: 0, startsWith: 'Osztály' } });
       fixture.detectChanges();
       expect(q(fixture, 'io-undo-error-0-0')!.textContent).toContain('nem lehet az első');
-      c.setFrom(0, 0, null);
+      editor(fixture, WordUndoEditorComponent, 0, 0).setFrom(null);
       fixture.detectChanges();
       expect(c.proposal()!.subtasks[0].undo[0].to).toBeNull();
       expect(q(fixture, 'io-client-errors')!.textContent).toContain('1.: 1. visszacsinálási művelet - hiányzó első bekezdés');
@@ -875,40 +909,37 @@ describe('IrodaiMegoldasbolComponent', () => {
       const c = fixture.componentInstance;
       tab(fixture, 'visszacsinalas');
 
-      c.changeWordKind(1, 0, 'removeImage');
+      editor(fixture, WordUndoEditorComponent, 1, 0).changeKind('removeImage');
       expect(c.proposal()!.subtasks[1].undo[0]).toMatchObject({ op: 'removeImage', index: 0 });
-      c.toggleEdit(1, 0);
       fixture.detectChanges();
       expect((q(fixture, 'io-index-1-0') as HTMLInputElement).min).toBe('1');
-      c.setChartNumber(1, 0, '');
+      typeInto(fixture, 'io-index-1-0', '');
       expect(c.clientErrors().some((e) => e.includes('hiányzó rajz-sorszám'))).toBe(true);
-      c.setChartNumber(1, 0, '3');
+      typeInto(fixture, 'io-index-1-0', '3');
       expect(c.proposal()!.subtasks[1].undo[0].index).toBe(2);
       expect(describe1(c, 1, 0)).toBe('a(z) 3. rajz törlése (kép/alakzat/szövegdoboz/diagram)');
 
-      c.changeWordKind(1, 1, 'removeHeader');
+      editor(fixture, WordUndoEditorComponent, 1, 1).changeKind('removeHeader');
       expect(c.proposal()!.subtasks[1].undo[1]).toMatchObject({ op: 'removeHeader', field: null, section: null });
-      c.toggleEdit(1, 1);
       fixture.detectChanges();
       const options = q(fixture, 'io-section-1-1')!.querySelectorAll('option');
       expect(options.length).toBe(11);
       expect(options[1].textContent).toContain('1. szakasz');
       c.setUndo(1, 1, { section: 2 });
       expect(describe1(c, 1, 1)).toBe('élőfej törlése (3. szakasz)');
-      c.changeWordKind(1, 1, 'removeField');
+      editor(fixture, WordUndoEditorComponent, 1, 1).changeKind('removeField');
       fixture.detectChanges();
       expect(q(fixture, 'io-field-1-1')!.textContent).toContain('NUMPAGES - oldalak száma');
       expect(c.clientErrors().some((e) => e.includes('hiányzó mezőfajta'))).toBe(true);
       c.setUndo(1, 1, { field: 'DATE' });
       expect(describe1(c, 1, 1)).toBe('DATE mező törlése (dátum)');
 
-      c.changeWordKind(1, 2, 'removeFootnotes');
+      editor(fixture, WordUndoEditorComponent, 1, 2).changeKind('removeFootnotes');
       expect(c.proposal()!.subtasks[1].undo[2].parts).toBeNull();
-      c.toggleEdit(1, 2);
       fixture.detectChanges();
       expect(q(fixture, 'io-part-1-2-footnotes')).not.toBeNull();
-      c.togglePart(1, 2, 'endnotes');
-      c.togglePart(1, 2, 'footnotes');
+      editor(fixture, WordUndoEditorComponent, 1, 2).togglePart('endnotes');
+      editor(fixture, WordUndoEditorComponent, 1, 2).togglePart('footnotes');
       expect(c.proposal()!.subtasks[1].undo[2].parts).toEqual(['footnotes', 'endnotes']);
 
       c.toggleEdit(0, 1);
