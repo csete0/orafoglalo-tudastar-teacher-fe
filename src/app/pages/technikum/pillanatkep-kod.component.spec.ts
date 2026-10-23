@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of } from 'rxjs';
-import { PillanatkepKodComponent, desktopFileRank } from './pillanatkep-kod.component';
+import { PillanatkepKodComponent, backendFileRank, desktopFileRank } from './pillanatkep-kod.component';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ExamCodeCommentDto, ExamSessionSnapshotDto } from '../../models/technikum.model';
@@ -247,7 +247,7 @@ describe('PillanatkepKodComponent', () => {
     expect(el.querySelector('[data-testid="part-lang-console"]')!.textContent!.trim()).toBe('Java');
     expect(el.querySelector('[data-testid="part-lang-gui"]')!.textContent!.trim()).toBe('Java');
     expect(el.querySelector('[data-testid="part-lang-web"]')).toBeNull();
-    expect(el.querySelector('[data-testid="part-lang-api"]')).toBeNull();
+    expect(el.querySelector('[data-testid="part-lang-api"]')!.textContent!.trim()).toBe('C# (ASP.NET Core)');
 
     expect(fileList(el)).toEqual(['console/Kolcsonzes.java', 'console/Main.java', 'console/adatok.txt (keret)']);
     expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('public class Kolcsonzes');
@@ -287,6 +287,53 @@ describe('PillanatkepKodComponent', () => {
     click(el, '[data-testid="part-tab-gui"]');
     fixture.detectChanges();
     expect(fileList(el)).toEqual(['App/Form1.cs', 'App/MainWindow.xaml', 'App/Form1.Designer.cs', 'App/App.csproj']);
+  });
+
+  const backendSnapshot = (runtime: ExamSessionSnapshotDto['runtime'], files: Record<string, string>, readOnlyPaths: string[] = []): ExamSessionSnapshotDto =>
+    ({ ...snapshot, runtime, gui: null, files: { ...files, 'db/schema.sql': 'CREATE TABLE x();' }, readOnlyPaths: [...readOnlyPaths, 'db/schema.sql'] });
+
+  it('Express-dolgozat: backend-jelvény az api fülén, a kézzel írt .js elöl, a package.json hátul', async () => {
+    const { fixture, el } = await setup([], backendSnapshot('judge0-express', {
+      'backend/package.json': '{ "main": "server.js" }', 'backend/server.js': "const express = require('express');", 'backend/routes/konyvek.js': 'module.exports = router;',
+    }));
+    expect(el.querySelector('[data-testid="part-lang-api"]')!.textContent!.trim()).toBe('JavaScript (Node.js + Express)');
+    expect(el.querySelector('[data-testid="part-lang-web"]')).toBeNull();
+    click(el, '[data-testid="part-tab-api"]');
+    fixture.detectChanges();
+    expect(fileList(el)).toEqual(['backend/routes/konyvek.js', 'backend/server.js', 'backend/package.json']);
+    expect(el.querySelector('[data-testid="code-view"]')!.textContent).toContain('module.exports = router;');
+  });
+
+  it('Laravel-dolgozat: routes/api.php elöl, Controllers, Models, a keret-osztályok hátul; megjegyzés egy .php sorra', async () => {
+    const { fixture, el, api } = await setup([], backendSnapshot('judge0-laravel', {
+      'backend/app/Http/Controllers/Controller.php': '<?php\nabstract class Controller {}',
+      'backend/app/Providers/AppServiceProvider.php': '<?php\nclass AppServiceProvider {}',
+      'backend/app/Models/Konyv.php': '<?php\nclass Konyv {}',
+      'backend/app/Http/Controllers/KonyvController.php': '<?php\n\nnamespace App\\Http\\Controllers;\n\nclass KonyvController {}',
+      'backend/routes/api.php': "<?php\nRoute::get('/konyvek', [KonyvController::class, 'index']);",
+    }, ['backend/app/Http/Controllers/Controller.php', 'backend/app/Providers/AppServiceProvider.php']));
+    expect(el.querySelector('[data-testid="part-lang-api"]')!.textContent!.trim()).toBe('PHP (Laravel)');
+    click(el, '[data-testid="part-tab-api"]');
+    fixture.detectChanges();
+    expect(fileList(el).map((f) => f.replace(' (keret)', ''))).toEqual([
+      'backend/routes/api.php', 'backend/app/Http/Controllers/KonyvController.php', 'backend/app/Models/Konyv.php',
+      'backend/app/Http/Controllers/Controller.php', 'backend/app/Providers/AppServiceProvider.php',
+    ]);
+    [...el.querySelectorAll<HTMLButtonElement>('app-kod-olvaso li button')][1].click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.code-line').length).toBe(5);
+    lineButton(el, 5).click();
+    fixture.detectChanges();
+    el.querySelector<HTMLTextAreaElement>('[data-testid="new-comment"] textarea')!.value = 'Hiányzik az index metódus.';
+    el.querySelector<HTMLFormElement>('[data-testid="new-comment"]')!.dispatchEvent(new Event('submit'));
+    expect(api.createComment).toHaveBeenCalledWith(31, 'api', 'backend/app/Http/Controllers/KonyvController.php', 5, 'Hiányzik az index metódus.');
+  });
+
+  it('backendFileRank: routes/api.php 0, kézzel írt forrás 1, kezdő keret- és projektfájl 2', () => {
+    expect(['backend/routes/api.php', 'backend/app/Models/Konyv.php', 'backend/src/main/java/hu/vizsga/Konyv.java', 'backend/server.js',
+      'backend/Program.cs', 'backend/package.json', 'backend/pom.xml', 'backend/src/main/resources/application.properties',
+      'backend/app/Http/Controllers/Controller.php', 'backend/app/Providers/AppServiceProvider.php'].map(backendFileRank))
+      .toEqual([0, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
   });
 
   it('desktopFileRank: kézzel írt forrás 0, generált 1, minden más 2 (kis-nagybetű független)', () => {

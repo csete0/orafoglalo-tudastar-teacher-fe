@@ -10,7 +10,7 @@ import { AiHelperQuotaItemDto, aiHelperErrorMessage } from '../../shared/ai-help
 import { parseUtc } from '../../shared/utc-date.util';
 import { CodeCommentSuggestionDto } from '../../models/teacher-project.model';
 import {
-  CLIENT_FRAMEWORK_LABEL, DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto,
+  BACKEND_RUNTIME_LABEL, CLIENT_FRAMEWORK_LABEL, DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto,
 } from '../../models/technikum.model';
 
 /** A pillanatkép fülei: az öt vizsgarész és a részekhez nem tartozó (pl. hivatalos adat-) fájlok. */
@@ -29,6 +29,19 @@ export const desktopFileRank: CodeFileRank = (path) => {
   const p = path.toLowerCase();
   if (p.endsWith('.designer.cs')) return 1;
   return HAND_WRITTEN_SOURCES.some((x) => p.endsWith(x)) ? 0 : 2;
+};
+
+/** A backend kezdő keret- és projektfájljai (csomag-, build- és beállításfájl, a Laravel alap-osztályai) - a kézzel írt forrás után. */
+const BACKEND_PROJECT_FILES = ['package.json', 'pom.xml', 'application.properties', 'controller.php', 'appserviceprovider.php'];
+
+/**
+ * A backend-rész fájlsorrendje: elöl az útvonalak (routes/api.php), aztán a kézzel írt forrás (Controllers, Models, src/main/java/**,
+ * *.js, *.cs), végül a kezdő keret- és projektfájlok (package.json, pom.xml, application.properties, Controller.php, AppServiceProvider.php).
+ */
+export const backendFileRank: CodeFileRank = (path) => {
+  const p = path.toLowerCase();
+  if (p.endsWith('/routes/api.php')) return 0;
+  return BACKEND_PROJECT_FILES.includes(p.slice(p.lastIndexOf('/') + 1)) ? 2 : 1;
 };
 
 /** Kliens-oldali (nem mentett) MI-javaslat; a `key` csak a felületen azonosít. */
@@ -259,9 +272,11 @@ export class PillanatkepKodComponent {
     for (const c of this.comments()) counts.set(c.partKey, (counts.get(c.partKey) ?? 0) + 1);
     const language = DESKTOP_LANGUAGE_LABEL[sn.desktopLanguage ?? 'csharp'];
     const framework = sn.clientBuild ? CLIENT_FRAMEWORK_LABEL[sn.clientBuild.framework] : null;
+    // A backend-jelvény minden munkamenetnél látszik (a C#-nál is): a REST API-t a diák indításkor választotta.
+    const backend = BACKEND_RUNTIME_LABEL[sn.runtime] ?? sn.runtime;
+    const badge = (k: ExamPartKey) => (DESKTOP_PARTS.includes(k) ? language : k === 'client' ? framework : k === 'api' ? backend : null);
     const tabs: { key: Tab; label: string; language: string | null; comments: number }[] = keys.map((k) => ({
-      key: k, label: EXAM_PART_LABEL[k] ?? k, language: DESKTOP_PARTS.includes(k) ? language : k === 'client' ? framework : null,
-      comments: counts.get(k) ?? 0,
+      key: k, label: EXAM_PART_LABEL[k] ?? k, language: badge(k), comments: counts.get(k) ?? 0,
     }));
     if (Object.keys(this.otherFiles()).length) tabs.push({ key: 'egyeb', label: 'Egyéb fájlok', language: null, comments: 0 });
     return tabs;
@@ -329,7 +344,7 @@ export class PillanatkepKodComponent {
   }
 
   private rankOf(tab: Tab): CodeFileRank {
-    return DESKTOP_PARTS.includes(tab) ? desktopFileRank : () => 0;
+    return DESKTOP_PARTS.includes(tab) ? desktopFileRank : tab === 'api' ? backendFileRank : () => 0;
   }
 
   selectFile(path: string | null): void {
