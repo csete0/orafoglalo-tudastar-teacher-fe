@@ -338,3 +338,40 @@ export interface WeakTopicSummaryDto {
   sentences: string[];
   topics: WeakTopicSummaryTopicDto[];
 }
+
+/** Igazgatói osztály-összesítő (intézmény „Csoportok” fül) - `GET teacher/schools/{id}/class-overview?days=14|30`. */
+export type ClassOverviewPeriod = 14 | 30;
+
+export interface SchoolOverviewKpiDto {
+  studentCount: number;
+  activeStudentCount: number;
+  averageScorePercent: number | null;
+  seatsUsed: number;
+  seatsTotal: number;
+  assignmentsThisMonth: number;
+}
+
+export interface SchoolClassRowDto {
+  groupId: number;
+  name: string;
+  teacherDisplayName: string;
+  /** A néző a csoport saját tanára - csak ekkor nyitható a csoportoldal. */
+  canOpen: boolean;
+  memberCount: number;
+  activeMemberCount: number;
+  averageScorePercent: number | null;
+  assignmentsGiven: number;
+  assignmentCompletions: number;
+  assignmentSlots: number;
+  readinessPercent: number | null;
+  readinessStudentCount: number;
+  weakestTopicName: string | null;
+  weakestTopicSuccessRate: number | null;
+}
+
+export interface SchoolClassOverviewDto {
+  periodDays: ClassOverviewPeriod;
+  periodFrom: string;
+  kpi: SchoolOverviewKpiDto;
+  groups: SchoolClassRowDto[];
+}

@@ -4,6 +4,8 @@ import { HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ClassOverviewPeriod,
+  SchoolClassOverviewDto,
   StudentActivityDetailDto,
   StudentActivitySummaryDto,
   TaskSetResultsFilter,
@@ -33,6 +35,13 @@ export class ReportService {
       `${this.baseUrl}/schools/${schoolId}/activity`,
       { params: this.dateRangeParams(from, to) },
     );
+  }
+
+  /** Igazgatói osztály-összesítő: iskola-KPI-k + csoportonkénti sor (csak intézmény-adminnak, különben 403). */
+  getSchoolClassOverview(schoolId: number, days: ClassOverviewPeriod): Observable<SchoolClassOverviewDto> {
+    return this.http.get<SchoolClassOverviewDto>(`${this.baseUrl}/schools/${schoolId}/class-overview`, {
+      params: new HttpParams().set('days', days),
+    });
   }
 
   /** UI-UX-T2: a vezérlőpult élő blokkjai (friss kvíz-eredmények + határidők). */

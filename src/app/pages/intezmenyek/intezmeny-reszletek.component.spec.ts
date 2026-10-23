@@ -7,6 +7,8 @@ import { ReportStore } from '../../services/report/report.store';
 import { LeaderboardStore } from '../../services/leaderboard/leaderboard.store';
 import { SchoolDto } from '../../models/school.model';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
+import { ReportService } from '../../services/report/report.service';
+import { of } from 'rxjs';
 
 function makeSchool(overrides: Partial<SchoolDto> = {}): SchoolDto {
   return {
@@ -95,6 +97,15 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
         { provide: ReportStore, useValue: reportStoreMock },
         { provide: LeaderboardStore, useValue: leaderboardStoreMock },
         { provide: ConfirmService, useValue: confirmServiceMock },
+        {
+          provide: ReportService,
+          useValue: {
+            getSchoolClassOverview: vi.fn().mockReturnValue(of({
+              periodDays: 30, periodFrom: '2026-09-23T00:00:00Z', groups: [],
+              kpi: { studentCount: 0, activeStudentCount: 0, averageScorePercent: null, seatsUsed: 0, seatsTotal: 0, assignmentsThisMonth: 0 },
+            })),
+          },
+        },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '1' } } } },
       ],
     });
@@ -359,7 +370,7 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     fixture.componentInstance.setTab('csoportok');
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('ul.space-y-2')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-intezmeny-osztalyok')).toBeTruthy();
 
     schoolStoreMock.isSelectedAdmin.set(false);
     fixture.detectChanges();
@@ -393,11 +404,9 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     expect(schoolStoreMock.loadLicenseOverview).toHaveBeenCalledWith(1);
   });
 
-  // UI-TT-175: a "Csoportok" fülön az `isArchived` mező eddig sehol nem volt kiolvasva a
-  // template-ben, szemben a tanár saját csoport-nézeteivel (`csoportok-lista.component.ts`,
-  // `csoport-reszletek.component.ts`), amik jól látható "Archivált" jelvényt mutatnak rá -
-  // egy archivált csoport itt megkülönböztethetetlen volt egy élő csoporttól.
-  it('BUG UI-TT-175 javítva: az archivált csoport a Csoportok fülön "Archivált" jelvényt kap, a nem-archivált nem', () => {
+  // UI-TT-175: az archivált csoport megkülönböztethető maradjon. Az osztály-összesítő csak az aktív csoportokat
+  // sorolja; az archiváltak külön, „Archivált csoportok” lenyitható listában jelennek meg.
+  it('BUG UI-TT-175: az archivált csoport a Csoportok fülön az „Archivált csoportok” listában jelenik meg, a nem-archivált nem', () => {
     configure(makeSchool({ myRole: 'Admin' }), true);
     schoolStoreMock.schoolGroups.set([
       { groupId: 1, name: 'Élő csoport', teacherDisplayName: 'Teszt Tanár', memberCount: 3, isArchived: false },
@@ -409,10 +418,11 @@ describe('IntezmenyReszletekComponent — szerep-függő fülek', () => {
     fixture.componentInstance.setTab('csoportok');
     fixture.detectChanges();
 
-    const items: HTMLLIElement[] = Array.from(fixture.nativeElement.querySelectorAll('ul.space-y-2 > li'));
-    expect(items.length).toBe(2);
-    expect(items[0].textContent).not.toContain('Archivált');
-    expect(items[1].textContent).toContain('Archivált');
+    expect(schoolStoreMock.loadSchoolGroups).toHaveBeenCalledWith(1);
+    const archived = fixture.nativeElement.querySelector('details') as HTMLDetailsElement;
+    expect(archived.textContent).toContain('Archivált csoportok (1)');
+    expect(archived.textContent).toContain('Archivált csoport');
+    expect(archived.textContent).not.toContain('Élő csoport');
   });
 
   // UI-TT-179: valódi, tartalom-váltó tab-widget (Tanárok/Ranglista/Áttekintés/Csoportok) -
