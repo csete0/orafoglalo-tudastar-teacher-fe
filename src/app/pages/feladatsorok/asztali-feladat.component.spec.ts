@@ -205,4 +205,53 @@ describe('AsztaliFeladatComponent', () => {
     expect(desktopTaskProblems({ ...item('Egy'), steps: [] })[0]).toContain('feladatpont');
     expect(desktopTaskProblems({ ...item('Egy'), reference: ' ' })[0]).toContain('megoldási vázlat');
   });
+
+  it('lekérdezés közben 404: lejárt generálás, vissza az űrlapra a magyarázattal', () => {
+    const { fixture, c } = create();
+    service.getJob.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    c.topic.set('Könyvtár');
+    c.start();
+    fixture.detectChanges();
+    expect(c.step()).toBe('input');
+    expect(q(fixture, 'dt-error')!.textContent).toContain('24 óra után lejár');
+    expect(service.getJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('átmeneti lekérdezési hiba: háromszor újrapróbál, utána a futás-nézetben jelzi', () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, c } = create();
+      service.getJob.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
+      c.topic.set('Könyvtár');
+      c.start();
+      vi.advanceTimersByTime(DESKTOP_POLL_MS * 3);
+      fixture.detectChanges();
+      expect(service.getJob).toHaveBeenCalledTimes(4);
+      expect(c.step()).toBe('running');
+      expect(q(fixture, 'dt-poll-error')!.textContent).toContain('Az állapot lekérdezése nem sikerült');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a közös dialógus-héjon: Escape bezár és leállítja a lekérdezést; a cím a dialógus címkéje', () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, c, closed } = create();
+      service.getJob.mockReturnValue(of(job({ status: 'generating', result: null })));
+      c.topic.set('Könyvtár');
+      c.start();
+      fixture.detectChanges();
+      const dialog = q(fixture, 'dt-dialog')!;
+      expect(dialog.getAttribute('role')).toBe('dialog');
+      expect(fixture.nativeElement.querySelector('#' + dialog.getAttribute('aria-labelledby'))!.textContent).toContain('Asztali feladatsor témából');
+      dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(closed).toHaveBeenCalledTimes(1);
+      const calls = service.getJob.mock.calls.length;
+      vi.advanceTimersByTime(DESKTOP_POLL_MS * 3);
+      expect(service.getJob.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { defer, repeat, retry, Subscription, takeWhile, throwError, timer } from 'rxjs';
 import {
   DESKTOP_LIMITS,
   DesktopFramework,
@@ -14,11 +13,13 @@ import {
 } from '../../models/desktop-task.model';
 import { ReportService } from '../../services/report/report.service';
 import { TeacherDesktopTaskService } from '../../services/teacher-desktop-task/teacher-desktop-task.service';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { AI_HELPER_PREMIUM_TEXT, aiHelperBlock, aiHelperErrorMessage, AiHelperQuotaItemDto, quotaRemaining } from '../../shared/ai-helper-quota.util';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { ToastService } from '../../shared/toast/toast.service';
+import { injectAiJobPoller } from './shared/ai-job-poller';
 
 /** Az állapot-lekérdezés gyakorisága (ms). */
 export const DESKTOP_POLL_MS = 2000;
@@ -48,12 +49,10 @@ export const DESKTOP_FRAMEWORKS: { value: DesktopFramework; label: string }[] = 
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-asztali-feladat',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent],
+  imports: [DialogShellComponent, FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <div class="fixed inset-0 bg-black/40" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="dt-title" tabindex="-1" data-testid="dt-dialog"
-        class="card relative w-full max-w-4xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
+    <app-dialog-shell labelledBy="dt-title" testId="dt-dialog"
+      panelClass="card w-full max-w-4xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-secondary shrink-0"><app-icon name="code" class="w-5 h-5 block" /></div>
@@ -68,14 +67,14 @@ export const DESKTOP_FRAMEWORKS: { value: DesktopFramework; label: string }[] = 
           @case ('running') {
             <div class="space-y-3" data-testid="dt-running">
               <div role="status" aria-live="polite">
-                <app-local-spinner [label]="progressText() || 'Indítás…'" />
+                <app-local-spinner [label]="poller.progressText() || 'Indítás…'" />
               </div>
               <p class="text-sm text-text-muted text-center">
                 Az MI megírja a feladatokat, a szempontlistákat és a megoldási vázlatokat - ez egy-két percig tarthat. Ha bezárod az ablakot,
                 a készítés a háttérben folytatódik, és a gombbal később újra megnyithatod.
               </p>
-              @if (pollError()) {
-                <p class="text-sm text-danger text-center" role="alert" data-testid="dt-poll-error">{{ pollError() }}</p>
+              @if (poller.error(); as pollError) {
+                <p class="text-sm text-danger text-center" role="alert" data-testid="dt-poll-error">{{ pollError }}</p>
               }
               <div class="flex justify-center">
                 <button type="button" class="btn btn-ghost" (click)="close()">Bezárás</button>
@@ -238,8 +237,7 @@ export const DESKTOP_FRAMEWORKS: { value: DesktopFramework; label: string }[] = 
             </div>
           }
         }
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class AsztaliFeladatComponent implements OnInit {
@@ -269,9 +267,14 @@ export class AsztaliFeladatComponent implements OnInit {
   readonly starting = signal(false);
   readonly startError = signal<string | null>(null);
 
-  readonly jobId = signal<number | null>(null);
-  readonly progressText = signal<string | null>(null);
-  readonly pollError = signal<string | null>(null);
+  /** A háttérben futó job lekérdezése (azonosító, haladás, lekérdezési hiba); bezáráskor leáll, a job a szerveren fut tovább. */
+  readonly poller = injectAiJobPoller<DesktopTaskJobDto>({
+    intervalMs: DESKTOP_POLL_MS,
+    activeStatuses: ACTIVE_STATUSES,
+    fetch: (jobId) => this.service.getJob(this.taskSetId(), jobId),
+    onJob: (job) => this.onJob(job),
+    onGone: () => this.backToInput('Ez a generálás már nem érhető el (24 óra után lejár). Indíts újat.'),
+  });
 
   readonly proposal = signal<DesktopTaskProposal | null>(null);
   readonly active = signal(0);
@@ -295,9 +298,6 @@ export class AsztaliFeladatComponent implements OnInit {
   readonly problems = computed(() => (this.proposal()?.tasks ?? []).map(desktopTaskProblems));
   readonly canSave = computed(() => !this.saving() && !this.discarding() && this.problems().length > 0 && this.problems().every((p) => p.length === 0));
 
-  private polling: Subscription | null = null;
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
-
   ngOnInit(): void {
     this.loadQuota();
     // Visszakapcsolódás a futó / elkészült, még nem mentett jobhoz (oldal-újratöltés, bezárt ablak után is).
@@ -305,7 +305,6 @@ export class AsztaliFeladatComponent implements OnInit {
       .getActiveJob(this.taskSetId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (job) => job && this.step() === 'input' && this.poll(job.jobId), error: () => {} });
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   private loadQuota(): void {
@@ -354,31 +353,11 @@ export class AsztaliFeladatComponent implements OnInit {
   }
 
   private poll(jobId: number): void {
-    this.stopPolling();
-    this.jobId.set(jobId);
-    this.progressText.set(null);
-    this.pollError.set(null);
     this.step.set('running');
-    this.polling = defer(() => this.service.getJob(this.taskSetId(), jobId))
-      .pipe(
-        // Átmeneti hálózati hiba: néhányszor újra; a 404 (lejárt / nem a tiéd) végleges.
-        retry({ count: 3, resetOnSuccess: true, delay: (err) => (err?.status === 404 ? throwError(() => err) : timer(DESKTOP_POLL_MS)) }),
-        repeat({ delay: DESKTOP_POLL_MS }),
-        takeWhile((job) => ACTIVE_STATUSES.has(job.status), true),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (job) => this.jobId() === jobId && this.onJob(job),
-        error: (err) => {
-          if (this.jobId() !== jobId) return;
-          if (err?.status === 404) this.backToInput('Ez a generálás már nem érhető el (24 óra után lejár). Indíts újat.');
-          else this.pollError.set(extractErrorMessage(err, 'Az állapot lekérdezése nem sikerült - zárd be, és nyisd meg újra később.'));
-        },
-      });
+    this.poller.poll(jobId);
   }
 
   private onJob(job: DesktopTaskJobDto): void {
-    this.progressText.set(job.progressText);
     if (job.request && !this.topic()) {
       this.topic.set(job.request.topic);
       this.level.set(job.request.level);
@@ -400,16 +379,10 @@ export class AsztaliFeladatComponent implements OnInit {
   }
 
   private backToInput(message: string | null): void {
-    this.stopPolling();
+    this.poller.clear();
     this.proposal.set(null);
-    this.jobId.set(null);
     this.step.set('input');
     this.startError.set(message);
-  }
-
-  private stopPolling(): void {
-    this.polling?.unsubscribe();
-    this.polling = null;
   }
 
   // ── Szerkesztés (megváltoztathatatlan frissítés: a computed-ek újraszámolnak) ──
@@ -463,7 +436,7 @@ export class AsztaliFeladatComponent implements OnInit {
   // ── Mentés / elvetés ──
 
   save(): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     const proposal = this.proposal();
     if (!this.canSave() || jobId == null || !proposal) return;
     this.saving.set(true);
@@ -484,7 +457,7 @@ export class AsztaliFeladatComponent implements OnInit {
   }
 
   discard(): void {
-    const jobId = this.jobId();
+    const jobId = this.poller.jobId();
     if (jobId == null || this.discarding() || this.saving()) return;
     this.discarding.set(true);
     this.saveError.set(null);
@@ -504,12 +477,12 @@ export class AsztaliFeladatComponent implements OnInit {
 
   private afterDiscard(jobId: number): void {
     this.discarding.set(false);
-    if (this.jobId() === jobId) this.backToInput(null);
+    if (this.poller.jobId() === jobId) this.backToInput(null);
   }
 
   close(): void {
     if (this.saving()) return;
-    this.stopPolling();
+    this.poller.stop();
     this.closed.emit();
   }
 }

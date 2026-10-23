@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { catchError, map, of, Subject, switchMap } from 'rxjs';
 import { GradingQualityCheckDto, GradingQualityDto, TeacherTaskDto } from '../../models/teacher-content.model';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { IconComponent } from '../../shared/icon/icon.component';
@@ -103,30 +105,36 @@ export class AutomatikusJavitasComponent {
   readonly quality = signal<GradingQualityDto | null>(null);
   readonly error = signal<string | null>(null);
 
-  // A legutóbb indított lekérés sorszáma: egy lassú, elavult válasz ne írhassa felül a frissebbet.
-  private generation = 0;
+  /** Újratöltési kérések - switchMap: az új lekérés megszakítja a korábbit, egy lassú, elavult válasz nem írhatja felül a frissebbet. */
+  private readonly reload$ = new Subject<void>();
 
   constructor() {
+    this.reload$
+      .pipe(
+        switchMap(() => {
+          this.error.set(null);
+          return this.rubricService.getGradingQuality(this.taskSetId(), this.task().id).pipe(
+            map((quality) => ({ quality, error: null })),
+            catchError((err: unknown) =>
+              of({ quality: null, error: extractErrorMessage(err, 'Az automatikus javítás állapota nem kérhető le.') }),
+            ),
+          );
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe(({ quality, error }) => {
+        this.quality.set(quality);
+        this.error.set(error);
+      });
     effect(() => {
-      const taskSetId = this.taskSetId();
-      const task = this.task();
-      untracked(() => this.loadQuality(taskSetId, task.id));
+      this.taskSetId();
+      this.task();
+      untracked(() => this.loadQuality());
     });
   }
 
-  loadQuality(taskSetId = this.taskSetId(), taskId = this.task().id): void {
-    const generation = ++this.generation;
-    this.error.set(null);
-    this.rubricService.getGradingQuality(taskSetId, taskId).subscribe({
-      next: (quality) => {
-        if (generation === this.generation) this.quality.set(quality);
-      },
-      error: (err) => {
-        if (generation !== this.generation) return;
-        this.quality.set(null);
-        this.error.set(extractErrorMessage(err, 'Az automatikus javítás állapota nem kérhető le.'));
-      },
-    });
+  loadQuality(): void {
+    this.reload$.next();
   }
 
   headline(quality: GradingQualityDto): string {

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AutomatikusJavitasComponent } from './automatikus-javitas.component';
 import { TeacherRubricService } from '../../services/teacher-rubric/teacher-rubric.service';
 import { GradingQualityDto, TeacherTaskDto } from '../../models/teacher-content.model';
@@ -121,5 +121,33 @@ describe('AutomatikusJavitasComponent', () => {
   it('lekérési hibánál a hibaüzenetet mutatja', () => {
     const fixture = create(new Error('Nem található feladat.'));
     expect(text(fixture)).toContain('Nem található feladat.');
+  });
+
+  it('gyors egymásutánban csak a legutóbbi lekérés eredménye számít; a korábbi megszakad', () => {
+    const fixture = create(makeQuality());
+    const first = new Subject<GradingQualityDto>();
+    const second = new Subject<GradingQualityDto>();
+    rubricServiceMock.getGradingQuality.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    fixture.componentRef.setInput('task', makeTask({ title: 'v2' }));
+    fixture.detectChanges();
+    fixture.componentInstance.loadQuality();
+
+    expect(first.observed).toBe(false);
+    second.next(makeQuality({ level: 'yellow' }));
+    first.next(makeQuality({ level: 'red' }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="auto-grading-level"]').getAttribute('data-level')).toBe('yellow');
+  });
+
+  it('hiba után az újratöltés törli a hibát, és megszűnéskor a függő lekérés leiratkozik', () => {
+    const fixture = create(new Error('Átmeneti hiba.'));
+    expect(fixture.componentInstance.error()).toBe('Átmeneti hiba.');
+    const pending = new Subject<GradingQualityDto>();
+    rubricServiceMock.getGradingQuality.mockReturnValueOnce(pending);
+    fixture.componentInstance.loadQuality();
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(pending.observed).toBe(true);
+    fixture.destroy();
+    expect(pending.observed).toBe(false);
   });
 });
