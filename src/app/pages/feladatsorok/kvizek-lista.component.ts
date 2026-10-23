@@ -12,6 +12,7 @@ import {
   TeacherQuizDto,
 } from '../../models/teacher-quiz.model';
 import { TartalomFulekComponent } from './tartalom-fulek.component';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 /**
  * Tanári kvízek listája.
@@ -28,12 +29,15 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kvizek-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, TartalomFulekComponent, VideoHelpComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <h1 class="page-title">{{ isAdmin ? 'Platform-kvízek' : 'Kvízeim' }}</h1>
+          <div class="flex items-center gap-1">
+            <h1 class="page-title">{{ isAdmin ? 'Platform-kvízek' : 'Kvízeim' }}</h1>
+            @if (!isAdmin) { <app-video-help video="eloJatek" /> }
+          </div>
           <p class="text-sm text-text-muted mt-1">
             {{ isAdmin
               ? 'Hivatalos kvízek minden előfizető diáknak - a diák az érettségi szintje szerint látja őket'

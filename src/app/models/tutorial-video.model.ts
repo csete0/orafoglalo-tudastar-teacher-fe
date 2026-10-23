@@ -18,7 +18,7 @@ export interface TutorialVideoList {
 }
 
 export interface TutorialVideoStreamUrl {
-  /** Aláírt útvonal (`/api/teacher/tutorial-videos/{id}/stream?token=…`) - a <video> Bearer nélkül tölti. */
+  /** Aláírt útvonal (`/api/tutorial-videos/{id}/stream?token=…`) - a <video> Bearer nélkül tölti. */
   url: string;
   expiresInSeconds: number;
 }

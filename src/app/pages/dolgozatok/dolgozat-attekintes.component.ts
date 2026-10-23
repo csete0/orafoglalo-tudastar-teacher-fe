@@ -11,6 +11,7 @@ import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { DolgozatVisszajelzesComponent } from './dolgozat-visszajelzes.component';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 const STATUS_LABELS: Record<ClassTestStudentRow['status'], string> = {
   not_started: 'nem kezdte el',
@@ -31,7 +32,7 @@ const LIVE_TAIL_MS = 15 * 60_000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-dolgozat-attekintes',
   standalone: true,
-  imports: [RouterLink, DatePipe, LocalSpinnerComponent, AttemptReviewPanelComponent, DolgozatVisszajelzesComponent],
+  imports: [RouterLink, DatePipe, LocalSpinnerComponent, AttemptReviewPanelComponent, DolgozatVisszajelzesComponent, VideoHelpComponent],
   template: `
     <div class="page-wide">
       @if (overview(); as o) {
@@ -39,7 +40,10 @@ const LIVE_TAIL_MS = 15 * 60_000;
         <div class="flex items-start justify-between gap-4 flex-wrap mt-2 mb-5">
           <div>
             <p class="text-xs font-bold uppercase tracking-wide text-warning">Dolgozat · {{ o.timeLimitSeconds / 60 }} perc</p>
-            <h1 class="text-2xl font-bold">{{ o.taskSetTitle }}</h1>
+            <div class="flex items-center gap-1">
+              <h1 class="text-2xl font-bold">{{ o.taskSetTitle }}</h1>
+              <app-video-help video="eredmenyek" />
+            </div>
             <p class="text-sm text-text-muted">
               Megírható: {{ o.opensAt | date: 'yyyy.MM.dd. HH:mm' }} – {{ o.dueAt | date: 'HH:mm' }}
               @if (isLive()) { · <span class="text-success font-semibold">élő frissítés</span> }

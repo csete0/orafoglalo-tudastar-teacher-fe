@@ -6,17 +6,18 @@ import { SchoolStore } from '../../services/school/school.store';
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { notBlankValidator } from '../../shared/validators/not-blank.validator';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoportok-lista',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent],
+  imports: [ReactiveFormsModule, FormsModule, RouterLink, IconComponent, VideoHelpComponent],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-10">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <h1 class="page-title">Csoportjaim</h1>
+          <div class="flex items-center gap-1"><h1 class="page-title">Csoportjaim</h1><app-video-help video="csoportok" /></div>
           <p class="text-sm text-text-muted mt-1">Diák-csoportok meghívó kóddal és eredmény-riportokkal</p>
         </div>
         <!-- UI-UX-T6: a létrehozás ritkább művelet, mint a belépés - gombbal nyílik,

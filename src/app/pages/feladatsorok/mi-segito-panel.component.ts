@@ -16,6 +16,7 @@ import {
   AiHelperQuotaItemDto,
 } from '../../shared/ai-helper-quota.util';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 /** A vázlatban kijelölt feladat - a panel ehhez kínálja a feladatszintű segítségeket. */
 export interface MiSegitoSelection {
@@ -63,7 +64,7 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
   standalone: true,
   // A ragadós hasáb maga a host (a rács cellája), különben a tartalom magasságú hostban nem ragadna.
   host: { class: 'block min-w-0 xl:sticky xl:top-4' },
-  imports: [FormsModule, NgTemplateOutlet, RouterLink, IconComponent],
+  imports: [FormsModule, NgTemplateOutlet, RouterLink, IconComponent, VideoHelpComponent],
   template: `
     <aside aria-labelledby="ai-panel-title" class="card !rounded-xl p-4 space-y-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
       data-testid="ai-panel">
@@ -126,7 +127,10 @@ const OFFICE_KINDS: { kind: OfficeFileKind; label: string }[] = [
         </div>
 
         <div>
-          <label class="block text-xs text-text-muted mb-1" for="ai-office-kind">Irodai feladat a megoldott fájlból</label>
+          <div class="flex items-center gap-1 mb-1">
+            <label class="block text-xs text-text-muted" for="ai-office-kind">Irodai feladat a megoldott fájlból</label>
+            <app-video-help video="irodai" />
+          </div>
           <div class="flex gap-2">
             <select id="ai-office-kind" class="input !w-auto !px-2 !py-1 min-w-0 flex-1" [ngModel]="officeKind()"
               (ngModelChange)="officeKind.set($event)" data-testid="office-task-kind">
