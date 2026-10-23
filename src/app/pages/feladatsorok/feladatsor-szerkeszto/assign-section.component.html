@@ -1,0 +1,105 @@
+@if (assignmentsError()) {
+  <p class="text-sm text-danger mb-3">{{ assignmentsError() }}</p>
+}
+
+<ul class="space-y-2 mb-4">
+  @for (assignment of activeAssignments(); track assignment.id) {
+    <li class="flex items-center gap-2 text-sm">
+      <app-icon name="users" class="w-4 h-4 block text-text-muted" />
+      <span class="flex-1">
+        {{ groupLabel(assignment.groupId, assignment.groupName) }}
+        @if (assignment.isTest) {
+          <span class="badge badge-warning">Dolgozat · {{ (assignment.timeLimitSeconds ?? 0) / 60 }} perc</span>
+          <a class="text-primary font-semibold" [routerLink]="['/dolgozatok', assignment.id]">Áttekintés</a>
+        }
+        @if (assignment.opensAt) {
+          <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+        }
+        @if (assignment.dueAt) {
+          <span class="text-text-muted">· határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
+        }
+      </span>
+      <button type="button" class="btn btn-ghost text-danger" (click)="revokeAssignment(assignment.id)">
+        Visszavonás
+      </button>
+    </li>
+  } @empty {
+    @if (!assignmentsLoading()) {
+      <li class="text-sm text-text-muted">Még nincs kiadva egyetlen csoportnak sem.</li>
+    }
+  }
+</ul>
+
+@if (!isPublished()) {
+  <p class="text-sm text-text-muted">Előbb publikáld a feladatsort, utána adhatod ki csoportoknak.</p>
+} @else {
+  <form [formGroup]="assignForm" (ngSubmit)="assign()" class="space-y-3 border-t border-border-default pt-4">
+    <label class="block">
+      <span class="text-sm text-text-muted">Csoport</span>
+      <select formControlName="groupId" class="input mt-1">
+        @for (group of assignableGroups(); track group.id) {
+          <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
+        }
+      </select>
+    </label>
+
+    <label class="flex items-start gap-2">
+      <input formControlName="isTest" type="checkbox" class="mt-1" />
+      <span>
+        <span class="font-semibold">Dolgozatként adom ki</span>
+        <span class="block text-sm text-text-muted">
+          Egyszer írható meg, szünet nélkül, a megadott időkorláttal. A feladatok a kezdésig rejtve maradnak,
+          a rendszer automatikusan pontoz, az eredményt te teszed közzé. Minden feladattípus belekerül (programozás, SQL, szövegszerkesztés, táblázatkezelés, prezentáció, grafika, weblap).
+        </span>
+      </span>
+    </label>
+
+    @if (assignForm.controls.isTest.value) {
+      <label class="block">
+        <span class="text-sm text-text-muted">Időkorlát (perc)</span>
+        <input formControlName="timeLimitMinutes" type="number" min="5" max="240" class="input mt-1" />
+      </label>
+    }
+
+    <label class="block">
+      <span class="text-sm text-text-muted">
+        {{ assignForm.controls.isTest.value ? 'Megírható ettől' : 'Nyitás dátuma (nem kötelező)' }}
+      </span>
+      <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
+    </label>
+
+    <label class="block">
+      <span class="text-sm text-text-muted">
+        {{ assignForm.controls.isTest.value ? 'Megírható eddig (utána a rendszer beadja)' : 'Határidő (nem kötelező)' }}
+      </span>
+      <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
+    </label>
+
+    @if (assignForm.errors?.['opensAtAfterDueAt']) {
+      <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
+    }
+    @if (assignForm.errors?.['testWindowRequired']) {
+      <p class="text-sm text-text-muted">Dolgozatnál add meg, mettől meddig írható meg.</p>
+    }
+    @if (assignForm.errors?.['testDueInPast']) {
+      <p class="text-sm text-danger">A dolgozat határideje már elmúlt - adj meg egy jövőbeli időpontot.</p>
+    }
+    @if (assignForm.errors?.['testTimeLimit']) {
+      <p class="text-sm text-danger">Az időkorlát 5 és 240 perc között lehet.</p>
+    }
+    @if (assignForm.errors?.['testWindowTooShort']) {
+      <p class="text-sm text-danger">A megírható időszak legyen legalább olyan hosszú, mint az időkorlát.</p>
+    }
+
+    <button
+      type="submit"
+      class="btn btn-primary"
+      [disabled]="assignForm.invalid || store.loading() || assignableGroups().length === 0"
+    >
+      Kiadás
+    </button>
+    @if (assignableGroups().length === 0 && groupStore.activeGroups().length > 0) {
+      <p class="text-sm text-text-muted">Minden csoportod megkapta már ezt a feladatsort.</p>
+    }
+  </form>
+}

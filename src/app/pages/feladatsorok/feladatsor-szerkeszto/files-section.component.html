@@ -1,0 +1,93 @@
+<ul class="space-y-2 mb-4">
+  @for (file of files.listedFiles(); track file.id) {
+    <li class="flex justify-between items-center card !rounded-xl p-3 text-sm" [attr.data-testid]="'file-row-' + file.id">
+      <span class="flex items-center gap-2 min-w-0">
+        <app-icon name="document" class="w-4 h-4 block text-text-muted shrink-0" />
+        <span class="truncate">{{ file.originalFileName }} ({{ files.fileKindLabel(file.kind) }}{{ files.fileTaskLabel(file) }})</span>
+      </span>
+      <div class="flex items-center gap-3 shrink-0">
+        @if (files.isPdf(file)) {<a [href]="files.downloadHref(file)" target="_blank" rel="noopener" class="text-primary hover:underline">Megnyitás</a>} @else {<a [href]="files.downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>}
+        <button (click)="files.deleteFile(taskSetId(), file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
+      </div>
+    </li>
+  }
+</ul>
+
+<!-- UI-TT-173: a natív input type=file intrinsic szélessége (Choose File gomb +
+     No file chosen felirat, mérve ~286px) meghaladta a feltétel nélküli
+     grid-cols-2 mobil-szélességen (375px viewporton) számított ~165.5px-es oszlop-
+     szélességét - az input nem zsugorodott, hanem kilógott a kártyájából, és a TELJES
+     oldal vízszintesen túlcsordult (493px). grid-cols-1 sm:grid-cols-2-re cserélve
+     mobilon (<640px) egymás alatt, egy oszlopban jelennek meg a kártyák (bőven elfér a
+     natív vezérlő), sm:-től (≥640px) változatlanul 2 oszlop. A w-full/max-w-full
+     az inputon extra védőháló, hogy a natív vezérlő MINDIG a szülő kártya tényleges
+     szélességét tisztelje, ne a saját intrinsic méretét. -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  @for (kindOption of fileKinds; track kindOption.kind) {
+    <div class="card !rounded-xl p-3">
+      <label class="text-sm block mb-1">{{ kindOption.label }}</label>
+      <!-- Feladatonkénti séma (pl. két SQL-feladatos katalógus-másolat): a feltöltés csak a kiválasztott feladat fájlját cseréli. -->
+      @if (isSchemaKind(kindOption.kind) && files.taskBoundSchema()) {
+        <label class="block text-xs text-text-muted mb-1">
+          Melyik feladathoz?
+          <select class="input !px-2 !py-1 mt-1" [ngModel]="files.schemaTaskId()" (ngModelChange)="files.schemaTaskChoice.set($event)"
+            [ngModelOptions]="{ standalone: true }" [attr.data-testid]="'schema-task-' + kindOption.kind">
+            <option [ngValue]="null" disabled>Válassz feladatot…</option>
+            @for (t of files.sqlTasks(); track t.id) { <option [ngValue]="t.id">{{ t.taskOrder }}. {{ t.title }}</option> }
+          </select>
+        </label>
+      }
+      <input type="file" [accept]="kindOption.accept"
+        [disabled]="files.loading() || (isSchemaKind(kindOption.kind) && files.taskBoundSchema() && files.schemaTaskId() === null)"
+        [attr.data-testid]="'file-input-' + kindOption.kind"
+        (change)="files.uploadFile(taskSetId(), kindOption.kind, $event)"
+        class="w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
+    </div>
+  }
+</div>
+
+<!--
+  Irodai feladatonként: forrásfájlok (amit a diák megkap) és a tanár saját megoldása.
+  A megoldásból készül a szempontlista, és a kapu ezen ellenőrzi a gépi szabályokat.
+-->
+@if (files.officeTasks().length > 0) {
+  <div class="mt-6 space-y-3" data-testid="office-task-files">
+    <h3 class="font-semibold">Irodai feladatok fájljai</h3>
+    <p class="text-xs text-text-muted">
+      Elfogadott fájlok: {{ officeFileAcceptLabel }} · legfeljebb 20 MB / fájl.
+    </p>
+    @for (task of files.officeTasks(); track task.id) {
+      <div class="card !rounded-xl p-3 space-y-3" [attr.data-testid]="'office-files-' + task.id">
+        <p class="font-medium text-sm">{{ task.taskOrder }}. {{ task.title }}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          @for (slot of officeFileSlots; track slot.kind) {
+            <div class="min-w-0" [attr.data-testid]="'office-slot-' + slot.kind">
+              <label class="text-sm font-medium block">{{ slot.label }}</label>
+              <p class="text-xs text-text-muted mb-2">{{ slot.help }}</p>
+              <ul class="space-y-1 mb-2">
+                @for (file of files.taskFiles(task.id, slot.kind); track file.id) {
+                  <li class="flex justify-between items-center gap-2 text-sm bg-bg-element rounded-lg px-2 py-1">
+                    <span class="truncate min-w-0">{{ file.originalFileName }}</span>
+                    <span class="flex items-center gap-3 shrink-0">
+                      @if (files.isPdf(file)) {<a [href]="files.downloadHref(file)" target="_blank" rel="noopener" class="text-primary hover:underline">Megnyitás</a>} @else {<a [href]="files.downloadHref(file)" [attr.download]="file.originalFileName" class="text-primary hover:underline">Letöltés</a>}
+                      <button (click)="files.deleteFile(taskSetId(), file.id, file.originalFileName)" class="text-danger hover:underline">Törlés</button>
+                    </span>
+                  </li>
+                }
+              </ul>
+              <input type="file" multiple [accept]="officeFileAccept" [disabled]="files.loading()"
+                (change)="files.uploadOfficeFiles(taskSetId(), task.id, slot.kind, $event)"
+                class="w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-primary-hover file:cursor-pointer cursor-pointer" />
+            </div>
+          }
+        </div>
+        @if (files.taskFiles(task.id, 'OfficeSolution').length === 0) {
+          <p class="text-sm text-warning flex items-start gap-2" data-testid="office-solution-missing">
+            <app-icon name="warning-triangle" class="w-4 h-4 block mt-0.5 shrink-0" />
+            <span>Töltsd fel a saját megoldásodat – ebből készül a szempontlista.</span>
+          </p>
+        }
+      </div>
+    }
+  </div>
+}

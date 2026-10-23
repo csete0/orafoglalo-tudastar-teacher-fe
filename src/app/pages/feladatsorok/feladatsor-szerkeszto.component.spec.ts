@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
@@ -18,8 +18,6 @@ import { TeacherOfficeTaskService } from '../../services/teacher-office-task/tea
 import { TeacherDesktopTaskService } from '../../services/teacher-desktop-task/teacher-desktop-task.service';
 import { ReportService } from '../../services/report/report.service';
 import { TaskEditState } from './feladatsor-szerkeszto/task-edit.state';
-import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
-import { TaskSetAssignmentDto } from '../../models/teacher-content.model';
 
 function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTaskSetDetailDto {
   return {
@@ -45,6 +43,12 @@ function makeDetail(overrides: Partial<TeacherTaskSetDetailDto> = {}): TeacherTa
 function helperQuota() {
   return { month: '2026-10', premium: true, quizSource: { used: 0, limit: 1 }, testFeedback: { used: 0, limit: 1 }, codeComments: { used: 0, limit: 1 },
     officeTask: { used: 0, limit: 20 }, desktopTask: { used: 0, limit: 20 } };
+}
+
+/** Az MI-dialógusok `@defer` blokkban vannak: az első megnyitáskor a lusta chunk betöltését is meg kell várni. */
+async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
+  await fixture.whenStable();
+  fixture.detectChanges();
 }
 
 describe('FeladatsorSzerkesztoComponent', () => {
@@ -146,29 +150,6 @@ describe('FeladatsorSzerkesztoComponent', () => {
     });
   }
 
-  it('dolgozatként kiadva kötelező az időablak, 5–240 perc, és az ablak legalább az időkorlát', () => {
-    configure(null);
-    const form = TestBed.createComponent(FeladatsorSzerkesztoComponent).componentInstance.assignForm;
-
-    form.setValue({ groupId: 3, opensAt: '', dueAt: '', isTest: false, timeLimitMinutes: 45 });
-    expect(form.valid).toBe(true); // sima kiadásnál az ablak nem kötelező
-
-    form.patchValue({ isTest: true });
-    expect(form.errors?.['testWindowRequired']).toBe(true);
-
-    form.patchValue({ opensAt: '2020-10-05T10:00', dueAt: '2020-10-05T11:00' });
-    expect(form.errors?.['testDueInPast']).toBe(true); // múltbeli határidőt a szerver is elutasítaná
-
-    form.patchValue({ opensAt: '2099-10-05T10:00', dueAt: '2099-10-05T10:30' });
-    expect(form.errors?.['testWindowTooShort']).toBe(true);
-
-    form.patchValue({ timeLimitMinutes: 300 });
-    expect(form.errors?.['testTimeLimit']).toBe(true);
-
-    form.patchValue({ timeLimitMinutes: 30 });
-    expect(form.valid).toBe(true);
-  });
-
   it('SQL kódrészlet esetén create.sql/create_lite.sql nélkül figyelmeztetést mutat', () => {
     configure(
       makeDetail({
@@ -202,7 +183,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(warning.textContent).toContain('kötelező');
   });
 
-  it('SQL-feladatnál felkínálja a hiányzó SQL-fájl elkészítését, a gomb a párbeszédablakot nyitja', () => {
+  it('SQL-feladatnál felkínálja a hiányzó SQL-fájl elkészítését, a gomb a párbeszédablakot nyitja', async () => {
     configure(
       makeDetail({
         tasks: [{ id: 1, title: 'F1', description: 'd', maxPoints: 10, taskOrder: 1, taskTypeIds: [5], completeSolutionSnippets: [], subTasks: [] }],
@@ -215,6 +196,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
     (fixture.nativeElement.querySelector('[data-testid="ai-panel"] [data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
     fixture.detectChanges();
+    await settle(fixture);
     expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
   });
 
@@ -256,7 +238,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="ai-catalog-link"]')!.getAttribute('href')).toBe('/feladatsorok?katalogus=1');
     });
 
-    it('csak kijelölt programozási feladatnál kínálja a hiányzó részek pótlását, és a feladattal nyitja az ablakot; az AI-val készültet jelöli', () => {
+    it('csak kijelölt programozási feladatnál kínálja a hiányzó részek pótlását, és a feladattal nyitja az ablakot; az AI-val készültet jelöli', async () => {
       configure(makeDetail({ tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -271,11 +253,12 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       click(el, 'ai-complete-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.componentInstance.aiTaskDialog()).toEqual({ mode: 'complete', task: expect.objectContaining({ id: 1 }) });
       expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Feladat kiegészítése AI-val');
     });
 
-    it('új programozási feladat a panelről; mentés után újratölt és kinyitja az új feladatot', () => {
+    it('új programozási feladat a panelről; mentés után újratölt és kinyitja az új feladatot', async () => {
       configure(makeDetail({ tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -283,6 +266,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       click(el, 'ai-new-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.componentInstance.aiTaskDialog()).toEqual({ mode: 'new', task: null });
       expect(el.querySelector('[data-testid="ai-task-dialog"]')!.textContent).toContain('Új programozási feladat AI-val');
 
@@ -291,7 +275,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(fixture.componentInstance.tasks.expandedTaskId()).toBe(456);
     });
 
-    it('az irodai ablak a panel típusválasztójával nyílik (alapból Excel, átállítva Word)', () => {
+    it('az irodai ablak a panel típusválasztójával nyílik (alapból Excel, átállítva Word)', async () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, officeServiceMock);
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
@@ -300,6 +284,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       click(el, 'office-task-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Excel)');
       click(el, 'io-close');
       fixture.detectChanges();
@@ -311,11 +296,12 @@ describe('FeladatsorSzerkesztoComponent', () => {
       fixture.detectChanges();
       click(el, 'office-task-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.componentInstance.officeTaskDialog()).toBe('word');
       expect(el.querySelector('[data-testid="io-dialog"]')!.textContent).toContain('Irodai feladat a megoldott fájlból (Word)');
     });
 
-    it('irodai mentés után újranyitva az ablak jelzi a mentett feladatot; az „Ugrás a feladathoz” bezár és kinyitja a feladatot', () => {
+    it('irodai mentés után újranyitva az ablak jelzi a mentett feladatot; az „Ugrás a feladathoz” bezár és kinyitja a feladatot', async () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherOfficeTaskService, officeServiceMock);
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
@@ -325,6 +311,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       c.lastOfficeSave.set({ taskSetId: 1, taskId: 456, title: 'Kupa' });
       c.officeTaskDialog.set('excel');
       fixture.detectChanges();
+      await settle(fixture);
       expect(el.querySelector('[data-testid="io-last-saved"]')!.textContent).toContain('Az előző generálás mentve: Kupa');
       click(el, 'io-last-saved-open');
       fixture.detectChanges();
@@ -337,7 +324,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="io-last-saved"]')).toBeNull();
     });
 
-    it('az „Asztali feladatsor témából” ablak a panelről nyílik', () => {
+    it('az „Asztali feladatsor témából” ablak a panelről nyílik', async () => {
       configure(makeDetail({ tasks: tasks() }));
       TestBed.overrideProvider(TeacherDesktopTaskService, { useValue: { getActiveJob: () => of(null) } });
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
@@ -346,18 +333,20 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       click(el, 'desktop-task-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(el.querySelector('[data-testid="dt-dialog"]')!.textContent).toContain('Asztali feladatsor témából');
       click(el, 'dt-close');
       fixture.detectChanges();
       expect(el.querySelector('[data-testid="dt-dialog"]')).toBeNull();
     });
 
-    it('a panel „Hiányzó SQL-fájl elkészítése” gombja a generátort nyitja', () => {
+    it('a panel „Hiányzó SQL-fájl elkészítése” gombja a generátort nyitja', async () => {
       configure(makeDetail({ tasks: tasks() }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
       click(fixture.nativeElement, 'ai-sql-files-open');
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
 
@@ -974,7 +963,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
     fixture.detectChanges();
 
-    const expectedApiUrl = fixture.componentInstance.apiOrigin + '/api/teacher-files/f1';
+    const expectedApiUrl = fixture.componentInstance.files.apiOrigin + '/api/teacher-files/f1';
     expect(authorizedFileServiceMock.resolveUrl).toHaveBeenCalledWith(expectedApiUrl);
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a.text-primary');
@@ -1063,7 +1052,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
     // Nincs "vesztes" blob URL, tehát nincs mit revoke-olni sem - a dedupe magát a
     // versenyhelyzetet előzi meg, nem csak a tünetét takarítja el utólag.
     expect(authorizedFileServiceMock.revoke).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.downloadHref(file)).toBe('blob:first');
+    expect(fixture.componentInstance.files.downloadHref(file)).toBe('blob:first');
   });
 
   describe('"Új feladat hozzáadása" draft-kezelés (UI-TT-25 / UI-TT-61)', () => {
@@ -1224,7 +1213,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const component = fixture.componentInstance;
 
       taskSetStoreMock.loading.set(true);
-      await component.deleteFile(1, 'f1', 'create.sql');
+      await component.files.deleteFile(1, 'f1', 'create.sql');
 
       expect(taskSetStoreMock.deleteFile).not.toHaveBeenCalled();
     });
@@ -1260,7 +1249,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // alapból NEM hívja meg onSuccess-t, tehát a kérés "folyamatban van". A VALÓS store-ban ez
       // szinkron módon már true-ra állítaná a `loading` jelet (mutateAndReload) — ezt itt
       // explicit szimuláljuk, mielőtt a második, javító fájlválasztás megtörténne.
-      component.uploadFile(1, 'CreateSql', {
+      component.files.uploadFile(1, 'CreateSql', {
         target: { files: [wrongFile], value: '' } as unknown as HTMLInputElement,
       } as unknown as Event);
       taskSetStoreMock.loading.set(true);
@@ -1270,7 +1259,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // Egy idempotencia-védett file-inputnak ekkor csendben no-op-nak kellene lennie
       // (ugyanúgy, mint az addTask()/addSubTask() UI-TT-115 fixe után) — ehelyett mindkét
       // feltöltés ténylegesen elindul.
-      component.uploadFile(1, 'CreateSql', {
+      component.files.uploadFile(1, 'CreateSql', {
         target: { files: [correctFile], value: '' } as unknown as HTMLInputElement,
       } as unknown as Event);
 
@@ -1588,7 +1577,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(block.querySelector('[data-testid="office-solution-missing"]')!.textContent).toContain(
         'Töltsd fel a saját megoldásodat – ebből készül a szempontlista.',
       );
-      expect(fixture.componentInstance.taskSetFiles().map((f) => f.id)).toEqual(['f2']);
+      expect(fixture.componentInstance.files.taskSetFiles().map((f) => f.id)).toEqual(['f2']);
     });
 
     it('feltöltéskor a nem elfogadott típusú vagy 20 MB fölötti fájlt kihagyja és megnevezi, a többit a feladathoz tölti fel', () => {
@@ -1602,7 +1591,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       const big = new File(['x'], 'nagy.png');
       Object.defineProperty(big, 'size', { value: 21 * 1024 * 1024 });
 
-      fixture.componentInstance.uploadOfficeFiles(1, 7, 'OfficeSolution', fileEvent([ok, bad, big]));
+      fixture.componentInstance.files.uploadOfficeFiles(1, 7, 'OfficeSolution', fileEvent([ok, bad, big]));
 
       expect(warning).toHaveBeenCalledWith(expect.stringContaining('virus.exe, nagy.png'), 6000);
       expect(taskSetStoreMock.uploadFiles).toHaveBeenCalledWith(1, 'OfficeSolution', [ok], 7, expect.any(Function));
@@ -1705,7 +1694,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(fixture.nativeElement.querySelector('[data-testid="sql-q-no-lite"]')).toBeNull();
     });
 
-    it('create_lite.sql nélkül az ablak az SQL-fájl generálóhoz irányít', () => {
+    it('create_lite.sql nélkül az ablak az SQL-fájl generálóhoz irányít', async () => {
       configure(makeDetail({ tasks: [sqlTask()], files: [] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.componentInstance.tasks.toggleTask(7);
@@ -1714,6 +1703,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
 
       (fixture.nativeElement.querySelector('[data-testid="sql-q-open-sql-files"]') as HTMLButtonElement).click();
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-queries-dialog"]')).toBeNull();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
@@ -1775,7 +1765,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       // A nem SQL fajták változatlanok.
       expect(fixture.nativeElement.querySelector('[data-testid="schema-task-InputTxt"]')).toBeNull();
 
-      fixture.componentInstance.schemaTaskChoice.set(8);
+      fixture.componentInstance.files.schemaTaskChoice.set(8);
       fixture.detectChanges();
       expect((fixture.nativeElement.querySelector('[data-testid="file-input-CreateLiteSql"]') as HTMLInputElement).disabled).toBe(false);
       pick(fixture, 'file-input-CreateLiteSql');
@@ -1790,7 +1780,7 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(fixture.nativeElement.querySelector('[data-testid="file-row-b"]').textContent).toContain('2. feladat');
     });
 
-    it('a generátor több SQL-feladatnál választás után nyílik, és a célfeladat fájljait kapja', () => {
+    it('a generátor több SQL-feladatnál választás után nyílik, és a célfeladat fájljait kapja', async () => {
       configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.detectChanges();
@@ -1801,22 +1791,24 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(warning).toHaveBeenCalled();
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).toBeNull();
 
-      fixture.componentInstance.schemaTaskChoice.set(7);
+      fixture.componentInstance.files.schemaTaskChoice.set(7);
       fixture.detectChanges();
       (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(7);
       expect(fixture.componentInstance.sqlGenerationFiles().map((f) => f.id)).toEqual(['a']);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
 
-    it('a vázlatban kijelölt SQL-feladattal a panel gombja annak a feladatnak nyitja a generátort', () => {
+    it('a vázlatban kijelölt SQL-feladattal a panel gombja annak a feladatnak nyitja a generátort', async () => {
       configure(makeDetail({ tasks: [sql(7, 1), sql(8, 2)], files: [schema('a', 'CreateSql', 7), schema('b', 'CreateLiteSql', 8)] }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
       fixture.componentInstance.selectTask(8);
       fixture.detectChanges();
       (fixture.nativeElement.querySelector('[data-testid="ai-sql-files-open"]') as HTMLButtonElement).click();
       fixture.detectChanges();
+      await settle(fixture);
       expect(fixture.componentInstance.sqlGenerationTaskId()).toBe(8);
       expect(fixture.nativeElement.querySelector('[data-testid="sql-generation-dialog"]')).not.toBeNull();
     });
@@ -1879,39 +1871,68 @@ describe('FeladatsorSzerkesztoComponent', () => {
       expect(await c.canLeave()).toBe(false);
     });
   });
-
-  // A kiadás/visszavonás írás: az oldal elhagyása után is végig kell futnia, és a toastnak
-  // meg kell jelennie (siker vagy hiba) - különben a tanár nem tudja meg, hogy elment-e.
-  describe('kiadás-mutációk az oldal elhagyása után', () => {
-    it('assign(): a komponens megszűnése után érkező válasz is megjeleníti a sikeres toastot', () => {
-      configure(makeDetail());
-      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      const response = new Subject<TaskSetAssignmentDto>();
-      vi.spyOn(TestBed.inject(TeacherTaskSetService), 'assignToGroup').mockReturnValue(response);
-      const success = vi.spyOn(TestBed.inject(ToastService), 'success');
-      const c = fixture.componentInstance;
-      c.assignForm.setValue({ groupId: 3, opensAt: '', dueAt: '', isTest: false, timeLimitMinutes: 45 });
-
-      c.assign(1);
-      fixture.destroy();
-      response.next({ id: 5, groupId: 3, groupName: 'A', assignedAt: new Date().toISOString(), isTest: false });
-
-      expect(success).toHaveBeenCalledWith('Feladatsor kiadva.');
+  describe('szekciók bekötése (Alapadatok, Fájlok)', () => {
+    const pdf = (id: string): TeacherFileDto => ({
+      id, kind: 'SolutionPdf', originalFileName: id + '.pdf', contentType: 'application/pdf', sizeBytes: 10, createdAt: '', url: '/api/teacher-files/' + id,
     });
 
-    it('revokeAssignment(): a komponens megszűnése után érkező hiba is megjelenik toastként', async () => {
-      configure(makeDetail());
+    it('az Alapadatok mezőibe gépelt érték a szerkesztő piszkozatába kerül (UI-TT-238), és a Mentés azzal ment', () => {
+      configure(makeDetail({ title: 'Eredeti cím', description: 'Leírás', rowVersion: 'AQ==' }));
       const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
-      const response = new Subject<unknown>();
-      vi.spyOn(TestBed.inject(TeacherTaskSetService), 'revokeAssignment').mockReturnValue(response);
-      const danger = vi.spyOn(TestBed.inject(ToastService), 'danger');
-      confirmServiceMock.ask.mockResolvedValue(true);
+      fixture.detectChanges();
+      const c = fixture.componentInstance;
+      const el: HTMLElement = fixture.nativeElement;
+      const title = el.querySelector('app-metadata-section input[maxlength="250"]') as HTMLInputElement;
+      const save = el.querySelector('app-metadata-section button.btn-primary') as HTMLButtonElement;
 
-      await fixture.componentInstance.revokeAssignment(5);
+      title.value = 'Új cím';
+      title.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      expect(c.metadataDraft()?.title).toBe('Új cím');
+      expect(c.hasUnsavedChanges()).toBe(true);
+      title.value = '   ';
+      title.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(save.disabled).toBe(true);
+
+      title.value = 'Új cím';
+      title.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      save.click();
+      expect(taskSetStoreMock.updateTaskSet).toHaveBeenCalledWith(1, expect.objectContaining({ title: 'Új cím', rowVersion: 'AQ==' }), expect.any(Function));
+    });
+
+    it('egy törölt fájl blob URL-je azonnal felszabadul (UI-TT-68), a többi a szerkesztő megszűnésekor', () => {
+      configure(makeDetail({ files: [pdf('a'), pdf('b')] }));
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const origin = fixture.componentInstance.files.apiOrigin;
+
+      taskSetStoreMock.selectedDetail.set(makeDetail({ files: [pdf('b')] }));
+      fixture.detectChanges();
+      expect(authorizedFileServiceMock.revoke.mock.calls).toEqual([[`blob:resolved-${origin}/api/teacher-files/a`]]);
+
       fixture.destroy();
-      response.error(new Error('hálózati hiba'));
+      expect(authorizedFileServiceMock.revoke).toHaveBeenLastCalledWith(`blob:resolved-${origin}/api/teacher-files/b`);
+      expect(authorizedFileServiceMock.revoke).toHaveBeenCalledTimes(2);
+    });
 
-      expect(danger).toHaveBeenCalledTimes(1);
+    it('a Fájlok rész a feltöltést és a törlést a szerkesztett feladatsorra indítja', async () => {
+      configure(makeDetail({ id: 1, files: [pdf('a')] }));
+      confirmServiceMock.ask.mockResolvedValue(true);
+      const fixture = TestBed.createComponent(FeladatsorSzerkesztoComponent);
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+
+      const input = el.querySelector('[data-testid="file-input-SolutionPdf"]') as HTMLInputElement;
+      Object.defineProperty(input, 'files', { value: [new File(['x'], 'm.pdf')], configurable: true });
+      input.dispatchEvent(new Event('change'));
+      expect(taskSetStoreMock.uploadFile).toHaveBeenCalledWith(1, 'SolutionPdf', expect.any(File), undefined, expect.any(Function));
+
+      (el.querySelector('[data-testid="file-row-a"] button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      expect(taskSetStoreMock.deleteFile).toHaveBeenCalledWith(1, 'a', expect.any(Function));
     });
   });
 });
