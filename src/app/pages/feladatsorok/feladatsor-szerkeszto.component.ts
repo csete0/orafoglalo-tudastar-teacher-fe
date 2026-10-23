@@ -31,6 +31,7 @@ import { IrodaiMegoldasbolComponent } from './irodai-megoldasbol.component';
 import { AsztaliFeladatComponent } from './asztali-feladat.component';
 import { allocatedPoints, FeladatVazlatComponent, FeladatVazlatSection } from './feladat-vazlat.component';
 import { MiSegitoPanelComponent, MiSegitoSelection } from './mi-segito-panel.component';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 const LEVELS: { id: number; label: string }[] = [
   { id: 1, label: 'Kezdő' },
@@ -92,7 +93,7 @@ type SnippetDraft = Record<number, Record<number, string>>;
   selector: 'app-feladatsor-szerkeszto',
   standalone: true,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
-  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, MiSegitoPanelComponent],
+  imports: [FormsModule, ReactiveFormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DatePipe, SkillPickerComponent, AutomatikusJavitasComponent, TesztbemenetComponent, SqlGeneralasComponent, SqlLekerdezesekComponent, AiFeladatComponent, IrodaiMegoldasbolComponent, AsztaliFeladatComponent, FeladatVazlatComponent, MiSegitoPanelComponent, VideoHelpComponent],
   template: `
     @if (store.selectedDetail(); as detail) {
       <div class="page-wide max-w-[100rem] mx-auto">
@@ -687,7 +688,10 @@ type SnippetDraft = Record<number, Record<number, string>>;
 
         <!-- ── Kiadás csoportnak ──────────────────────────────── -->
         <section id="kiadas" aria-label="Kiadás csoportnak" class="card p-5 mt-8">
-          <h2 class="font-bold mb-3">Kiadás csoportnak</h2>
+          <div class="flex items-center gap-1 mb-3">
+            <h2 class="font-bold">Kiadás csoportnak</h2>
+            <app-video-help video="kiadas" />
+          </div>
 
           @if (assignmentsError()) {
             <p class="text-sm text-danger mb-3">{{ assignmentsError() }}</p>

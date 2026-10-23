@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { VizsgareszTerkepComponent } from '../../technikum/vizsgaresz-terkep.component';
 import { CsoportCsapatokComponent } from '../../csapatok/csoport-csapatok.component';
+import { VideoHelpComponent } from '../../../shared/video-help/video-help.component';
 
 /**
  * Csoportoldal „Technikum” fül: felül a vizsgarész-térkép, alul a vizsgaremek-csapatok - mindkettő változatlanul
@@ -9,18 +10,24 @@ import { CsoportCsapatokComponent } from '../../csapatok/csoport-csapatok.compon
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-technikum',
-  imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent],
+  imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent, VideoHelpComponent],
   template: `
     <div class="space-y-10">
       @if (showTerkep()) {
         <section aria-labelledby="vizsgaresz-terkep">
-          <h2 id="vizsgaresz-terkep" class="text-lg font-bold mb-3 scroll-mt-20">Vizsgarész-térkép</h2>
+          <div class="flex items-center gap-1 mb-3">
+            <h2 id="vizsgaresz-terkep" class="text-lg font-bold scroll-mt-20">Vizsgarész-térkép</h2>
+            <app-video-help video="technikum" />
+          </div>
           <app-vizsgaresz-terkep [groupId]="groupId()" (unavailable)="terkepUnavailable.emit()" />
         </section>
       }
       @if (showCsapatok()) {
         <section aria-labelledby="csapatok">
-          <h2 id="csapatok" class="text-lg font-bold mb-3 scroll-mt-20">Csapatok</h2>
+          <div class="flex items-center gap-1 mb-3">
+            <h2 id="csapatok" class="text-lg font-bold scroll-mt-20">Csapatok</h2>
+            <app-video-help video="csapatok" />
+          </div>
           <app-csoport-csapatok [groupId]="groupId()" (unavailable)="csapatokUnavailable.emit()" />
         </section>
       }

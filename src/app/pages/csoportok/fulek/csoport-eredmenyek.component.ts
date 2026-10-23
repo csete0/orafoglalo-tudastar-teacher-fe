@@ -15,6 +15,7 @@ import {
   DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd,
 } from '../../../shared/date-range/report-date-range';
 import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-javaslatok.component';
+import { VideoHelpComponent } from '../../../shared/video-help/video-help.component';
 
 /**
  * Csoportoldal „Eredmények” fül: Összesítő (dátumszűrő + rendezhető tábla), Ranglista és Gyenge témák szakasz -
@@ -23,11 +24,14 @@ import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-ja
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-eredmenyek',
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent],
+  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent, VideoHelpComponent],
   template: `
     <div class="max-w-4xl space-y-10">
       <section aria-labelledby="osszesito">
-        <h2 id="osszesito" class="text-lg font-bold mb-3">Összesítő</h2>
+        <div class="flex items-center gap-1 mb-3">
+          <h2 id="osszesito" class="text-lg font-bold">Összesítő</h2>
+          <app-video-help video="eredmenyek" />
+        </div>
         <!-- UI-TT-178/180: a fül minden váltáskor újra létrejön - a szűrő kulcsa és tartománya a szülőben (model) él,
              különben a legördülő mindig „Teljes időszak”-ra ugrana vissza. -->
         <app-date-range-filter class="block mb-4" [initialRangeKey]="rangeKey()"

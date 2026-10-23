@@ -19,6 +19,7 @@ import {
   TeacherProjectDto,
 } from '../../models/teacher-project.model';
 import { TartalomFulekComponent } from './tartalom-fulek.component';
+import { VideoHelpComponent } from '../../shared/video-help/video-help.component';
 
 /** Az űrlap állapota egy projekt kiadásához. */
 interface AssignDraft {
@@ -43,10 +44,10 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-projektek-lista',
   standalone: true,
-  imports: [DatePipe, RouterLink, LocalSpinnerComponent, TartalomFulekComponent],
+  imports: [DatePipe, RouterLink, LocalSpinnerComponent, TartalomFulekComponent, VideoHelpComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
-      <h1 class="page-title">Projektek</h1>
+      <div class="flex items-center gap-1"><h1 class="page-title">Projektek</h1><app-video-help video="technikum" /></div>
       <p class="text-sm text-text-muted mt-1">
         A Projektműhely kész, lépésenként ellenőrzött projektjei (adatbázis, backend, weboldal) – kiadhatod a csoportjaidnak.
       </p>
