@@ -206,6 +206,31 @@ describe('GyengeTemakJavaslatokComponent', () => {
     expect(q(fixture, 'weak-assigned-taskSet-501')).toBeNull();
   });
 
+  it('hivatalos sor ablaka: Escape és háttérkattintás bezárja, futó kiadás közben nyitva marad', () => {
+    const { fixture, c } = create();
+    const escape = () => q(fixture, 'weak-catalog-dialog')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    c.act(CATALOG);
+    fixture.detectChanges();
+    escape();
+    fixture.detectChanges();
+    expect(q(fixture, 'weak-catalog-dialog')).toBeNull();
+
+    c.act(CATALOG);
+    fixture.detectChanges();
+    q(fixture, 'weak-catalog-backdrop')!.click();
+    fixture.detectChanges();
+    expect(q(fixture, 'weak-catalog-dialog')).toBeNull();
+
+    taskSets.catalogAssign.mockReturnValue(new Subject<unknown>());
+    c.act(CATALOG);
+    c.confirmCatalog();
+    fixture.detectChanges();
+    escape();
+    q(fixture, 'weak-catalog-backdrop')!.click();
+    fixture.detectChanges();
+    expect(q(fixture, 'weak-catalog-dialog')).not.toBeNull();
+  });
+
   it('figyelmeztetéssel visszatérő kiadás figyelmeztető toastot ad', () => {
     const { c } = create();
     taskSets.catalogAssign.mockReturnValue(of({ taskSetId: 777, copied: false, published: false, assignment: {}, warnings: ['Egy fájl nem másolódott.'] }));
