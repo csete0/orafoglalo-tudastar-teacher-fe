@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { StudentTaskSetResultRowDto, TeacherTaskSetResultsDto } from '../../models/report.model';
+import { SchoolClassOverviewDto, StudentTaskSetResultRowDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 import { TeacherQuizResultsDto, TeacherQuizStudentResultDto } from '../../models/teacher-quiz.model';
 import { saveBlob } from '../../shared/save-blob.util';
 
@@ -62,6 +62,41 @@ export class ResultsCsvExportService {
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     saveBlob(blob, this.buildFileName(`${results.title}-${viewSuffix}`));
+  }
+
+  /** Igazgatói osztály-összesítő exportja - ugyanaz az elválasztó/BOM/fájlnév-konvenció, mint a többi exporté. */
+  exportSchoolClassOverview(overview: SchoolClassOverviewDto, schoolName: string): void {
+    saveBlob(
+      new Blob([this.buildSchoolClassOverviewCsv(overview)], { type: 'text/csv;charset=utf-8' }),
+      this.buildFileName(`${schoolName}-osztalyok-${overview.periodDays}nap`),
+    );
+  }
+
+  buildSchoolClassOverviewCsv(overview: SchoolClassOverviewDto): string {
+    const days = overview.periodDays;
+    const header = [
+      'Csoport', 'Tanár', 'Tagok', `Aktív (${days} nap)`, 'Aktív %', `Átlag % (${days} nap)`,
+      'Kiadások', 'Kiadás-teljesítés %', 'Felkészültség %', 'Felkészültség (fő)', 'Leggyengébb téma', 'Téma %',
+    ];
+    const pct = (part: number, whole: number) => (whole > 0 ? String(Math.floor((part / whole) * 100)) : NO_VALUE);
+    const num = (v: number | null) => (v == null ? NO_VALUE : String(v).replace('.', ','));
+    const rows = overview.groups.map((g) => [
+      g.name,
+      g.teacherDisplayName,
+      String(g.memberCount),
+      String(g.activeMemberCount),
+      pct(g.activeMemberCount, g.memberCount),
+      num(g.averageScorePercent),
+      String(g.assignmentsGiven),
+      pct(g.assignmentCompletions, g.assignmentSlots),
+      num(g.readinessPercent),
+      String(g.readinessStudentCount),
+      g.weakestTopicName ?? NO_VALUE,
+      num(g.weakestTopicSuccessRate),
+    ]);
+    return UTF8_BOM + [header, ...rows]
+      .map((cells) => cells.map((c) => this.escapeCell(c)).join(SEPARATOR))
+      .join('\r\n');
   }
 
   private buildQuizRow(s: TeacherQuizStudentResultDto): string[] {

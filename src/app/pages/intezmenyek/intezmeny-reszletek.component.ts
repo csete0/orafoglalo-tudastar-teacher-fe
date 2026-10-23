@@ -13,6 +13,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
+import { IntezmenyOsztalyokComponent } from './intezmeny-osztalyok.component';
 import { ariaSort, SortHeaderComponent, SortState, sortRows } from '../../shared/sort-header/sort-header.component';
 import { DEFAULT_RANGE_KEY, ReportDateRange, ReportRangeKey, toDateInputValue, toDateInputValueExclusiveEnd } from '../../shared/date-range/report-date-range';
 
@@ -28,10 +29,10 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-intezmeny-reszletek',
   standalone: true,
-  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent],
+  imports: [DatePipe, FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, CopyButtonComponent, SortHeaderComponent, IntezmenyOsztalyokComponent],
   template: `
     @if (school.selectedSchool(); as s) {
-      <div class="max-w-3xl mx-auto px-4 py-10">
+      <div class="mx-auto px-4 py-10" [class.max-w-3xl]="tab() !== 'csoportok'" [class.max-w-6xl]="tab() === 'csoportok'">
         <div class="flex justify-between items-start mb-1 gap-3">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary">
@@ -241,27 +242,7 @@ type Tab = 'tanarok' | 'ranglista' | 'attekintes' | 'csoportok' | 'licenc';
 
           @case ('csoportok') {
             @if (school.isSelectedAdmin()) {
-              <ul class="space-y-2">
-                @for (group of school.schoolGroups(); track group.groupId) {
-                  <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
-                    <span class="flex items-center gap-2 min-w-0">
-                      <app-icon name="users" class="w-4 h-4 block text-text-muted shrink-0" />
-                      <span class="truncate">{{ group.name }}</span>
-                      @if (group.isArchived) {
-                        <span class="badge badge-neutral shrink-0">Archivált</span>
-                      }
-                    </span>
-                    <span class="text-text-muted shrink-0">{{ group.teacherDisplayName }} — {{ group.memberCount }} tag</span>
-                  </li>
-                } @empty {
-                  <li class="flex flex-col items-center py-10 gap-3">
-                    <div class="icon-tile icon-tile-neutral">
-                      <app-icon name="users" class="w-6 h-6 block" />
-                    </div>
-                    <p class="font-semibold">Az intézményhez még nincs csoport kötve.</p>
-                  </li>
-                }
-              </ul>
+              <app-intezmeny-osztalyok [schoolId]="s.id" [schoolName]="s.name" [allGroups]="school.schoolGroups()" />
             } @else {
               <p class="text-text-muted text-center py-10" data-testid="admin-tab-lost-access">
                 Már nincs igazgatói jogosultságod ehhez az intézményhez.

@@ -228,4 +228,20 @@ describe('ResultsCsvExportService', () => {
     expect(lines[1].split(';')).toEqual(['Kiss Anna', '15 / 20', '75', '10/10', '5/10*', '–', '9/10']);
     expect(lines[2].split(';')).toEqual(['Nagy Béla', 'csak gyakorolt', '–', '–', '–', '4/10', '–']);
   });
+
+  it('osztály-összesítő: fejléc az időszakkal, pontosvessző, tizedesvessző, „–” a hiányzó értékre', () => {
+    const csv = service.buildSchoolClassOverviewCsv({
+      periodDays: 14,
+      periodFrom: '2026-10-09T00:00:00Z',
+      kpi: { studentCount: 3, activeStudentCount: 1, averageScorePercent: null, seatsUsed: 0, seatsTotal: 0, assignmentsThisMonth: 0 },
+      groups: [{
+        groupId: 1, name: '=11.a', teacherDisplayName: 'Kiss Anna', canOpen: true, memberCount: 3, activeMemberCount: 1,
+        averageScorePercent: null, assignmentsGiven: 2, assignmentCompletions: 3, assignmentSlots: 6,
+        readinessPercent: 58.5, readinessStudentCount: 1, weakestTopicName: null, weakestTopicSuccessRate: null,
+      }],
+    });
+    const [header, line] = csv.replace('\uFEFF', '').split('\r\n');
+    expect(header).toContain('Aktív (14 nap)');
+    expect(line).toBe("'=11.a;Kiss Anna;3;1;33;–;2;50;58,5;1;–;–");
+  });
 });
