@@ -264,14 +264,15 @@ export interface TeacherRecentQuizResultDto {
 
 export interface TeacherUpcomingDeadlineDto {
   assignmentId: number;
-  /** 'project': Fejlesztőműhely/Technikum kiadás (az assignmentId a projekt-kiadásé). */
-  kind: 'quiz' | 'taskset' | 'project';
+  /** 'project': Fejlesztőműhely/Technikum kiadás, 'oral': szóbeli (az assignmentId az adott fajta kiadásáé). */
+  kind: 'quiz' | 'taskset' | 'project' | 'oral';
   quizId?: number | null;
   quizTitle?: string | null;
   taskSetId?: number | null;
   taskSetTitle?: string | null;
   projectTitle?: string | null;
-  /** Projekt-kiadásnál: időre írt dolgozat (próbavizsga). */
+  oralTitle?: string | null;
+  /** Projekt- és szóbeli kiadásnál: dolgozat. */
   isTest?: boolean;
   groupId: number;
   groupName: string;
