@@ -12,7 +12,8 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
-import { computeTaskWeakness, weakestTasks, WEAK_THRESHOLD_PERCENT } from '../../shared/task-analysis/task-weakness';
+import { computeTaskWeakness, weakestTasks } from '../../shared/task-analysis/task-weakness';
+import { GyengeFeladatokComponent } from './feladatsor-eredmenyek/gyenge-feladatok.component';
 import { GroupStore } from '../../services/group/group.store';
 import { DateRangeFilterComponent } from '../../shared/date-range-filter/date-range-filter.component';
 import {
@@ -28,7 +29,9 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-feladatsor-eredmenyek',
   standalone: true,
-  imports: [RouterLink, FormsModule, LocalSpinnerComponent, DateRangeFilterComponent, AttemptReviewPanelComponent],
+  imports: [
+    RouterLink, FormsModule, LocalSpinnerComponent, DateRangeFilterComponent, AttemptReviewPanelComponent, GyengeFeladatokComponent,
+  ],
   styles: [`
     @media print {
       tr { break-inside: avoid; }
@@ -97,33 +100,10 @@ import {
           }
         </div>
 
-        <!-- ── Leggyengébben teljesített feladatok ──
-             A mátrix megmutatja az adatot, de nem MONDJA MEG, mit kell újratanítani.
-             Ha nincs egyetlen értékelt beadás sem, a blokk NEM jelenik meg: egy
-             beadás nélküli feladatsornál "0%"-ot mutatni hazugság lenne, nem üres
-             állapot. -->
-        @if (weakest(); as weak) {
-          @if (weak.length > 0) {
-            <div class="card mb-4 p-4">
-              <h2 class="text-xs uppercase tracking-wide text-text-muted mb-2">
-                Leggyengébben teljesített feladatok
-              </h2>
-              <ul class="flex flex-col gap-1.5">
-                @for (task of weak; track task.taskId) {
-                  <li class="flex items-baseline gap-2 flex-wrap text-sm">
-                    <span class="font-medium">{{ task.taskOrder }}. {{ task.title }}</span>
-                    <span class="text-text-muted">átlag {{ task.averagePercent }}%</span>
-                    @if (task.belowThresholdCount > 0) {
-                      <span class="badge badge-warning !text-[10px] !px-1.5 !py-0.5">
-                        {{ task.belowThresholdCount }} / {{ task.evaluatedCount }} diák
-                        {{ weakThresholdPercent }}% alatt
-                      </span>
-                    }
-                  </li>
-                }
-              </ul>
-            </div>
-          }
+        <!-- Leggyengébben teljesített feladatok — értékelt beadás nélkül NEM jelenik meg
+             (egy beadás nélküli feladatsornál a „0%” hazugság lenne, nem üres állapot). -->
+        @if (weakest().length > 0) {
+          <app-gyenge-feladatok [tasks]="weakest()" />
         }
 
         <div class="card overflow-hidden">
@@ -254,23 +234,6 @@ export class FeladatsorEredmenyekComponent implements OnInit {
   readonly filterCustomTo = computed(() => toDateInputValueExclusiveEnd(this.filterRange().to));
 
   readonly activeGroups = computed(() => this.groupStore.groups().filter((g) => !g.isArchived));
-
-  /**
-   * FIGYELEM — getter, nem mező. Mezőként a TESZTKÖRNYEZETBEN némán `undefined`,
-   * és a sablonban üresen renderel (`... diák % alatt`).
-   *
-   * Mérve (2026-07-28): a `@angular/build:unit-test` + Vitest chunk-darabolásának
-   * mellékhatása, nem nyelvi szemantika — a mező-alak izoláltan és 8 spec fájllal
-   * még helyes, csak a teljes suite-ban (45 spec) áll elő az `undefined`.
-   * A `maxFeedbackLength` azért nem érintett, mert AZONOS fájlbeli const, így
-   * sosem kerül külön chunk-ba.
-   *
-   * A PRODUKCIÓS BUILD NEM ÉRINTETT — részletes indoklás a
-   * `date-range-filter.component.ts` azonos getterénél.
-   */
-  get weakThresholdPercent(): number {
-    return WEAK_THRESHOLD_PERCENT;
-  }
 
   /**
    * A leggyengébben teljesített feladatok — a már letöltött mátrixból számolva,
