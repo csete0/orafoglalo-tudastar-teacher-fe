@@ -8,6 +8,8 @@ import { TeacherOfficeTaskService } from '../../services/teacher-office-task/tea
 import { ToastService } from '../../shared/toast/toast.service';
 import { AiHelperQuotaDto } from '../../shared/ai-helper-quota.util';
 import { ExcelUndoEditorComponent } from './irodai-megoldasbol/excel-undo-editor.component';
+import { PptUndoEditorComponent } from './irodai-megoldasbol/ppt-undo-editor.component';
+import { WebUndoEditorComponent } from './irodai-megoldasbol/web-undo-editor.component';
 import { WordUndoEditorComponent } from './irodai-megoldasbol/word-undo-editor.component';
 import {
   OfficeTaskJobDto,
@@ -180,7 +182,7 @@ describe('IrodaiMegoldasbolComponent', () => {
     fixture.detectChanges();
   }
 
-  /** A művelet szerkesztője (a Visszacsinálás fülön kinyitva, ha még nincs) - az Excel- és a Word-szerkesztő külön komponens. */
+  /** A művelet szerkesztője (a Visszacsinálás fülön kinyitva, ha még nincs) - mind a négy (Excel, Word, weblap, PowerPoint) külön komponens. */
   function editor<T>(fixture: ReturnType<typeof create>, type: Type<T>, si: number, oi: number): T {
     const c = fixture.componentInstance;
     c.tab.set('visszacsinalas');
@@ -535,6 +537,28 @@ describe('IrodaiMegoldasbolComponent', () => {
       const sent = service.validate.mock.calls[0][2] as OfficeTaskProposal;
       expect(sent.subtasks[0].rubric[0]).toMatchObject({ key: 'r1', text: 'B5: SZUM függvény.' });
       expect(sent.subtasks[1].rubric[1]).toMatchObject({ key: null, text: 'Tengelyfelirat.', points: 2 });
+    });
+
+    it('Szempontok: a szempont-szerkesztő eseményei a javaslatot módosítják (szöveg, pont, törlés, új tétel)', () => {
+      const fixture = preview();
+      const c = fixture.componentInstance;
+      tab(fixture, 'szempontok');
+      const text = q(fixture, 'io-item-text-0-0') as HTMLTextAreaElement;
+      text.value = 'B5: SZUM függvény.';
+      text.dispatchEvent(new Event('input'));
+      typeInto(fixture, 'io-item-points-0-1', '2');
+      q(fixture, 'io-item-remove-1-1')!.click();
+      fixture.detectChanges();
+      q(fixture, 'io-item-add-1')!.click();
+      fixture.detectChanges();
+      const p = c.proposal()!;
+      expect(p.subtasks[0].rubric[0]).toMatchObject({ key: 'r1', text: 'B5: SZUM függvény.' });
+      expect(p.subtasks[0].rubric[1].points).toBe(2);
+      expect(p.subtasks[1].rubric).toHaveLength(2);
+      expect(p.subtasks[1].rubric[1]).toMatchObject({ key: null, text: '', points: 1 });
+      expect(c.dirty()).toBe(true);
+      expect(q(fixture, 'io-item-gate-0-0')).toBeNull();
+      expect(q(fixture, 'io-item-1-1')!.textContent).toContain('új - AI-szempont');
     });
 
     it('Előnézet: a két fájl oldalképei egymás mellett; konvertáló nélkül megjegyzés', () => {
@@ -1122,17 +1146,17 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(Array.from(select.options).map((o) => o.textContent!.trim())).toEqual([
         'válassz…', '[1] <html> lang="hu"', '[4] <title> „Kockafilm Filmklub”', '[12] <a> href="oldal.html"', '[13] <img.plakat> src="plakat1.png" alt="A Pál utcai fiúk"',
       ]);
-      c.setElement(1, 0, 12);
+      editor(fixture, WebUndoEditorComponent, 1, 0).setElement(12);
       expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 12, tag: 'img' });
-      expect(c.webFiles(c.proposal()!.subtasks[1].undo[0])).toEqual(['index.html', 'oldal.html']);
-      c.setWebFile(1, 0, 'oldal.html');
+      expect(editor(fixture, WebUndoEditorComponent, 1, 0).fileOptions(c.proposal()!.subtasks[1].undo[0])).toEqual(['index.html', 'oldal.html']);
+      editor(fixture, WebUndoEditorComponent, 1, 0).setFile('oldal.html');
       expect(c.proposal()!.subtasks[1].undo[0]).toMatchObject({ file: 'oldal.html', element: { index: null, tag: null } });
       expect(c.clientErrors().join(' ')).toContain('hiányzik az elem sorszáma');
 
-      c.changeWebKind(1, 0, 'removeCssDeclaration');
+      editor(fixture, WebUndoEditorComponent, 1, 0).changeKind('removeCssDeclaration');
       const changed = c.proposal()!.subtasks[1].undo[0];
       expect(changed).toMatchObject({ op: 'removeCssDeclaration', element: null, selector: '', property: '' });
-      expect(c.webFiles(changed)).toEqual(['index.html', 'oldal.html', 'stilus.css']);
+      expect(editor(fixture, WebUndoEditorComponent, 1, 0).fileOptions(changed)).toEqual(['index.html', 'oldal.html', 'stilus.css']);
       c.setUndo(1, 0, { selector: 'h2', property: 'color' });
       expect(c.clientErrors()).toEqual([]);
 
@@ -1171,6 +1195,22 @@ describe('IrodaiMegoldasbolComponent', () => {
       fixture.destroy();
     });
 
+    it('a telefonos előnézet-szélesség fülváltás után is megmarad, és nem tölti le újra a csomagokat', async () => {
+      const fixture = previewWeb();
+      tab(fixture, 'elonezet');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(q(fixture, 'io-web-solution')).not.toBeNull();
+      });
+      const downloads = service.downloadFile.mock.calls.length;
+      q(fixture, 'io-web-phone')!.click();
+      tab(fixture, 'feladat');
+      tab(fixture, 'elonezet');
+      expect(q(fixture, 'io-web-phone')!.getAttribute('aria-pressed')).toBe('true');
+      expect(service.downloadFile.mock.calls.length).toBe(downloads);
+      fixture.destroy();
+    });
+
     it('elem-lista nélkül kézi sorszám (1-től) és címke', () => {
       const fixture = previewWeb({}, { files: ['index.html'] });
       const c = fixture.componentInstance;
@@ -1178,8 +1218,8 @@ describe('IrodaiMegoldasbolComponent', () => {
       q(fixture, 'io-undo-edit-1-0')!.click();
       fixture.detectChanges();
       expect(q(fixture, 'io-element-1-0')).toBeNull();
-      c.setElementManual(1, 0, { index: 20 });
-      c.setElementManual(1, 0, { tag: 'li' });
+      editor(fixture, WebUndoEditorComponent, 1, 0).setElementManual({ index: 20 });
+      editor(fixture, WebUndoEditorComponent, 1, 0).setElementManual({ tag: 'li' });
       expect(c.proposal()!.subtasks[1].undo[0].element).toEqual({ index: 19, tag: 'li' });
     });
   });
@@ -1282,22 +1322,22 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(Array.from(slides.options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '1. dia', '2. dia', '3. dia']);
       const shapes = q(fixture, 'io-shape-0-1') as HTMLSelectElement;
       expect(Array.from(shapes.options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '#2 „Cím 1” (title) - Tavaszi koncert']);
-      c.togglePart(0, 1, 'color');
+      editor(fixture, PptUndoEditorComponent, 0, 1).togglePart('color');
       expect(c.proposal()!.subtasks[0].undo[1].parts).toEqual(['size', 'color']);
-      c.setSlide(0, 1, 2);
+      editor(fixture, PptUndoEditorComponent, 0, 1).setSlide(2);
       expect(c.proposal()!.subtasks[0].undo[1]).toMatchObject({ slide: 2, shape: null });
       expect(c.clientErrors().join(' ')).toContain('hiányzó alakzat');
-      c.setShape(0, 1, 3);
+      editor(fixture, PptUndoEditorComponent, 0, 1).setShape(3);
       expect(c.proposal()!.subtasks[0].undo[1].shape).toEqual({ id: 3, name: 'Szövegdoboz 2' });
       expect(c.clientErrors()).toEqual([]);
 
-      c.changePptKind(0, 1, 'removeAnimation');
+      editor(fixture, PptUndoEditorComponent, 0, 1).changeKind('removeAnimation');
       fixture.detectChanges();
       expect(c.proposal()!.subtasks[0].undo[1]).toMatchObject({ op: 'removeAnimation', slide: 2, shape: { id: 3 }, parts: null });
       expect((q(fixture, 'io-shape-0-1') as HTMLSelectElement).options[0].textContent!.trim()).toBe('a dia összes animációja');
-      c.setShape(0, 1, null);
+      editor(fixture, PptUndoEditorComponent, 0, 1).setShape(null);
       expect(c.clientErrors()).toEqual([]);
-      c.changePptKind(0, 1, 'removeTransition');
+      editor(fixture, PptUndoEditorComponent, 0, 1).changeKind('removeTransition');
       fixture.detectChanges();
       expect((q(fixture, 'io-slide-0-1') as HTMLSelectElement).options[0].textContent!.trim()).toBe('minden dia');
       expect(q(fixture, 'io-shape-0-1')).toBeNull();
@@ -1325,8 +1365,8 @@ describe('IrodaiMegoldasbolComponent', () => {
       expect(q(fixture, 'io-shape-0-1')).toBeNull();
       // A lista nélkül is választható a művelet saját diája.
       expect(Array.from((q(fixture, 'io-slide-0-1') as HTMLSelectElement).options).map((o) => o.textContent!.trim())).toEqual(['válassz…', '1. dia']);
-      c.setShapeManual(0, 1, { id: '7' });
-      c.setShapeManual(0, 1, { name: 'Téglalap 6' });
+      editor(fixture, PptUndoEditorComponent, 0, 1).setShapeManual({ id: '7' });
+      editor(fixture, PptUndoEditorComponent, 0, 1).setShapeManual({ name: 'Téglalap 6' });
       expect(c.proposal()!.subtasks[0].undo[1].shape).toEqual({ id: 7, name: 'Téglalap 6' });
       expect(q(fixture, 'io-shape-id-0-1')).not.toBeNull();
     });

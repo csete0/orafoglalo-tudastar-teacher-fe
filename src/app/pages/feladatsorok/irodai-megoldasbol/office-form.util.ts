@@ -22,3 +22,6 @@ export function toggledParts(current: readonly string[] | null | undefined, part
   const parts = order.map((p) => p.key).filter((k) => selected.has(k));
   return parts.length === 0 ? null : parts;
 }
+
+/** A részfeladat és a szempont pontjának felső korlátja (a BE-vel azonos). */
+export const MAX_POINTS = 100;
