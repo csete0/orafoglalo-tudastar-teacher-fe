@@ -71,7 +71,8 @@ export async function confirmPublishDespiteGradingGaps(page: Page): Promise<void
   const dialog = page.getByTestId('confirm-dialog');
   await expect(dialog).toContainText('Hiányos automatikus javítás', { timeout: 15000 });
   await dialog.getByRole('button', { name: 'Publikálás mégis' }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15000 });
+  // Csak EZ a dialógus tűnik el: intézményi tanárnál rögtön a tartalom-megosztás megerősítése nyílik (ugyanazzal a testid-val).
+  await expect(dialog.filter({ hasText: 'Hiányos automatikus javítás' })).toHaveCount(0, { timeout: 15000 });
 }
 
 // ── Diák oldal ──────────────────────────────────────────────────────────

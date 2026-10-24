@@ -34,6 +34,12 @@ export const DB_PASSWORD = 'E2ePgPassw0rd!';
 export const DB_CONNECTION_STRING =
   `Host=127.0.0.1;Port=${DB_HOST_PORT};Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=60;`;
 
+// Közös Redis a backend és az Admin API között, mint stagingen/élesen. Nélküle mindkét processz saját in-memory
+// check_auth cache-t kap, és az Admin API-ban végzett változás (pl. licenc-visszavonás) nem üríti a backend cache-ét.
+export const REDIS_CONTAINER_NAME = 'tudastar-e2e-redis';
+export const REDIS_HOST_PORT = 16379;
+export const REDIS_CONNECTION_STRING = `127.0.0.1:${REDIS_HOST_PORT}`;
+
 export const E2E_ADMIN_EMAIL = 'e2e-admin@example.com';
 export const E2E_ADMIN_PASSWORD = 'E2eAdmin123!';
 

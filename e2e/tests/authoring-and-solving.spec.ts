@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
-import { createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { confirmPublishDespiteGradingGaps, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 // A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
 // a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
@@ -103,8 +103,11 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   });
   await expect(teacherPage.getByTestId('sql-files-warning')).toHaveCount(0, { timeout: 15000 });
 
-  // ── Publikálás (magántanár — nincs intézmény, nincs megerősítő dialógus) ──
+  // ── Publikálás (magántanár — nincs intézményi megosztás-megerősítés; a hiányos gépi javítást viszont jelzi:
+  //    nincs szempontlista, és az E2E-ben nincs futtató a referencia-lekérdezések ellenőrzéséhez) ──
   await teacherPage.getByRole('button', { name: 'Publikálás' }).click();
+  await confirmPublishDespiteGradingGaps(teacherPage);
+  await expect(teacherPage.getByTestId('confirm-dialog')).toHaveCount(0);
   await expect(teacherPage.getByRole('button', { name: 'Publikálva' })).toBeVisible({ timeout: 15000 });
 
   const taskSetUrl = teacherPage.url();

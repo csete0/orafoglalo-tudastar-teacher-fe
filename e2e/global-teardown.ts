@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import { ADMIN_API_PID_FILE, BACKEND_PID_FILE, DB_CONTAINER_NAME } from './constants';
+import { ADMIN_API_PID_FILE, BACKEND_PID_FILE, DB_CONTAINER_NAME, REDIS_CONTAINER_NAME } from './constants';
 
 export default async function globalTeardown(): Promise<void> {
   console.log('[global-teardown] Backend + Admin API leállítása (global-setup.ts manuálisan indította)...');
@@ -16,6 +16,11 @@ export default async function globalTeardown(): Promise<void> {
     }
   } catch {
     // A konténer esetleg már nem létezik — nem hiba.
+  }
+  try {
+    execFileSync('docker', ['rm', '-f', REDIS_CONTAINER_NAME], { stdio: 'ignore' });
+  } catch {
+    // Nem hiba.
   }
 }
 
