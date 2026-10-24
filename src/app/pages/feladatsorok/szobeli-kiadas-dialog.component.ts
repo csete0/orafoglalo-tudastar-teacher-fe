@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { finalize, take } from 'rxjs';
 import { GroupStore } from '../../services/group/group.store';
@@ -9,6 +10,7 @@ import {
   TeacherOralAssignmentDto,
 } from '../../models/teacher-oral-exam.model';
 import { AiHelperQuotaItemDto, aiHelperErrorMessage, quotaRemaining } from '../../shared/ai-helper-quota.util';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { IconComponent } from '../../shared/icon/icon.component';
 
@@ -29,12 +31,11 @@ export interface OralAssignTarget {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-szobeli-kiadas-dialog',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, DialogShellComponent, IconComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="closed.emit()">
-      <div class="fixed inset-0 bg-black/40" data-testid="oral-assign-backdrop" (click)="closed.emit()"></div>
-      <form #dialog role="dialog" aria-modal="true" aria-labelledby="oral-assign-title" tabindex="-1" (ngSubmit)="submit()"
-        class="card relative w-full max-w-lg min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none space-y-4" data-testid="oral-assign-dialog">
+    <app-dialog-shell labelledBy="oral-assign-title" testId="oral-assign-dialog" backdropTestId="oral-assign-backdrop"
+      panelClass="card w-full max-w-lg min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="closed.emit()">
+      <form (ngSubmit)="submit()" class="space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <h2 id="oral-assign-title" class="font-bold text-lg">Kiadás csoportnak</h2>
@@ -84,10 +85,10 @@ export interface OralAssignTarget {
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label class="text-sm">Nyílik (nem kötelező)
-            <input type="datetime-local" class="input mt-1" (change)="opensAt.set($any($event.target).value)" data-testid="oral-assign-opens" />
+            <input #opens type="datetime-local" class="input mt-1" (change)="opensAt.set(opens.value)" data-testid="oral-assign-opens" />
           </label>
           <label class="text-sm">Határidő (nem kötelező)
-            <input type="datetime-local" class="input mt-1" (change)="dueAt.set($any($event.target).value)" data-testid="oral-assign-due" />
+            <input #due type="datetime-local" class="input mt-1" (change)="dueAt.set(due.value)" data-testid="oral-assign-due" />
           </label>
         </div>
 
@@ -100,11 +101,12 @@ export interface OralAssignTarget {
           <button type="submit" class="btn btn-primary" [disabled]="saving() || groupId() == null || (mode() === 'exam' && examBlocked())" data-testid="oral-assign-submit">Kiadás</button>
         </div>
       </form>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class SzobeliKiadasDialogComponent implements OnInit {
   private readonly api = inject(TeacherOralExamService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly groups = inject(GroupStore);
 
   readonly target = input.required<OralAssignTarget>();
@@ -134,20 +136,17 @@ export class SzobeliKiadasDialogComponent implements OnInit {
     dueAt: this.dueAt() ? new Date(this.dueAt()).toISOString() : null,
   }));
 
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
-
   ngOnInit(): void {
     this.voiceMinutes.set(this.target().defaultVoiceMinutes);
     this.groups.loadMine();
     // A keret csak tájékoztatás: ha nem jön meg, a kiadás attól még megy (a diák indításakor számít).
-    this.api.quota().pipe(take(1)).subscribe({
+    this.api.quota().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (q) => {
         this.examQuota.set(q.oralExam ?? null);
         this.examBlocked.set(q.premium === false);
       },
       error: () => {},
     });
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   submit(): void {

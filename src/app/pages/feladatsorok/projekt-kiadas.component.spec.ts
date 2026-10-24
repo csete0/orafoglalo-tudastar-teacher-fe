@@ -1,7 +1,12 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import { ProjektKiadasComponent } from './projekt-kiadas.component';
+import { ProjectMatrixComponent } from './projekt-kiadas/project-matrix.component';
+import { StudentCodePanelComponent } from './projekt-kiadas/student-code-panel.component';
+import { StudentCodeState } from './projekt-kiadas/student-code.state';
+import { CodeSuggestionsState } from './projekt-kiadas/code-suggestions.state';
 import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
 import { ReportService } from '../../services/report/report.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
@@ -64,7 +69,9 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     api.createComment.mockImplementation((_a, _u, path, line, body) => of(thread(nextId++, line, '', { body, path })));
-    return { fixture, el: fixture.nativeElement as HTMLElement, api, reports, confirm, cmp: fixture.componentInstance };
+    const injector = fixture.debugElement.injector;
+    return { fixture, el: fixture.nativeElement as HTMLElement, api, reports, confirm, cmp: fixture.componentInstance,
+      codeView: injector.get(StudentCodeState), suggest: injector.get(CodeSuggestionsState) };
   }
 
   async function openStudent(name: string, ctx: Awaited<ReturnType<typeof setup>>) {
@@ -77,7 +84,8 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     [...el.querySelectorAll<HTMLButtonElement>(`${root} button`)].find((b) => b.textContent!.trim() === text)!;
 
   it('technikumi projektnél a diák választott nyelvét mutatja, nem a REST-futtatót (staging 10-23)', async () => {
-    const { cmp } = await setup();
+    const { fixture } = await setup();
+    const cmp = fixture.debugElement.query(By.directive(ProjectMatrixComponent)).componentInstance as ProjectMatrixComponent;
     const tech = (desktopLanguage: 'csharp' | 'java' | null): ProjectAssignmentStudentDto =>
       ({ ...student(4, 'Dóra', 1, []), runtime: 'judge0-aspnet', desktopLanguage });
     expect(cmp.languageLabel(tech('java'))).toBe('Java');
@@ -122,7 +130,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
     el.querySelector<HTMLButtonElement>('[aria-label="Megjegyzés a(z) 2. sorhoz"]')!.click();
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="new-comment"]')).not.toBeNull();
-    fixture.componentInstance.selectFile('backend/app.py');
+    (fixture.debugElement.query(By.directive(StudentCodePanelComponent)).componentInstance as StudentCodePanelComponent).selectFile('backend/app.py');
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="new-comment"]')).toBeNull();
   });
@@ -214,7 +222,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       expect(cards[1].querySelector('.sev')!.className).toContain('sev--hiba');
       expect(ctx.el.querySelectorAll('[data-testid="suggest-list"] li').length).toBe(2);
       expect(ctx.el.querySelector('.suggestion-count')?.textContent?.trim()).toBe('2');
-      expect(ctx.cmp.hasPendingSuggestions()).toBe(true);
+      expect(ctx.suggest.hasPendingSuggestions()).toBe(true);
 
       button(cards[1] as HTMLElement, 'Elfogad').click();
       ctx.fixture.detectChanges();
@@ -246,7 +254,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       ctx.fixture.detectChanges();
       expect(ctx.api.createComment).toHaveBeenCalledTimes(1);
       expect(ctx.el.querySelector('.suggestion')).toBeNull();
-      expect(ctx.cmp.hasPendingSuggestions()).toBe(false);
+      expect(ctx.suggest.hasPendingSuggestions()).toBe(false);
     });
 
     it('„Mind elfogad” megerősítés után sorban menti az összeset (minden fájlból); elutasításnál semmit', async () => {
@@ -272,7 +280,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       ctx.fixture.detectChanges();
       expect(ctx.api.createComment.mock.calls.map((c) => c.slice(2))).toEqual([['backend/app.py', 2, 'A'], ['backend/seged.py', 2, 'B']]);
       expect(ctx.el.querySelector('[data-testid="suggest-list"]')).toBeNull();
-      expect(ctx.cmp.comments().filter((c) => c.body === 'A' || c.body === 'B').length).toBe(2);
+      expect(ctx.codeView.comments().filter((c) => c.body === 'A' || c.body === 'B').length).toBe(2);
     });
 
     it('fájlváltás megszakítja a fájlra kért futó kérést; a késve érkező válasz nem jut be', async () => {
@@ -291,7 +299,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       expect(ctx.el.querySelector('[data-testid="suggest-run"]')).not.toBeNull();
       pending.next(response([sugg('backend/app.py', 1, 'print(1)', 'hiba', 'késő')]));
       ctx.fixture.detectChanges();
-      expect(ctx.cmp.suggestions()).toEqual([]);
+      expect(ctx.suggest.suggestions()).toEqual([]);
     });
 
     it('megszakítás után vagy diákváltáskor a régi válasz elavult; diákváltás el nem fogadott javaslatokkal megerősítést kér', async () => {
@@ -305,7 +313,7 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       await openStudent('Bence', ctx);
       expect(ctx.confirm.ask).toHaveBeenCalledTimes(1);
       expect(ctx.api.studentCode).toHaveBeenCalledTimes(1);
-      expect(ctx.cmp.suggestions().length).toBe(1);
+      expect(ctx.suggest.suggestions().length).toBe(1);
       expect(await ctx.cmp.canLeave()).toBe(false);
       const unload = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent;
       ctx.cmp.onBeforeUnload(unload);
@@ -321,8 +329,36 @@ describe('ProjektKiadasComponent (osztály-nézet)', () => {
       expect(ctx.api.studentCode).toHaveBeenLastCalledWith(7, 2);
       expect(pending.observed).toBe(false);
       pending.next(response([sugg('backend/app.py', 1, 'print(1)', 'hiba', 'Annáé')]));
-      expect(ctx.cmp.suggestions()).toEqual([]);
+      expect(ctx.suggest.suggestions()).toEqual([]);
       expect(ctx.cmp.canLeave()).toBe(true);
+    });
+
+    it('„Bezárás” el nem fogadott javaslatokkal megerősítést kér; elvetve bezár, újranyitáskor a keretet nem kéri le újra', async () => {
+      const ctx = await setup({ confirm: false });
+      await openStudent('Anna', ctx);
+      ctx.api.commentSuggestions.mockReturnValue(of(response([sugg('backend/app.py', 1, 'print(1)', 'hiba', 'X')])));
+      ctx.el.querySelector<HTMLButtonElement>('[data-testid="suggest-run"]')!.click();
+      ctx.fixture.detectChanges();
+
+      button(ctx.el, 'Bezárás', '[data-testid="student-code"]').click();
+      await ctx.fixture.whenStable();
+      ctx.fixture.detectChanges();
+      expect(ctx.confirm.ask).toHaveBeenCalledTimes(1);
+      expect(ctx.el.querySelector('[data-testid="student-code"]')).not.toBeNull();
+      expect(ctx.suggest.suggestions().length).toBe(1);
+
+      ctx.confirm.ask.mockResolvedValue(true);
+      button(ctx.el, 'Bezárás', '[data-testid="student-code"]').click();
+      await ctx.fixture.whenStable();
+      ctx.fixture.detectChanges();
+      expect(ctx.el.querySelector('[data-testid="student-code"]')).toBeNull();
+      expect(ctx.suggest.suggestions()).toEqual([]);
+      expect(ctx.cmp.canLeave()).toBe(true);
+
+      await openStudent('Anna', ctx);
+      expect(ctx.el.querySelector('[data-testid="student-code"]')?.textContent).toContain('Anna kódja');
+      expect(ctx.api.studentCode).toHaveBeenCalledTimes(2);
+      expect(ctx.reports.getAiHelperQuota).toHaveBeenCalledTimes(1);
     });
   });
 });

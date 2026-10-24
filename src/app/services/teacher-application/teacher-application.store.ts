@@ -30,11 +30,11 @@ export class TeacherApplicationStore {
   // hívás válasza érvényesül, függetlenül attól, melyik érkezik meg utoljára a hálózaton.
   private _loadGeneration = 0;
 
-  readonly application = computed(() => this._application());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
+  readonly application = this._application.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
   /** Igaz, ha lefutott legalább egy getMine hívás (404 = nincs jelentkezés, de ez is "checked"). */
-  readonly checked = computed(() => this._checked());
+  readonly checked = this._checked.asReadonly();
   readonly status = computed(() => this._application()?.status ?? null);
   readonly isPending = computed(() => this.status() === 'Pending');
   readonly isApproved = computed(() => this.status() === 'Approved');

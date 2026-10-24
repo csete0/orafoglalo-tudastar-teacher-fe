@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Observable, Subscription } from 'rxjs';
@@ -9,6 +9,7 @@ import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-ta
 import { ToastService } from '../../shared/toast/toast.service';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 
 /** A javaslat egyedi kulcsa (egy feladatsor/kvíz több témakörnél is felbukkanhat). */
@@ -59,7 +60,7 @@ const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'r
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-gyenge-temak-javaslatok',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent],
+  imports: [FormsModule, IconComponent, LocalSpinnerComponent, DialogShellComponent],
   template: `
     <div aria-live="polite" [attr.aria-busy]="loading()" data-testid="weak-summary">
       @if (loading()) {
@@ -146,54 +147,52 @@ const TREND_LABELS: Record<string, string> = { improving: 'javul', declining: 'r
 
     @if (pendingCatalog(); as item) {
       <!-- Hivatalos sor kiadása: másolat készül → megerősítés + opcionális dátumok. -->
-      <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="closeCatalog()">
-        <div class="fixed inset-0 bg-black/40" data-testid="weak-catalog-backdrop" (click)="closeCatalog()"></div>
-        <div #catalogDialog role="dialog" aria-modal="true" aria-labelledby="weak-catalog-title" aria-describedby="weak-catalog-help" tabindex="-1"
-          data-testid="weak-catalog-dialog" class="card relative w-full max-w-lg min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
-          <div class="flex items-start justify-between gap-3 mb-3">
-            <h2 id="weak-catalog-title" class="font-bold text-lg">Hivatalos feladatsor kiadása</h2>
-            <button type="button" class="btn btn-ghost !p-1.5" aria-label="Bezárás" (click)="closeCatalog()" [disabled]="busyKey() !== null">
-              <app-icon name="x" class="w-5 h-5 block" />
-            </button>
-          </div>
-          <div id="weak-catalog-help" class="text-sm space-y-2 mb-4">
-            <p>
-              A(z) „{{ item.title }}” ({{ item.itemCount }} feladat)
-              @if (item.assignTaskSetId) {
-                már meglévő másolatát adjuk ki a csoportnak (ha még nincs publikálva, előbb publikáljuk).
-              } @else {
-                másolata a saját feladatsoraid közé kerül, publikáljuk, és kiadjuk a csoportnak. A másolatot később szerkesztheted.
-              }
-            </p>
-            <p [class.text-warning]="item.isPaid" [class.text-success]="!item.isPaid" data-testid="weak-catalog-access">
-              {{ item.isPaid ? paidNote(item) + '; dolgozatban mindenki elérheti.' : 'Ingyenes – minden diákod eléri.' }}
-            </p>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label class="block">
-              <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
-              <input type="datetime-local" class="input mt-1" [ngModel]="opensAt()" (ngModelChange)="opensAt.set($event)"
-                [ngModelOptions]="{ standalone: true }" data-testid="weak-catalog-opens" />
-            </label>
-            <label class="block">
-              <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
-              <input type="datetime-local" class="input mt-1" [ngModel]="dueAt()" (ngModelChange)="dueAt.set($event)"
-                [ngModelOptions]="{ standalone: true }" data-testid="weak-catalog-due" />
-            </label>
-          </div>
-          @if (datesInvalid()) {
-            <p class="text-sm text-danger mt-2" data-testid="weak-catalog-dates-error">A nyitás dátuma nem lehet a határidő után.</p>
-          }
-          @if (errors()[key(item)]; as err) {
-            <p class="bg-danger-subtle border border-danger/40 rounded-xl p-3 text-sm text-danger mt-3" role="alert" data-testid="weak-catalog-error">{{ err }}</p>
-          }
-          <div class="flex flex-wrap justify-end gap-2 mt-4">
-            <button type="button" class="btn btn-ghost" (click)="closeCatalog()" [disabled]="busyKey() !== null">Mégse</button>
-            <button type="button" class="btn btn-primary" (click)="confirmCatalog()" [disabled]="busyKey() !== null || datesInvalid()"
-              data-testid="weak-catalog-confirm">{{ busyKey() !== null ? 'Kiadás…' : 'Másolás és kiadás' }}</button>
-          </div>
+      <app-dialog-shell labelledBy="weak-catalog-title" describedBy="weak-catalog-help" testId="weak-catalog-dialog"
+        backdropTestId="weak-catalog-backdrop" panelClass="card w-full max-w-lg min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto"
+        (closed)="closeCatalog()">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <h2 id="weak-catalog-title" class="font-bold text-lg">Hivatalos feladatsor kiadása</h2>
+          <button type="button" class="btn btn-ghost !p-1.5" aria-label="Bezárás" (click)="closeCatalog()" [disabled]="busyKey() !== null">
+            <app-icon name="x" class="w-5 h-5 block" />
+          </button>
         </div>
-      </div>
+        <div id="weak-catalog-help" class="text-sm space-y-2 mb-4">
+          <p>
+            A(z) „{{ item.title }}” ({{ item.itemCount }} feladat)
+            @if (item.assignTaskSetId) {
+              már meglévő másolatát adjuk ki a csoportnak (ha még nincs publikálva, előbb publikáljuk).
+            } @else {
+              másolata a saját feladatsoraid közé kerül, publikáljuk, és kiadjuk a csoportnak. A másolatot később szerkesztheted.
+            }
+          </p>
+          <p [class.text-warning]="item.isPaid" [class.text-success]="!item.isPaid" data-testid="weak-catalog-access">
+            {{ item.isPaid ? paidNote(item) + '; dolgozatban mindenki elérheti.' : 'Ingyenes – minden diákod eléri.' }}
+          </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
+            <input type="datetime-local" class="input mt-1" [ngModel]="opensAt()" (ngModelChange)="opensAt.set($event)"
+              [ngModelOptions]="{ standalone: true }" data-testid="weak-catalog-opens" />
+          </label>
+          <label class="block">
+            <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
+            <input type="datetime-local" class="input mt-1" [ngModel]="dueAt()" (ngModelChange)="dueAt.set($event)"
+              [ngModelOptions]="{ standalone: true }" data-testid="weak-catalog-due" />
+          </label>
+        </div>
+        @if (datesInvalid()) {
+          <p class="text-sm text-danger mt-2" data-testid="weak-catalog-dates-error">A nyitás dátuma nem lehet a határidő után.</p>
+        }
+        @if (errors()[key(item)]; as err) {
+          <p class="bg-danger-subtle border border-danger/40 rounded-xl p-3 text-sm text-danger mt-3" role="alert" data-testid="weak-catalog-error">{{ err }}</p>
+        }
+        <div class="flex flex-wrap justify-end gap-2 mt-4">
+          <button type="button" class="btn btn-ghost" (click)="closeCatalog()" [disabled]="busyKey() !== null">Mégse</button>
+          <button type="button" class="btn btn-primary" (click)="confirmCatalog()" [disabled]="busyKey() !== null || datesInvalid()"
+            data-testid="weak-catalog-confirm">{{ busyKey() !== null ? 'Kiadás…' : 'Másolás és kiadás' }}</button>
+        </div>
+      </app-dialog-shell>
     }
   `,
 })
@@ -220,7 +219,6 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
   readonly dueAt = signal('');
 
   private loadRequest: Subscription | null = null;
-  private readonly catalogDialog = viewChild<ElementRef<HTMLElement>>('catalogDialog');
 
   readonly key = suggestionKey;
   readonly pct = floorPercent;
@@ -278,8 +276,8 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
       this.opensAt.set('');
       this.dueAt.set('');
       this.clearError(item);
+      // A fókuszt (be és vissza) a dialógus-héj kezeli.
       this.pendingCatalog.set(item);
-      setTimeout(() => this.catalogDialog()?.nativeElement.focus());
       return;
     }
     if (item.action !== 'assign') return;
@@ -300,8 +298,7 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
       opensAt: this.opensAt() ? new Date(this.opensAt()).toISOString() : null,
       dueAt: this.dueAt() ? new Date(this.dueAt()).toISOString() : null,
     });
-    this.run(item, call, (res) => {
-      const r = res as { copied: boolean; warnings: string[] };
+    this.run(item, call, (r) => {
       this.pendingCatalog.set(null);
       const summary = `„${item.title}” kiadva a csoportnak${r.copied ? ' - a másolat a saját feladatsoraid közé került' : ''}.`;
       if (r.warnings?.length) this.toastService.warning(`${summary} Figyelem: ${r.warnings.join(' ')}`, 10000);
@@ -315,7 +312,7 @@ export class GyengeTemakJavaslatokComponent implements OnInit {
     this.pendingCatalog.set(null);
   }
 
-  private run(item: WeakTopicSuggestionDto, call: Observable<unknown>, onSuccess: (res: unknown) => void): void {
+  private run<T>(item: WeakTopicSuggestionDto, call: Observable<T>, onSuccess: (res: T) => void): void {
     const key = suggestionKey(item);
     this.busyKey.set(key);
     this.clearError(item);

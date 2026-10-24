@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Subject, of } from 'rxjs';
 import { TeacherQuizDetailDto } from '../../models/teacher-quiz.model';
 import { TeacherQuizService } from './teacher-quiz.service';
+import { QuizBankStore } from './quiz-bank.store';
 import { TeacherQuizStore } from './teacher-quiz.store';
 
 function makeDetail(overrides: Partial<TeacherQuizDetailDto> = {}): TeacherQuizDetailDto {
@@ -226,75 +227,7 @@ describe('TeacherQuizStore', () => {
     expect(store.error()).toBe('Hálózati hiba.');
   });
 
-  // ── UI-UX: közös bank keresés + meglévő kérdés hozzáadása ─────
-
-  it('searchBankQuestions() a service-t hívja, a találatokat bankResults()-ba írja, saját (nem a fő) betöltés-jelzőt használ', () => {
-    configure();
-    const search$ = new Subject<unknown>();
-    serviceMock.searchBankQuestions.mockReturnValue(search$);
-
-    store.searchBankQuestions('XKERES', 3, 'Hard');
-
-    expect(serviceMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard', 'teacher');
-    expect(store.bankSearching()).toBe(true);
-    // A keresés NEM a fő loading()-ot állítja - a szerkesztő többi része eközben
-    // is használható marad.
-    expect(store.loading()).toBe(false);
-
-    search$.next([{ id: 1, questionText: 'XKERES kérdés' }]);
-    search$.complete();
-
-    expect(store.bankSearching()).toBe(false);
-    expect(store.bankResults()).toEqual([{ id: 1, questionText: 'XKERES kérdés' }]);
-  });
-
-  it('BUG: két egymást átfedő keresés közül a KÉSŐBB INDULÓ, de HAMARABB VÁLASZOLÓ nyer - egy lassú, korábbi keresés válasza felülírhatja egy újabb szűréssel indított, gyorsabb keresés találatait', () => {
-    // BE-QUIZAUTHORING-BANKSEARCH-STALE-RESPONSE-RACE: searchBankQuestions() minden
-    // hívása egy ÚJ, független subscribe-ot indít (nincs switchMap/generation-guard, ellentétben
-    // a mutateAndReload()-ban használt _detailQuizId cél-ellenőrzéssel). A tanár beír egy
-    // tág keresést (sok találat, lassabb backend-lekérdezés a Topic-join miatt), majd MIELŐTT
-    // az visszaérne, tovább szűkíti témakörrel/nehézséggel és újra keres (kevesebb sor, gyorabb
-    // válasz). Ha a második, gyorsabb válasz előbb érkezik, az elsőnek látszó - majd a lassabb,
-    // ELSŐ keresés válasza NÉMÁN felülírja: a felületen a szűkített szűrők mellett a tág keresés
-    // találatai maradnak, a tanár a rossz kérdéseket látja "hozzáadás"-ra kínálva.
-    configure();
-    const wideSearch$ = new Subject<unknown>();
-    const narrowSearch$ = new Subject<unknown>();
-    serviceMock.searchBankQuestions
-      .mockReturnValueOnce(wideSearch$)
-      .mockReturnValueOnce(narrowSearch$);
-
-    // 1. keresés: tág szűrő nélkül indul.
-    store.searchBankQuestions(null, null, null);
-    // 2. keresés: a tanár közben témakörre szűkít, ÚJRA keres - a régi kérés még folyamatban.
-    store.searchBankQuestions(null, 3, null);
-
-    // A GYORSABB, MÁSODIK (szűkített) keresés válasza előbb érkezik meg.
-    narrowSearch$.next([{ id: 2, questionText: 'Szűkített találat' }]);
-    narrowSearch$.complete();
-    expect(store.bankResults()).toEqual([{ id: 2, questionText: 'Szűkített találat' }]);
-
-    // Az ELSŐ (tág) keresés válasza KÉSVE érkezik meg - ez már elavult, hiszen a felület
-    // szűrői időközben megváltoztak, a tanár a szűkített találatokat várja.
-    wideSearch$.next([{ id: 1, questionText: 'Tág (elavult) találat' }]);
-    wideSearch$.complete();
-
-    // ELVÁRT: a felületen a szűrőknek megfelelő, szűkített találat maradjon. TÉNYLEGES: a
-    // késve érkező, elavult tág keresés válasza csendben felülírja.
-    expect(store.bankResults()).toEqual([{ id: 2, questionText: 'Szűkített találat' }]);
-  });
-
-  it('searchBankQuestions() hibáját bankSearchError()-ban jelzi, a fő error()-t nem érinti', () => {
-    configure();
-    const search$ = new Subject<unknown>();
-    serviceMock.searchBankQuestions.mockReturnValue(search$);
-
-    store.searchBankQuestions(null, null, null);
-    search$.error({ error: { errorMessage: 'A keresés sikertelen.' } });
-
-    expect(store.bankSearchError()).toBe('A keresés sikertelen.');
-    expect(store.error()).toBeNull();
-  });
+  // ── UI-UX: meglévő kérdés hozzáadása a bankból (a keresés: quiz-bank.store.spec) ─────
 
   it('addExistingQuestion() sikeres hozzáadás után újratölti a kvíz-részletet, és meghívja az onSuccess callback-et', () => {
     configure();
@@ -344,6 +277,25 @@ describe('TeacherQuizStore', () => {
     store.setScope('teacher');
     store.loadMine();
     expect(serviceMock.getMine).toHaveBeenLastCalledWith('teacher');
+  });
+
+  it('C5: a scope-váltás a kérdésbank-keresés találatait és hibáját is üríti, a még futó keresés válasza sem érkezik meg', () => {
+    configure();
+    const bank = TestBed.inject(QuizBankStore);
+    const pending$ = new Subject<unknown>();
+    serviceMock.searchBankQuestions.mockReturnValueOnce(of([{ id: 1, questionText: 'Tanári találat' }]));
+    bank.search(null, null, null, 'teacher');
+    expect(bank.results().length).toBe(1);
+
+    serviceMock.searchBankQuestions.mockReturnValueOnce(pending$);
+    bank.search('x', null, null, 'teacher');
+    store.setScope('admin');
+    expect(bank.results()).toEqual([]);
+    expect(bank.error()).toBeNull();
+
+    pending$.next([{ id: 2, questionText: 'Tanári, késve' }]);
+    pending$.complete();
+    expect(bank.results()).toEqual([]);
   });
 
   it('C5: scope-váltás után egy még futó, előző scope-beli betöltés válasza nem érkezik meg', () => {

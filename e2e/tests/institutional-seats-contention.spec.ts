@@ -17,7 +17,7 @@ import {
  * felhasználóval.
  */
 
-/** Regisztrál egy diákot és beléptet a csoportba. A hely FOGLALÁSA a következő bejelentkezéskor történik. */
+/** Regisztrál egy diákot és beléptet a csoportba. A csatlakozás már foglal helyet, ha van szabad (különben kiszorulás). */
 async function registerAndJoin(browser: Browser, prefix: string, inviteCode: string): Promise<string> {
   const context = await browser.newContext();
   try {
@@ -33,13 +33,22 @@ async function registerAndJoin(browser: Browser, prefix: string, inviteCode: str
   }
 }
 
-/** Friss kontextusban belép, és megmondja, kapott-e intézményi helyet. */
+/**
+ * Friss kontextusban belép, és megmondja, kapott-e intézményi helyet.
+ *
+ * A profil a friss jogosultságot a `check-auth` válaszából rajzolja: megvárjuk a választ és az előfizetés-szekciót,
+ * csak utána nézzük meg a licenc-kártyát. (Korábban egy azonnali `isVisible()` a még be sem töltött oldalon
+ * versenyhelyzetben „nincs hely”-et mondott a ténylegesen helyet kapott diákra is.)
+ */
 async function loginAndHasSeat(browser: Browser, email: string): Promise<{ hasSeat: boolean; page: Page }> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await loginOnStudentApp(page, email);
+  const checkAuth = page.waitForResponse((r) => r.url().includes('/auth/check-auth') && r.ok(), { timeout: 15000 });
   await page.goto(`${STUDENT_FE_URL}/profile`);
-  const hasSeat = await page.getByText(/Iskolai licenc/).isVisible().catch(() => false);
+  await checkAuth;
+  await expect(page.getByText('Előfizetéseid')).toBeVisible({ timeout: 15000 });
+  const hasSeat = await page.getByText(/Iskolai licenc/).isVisible();
   return { hasSeat, page };
 }
 
@@ -105,12 +114,14 @@ test('egyidejű bejelentkezés: pontosan a kapacitásnyi diák kap helyet, a tö
 
     const { institutionName, inviteCode } = await setUpInstitutionWithLicence(browser, adminPage, CAPACITY);
 
-    const emails: string[] = [];
-    for (let i = 0; i < STUDENTS; i++) {
-      emails.push(await registerAndJoin(browser, `cont-student-${i}`, inviteCode));
-    }
+    // 2026-10-10 óta (BE-GROUPJOIN-MIDSESSION-NO-SEATCLAIM) a csatlakozás is foglal helyet, ugyanúgy, mint a
+    // bejelentkezés - az órán egyszerre beváltott meghívó kód tehát ugyanolyan roham, ezért ez is egyszerre indul.
+    const emails = await Promise.all(
+      Array.from({ length: STUDENTS }, (_, i) => registerAndJoin(browser, `cont-student-${i}`, inviteCode)),
+    );
 
-    // EGYSZERRE indított bejelentkezések - ez modellezi a becsengetéskori rohamot.
+    // EGYSZERRE indított bejelentkezések - ez modellezi a becsengetéskori rohamot. A csatlakozáskor helyet kapott diák
+    // helye „ragadós”, a kimaradtak itt újra próbálkoznak.
     const results = await Promise.all(emails.map((email) => loginAndHasSeat(browser, email)));
     openPages.push(...results.map((r) => r.page));
 
@@ -124,8 +135,9 @@ test('egyidejű bejelentkezés: pontosan a kapacitásnyi diák kap helyet, a tö
       .toBeVisible({ timeout: 15000 });
 
     await schoolRow.getByRole('button', { name: 'Kihasználtság' }).click();
-    // A bővítési döntés fő száma: akik jogosultak lettek volna, de nem fértek be.
-    await expect(schoolRow.getByText(new RegExp(`${STUDENTS - CAPACITY} alkalommal nem jutott hely`)))
+    // A bővítési döntés fő száma: HÁNYSZOR nem jutott hely jogosult diáknak (nem hány diák - ld. a BE
+    // InstitutionalSeatService kiszorulás-könyvelését). Minden kimaradt diák kétszer: csatlakozáskor és bejelentkezéskor.
+    await expect(schoolRow.getByText(new RegExp(`${2 * (STUDENTS - CAPACITY)} alkalommal nem jutott hely`)))
       .toBeVisible({ timeout: 15000 });
     await expect(schoolRow.getByText(/Ez a keret szűk/)).toBeVisible({ timeout: 15000 });
   } finally {

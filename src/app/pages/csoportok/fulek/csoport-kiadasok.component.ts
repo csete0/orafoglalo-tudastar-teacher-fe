@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { finalize, take } from 'rxjs';
@@ -183,6 +184,7 @@ export class CsoportKiadasokComponent implements OnInit {
   private readonly teacherProjectService = inject(TeacherProjectService);
   private readonly kahootHostService = inject(KahootHostService);
   private readonly teacherOralExamService = inject(TeacherOralExamService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly groupAssignments = signal<TeacherGroupAssignmentDto[]>([]);
   readonly assignmentsLoading = signal(false);
@@ -209,7 +211,7 @@ export class CsoportKiadasokComponent implements OnInit {
 
     this.assignmentsLoading.set(true);
     this.teacherQuizService.getGroupAssignments(groupId)
-      .pipe(take(1), finalize(() => this.assignmentsLoading.set(false)))
+      .pipe(take(1), finalize(() => this.assignmentsLoading.set(false)), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (assignments) => this.groupAssignments.set(assignments),
         error: () => this.assignmentsError.set('A kiadások betöltése sikertelen.'),
@@ -217,18 +219,18 @@ export class CsoportKiadasokComponent implements OnInit {
 
     this.taskSetAssignmentsLoading.set(true);
     this.teacherTaskSetService.getGroupTaskSetAssignments(groupId)
-      .pipe(take(1), finalize(() => this.taskSetAssignmentsLoading.set(false)))
+      .pipe(take(1), finalize(() => this.taskSetAssignmentsLoading.set(false)), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (assignments) => this.groupTaskSetAssignments.set(assignments),
         error: () => this.taskSetAssignmentsError.set('A feladatsor-kiadások betöltése sikertelen.'),
       });
 
-    this.teacherProjectService.forGroup(groupId).pipe(take(1)).subscribe({
+    this.teacherProjectService.forGroup(groupId).pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (assignments) => this.projectAssignments.set(assignments),
       error: () => this.projectAssignmentsError.set('A projekt-kiadások betöltése sikertelen.'),
     });
 
-    this.teacherOralExamService.assignments(groupId).pipe(take(1)).subscribe({
+    this.teacherOralExamService.assignments(groupId).pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (assignments) => {
         this.oralAssignments.set(assignments);
         this.oralEnabled.set(true);
@@ -241,6 +243,7 @@ export class CsoportKiadasokComponent implements OnInit {
     });
   }
 
+  /** Írás: a szobanyitás nem bontódik a fül elhagyásakor (a már létrehozott szobához a navigáció is kell). */
   startLive(assignment: TeacherGroupAssignmentDto): void {
     if (this.liveStartPending()) return;
     this.liveStartPending.set(true);

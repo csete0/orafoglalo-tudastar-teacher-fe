@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { concat, Observable } from 'rxjs';
 import { finalize, take, toArray } from 'rxjs/operators';
@@ -13,6 +13,7 @@ import {
   TeacherTaskSetDto,
 } from '../../models/teacher-content.model';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { DetailReloadTarget, mutateAndReload, publishAndReload } from '../detail-reload.util';
 
 /**
  * A mutáló metódusok (feladat/megoldás/snippet/fájl) minden sikeres hívás
@@ -64,12 +65,22 @@ export class TeacherTaskSetStore {
   // elhagyott entitás mutációja ne indíthasson újratöltést egy MÁSIK entitás nézetébe.
   private _detailTaskSetId: number | null = null;
 
-  readonly taskSets = computed(() => this._taskSets());
-  readonly selectedDetail = computed(() => this._selectedDetail());
-  readonly publishResult = computed(() => this._publishResult());
-  readonly loading = computed(() => this._loading());
-  readonly mineLoading = computed(() => this._mineLoading());
-  readonly error = computed(() => this._error());
+  /** A mutáció+újratöltés közös folyamata (`detail-reload.util`) ezen a szeleten dolgozik. */
+  private readonly detailReload: DetailReloadTarget = {
+    destroyRef: this.destroyRef,
+    loading: this._loading,
+    error: this._error,
+    publishResult: this._publishResult,
+    currentId: () => this._detailTaskSetId,
+    reload: (id, onSuccess) => this.loadDetail(id, onSuccess),
+  };
+
+  readonly taskSets = this._taskSets.asReadonly();
+  readonly selectedDetail = this._selectedDetail.asReadonly();
+  readonly publishResult = this._publishResult.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly mineLoading = this._mineLoading.asReadonly();
+  readonly error = this._error.asReadonly();
 
   loadMine(): void {
     this._mineLoading.set(true);
@@ -139,7 +150,7 @@ export class TeacherTaskSetStore {
   }
 
   updateTaskSet(id: number, request: CreateTeacherTaskSetRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.update(id, request), id, onSuccess);
+    mutateAndReload(this.detailReload, this.service.update(id, request), id, onSuccess);
   }
 
   deleteTaskSet(id: number, onSuccess?: () => void): void {
@@ -155,84 +166,40 @@ export class TeacherTaskSetStore {
    * `publishedSchoolId`-t is nullazza, es egy kezzel frissitett allapot elcsuszna tole.
    */
   unpublish(id: number): void {
-    this.mutateAndReload(this.service.unpublish(id), id);
+    mutateAndReload(this.detailReload, this.service.unpublish(id), id);
   }
 
   publish(id: number, onSuccess?: () => void): void {
-    if (this._loading()) return;
-
-    this._loading.set(true);
-    this._error.set(null);
-
-    this.service
-      .publish(id)
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (result) => {
-          // TEACH-8: ugyanaz a célpont-ellenőrzés, mint a mutateAndReload() UI-TT-156
-          // guardja (ld. lent) - a publish() korábban ezt NEM kapta meg, holott
-          // pontosan ugyanúgy a store `providedIn: 'root'`-ja és a store-hoz kötött
-          // (nem a komponenshez kötött) takeUntilDestroyed miatt egy elhagyott (A)
-          // feladatsor publikálásának KÉSVE érkező válasza a közben megnyitott (B)
-          // feladatsor szerkesztőjét írta felül: sikeres ágon a `_publishResult`
-          // (a sablon validációs-hiba listája) ÉS egy feltétel nélküli `loadDetail(A,
-          // onSuccess)` - ez utóbbi a `_detailGeneration`-t a LEGMAGASABB értékre
-          // léptette, tehát A adatai "nyertek" B már megjelenített, helyes adatai
-          // felett, a "Feladatsor publikálva." toast pedig B oldalán jelent meg, holott
-          // a teanár B-t sosem publikálta.
-          if (this._detailTaskSetId !== null && this._detailTaskSetId !== id) return;
-
-          this._publishResult.set(result);
-          if (result.success) {
-            // Loading marad true (a loadDetail() gondoskodik a lezárásáról), amíg az
-            // újratöltés válasza meg nem érkezik — enélkül a "Publikálás" gomb és a
-            // fejléc-jelvény átmenetileg úgy mutatná, mintha a publikálás sikertelen
-            // lenne / még nem történt volna meg (UI-TT-45).
-            this.loadDetail(id, onSuccess);
-          } else {
-            this._loading.set(false);
-          }
-        },
-        error: (err) => {
-          // TEACH-8: ld. a next-ág fenti megjegyzését - a hiba-ágnak is ugyanez a
-          // célpont-ellenőrzés kell, nehogy egy elhagyott feladatsor publikálási
-          // hibája a közben megnyitott MÁSIK feladatsor loading/error állapotát írja
-          // felül.
-          if (this._detailTaskSetId !== null && this._detailTaskSetId !== id) return;
-
-          this._error.set(extractErrorMessage(err, 'A publikálás sikertelen.'));
-          this._loading.set(false);
-        },
-      });
+    publishAndReload(this.detailReload, () => this.service.publish(id), id, onSuccess);
   }
 
   addTask(taskSetId: number, request: CreateTeacherTaskRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addTask(taskSetId, request), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.addTask(taskSetId, request), taskSetId, onSuccess);
   }
 
   updateTask(taskSetId: number, taskId: number, request: CreateTeacherTaskRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.updateTask(taskId, request), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.updateTask(taskId, request), taskSetId, onSuccess);
   }
 
   deleteTask(taskSetId: number, taskId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteTask(taskId), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.deleteTask(taskId), taskSetId, onSuccess);
   }
 
   addSubTask(taskSetId: number, taskId: number, request: CreateTeacherSubTaskRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.addSubTask(taskId, request), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.addSubTask(taskId, request), taskSetId, onSuccess);
   }
 
   updateSubTask(taskSetId: number, solutionId: number, request: CreateTeacherSubTaskRequest, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.updateSubTask(solutionId, request), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.updateSubTask(solutionId, request), taskSetId, onSuccess);
   }
 
   deleteSubTask(taskSetId: number, solutionId: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteSubTask(solutionId), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.deleteSubTask(solutionId), taskSetId, onSuccess);
   }
 
   upsertSubTaskSnippets(taskSetId: number, solutionId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
     if (this._loading()) return;
-    this.mutateAndReload(this.service.upsertSubTaskSnippets(solutionId, snippets), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.upsertSubTaskSnippets(solutionId, snippets), taskSetId, onSuccess);
   }
 
   // UI-TT-121 testvér-eset: ez a metódus - a fenti upsertSubTaskSnippets()-szel
@@ -249,11 +216,11 @@ export class TeacherTaskSetStore {
   // egy ténylegesen elindított második hívástól.
   upsertCompleteSolutionSnippets(taskSetId: number, taskId: number, snippets: SnippetDto[], onSuccess?: () => void): void {
     if (this._loading()) return;
-    this.mutateAndReload(this.service.upsertCompleteSolutionSnippets(taskId, snippets), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.upsertCompleteSolutionSnippets(taskId, snippets), taskSetId, onSuccess);
   }
 
   uploadFile(taskSetId: number, kind: string, file: File, taskId?: number, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.uploadFile(taskSetId, kind, file, taskId), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.uploadFile(taskSetId, kind, file, taskId), taskSetId, onSuccess);
   }
 
   /**
@@ -264,11 +231,11 @@ export class TeacherTaskSetStore {
   uploadFiles(taskSetId: number, kind: string, files: File[], taskId?: number, onSuccess?: () => void): void {
     if (this._loading() || files.length === 0) return;
     const uploads = concat(...files.map((file) => this.service.uploadFile(taskSetId, kind, file, taskId)));
-    this.mutateAndReload(uploads.pipe(toArray()), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, uploads.pipe(toArray()), taskSetId, onSuccess);
   }
 
   deleteFile(taskSetId: number, fileId: string, onSuccess?: () => void): void {
-    this.mutateAndReload(this.service.deleteFile(fileId), taskSetId, onSuccess);
+    mutateAndReload(this.detailReload, this.service.deleteFile(fileId), taskSetId, onSuccess);
   }
 
   clearError(): void {
@@ -292,53 +259,6 @@ export class TeacherTaskSetStore {
       .subscribe({
         next: onSuccess,
         error: (err) => this._error.set(extractErrorMessage(err, 'A művelet sikertelen.')),
-      });
-  }
-
-  private mutateAndReload<T>(observable: Observable<T>, taskSetId: number, onSuccess?: () => void): void {
-    this._loading.set(true);
-    this._error.set(null);
-
-    observable
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          // UI-TT-156: csak akkor töltünk újra, ha a mutáció célpontja MÉG MINDIG a
-          // loader aktuális célpontja. Ha a tanár időközben egy MÁSIK feladatsorra
-          // navigált, az elhagyott (A) mutáció újratöltése felülírná a most megjelenített
-          // (B) szerkesztőt — a `_detailGeneration` ezt nem akadályozza meg, mert A
-          // reloadja indul utoljára, tehát ő kapná a legmagasabb generációt.
-          //
-          // A `_loading`-ot ilyenkor SZÁNDÉKOSAN nem állítjuk vissza: a `_detailTaskSetId`
-          // kizárólag a `loadDetail()`-ben változik, ami mindig `_loading.set(true)`-val
-          // indul és mindig lezáródó `finalize()`-t kap — tehát a loading állapot ekkor
-          // már ANNAK a frissebb betöltésnek a tulajdona, ami a célpontot átállította.
-          // Egy kézi `false` itt a még futó B-betöltés spinnerét kapcsolná ki idő előtt.
-          //
-          // A `null` (még semmit nem töltött be a loader) SZÁNDÉKOSAN átengedi az
-          // újratöltést: ilyenkor nincs megjelenített feladatsor, amit felül lehetne írni,
-          // viszont a UI-TT-45 szerződés (a `_loading` csak a reload befejeztével vált
-          // false-ra) EZEN a reloadon múlik — blokkolva a spinner örökre bent ragadna.
-          if (this._detailTaskSetId !== null && this._detailTaskSetId !== taskSetId) return;
-
-          // Loading marad true a mutáció válasza UTÁN is, egészen addig, amíg a
-          // szinkron módon elindított loadDetail() saját finalize()-a le nem futtatja
-          // — enélkül a mutáció válaszának megérkezésekor azonnal false-ra váltana,
-          // mielőtt a UI ténylegesen a frissített (pl. újonnan mentett) állapotot
-          // mutatná (UI-TT-45).
-          this.loadDetail(taskSetId, onSuccess);
-        },
-        error: (err) => {
-          // TEACH-6: ugyanaz a guard, mint a SIKER-ágon fent (UI-TT-156) - ha a tanár
-          // időközben egy MÁSIK feladatsorra navigált, az elhagyott (A) mutáció HIBÁS
-          // válasza sem írhatja felül a közben megnyitott (B) feladatsor loading/error
-          // állapotát (rossz-kontextusú hibabanner B fölött, illetve a B loadDetail()-je
-          // saját finalize()-a előtt idő előtt kikapcsolt spinner).
-          if (this._detailTaskSetId !== null && this._detailTaskSetId !== taskSetId) return;
-
-          this._error.set(extractErrorMessage(err, 'A művelet sikertelen.'));
-          this._loading.set(false);
-        },
       });
   }
 }

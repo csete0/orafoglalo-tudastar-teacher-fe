@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
-import { createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { confirmPublishDespiteGradingGaps, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 // A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
 // a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
@@ -85,7 +85,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await saveSnippetsButton.click();
 
   // ── SQL-párosítási figyelmeztetés látszik (még nincs fájl feltöltve) ──
-  await expect(teacherPage.locator('p.text-warning')).toBeVisible({ timeout: 15000 });
+  await expect(teacherPage.getByTestId('sql-files-warning')).toBeVisible({ timeout: 15000 });
 
   // ── create.sql + create_lite.sql feltöltése ──
   const createSqlInput = teacherPage.locator('label', { hasText: 'create.sql' }).locator('xpath=following-sibling::input[@type="file"]');
@@ -101,10 +101,13 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
     name: 'create_lite.sql', mimeType: 'application/sql',
     buffer: Buffer.from('CREATE TABLE Users (Id INTEGER PRIMARY KEY, Name TEXT);', 'utf-8'),
   });
-  await expect(teacherPage.locator('p.text-warning')).toHaveCount(0, { timeout: 15000 });
+  await expect(teacherPage.getByTestId('sql-files-warning')).toHaveCount(0, { timeout: 15000 });
 
-  // ── Publikálás (magántanár — nincs intézmény, nincs megerősítő dialógus) ──
+  // ── Publikálás (magántanár — nincs intézményi megosztás-megerősítés; a hiányos gépi javítást viszont jelzi:
+  //    nincs szempontlista, és az E2E-ben nincs futtató a referencia-lekérdezések ellenőrzéséhez) ──
   await teacherPage.getByRole('button', { name: 'Publikálás' }).click();
+  await confirmPublishDespiteGradingGaps(teacherPage);
+  await expect(teacherPage.getByTestId('confirm-dialog')).toHaveCount(0);
   await expect(teacherPage.getByRole('button', { name: 'Publikálva' })).toBeVisible({ timeout: 15000 });
 
   const taskSetUrl = teacherPage.url();

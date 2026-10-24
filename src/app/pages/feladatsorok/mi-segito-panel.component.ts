@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -239,6 +239,7 @@ export class MiSegitoPanelComponent {
       if (!open && this.lastDialogOpen !== false) this.reload();
       this.lastDialogOpen = open;
     });
+    inject(DestroyRef).onDestroy(() => this.loads.unsubscribe());
   }
 
   /** A három keret újratöltése - a szerkesztő hívja a nem dialógusos MI-használat után is (inline szempontlista-vázlat). */

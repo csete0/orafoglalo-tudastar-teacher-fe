@@ -18,6 +18,11 @@ import {
   DB_NAME,
   DB_PASSWORD,
   DB_USER,
+  REDIS_CONNECTION_STRING,
+  REDIS_CONTAINER_NAME,
+  REDIS_HOST_PORT,
+  STUDENT_FE_URL,
+  TEACHER_FE_URL,
   TEACHER_FILES_ROOT,
 } from './constants';
 
@@ -55,6 +60,17 @@ export default async function globalSetup(): Promise<void> {
 
   await waitForPostgresReady();
 
+  // A backend és az Admin API ugyanazt a Redist használja (check_auth cache), mint stagingen/élesen - ld. constants.ts.
+  console.log(`[global-setup] Redis konténer indítása (port ${REDIS_HOST_PORT})...`);
+  runDocker(['rm', '-f', REDIS_CONTAINER_NAME], { allowFailure: true });
+  runDocker([
+    'run', '-d',
+    '--name', REDIS_CONTAINER_NAME,
+    '--memory', '128m',
+    '-p', `127.0.0.1:${REDIS_HOST_PORT}:6379`,
+    'redis:7-alpine',
+  ]);
+
   console.log('[global-setup] Séma (EF-alapmigrációk + sql-postgres scriptek) + seed (DigitalCulture.E2ESeed)...');
   execFileSync(
     'dotnet',
@@ -75,6 +91,11 @@ export default async function globalSetup(): Promise<void> {
     pidFile: BACKEND_PID_FILE,
     logFile: BACKEND_LOG_FILE,
     env: {
+      Kestrel__Port: String(BACKEND_PORT),
+      // A backend által generált linkek (e-mail, tanári/diák app közti átlinkelés) az E2E-portokra mutassanak.
+      Urls__Dev__Frontend: STUDENT_FE_URL,
+      Urls__Dev__Backend: BACKEND_URL,
+      Urls__Dev__TeacherFrontend: TEACHER_FE_URL,
       ContactForm__RecipientEmail: 'e2e-contact@example.com',
       TeacherFiles__RootPath: TEACHER_FILES_ROOT,
       // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)
@@ -149,6 +170,7 @@ async function startDotnetService(svc: DotnetService): Promise<void> {
       ...process.env,
       ASPNETCORE_ENVIRONMENT: 'Development',
       ConnectionStrings__PostgresConnection: DB_CONNECTION_STRING,
+      Redis__ConnectionString: REDIS_CONNECTION_STRING,
       // Csak az E2E-hez: a JWT-kulcs Development módban sincs a repóban (SEC-fix), User Secrets pedig a CT-n nincs -
       // enélkül minden bejelentkezés 500-at adott („JWT SecretKey nincs konfigurálva”).
       Authentication__SecretKey: 'e2e-only-jwt-secret-key-not-for-any-real-environment-0123456789',

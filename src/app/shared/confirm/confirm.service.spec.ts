@@ -1,4 +1,6 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { ConfirmService } from './confirm.service';
 
 describe('ConfirmService', () => {
@@ -41,5 +43,19 @@ describe('ConfirmService', () => {
 
     service.resolve(true);
     await expect(second).resolves.toBe(true);
+  });
+
+  it('UI-TT-246: válasz nélküli elnavigáláskor (Vissza, menü) a nyitott kérdés elutasítva zárul, a művelet nem fut le', async () => {
+    @Component({ template: '' })
+    class TargetPage {}
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideRouter([{ path: 'lista', component: TargetPage }])] });
+    service = TestBed.inject(ConfirmService);
+
+    const answer = service.ask({ message: 'Biztosan törlöd?', danger: true });
+    await TestBed.inject(Router).navigateByUrl('/lista');
+
+    await expect(answer).resolves.toBe(false);
+    expect(service.pending()).toBeNull();
   });
 });

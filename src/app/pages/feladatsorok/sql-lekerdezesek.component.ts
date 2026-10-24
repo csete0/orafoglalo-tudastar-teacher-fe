@@ -1,24 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { SqlQueryItemDto, SqlQueryResultDto, SqlQueryStatus, TeacherTaskDto } from '../../models/teacher-content.model';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
+import { SqlQueryItemComponent } from './sql-lekerdezesek/sql-query-item.component';
 
 const SQL_LANGUAGE_ID = 6;
-
-const STATUS: Record<SqlQueryStatus, { icon: string; label: string; badge: string }> = {
-  ok: { icon: '✔', label: 'lefutott', badge: 'badge-success' },
-  not_query: { icon: '✔', label: 'lefutott (nem lekérdezés)', badge: 'badge-success' },
-  error: { icon: '✘', label: 'hiba', badge: 'badge-danger' },
-  nondeterministic: { icon: '⚠', label: 'kétszer futtatva eltérő eredmény', badge: 'badge-warning' },
-  missing: { icon: '⚠', label: 'nincs lekérdezés', badge: 'badge-warning' },
-  not_run: { icon: '⚠', label: 'nem ellenőrzött', badge: 'badge-warning' },
-};
 
 const isGood = (status: SqlQueryStatus | undefined) => status === 'ok' || status === 'not_query';
 
@@ -38,13 +30,10 @@ function errorText(err: unknown, fallback: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sql-lekerdezesek',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent],
+  imports: [DialogShellComponent, IconComponent, LocalSpinnerComponent, SqlQueryItemComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
-      <div class="fixed inset-0 bg-black/40" data-testid="sql-q-backdrop" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-q-title" tabindex="-1" data-testid="sql-queries-dialog"
-        class="card relative w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
+    <app-dialog-shell labelledBy="sql-q-title" testId="sql-queries-dialog" backdropTestId="sql-q-backdrop"
+      panelClass="card w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="database" class="w-5 h-5 block" /></div>
@@ -73,9 +62,10 @@ function errorText(err: unknown, fallback: string): string {
                 A futtató most nem érhető el, így a lekérdezések ellenőrzése elmaradt - mentés előtt érdemes később újraellenőrizni.
               </p>
             }
-            @if ((latest()?.warnings ?? []).length > 0) {
+            @let warnings = latest()?.warnings ?? [];
+            @if (warnings.length > 0) {
               <ul class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning list-disc pl-8 space-y-0.5" data-testid="sql-q-warnings">
-                @for (w of latest()!.warnings; track $index) { <li>{{ w }}</li> }
+                @for (w of warnings; track $index) { <li>{{ w }}</li> }
               </ul>
             }
             @if (gen.aiNotes) {
@@ -83,82 +73,9 @@ function errorText(err: unknown, fallback: string): string {
             }
 
             @for (item of gen.queries; track item.subTaskId) {
-              @let check = checks()[item.subTaskId];
-              <section class="bg-bg-element rounded-xl p-3 space-y-2 min-w-0" [attr.data-testid]="'sql-q-item-' + item.subTaskId"
-                [attr.aria-labelledby]="'sql-q-label-' + item.subTaskId">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="font-semibold text-sm" [id]="'sql-q-label-' + item.subTaskId">{{ item.label }}</h3>
-                  <span class="badge" [class]="statusBadge(check?.status)" [attr.data-testid]="'sql-q-status-' + item.subTaskId"
-                    [attr.aria-label]="'Állapot: ' + statusLabel(check?.status)">
-                    <span aria-hidden="true">{{ statusIcon(check?.status) }}</span>&nbsp;{{ statusLabel(check?.status) }}
-                  </span>
-                  @if (isChanged(item)) { <span class="badge badge-warning">módosítva</span> }
-                  @if (check?.status === 'missing') {
-                    <span class="badge badge-neutral" [attr.data-testid]="'sql-q-missing-' + item.subTaskId">Nem készült lekérdezés (pl. importálás – nem igényel SQL-t)</span>
-                  } @else if (!willSave(item.subTaskId) && (check?.hadSnippet ?? item.hadSnippet)) {
-                    <span class="badge badge-neutral" [attr.data-testid]="'sql-q-wont-save-' + item.subTaskId">Nem lesz mentve – már van megoldás</span>
-                  } @else if (check?.hadSnippet ?? item.hadSnippet) {
-                    <span class="badge badge-neutral" [attr.data-testid]="'sql-q-had-' + item.subTaskId">van már SQL-megoldása – felülíródik</span>
-                  }
-                </div>
-
-                @if (check?.error) {
-                  <p class="text-sm text-danger break-words" [attr.data-testid]="'sql-q-error-' + item.subTaskId">{{ check!.error }}</p>
-                }
-                @if (itemWarnings(check).length > 0) {
-                  <ul class="text-sm text-warning list-disc pl-5 space-y-0.5" [attr.data-testid]="'sql-q-item-warnings-' + item.subTaskId">
-                    @for (w of itemWarnings(check); track $index) { <li>{{ w }}</li> }
-                  </ul>
-                }
-
-                <textarea rows="6" spellcheck="false" [attr.aria-label]="item.label + ' lekérdezése'" [attr.data-testid]="'sql-q-editor-' + item.subTaskId"
-                  class="input !bg-bg-panel !px-2 !py-1 !text-xs font-mono whitespace-pre"
-                  placeholder="Ide írhatod a lekérdezést (üresen hagyva nem kerül mentésre)."
-                  [ngModel]="texts()[item.subTaskId] ?? ''" (ngModelChange)="edit(item.subTaskId, $event)" [ngModelOptions]="{ standalone: true }"></textarea>
-
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <label class="flex items-center gap-2 text-sm">
-                    <input type="checkbox" [checked]="isSelected(item.subTaskId)" [disabled]="!hasText(item.subTaskId) || !willSave(item.subTaskId)"
-                      (change)="toggleSelected(item.subTaskId)" [attr.data-testid]="'sql-q-select-' + item.subTaskId" />
-                    Mentésre kijelölve
-                  </label>
-                  @if (isChanged(item)) {
-                    <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="restore(item)" [attr.data-testid]="'sql-q-restore-' + item.subTaskId"
-                      [attr.aria-label]="item.label + ' visszaállítása az MI változatára'">Visszaállítás</button>
-                  }
-                </div>
-
-                @if (check?.preview; as p) {
-                  <div [attr.data-testid]="'sql-q-preview-' + item.subTaskId">
-                    <p class="text-xs text-text-muted mb-1">
-                      Eredmény: {{ p.totalRows }} sor{{ p.rows.length < p.totalRows ? ' – az első ' + p.rows.length + ' látszik' : '' }}
-                    </p>
-                    @if (p.columns.length > 0) {
-                      <div class="overflow-x-auto max-h-72 overflow-y-auto rounded-lg border border-border-default bg-bg-panel" tabindex="0"
-                        [attr.aria-label]="item.label + ' eredménye'" role="region">
-                        <table class="text-xs font-mono border-collapse min-w-full">
-                          <thead>
-                            <tr>
-                              @for (c of p.columns; track $index) {
-                                <th scope="col" class="text-left font-semibold px-2 py-1 border-b border-border-default whitespace-nowrap bg-bg-element">{{ c }}</th>
-                              }
-                            </tr>
-                          </thead>
-                          <tbody>
-                            @for (row of p.rows; track $index) {
-                              <tr>
-                                @for (cell of row; track $index) {
-                                  <td class="px-2 py-0.5 border-b border-border-default whitespace-nowrap" [class.text-text-muted]="cell === null">{{ cell ?? 'NULL' }}</td>
-                                }
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      </div>
-                    }
-                  </div>
-                }
-              </section>
+              <app-sql-query-item [item]="item" [check]="checks()[item.subTaskId]" [text]="texts()[item.subTaskId] ?? ''"
+                [selected]="isSelected(item.subTaskId)" [willSave]="willSave(item.subTaskId)"
+                (textChange)="edit(item.subTaskId, $event)" (selectedToggle)="toggleSelected(item.subTaskId)" (restore)="restore(item)" />
             }
 
             @if (dirty()) {
@@ -261,8 +178,7 @@ function errorText(err: unknown, fallback: string): string {
             </div>
           </div>
         }
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class SqlLekerdezesekComponent implements OnInit {
@@ -305,8 +221,6 @@ export class SqlLekerdezesekComponent implements OnInit {
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
 
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
-
   readonly missingCount = computed(
     () => this.task().subTasks.filter((s) => !s.snippets.some((sn) => sn.programmingLanguageId === SQL_LANGUAGE_ID && sn.code.trim())).length,
   );
@@ -341,7 +255,6 @@ export class SqlLekerdezesekComponent implements OnInit {
   ngOnInit(): void {
     // Ha minden részfeladatnak van már megoldása, csak az újraírásnak van értelme.
     this.regenerate.set(this.missingCount() === 0);
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   generate(): void {
@@ -401,12 +314,6 @@ export class SqlLekerdezesekComponent implements OnInit {
     return this.checks()[subTaskId]?.willSave !== false;
   }
 
-  /** A „nem lesz mentve” figyelmeztetést a jelvény mutatja - a listában nem ismételjük. */
-  itemWarnings(check: SqlQueryItemDto | undefined): string[] {
-    const warnings = check?.warnings ?? [];
-    return check?.willSave === false ? warnings.filter((w) => !w.startsWith('Nem lesz mentve')) : warnings;
-  }
-
   toggleSelected(subTaskId: number): void {
     this.selected.update((current) => {
       const next = new Set(current);
@@ -414,10 +321,6 @@ export class SqlLekerdezesekComponent implements OnInit {
       else next.add(subTaskId);
       return next;
     });
-  }
-
-  isChanged(item: SqlQueryItemDto): boolean {
-    return (this.texts()[item.subTaskId] ?? '') !== (item.sql ?? '');
   }
 
   edit(subTaskId: number, text: string): void {
@@ -535,17 +438,5 @@ export class SqlLekerdezesekComponent implements OnInit {
     this.revalidation?.unsubscribe();
     this.revalidation = null;
     this.revalidating.set(false);
-  }
-
-  statusLabel(status: SqlQueryStatus | undefined): string {
-    return status ? (STATUS[status]?.label ?? status) : 'nem ellenőrzött';
-  }
-
-  statusIcon(status: SqlQueryStatus | undefined): string {
-    return status ? (STATUS[status]?.icon ?? '⚠') : '⚠';
-  }
-
-  statusBadge(status: SqlQueryStatus | undefined): string {
-    return status ? (STATUS[status]?.badge ?? 'badge-neutral') : 'badge-neutral';
   }
 }

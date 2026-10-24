@@ -287,6 +287,21 @@ describe('SzempontlistaComponent', () => {
     expect(all(fixture, 'rubric-item-gate').length).toBe(0);
   });
 
+  it('megszűnéskor a függő betöltés (lista, keret) lemondva', () => {
+    const rubric = new Subject<TeacherRubricDto | null>();
+    const quota = new Subject<RubricQuotaDto>();
+    const fixture = create(null);
+    service.getRubric.mockReturnValue(rubric);
+    service.getRubricQuota.mockReturnValue(quota);
+    fixture.componentRef.setInput('task', { ...makeTask(), id: 8 });
+    fixture.detectChanges();
+    expect(rubric.observed).toBe(true);
+    expect(quota.observed).toBe(true);
+    fixture.destroy();
+    expect(rubric.observed).toBe(false);
+    expect(quota.observed).toBe(false);
+  });
+
   it('saját listánál nincs „hivatalos” megjegyzés', () => {
     const fixture = create(makeRubric());
     expect(el(fixture, 'rubric-catalog-copy')).toBeNull();

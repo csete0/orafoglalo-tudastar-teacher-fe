@@ -20,9 +20,9 @@ szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
   E:\Repos\orafoglalo-tudastar-admin-fe     <- platform-admin felület (2026-09-23 óta)
   ```
   Ha máshol vannak, ld. alább az env var felülbírálást.
-- A `7083` (backend), `4200` (diák-fe) és `4300` (tanár-fe) portok szabadok —
-  a suite a NORMÁL dev portokat használja, ezért **E2E közben ne fusson
-  párhuzamosan egy normál dev session** (állítsd le előtte, ha fut).
+- Saját, elszigetelt portok (2026-10-24 óta): backend `17083`, diák-fe `4210`, tanár-fe `4310` - a két frontend
+  az `e2e` build-konfigurációval (`environment.e2e.ts`) indul, így egy normál dev session (7083/4200/4300) és a
+  staging CT példányai mellette is futhatnak, semmit nem kell leállítani.
   Az Admin API (`17090`) és az admin-fe (`14400`) saját portot kap, mert a staging CT-n a 7090/4400-on a
   staging példányok futnak. Az admin-fe production-konfiggal (relatív `/api/admin`) és az `e2e/admin-proxy.json`
   proxyval indul - az Admin API-n nincs CORS, stagingen/élesen is az nginx teszi egy originre.

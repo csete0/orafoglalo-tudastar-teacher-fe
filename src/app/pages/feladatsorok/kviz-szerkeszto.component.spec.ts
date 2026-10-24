@@ -1,14 +1,28 @@
-import { computed, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { computed, signal, Type } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { QuizBankQuestionDto, TeacherQuizAssignmentDto, TeacherQuizDetailDto, TeacherQuizQuestionDto } from '../../models/teacher-quiz.model';
 import { GroupDto } from '../../models/group.model';
 import { GroupStore } from '../../services/group/group.store';
+import { QuizBankStore } from '../../services/teacher-quiz/quiz-bank.store';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { KvizSzerkesztoComponent } from './kviz-szerkeszto.component';
+import { QuizAiComponent } from './kviz-szerkeszto/quiz-ai.component';
+import { QuizAssignComponent } from './kviz-szerkeszto/quiz-assign.component';
+import { QuizBankSearchComponent } from './kviz-szerkeszto/quiz-bank-search.component';
+import { QuizLiveComponent } from './kviz-szerkeszto/quiz-live.component';
+import { QuizPublishComponent } from './kviz-szerkeszto/quiz-publish.component';
+import { QuizQuestionFormComponent } from './kviz-szerkeszto/quiz-question-form.component';
+import { QuizSettingsComponent } from './kviz-szerkeszto/quiz-settings.component';
+
+/** A szerkesztő egy szekció-alkomponense (a renderelt oldalból). */
+function section<T>(fixture: ComponentFixture<KvizSzerkesztoComponent>, type: Type<T>): T {
+  return fixture.debugElement.query(By.directive(type)).componentInstance as T;
+}
 
 function makeQuestion(overrides: Partial<TeacherQuizQuestionDto> = {}): TeacherQuizQuestionDto {
   return {
@@ -87,16 +101,11 @@ describe('KvizSzerkesztoComponent', () => {
     generating: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     publishResult: ReturnType<typeof signal<unknown>>;
-    bankResults: ReturnType<typeof signal<QuizBankQuestionDto[]>>;
-    bankSearching: ReturnType<typeof signal<boolean>>;
-    bankSearchError: ReturnType<typeof signal<string | null>>;
     loadDetail: ReturnType<typeof vi.fn>;
     addQuestion: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
     clearPublishResult: ReturnType<typeof vi.fn>;
-    searchBankQuestions: ReturnType<typeof vi.fn>;
     addExistingQuestion: ReturnType<typeof vi.fn>;
-    clearBankResults: ReturnType<typeof vi.fn>;
     updateQuiz: ReturnType<typeof vi.fn>;
     setScope: ReturnType<typeof vi.fn>;
     unpublish: ReturnType<typeof vi.fn>;
@@ -121,16 +130,11 @@ describe('KvizSzerkesztoComponent', () => {
       generating: signal(false),
       error: signal(null),
       publishResult: signal(null),
-      bankResults: signal([]),
-      bankSearching: signal(false),
-      bankSearchError: signal(null),
       loadDetail: vi.fn(),
       addQuestion: vi.fn(),
       publish: vi.fn(),
       clearPublishResult: vi.fn(),
-      searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
-      clearBankResults: vi.fn(),
       updateQuiz: vi.fn(),
       setScope: vi.fn(),
       unpublish: vi.fn(),
@@ -178,10 +182,10 @@ describe('KvizSzerkesztoComponent', () => {
    * megjelenített (rossz) kvízre menne.
    */
   it('UI-TT-237: archivált csoport sem az Élő játék, sem a Kiadás választóban nem jelenik meg', () => {
-    configure(makeDetail(), [makeGroup({ id: 1, name: 'Aktív' }), makeGroup({ id: 2, name: 'Régi', isArchived: true })]);
-    const c = TestBed.createComponent(KvizSzerkesztoComponent).componentInstance;
-    expect(c.groupOptions().map((g) => g.id)).toEqual([1]);
-    expect(c.assignableGroups().map((g) => g.id)).toEqual([1]);
+    const fixture = configure(makeDetail(), [makeGroup({ id: 1, name: 'Aktív' }), makeGroup({ id: 2, name: 'Régi', isArchived: true })]);
+    fixture.detectChanges();
+    expect(section(fixture, QuizLiveComponent).groupOptions().map((g) => g.id)).toEqual([1]);
+    expect(section(fixture, QuizAssignComponent).assignableGroups().map((g) => g.id)).toEqual([1]);
   });
 
   it('csak a SAJÁT id-jéhez tartozó kvízt jeleníti meg', () => {
@@ -206,7 +210,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('nem enged menteni, amíg nincs kijelölve helyes válasz', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     component.questionForm.patchValue({
       questionType: 'single',
@@ -226,7 +230,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('kevés vagy ismétlődő válaszlehetőségnél figyelmeztet', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     component.questionForm.patchValue({ questionText: 'k', topicId: 1, optionsText: 'Csak egy' });
     fixture.detectChanges();
@@ -242,7 +246,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('egyválasztósnál a jelölés lecserélődik, többválasztósnál gyűlik', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     component.questionForm.patchValue({ questionType: 'single', optionsText: 'A\nB\nC' });
     fixture.detectChanges();
@@ -264,7 +268,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('hiányos kitöltésnél kéri a ___ jelölést és az elfogadott válaszokat', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     component.questionForm.patchValue({
       questionType: 'cloze',
@@ -287,7 +291,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('hiányos kitöltésnél opciók nélkül, elfogadott alakokkal küldi be a kérdést', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     component.questionForm.patchValue({
       questionType: 'cloze',
@@ -316,7 +320,7 @@ describe('KvizSzerkesztoComponent', () => {
   it('BUG UI-TT-209 javítva: hiányzó témakörnél a "Hozzáadás" gomb letiltva marad', () => {
     const fixture = configure();
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
     // Minden ki van töltve, KIVÉVE a kötelező témakört.
     component.questionForm.patchValue({
@@ -332,8 +336,9 @@ describe('KvizSzerkesztoComponent', () => {
     expect(component.questionForm.invalid).toBe(true);
 
     const addButton: HTMLButtonElement = fixture.nativeElement.querySelector(
-      'form[novalidate] button[type="submit"], section button[type="submit"]',
+      'app-quiz-question-form button[type="submit"]',
     );
+    expect(addButton?.textContent).toContain('Hozzáadás');
     expect(addButton?.disabled).toBe(true);
   });
 
@@ -364,11 +369,62 @@ describe('KvizSzerkesztoComponent', () => {
 
     // A form a syncSettingsForm()-ból töltődik; a címet expliciten beállítjuk,
     // hogy a required/notBlank validator ne blokkolja a mentést.
-    fixture.componentInstance.settingsForm.patchValue({ title: 'Teszt kvíz' });
-    fixture.componentInstance.saveSettings();
+    const settings = section(fixture, QuizSettingsComponent);
+    settings.settingsForm.patchValue({ title: 'Teszt kvíz' });
+    settings.saveSettings();
 
     const request = storeMock.updateQuiz.mock.calls[0][1] as { rowVersion?: string };
     expect(request.rowVersion).toBe('AAAAAAAAB9k=');
+  });
+
+  describe('K: szekció-alkomponensek bekötése', () => {
+    it('a beállítás-űrlap a megjelenő kvízből töltődik, a betöltés végén pedig a friss adatokra frissül', () => {
+      const fixture = configure(makeDetail({ title: 'Régi cím', maxAttempts: 2 }));
+      fixture.detectChanges();
+      const settings = section(fixture, QuizSettingsComponent);
+      expect(settings.settingsForm.controls.title.value).toBe('Régi cím');
+      expect(settings.settingsForm.controls.maxAttempts.value).toBe(2);
+
+      // A store betöltése befejeződik: a szülő a callbackben újraszinkronizál.
+      storeMock.selectedDetail.set(makeDetail({ title: 'Friss cím', maxAttempts: null }));
+      const onLoaded = storeMock.loadDetail.mock.calls[0][1] as () => void;
+      onLoaded();
+      expect(settings.settingsForm.controls.title.value).toBe('Friss cím');
+      expect(settings.settingsForm.controls.maxAttempts.value).toBeNull();
+    });
+
+    it('a kérdéslista „Szerkesztés” gombja a kérdés-űrlapba tölti a kérdést', async () => {
+      const q = makeQuestion({ id: 5, questionText: 'Listából szerkesztett' });
+      const fixture = configure(makeDetail({ questions: [q] }));
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+
+      (el.querySelector('app-quiz-question-list li button') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const editButton = Array.from(el.querySelectorAll('app-quiz-question-list button'))
+        .find((b) => b.textContent?.trim() === 'Szerkesztés') as HTMLButtonElement;
+      editButton.click();
+      await fixture.whenStable();
+
+      const form = section(fixture, QuizQuestionFormComponent);
+      expect(form.editingId()).toBe(5);
+      expect(form.questionForm.controls.questionText.value).toBe('Listából szerkesztett');
+    });
+
+    it('élő játék: a csoport-választó a kiválasztott id-t számként, az üres opciót null-ként tárolja', () => {
+      const fixture = configure(makeDetail({ isPublished: true }), [makeGroup({ id: 3, name: 'Élő' })]);
+      fixture.detectChanges();
+      const live = section(fixture, QuizLiveComponent);
+      const select = (fixture.nativeElement as HTMLElement).querySelector('#elo select') as HTMLSelectElement;
+
+      select.value = '3';
+      select.dispatchEvent(new Event('change'));
+      expect(live.liveGroupId()).toBe(3);
+
+      select.value = '';
+      select.dispatchEvent(new Event('change'));
+      expect(live.liveGroupId()).toBeNull();
+    });
   });
 
   describe('startEdit() - el nem mentett módosítás védelme (UI-TT-218)', () => {
@@ -378,7 +434,7 @@ describe('KvizSzerkesztoComponent', () => {
     it('BUG UI-TT-218 javítva: dirty formmal másik kérdésre váltva megerősítést kér, elutasításnál a form változatlan marad', async () => {
       const fixture = configure(makeDetail({ questions: [q1, q2] }));
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizQuestionFormComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       component.startEdit(q1);
@@ -402,7 +458,7 @@ describe('KvizSzerkesztoComponent', () => {
     it('megerősítés elfogadásánál a form áttölti a másik kérdés adataira', async () => {
       const fixture = configure(makeDetail({ questions: [q1, q2] }));
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizQuestionFormComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       component.startEdit(q1);
@@ -422,7 +478,7 @@ describe('KvizSzerkesztoComponent', () => {
     it('nem-dirty formnál (nincs el nem mentett módosítás) NEM kér megerősítést', async () => {
       const fixture = configure(makeDetail({ questions: [q1, q2] }));
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizQuestionFormComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       component.startEdit(q1);
@@ -432,6 +488,63 @@ describe('KvizSzerkesztoComponent', () => {
 
       expect(confirmService.pending()).toBeNull();
       expect(component.editingId()).toBe(2);
+    });
+  });
+
+  // UI-TT-245 (refaktor-tanar-admin, 2026-10-24): a fenti UI-TT-218 védelem CSAK a kérdések közti
+  // váltást fedi (startEdit), a "Beállítások" (Cím/Leírás/időkorlát/stb.) mentetlen módosítását NEM -
+  // a route ('kvizek/:id/szerkesztes', app.routes.ts) nem kap canDeactivate-et, a komponens nem
+  // implementál canLeave()-t, szemben a testvér oldalakkal (szóbeli-téma, feladatsor-szerkesztő,
+  // projekt-kiadás - mindhárom "Mentetlen módosítások elhagyás előtt megerősítést kérnek." kommenttel
+  // kapja a route-guardot). Élőben reprodukálva: Leírás mezőbe szöveg írva, Mentés NÉLKÜL
+  // "Eredmények →"-re (majd külön próbával "← Kvízeim"-re) kattintva - nincs "Elveted a
+  // módosításokat?" dialógus, a szöveg a visszatéréskor véglegesen, csendben elveszett.
+  describe('Beállítások mentetlen módosítás elhagyás-őre (UI-TT-245)', () => {
+    it('UI-TT-245: mentetlen Beállítások-módosításnál az elhagyás megerősítést kér, mentés után nem', async () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const settings = section(fixture, QuizSettingsComponent);
+      const confirmService = TestBed.inject(ConfirmService);
+
+      expect(component.canLeave()).toBe(true);
+
+      settings.settingsForm.controls.description.setValue('UI-TT-repro-lostwork-test');
+      settings.settingsForm.markAsDirty();
+      const leave = component.canLeave();
+      expect(confirmService.pending()).not.toBeNull();
+      confirmService.resolve(false);
+      expect(await leave).toBe(false);
+
+      storeMock.updateQuiz.mockImplementation((_id: number, _req: unknown, onSuccess?: () => void) => onSuccess?.());
+      settings.saveSettings();
+      expect(component.canLeave()).toBe(true);
+    });
+
+    it('a sikeres törlés után a mentetlen beállítás sem kérdez rá újra (a kvíz már nincs)', () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const settings = section(fixture, QuizSettingsComponent);
+      settings.settingsForm.controls.description.setValue('Mentetlen');
+      settings.settingsForm.markAsDirty();
+
+      // A store deleteQuiz-a a sikeres DELETE után kiveszi a kvízt (selectedDetail = null), utána navigál a listára.
+      storeMock.selectedDetail.set(null);
+      expect(fixture.componentInstance.canLeave()).toBe(true);
+      expect(TestBed.inject(ConfirmService).pending()).toBeNull();
+    });
+
+    it('UI-TT-245: az „Új kérdés” piszkozat is védett', async () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const form = section(fixture, QuizQuestionFormComponent);
+      form.questionForm.controls.questionText.setValue('Félbehagyott kérdés');
+      form.questionForm.markAsDirty();
+
+      const leave = fixture.componentInstance.canLeave();
+      const confirmService = TestBed.inject(ConfirmService);
+      confirmService.resolve(true);
+      expect(await leave).toBe(true);
     });
   });
 
@@ -451,7 +564,7 @@ describe('KvizSzerkesztoComponent', () => {
         [groupA, groupB],
       );
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizAssignComponent);
 
       // A kiadás-listában (groupId=1, a régi kiadás) a YGNEGXM7 kódnak kell megjelennie.
       expect(component.groupLabel(1, 'browserhunt-csoport-20260721')).toBe(
@@ -474,7 +587,8 @@ describe('KvizSzerkesztoComponent', () => {
     it('kontroll: egyedi nevű csoportnál a felület változatlan marad, nincs invite-kód a névhez fűzve', () => {
       const group = makeGroup({ id: 1, name: 'Egyedi csoport', inviteCode: 'ZZZZ9999' });
       const fixture = configure(makeDetail({ isPublished: true, assignments: [] }), [group]);
-      const component = fixture.componentInstance;
+      fixture.detectChanges();
+      const component = section(fixture, QuizAssignComponent);
 
       expect(component.groupLabel(1, 'Egyedi csoport')).toBe('Egyedi csoport');
     });
@@ -533,19 +647,20 @@ describe('KvizSzerkesztoComponent', () => {
       expect(el.querySelector('[data-testid="quiz-source-section"]')).not.toBeNull();
       expect(el.querySelector('app-kviz-szovegbol')).toBeNull();
 
-      fixture.componentInstance.sourceOpen.set(true);
+      const ai = section(fixture, QuizAiComponent);
+      ai.sourceOpen.set(true);
       fixture.detectChanges();
       expect(el.querySelector('app-kviz-szovegbol')).not.toBeNull();
 
       storeMock.loadDetail.mockClear();
-      fixture.componentInstance.onSourceChanged();
+      ai.onSourceChanged();
       expect(storeMock.loadDetail).toHaveBeenCalledWith(7);
     });
 
     it('publikált platform-kvíznél Visszavonás gomb - megerősítés után store.unpublish(), elutasításnál nem', async () => {
       const fixture = configure(makeDetail({ isPublished: true, questionCount: 3 }), [], { scope: 'admin' });
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizPublishComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       const button = fixture.nativeElement.querySelector('[data-testid="unpublish-btn"]') as HTMLButtonElement;
@@ -580,7 +695,7 @@ describe('KvizSzerkesztoComponent', () => {
     it('törlés gomb → megerősítés után store.deleteQuiz() hívódik', async () => {
       const fixture = configure(makeDetail({ id: 7, isPublished: false }));
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizAssignComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       const deletePromise = component.deleteQuiz();
@@ -594,7 +709,7 @@ describe('KvizSzerkesztoComponent', () => {
     it('törlés elutasításnál store.deleteQuiz() NEM hívódik', async () => {
       const fixture = configure(makeDetail({ id: 7, isPublished: false }));
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizAssignComponent);
       const confirmService = TestBed.inject(ConfirmService);
 
       const deletePromise = component.deleteQuiz();
@@ -612,7 +727,7 @@ describe('KvizSzerkesztoComponent', () => {
       const group = makeGroup({ id: 2, name: 'Teszt csoport' });
       const fixture = configure(makeDetail({ id: 7, isPublished: true }), [group]);
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizAssignComponent);
 
       component.assignForm.patchValue({
         groupId: 2,
@@ -634,7 +749,7 @@ describe('KvizSzerkesztoComponent', () => {
       const group = makeGroup({ id: 2, name: 'Teszt csoport' });
       const fixture = configure(makeDetail({ id: 7, isPublished: true }), [group]);
       fixture.detectChanges();
-      const component = fixture.componentInstance;
+      const component = section(fixture, QuizAssignComponent);
 
       component.assignForm.patchValue({
         groupId: 2,
@@ -702,16 +817,18 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
     generating: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     publishResult: ReturnType<typeof signal<unknown>>;
-    bankResults: ReturnType<typeof signal<QuizBankQuestionDto[]>>;
-    bankSearching: ReturnType<typeof signal<boolean>>;
-    bankSearchError: ReturnType<typeof signal<string | null>>;
     loadDetail: ReturnType<typeof vi.fn>;
     addQuestion: ReturnType<typeof vi.fn>;
     publish: ReturnType<typeof vi.fn>;
-    searchBankQuestions: ReturnType<typeof vi.fn>;
     addExistingQuestion: ReturnType<typeof vi.fn>;
-    clearBankResults: ReturnType<typeof vi.fn>;
     setScope: ReturnType<typeof vi.fn>;
+    scope: ReturnType<typeof signal<string>>;
+  };
+  let bankMock: {
+    results: ReturnType<typeof signal<QuizBankQuestionDto[]>>;
+    searching: ReturnType<typeof signal<boolean>>;
+    error: ReturnType<typeof signal<string | null>>;
+    search: ReturnType<typeof vi.fn>;
   };
 
   function configure() {
@@ -721,16 +838,18 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
       generating: signal(false),
       error: signal(null),
       publishResult: signal(null),
-      bankResults: signal([]),
-      bankSearching: signal(false),
-      bankSearchError: signal(null),
       loadDetail: vi.fn(),
       addQuestion: vi.fn(),
       publish: vi.fn(),
-      searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
-      clearBankResults: vi.fn(),
       setScope: vi.fn(),
+      scope: signal('teacher'),
+    };
+    bankMock = {
+      results: signal([]),
+      searching: signal(false),
+      error: signal(null),
+      search: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -739,6 +858,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } },
         { provide: TeacherQuizStore, useValue: storeMock },
+        { provide: QuizBankStore, useValue: bankMock },
         { provide: TeacherQuizService, useValue: { getTopics: () => of([]) } },
         { provide: GroupStore, useValue: { groups: signal([]), activeGroups: signal([]), loadMine: vi.fn() } },
       ],
@@ -758,7 +878,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
 
   it('kinyitva megjelenik a keresőforma, keresésre a store-t hívja a megadott szűrőkkel', () => {
     const fixture = configure();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizBankSearchComponent);
 
     component.toggleBankSearch();
     fixture.detectChanges();
@@ -767,26 +887,26 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
     component.bankSearchForm.patchValue({ search: 'XKERES', topicId: 3, difficulty: 'Hard' });
     component.searchBank();
 
-    expect(storeMock.searchBankQuestions).toHaveBeenCalledWith('XKERES', 3, 'Hard');
+    expect(bankMock.search).toHaveBeenCalledWith('XKERES', 3, 'Hard', 'teacher');
   });
 
   it('üres keresőszöveget null-ra normalizálja (nem küld whitespace-only stringet)', () => {
     const fixture = configure();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizBankSearchComponent);
     component.toggleBankSearch();
     fixture.detectChanges();
 
     component.bankSearchForm.patchValue({ search: '   ', topicId: null, difficulty: null });
     component.searchBank();
 
-    expect(storeMock.searchBankQuestions).toHaveBeenCalledWith(null, null, null);
+    expect(bankMock.search).toHaveBeenCalledWith(null, null, null, 'teacher');
   });
 
   it('a találatok megjelennek, a "Hozzáadás" a kiválasztott kérdés id-jével hívja a store-t', () => {
     const fixture = configure();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizBankSearchComponent);
     component.toggleBankSearch();
-    storeMock.bankResults.set([makeBankQuestion({ id: 99, questionText: 'XKERES kérdés' })]);
+    bankMock.results.set([makeBankQuestion({ id: 99, questionText: 'XKERES kérdés' })]);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('XKERES kérdés');
@@ -802,7 +922,7 @@ describe('KvizSzerkesztoComponent - meglévő kérdés hozzáadása a bankból',
 
   it('keresés előtt nem mutatja a "Nincs találat" üzenetet, csak egy lezárult, üres keresés után', () => {
     const fixture = configure();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizBankSearchComponent);
     component.toggleBankSearch();
     fixture.detectChanges();
 
@@ -849,15 +969,10 @@ describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
       generating: signal(false),
       error: signal(null),
       publishResult: signal(null),
-      bankResults: signal([]),
-      bankSearching: signal(false),
-      bankSearchError: signal(null),
       loadDetail: vi.fn(),
       addQuestion: vi.fn(),
       publish: vi.fn(),
-      searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
-      clearBankResults: vi.fn(),
       setScope: vi.fn(),
     };
 
@@ -924,7 +1039,12 @@ describe('KvizSzerkesztoComponent - szekció-navigáció (UI-TT-228)', () => {
 
 describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
   let storeMock: ReturnType<typeof buildStoreMock>;
-  let quizSvcMock: { getTopics: ReturnType<typeof vi.fn>; getQuestionReports: ReturnType<typeof vi.fn>; resolveQuestionReport: ReturnType<typeof vi.fn> };
+  let quizSvcMock: {
+    getTopics: ReturnType<typeof vi.fn>;
+    getQuestionReports: ReturnType<typeof vi.fn>;
+    resolveQuestionReport: ReturnType<typeof vi.fn>;
+    uploadQuizImage: ReturnType<typeof vi.fn>;
+  };
 
   function buildStoreMock(detail: TeacherQuizDetailDto | null = makeDetail()) {
     return {
@@ -933,16 +1053,11 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
       generating: signal(false),
       error: signal(null),
       publishResult: signal(null),
-      bankResults: signal([] as QuizBankQuestionDto[]),
-      bankSearching: signal(false),
-      bankSearchError: signal(null),
       loadDetail: vi.fn(),
       addQuestion: vi.fn(),
       publish: vi.fn(),
       clearPublishResult: vi.fn(),
-      searchBankQuestions: vi.fn(),
       addExistingQuestion: vi.fn(),
-      clearBankResults: vi.fn(),
       updateQuiz: vi.fn(),
       setScope: vi.fn(),
       unpublish: vi.fn(),
@@ -957,6 +1072,7 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
       getTopics: vi.fn().mockReturnValue(of([])),
       getQuestionReports: vi.fn().mockReturnValue(of({ items: [], totalCount: 0 })),
       resolveQuestionReport: vi.fn().mockReturnValue(of(null)),
+      uploadQuizImage: vi.fn().mockReturnValue(of({ id: 'b1a2c3d4-e5f6-7890-abcd-ef1234567890' })),
     };
     TestBed.configureTestingModule({
       imports: [KvizSzerkesztoComponent],
@@ -998,10 +1114,18 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
   it('C6: kép feltöltése után a saveQuestion az imageFileId-t is elküldi', () => {
     const fixture = configure(makeDetail({ id: 7, questions: [] }));
     fixture.detectChanges();
-    const component = fixture.componentInstance;
+    const component = section(fixture, QuizQuestionFormComponent);
 
-    // Szimulált feltöltés eredménye (a quizService.uploadQuizImage subscribe után fut)
-    (component as any).pendingImageFileId.set('b1a2c3d4-e5f6-7890-abcd-ef1234567890');
+    // Kép kiválasztása → feltöltés (a quizService.uploadQuizImage válaszának id-je kerül a kérdésbe)
+    const originalCreateObjectUrl = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:kep');
+    const file = new File(['x'], 'kep.png', { type: 'image/png' });
+    try {
+      component.onImageSelected({ target: { files: [file], value: '' } } as unknown as Event);
+    } finally {
+      URL.createObjectURL = originalCreateObjectUrl;
+    }
+    expect(quizSvcMock.uploadQuizImage).toHaveBeenCalledWith(7, file);
 
     component.questionForm.patchValue({
       questionType: 'single',
@@ -1010,7 +1134,7 @@ describe('KvizSzerkesztoComponent - A5: reportCount badge', () => {
       difficulty: 'Medium',
       optionsText: 'A\nB',
     });
-    (component as any).selectedCorrect.set(['A']);
+    component.toggleCorrect('A');
 
     component.saveQuestion();
 

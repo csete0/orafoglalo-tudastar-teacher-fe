@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs';
 import { TeacherProjectService } from '../../services/teacher-project/teacher-project.service';
 import { GroupStore } from '../../services/group/group.store';
@@ -90,7 +91,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
               @if (openFor() === p.slug) {
                 <form class="mt-4 grid gap-3 sm:grid-cols-2 border-t border-border-default pt-4" (submit)="assign($event, p)" data-testid="assign-form">
                   <label class="text-sm">Csoport
-                    <select class="input mt-1" (change)="patch({ groupId: +$any($event.target).value || null })" data-testid="assign-group">
+                    <select #group class="input mt-1" (change)="patch({ groupId: +group.value || null })" data-testid="assign-group">
                       <option value="">Válassz csoportot…</option>
                       @for (g of assignableGroups(p); track g.id) { <option [value]="g.id">{{ g.name }}</option> }
                     </select>
@@ -101,7 +102,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                     </p>
                   } @else {
                     <label class="text-sm">Nyelv
-                      <select class="input mt-1" (change)="patch({ runtime: $any($event.target).value })" data-testid="assign-runtime">
+                      <select #runtime class="input mt-1" (change)="selectRuntime(p, runtime.value)" data-testid="assign-runtime">
                         <option value="">A diák választ</option>
                         @for (r of p.runtimes; track r) { <option [value]="r">Csak {{ runtimeLabels[r] }}</option> }
                       </select>
@@ -110,7 +111,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                   @if (canBeTest(p)) {
                     <div class="sm:col-span-2 rounded-xl bg-bg-element p-3">
                       <label class="flex items-center gap-2 text-sm font-semibold">
-                        <input type="checkbox" role="switch" [checked]="draft().isTest" (change)="patch({ isTest: $any($event.target).checked })" data-testid="assign-test" />
+                        <input #isTest type="checkbox" role="switch" [checked]="draft().isTest" (change)="patch({ isTest: isTest.checked })" data-testid="assign-test" />
                         Dolgozat (időkorláttal)
                       </label>
                       <p class="text-xs text-text-muted mt-1">
@@ -118,18 +119,18 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                       </p>
                       @if (draft().isTest) {
                         <label class="text-sm block mt-3">Időkorlát (perc)
-                          <input type="number" class="input mt-1 !w-32" [min]="minMinutes" [max]="maxMinutes" step="1" placeholder="240"
-                                 (change)="patch({ minutes: $any($event.target).value })" data-testid="assign-minutes" />
+                          <input #minutes type="number" class="input mt-1 !w-32" [min]="minMinutes" [max]="maxMinutes" step="1" placeholder="240"
+                                 (change)="patch({ minutes: minutes.value })" data-testid="assign-minutes" />
                           <span class="block text-xs text-text-muted mt-1">Üresen a projekt ideje (a szakmai vizsgán 240 perc).</span>
                         </label>
                       }
                     </div>
                   }
                   <label class="text-sm">{{ draft().isTest ? 'Kezdés' : 'Nyílik (nem kötelező)' }}
-                    <input type="datetime-local" class="input mt-1" (change)="patch({ opensAt: $any($event.target).value })" data-testid="assign-opens" />
+                    <input #opens type="datetime-local" class="input mt-1" (change)="patch({ opensAt: opens.value })" data-testid="assign-opens" />
                   </label>
                   <label class="text-sm">{{ draft().isTest ? 'Befejezés' : 'Határidő (nem kötelező)' }}
-                    <input type="datetime-local" class="input mt-1" (change)="patch({ dueAt: $any($event.target).value })" data-testid="assign-due" />
+                    <input #due type="datetime-local" class="input mt-1" (change)="patch({ dueAt: due.value })" data-testid="assign-due" />
                   </label>
                   @if (formError(); as err) { <p class="text-danger text-sm sm:col-span-2" role="alert">{{ err }}</p> }
                   <div class="sm:col-span-2">
@@ -185,6 +186,7 @@ export class ProjektekListaComponent implements OnInit {
   private readonly groups = inject(GroupStore);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly runtimeLabels = RUNTIME_LABELS;
   readonly utc = parseUtc;
@@ -207,7 +209,7 @@ export class ProjektekListaComponent implements OnInit {
 
   load(): void {
     this.loading.set(true);
-    this.api.list().pipe(take(1), finalize(() => this.loading.set(false))).subscribe({
+    this.api.list().pipe(take(1), finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (projects) => this.projects.set(projects),
       error: (e) => this.error.set(extractErrorMessage(e, 'A projektek betöltése sikertelen.')),
     });
@@ -227,6 +229,11 @@ export class ProjektekListaComponent implements OnInit {
 
   patch(change: Partial<AssignDraft>): void {
     this.draft.update((d) => ({ ...d, ...change }));
+  }
+
+  /** A legördülő értéke a projekt futtatói közül való; üres = a diák választ. */
+  selectRuntime(p: TeacherProjectDto, value: string): void {
+    this.patch({ runtime: p.runtimes.find((r) => r === value) ?? '' });
   }
 
   /**

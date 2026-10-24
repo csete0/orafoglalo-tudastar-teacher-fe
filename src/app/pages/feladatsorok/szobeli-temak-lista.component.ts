@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { take } from 'rxjs';
 import {
   ORAL_MODE_LABELS,
   ORAL_TOPIC_STATUS_LABELS,
@@ -120,6 +120,7 @@ import { TartalomFulekComponent } from './tartalom-fulek.component';
 })
 export class SzobeliTemakListaComponent implements OnInit {
   private readonly api = inject(TeacherOralExamService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly statusLabels = ORAL_TOPIC_STATUS_LABELS;
   readonly modeLabels = ORAL_MODE_LABELS;
@@ -135,7 +136,7 @@ export class SzobeliTemakListaComponent implements OnInit {
   readonly assignTarget = signal<OralAssignTarget | null>(null);
 
   ngOnInit(): void {
-    this.api.topics().pipe(take(1)).subscribe({
+    this.api.topics().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (topics) => {
         this.topics.set(topics);
         this.loading.set(false);
@@ -147,8 +148,8 @@ export class SzobeliTemakListaComponent implements OnInit {
       },
     });
     // A mellék-listák hibája nem takarja el a témákat: a kész szóbelik szakasza rejtve marad, a kiadásoknál hibaüzenet áll.
-    this.api.profiles().pipe(take(1)).subscribe({ next: (p) => this.profiles.set(p), error: () => {} });
-    this.api.assignments().pipe(take(1)).subscribe({ next: (a) => this.assignments.set(a), error: () => this.assignmentsError.set(true) });
+    this.api.profiles().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (p) => this.profiles.set(p), error: () => {} });
+    this.api.assignments().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (a) => this.assignments.set(a), error: () => this.assignmentsError.set(true) });
   }
 
   openAssign(profile: TeacherOralProfileOptionDto): void {

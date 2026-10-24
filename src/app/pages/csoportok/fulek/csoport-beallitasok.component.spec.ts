@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { CsoportBeallitasokComponent } from './csoport-beallitasok.component';
+import { CsoportHelyekComponent } from './csoport-helyek.component';
 import { GroupStore } from '../../../services/group/group.store';
 import { GroupSeatStore } from '../../../services/group/group-seat.store';
 import { SchoolStore } from '../../../services/school/school.store';
@@ -96,7 +98,7 @@ describe('CsoportBeallitasokComponent', () => {
   it('saveRename() visszaküldi a betöltött csoport konkurrencia-tokenjét', () => {
     const { c } = setup(makeGroup({ rowVersion: 'AAAAAAAAB9k=' }));
     c.startRename();
-    c.renameValue = 'Új név';
+    c.renameValue.set('Új név');
     c.saveRename();
     expect((update.mock.calls[0][1] as { name: string; rowVersion?: string })).toEqual(expect.objectContaining({ name: 'Új név', rowVersion: 'AAAAAAAAB9k=' }));
   });
@@ -104,10 +106,31 @@ describe('CsoportBeallitasokComponent', () => {
   it('sikertelen mentésnél az átnevező nyitva marad a begépelt névvel', () => {
     const { c } = setup(makeGroup({ rowVersion: 'elavult' }));
     c.startRename();
-    c.renameValue = 'Új név';
+    c.renameValue.set('Új név');
     c.saveRename();
     expect(c.renaming()).toBe(true);
-    expect(c.renameValue).toBe('Új név');
+    expect(c.renameValue()).toBe('Új név');
+  });
+
+  it('Mégse után az újabb „Átnevezés” a mostani névvel indul (az eldobott piszkozat nem marad meg)', () => {
+    const { fixture, el, c } = setup();
+    c.startRename();
+    c.renameValue.set('Eldobott');
+    c.renaming.set(false);
+    c.startRename();
+    fixture.detectChanges();
+    expect(c.renameValue()).toBe('Teszt Csoport');
+    const save = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Mentés') as HTMLButtonElement;
+    c.renameValue.set('   ');
+    fixture.detectChanges();
+    expect(save.disabled).toBe(true);
+  });
+
+  it('új csoport-objektum (sikeres mentés) a select-et a mentett intézményre szinkronizálja', () => {
+    const { fixture, c } = setup(makeGroup({ schoolId: undefined }), [school]);
+    expect(c.displaySchoolId()).toBeNull();
+    fixture.componentRef.setInput('group', makeGroup({ schoolId: 5 }));
+    expect(c.displaySchoolId()).toBe(5);
   });
 
   // UI-TT-34: archivált csoport visszaállítható.
@@ -159,9 +182,10 @@ describe('CsoportBeallitasokComponent', () => {
 
   // UI-TT-212: az „Óra vége” megerősítő szövege a kvízt író diákot is említi.
   it('UI-TT-212: az „Óra vége” megerősítése vizsgát ÉS kvízt is említ, majd releaseAll()-t hív', async () => {
-    const { c } = setup();
+    const { fixture } = setup();
     seatStore.overview.set(overview({ holders: [holder({ hasSessionInProgress: true })] }));
-    await c.confirmEndLesson();
+    const helyek = fixture.debugElement.query(By.directive(CsoportHelyekComponent)).componentInstance as CsoportHelyekComponent;
+    await helyek.confirmEndLesson();
     const message = confirm.ask.mock.calls[0][0].message as string;
     expect(message).toContain('Aki épp vizsgázik vagy kvízt ír, attól a rendszer nem veszi el a helyet.');
     expect(seatStore['releaseAll']).toHaveBeenCalledWith(1);

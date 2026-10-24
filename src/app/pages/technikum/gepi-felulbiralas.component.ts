@@ -8,7 +8,12 @@ import { parseUtc } from '../../shared/utc-date.util';
 import { CaseDetailDto, ExamPartResultDto, ExamSessionSnapshotDto } from '../../models/technikum.model';
 
 /** Egy csoport kézi ítélete: a gépi marad, vagy kézzel átment / elbukott. */
-type Verdict = 'gepi' | 'atment' | 'elbukott';
+const VERDICTS = ['gepi', 'atment', 'elbukott'] as const;
+type Verdict = (typeof VERDICTS)[number];
+
+function isVerdict(value: string): value is Verdict {
+  return (VERDICTS as readonly string[]).includes(value);
+}
 
 interface CaseGroup {
   key: string;
@@ -67,7 +72,7 @@ export function caseGroups(cases: CaseDetailDto[]): CaseGroup[] {
             @if (g.saved !== 'gepi') { <span class="badge badge-primary !text-[0.625rem]" data-testid="group-teacher-judged">tanár bírálta</span> }
             <label class="sr-only" [for]="'machine-verdict-' + rid + '-' + $index">Ítélet: {{ g.label }}</label>
             <select class="input !w-auto !px-1.5 !py-0.5 !text-xs ml-auto" [id]="'machine-verdict-' + rid + '-' + $index"
-                    [value]="verdictOf(g)" [attr.data-testid]="'machine-verdict-' + g.key" (change)="setVerdict(g.key, $any($event.target).value)">
+                    #verdictSelect [value]="verdictOf(g)" [attr.data-testid]="'machine-verdict-' + g.key" (change)="setVerdict(g.key, verdictSelect.value)">
               <option value="gepi">Gépi ítélet</option>
               <option value="atment">Kézi: átment</option>
               <option value="elbukott">Kézi: elbukott</option>
@@ -87,8 +92,8 @@ export function caseGroups(cases: CaseDetailDto[]): CaseGroup[] {
       }
     </ul>
     <label class="block text-xs font-semibold mt-2" [for]="'machine-note-' + rid">Megjegyzés a felülbíráláshoz (a diák nem látja)</label>
-    <textarea class="form-input !text-xs w-full mt-1" rows="2" maxlength="500" [id]="'machine-note-' + rid" [value]="note()"
-              [attr.data-testid]="'machine-note-' + rid" (input)="setNote($any($event.target).value)"
+    <textarea #noteBox class="form-input !text-xs w-full mt-1" rows="2" maxlength="500" [id]="'machine-note-' + rid" [value]="note()"
+              [attr.data-testid]="'machine-note-' + rid" (input)="setNote(noteBox.value)"
               placeholder="Pl.: a lista a böngészőben helyesen frissül, a mérő nem várta meg."></textarea>
     <div class="flex flex-wrap items-center gap-2 mt-2">
       <button type="button" class="btn btn-primary !px-2 !py-1 !text-xs" [disabled]="busy() || !dirty()"
@@ -145,7 +150,9 @@ export class GepiFelulbiralasComponent {
     return this.drafts()[g.key] ?? g.saved;
   }
 
-  setVerdict(key: string, verdict: Verdict): void {
+  /** A legördülő értéke (a három opció egyike). */
+  setVerdict(key: string, verdict: string): void {
+    if (!isVerdict(verdict)) return;
     this.drafts.update((d) => ({ ...d, [key]: verdict }));
     this.error.set(null);
   }

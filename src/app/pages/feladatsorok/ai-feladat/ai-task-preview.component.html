@@ -1,0 +1,90 @@
+<!-- ── 3. Előnézet ─────────────────────────── -->
+@let r = report();
+<div class="space-y-4 min-w-0" data-testid="ai-task-preview">
+  @switch (r.status) {
+    @case ('ok') {
+      <p class="bg-success-subtle border border-success/40 rounded-xl p-3 text-sm text-success flex items-start gap-2" data-testid="ai-task-valid">
+        <app-icon name="check" class="w-5 h-5 block shrink-0" />
+        <span>A mintamegoldás lefutott a futtatón, és minden részfeladat ad kimenetet. Nézd át a füleket, mentés előtt bármit módosíthatsz.</span>
+      </p>
+    }
+    @case ('unavailable') {
+      <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning" data-testid="ai-task-unavailable">
+        <p>A futtató most nem érhető el, így az ellenőrzés elmaradt - próbáld újra az Újraellenőrzéssel.</p>
+        @for (e of r.errors; track $index) { <span class="block text-xs mt-1">{{ e }}</span> }
+      </div>
+    }
+    @default {
+      <div class="bg-danger-subtle border border-danger/40 rounded-xl p-3 text-sm text-danger" data-testid="ai-task-invalid">
+        <p class="font-semibold mb-1">Az ellenőrzés hibát talált - így nem menthető. Javítsd a füleken, majd ellenőrizd újra:</p>
+        <ul class="list-disc pl-5 space-y-0.5 break-words">
+          @for (e of r.errors; track $index) { <li>{{ e }}</li> }
+        </ul>
+      </div>
+    }
+  }
+
+  @if (state.notes()) {
+    <p class="text-sm text-text-muted break-words"><span class="font-medium">Az AI megjegyzése:</span> {{ state.notes() }}</p>
+  }
+
+  <div role="tablist" aria-label="Az elkészült feladat részei" class="flex gap-1 overflow-x-auto border-b border-border-default -mx-1 px-1">
+    @for (t of tabs; track t.id; let i = $index) {
+      <button type="button" role="tab" [id]="'ai-task-tab-' + t.id" [attr.aria-selected]="state.tab() === t.id"
+        [attr.aria-controls]="'ai-task-panel-' + t.id" [attr.tabindex]="state.tab() === t.id ? 0 : -1"
+        (click)="state.tab.set(t.id)" (keydown)="onTabKey($event, i)" [attr.data-testid]="'ai-task-tab-' + t.id"
+        class="px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px"
+        [class.border-primary]="state.tab() === t.id" [class.text-primary]="state.tab() === t.id" [class.font-semibold]="state.tab() === t.id"
+        [class.border-transparent]="state.tab() !== t.id" [class.text-text-muted]="state.tab() !== t.id">
+        {{ t.label }}
+        @if (t.id === 'ellenorzes') {
+          @if (r.status === 'ok') { <span class="text-success" aria-hidden="true">✔</span> }
+          @else if (r.status === 'failed') { <span class="text-danger" aria-hidden="true">✘</span> }
+          @if (r.warnings.length > 0) { <span class="badge badge-warning ml-1">{{ r.warnings.length }}</span> }
+        }
+      </button>
+    }
+  </div>
+
+  @if (state.proposal(); as p) {
+    <div role="tabpanel" [id]="'ai-task-panel-' + state.tab()" [attr.aria-labelledby]="'ai-task-tab-' + state.tab()" class="min-w-0">
+      @switch (state.tab()) {
+        @case ('feladat') { <app-ai-task-subtasks-tab [mode]="mode()" [proposal]="p" /> }
+        @case ('adatfajl') { <app-ai-task-data-file-tab [mode]="mode()" [proposal]="p" [report]="r" /> }
+        @case ('megoldas') { <app-ai-task-solution-tab [proposal]="p" /> }
+        @case ('ellenorzes') { <app-ai-task-check-tab [proposal]="p" [report]="r" /> }
+      }
+    </div>
+  }
+
+  @if (state.dirty()) {
+    <div class="bg-warning-subtle border border-warning/40 rounded-xl p-3 text-sm text-warning flex flex-wrap items-center justify-between gap-2" role="status" data-testid="ai-task-dirty">
+      <span>Módosítottad a feladatot - mentés előtt ellenőrizd újra (ez nem használ AI-t).</span>
+      <button type="button" class="btn btn-primary !px-3 !py-1" (click)="revalidate.emit()" [disabled]="revalidating()" data-testid="ai-task-revalidate">
+        {{ revalidating() ? 'Ellenőrzés…' : 'Újraellenőrzés' }}
+      </button>
+    </div>
+  } @else if (r.status === 'unavailable') {
+    <div class="flex justify-end">
+      <button type="button" class="btn btn-ghost !px-3 !py-1" (click)="revalidate.emit()" [disabled]="revalidating()" data-testid="ai-task-revalidate">
+        {{ revalidating() ? 'Ellenőrzés…' : 'Újraellenőrzés' }}
+      </button>
+    </div>
+  }
+  @if (state.revalidateError()) {
+    <p class="text-sm text-danger" role="alert" data-testid="ai-task-revalidate-error">{{ state.revalidateError() }}</p>
+  }
+  @if (state.saveError()) {
+    <p class="text-sm text-danger" role="alert" data-testid="ai-task-save-error">{{ state.saveError() }}</p>
+  }
+
+  <div class="flex flex-wrap justify-end gap-2 pt-2">
+    <button type="button" class="btn btn-ghost mr-auto" (click)="discard.emit()" [disabled]="saving() || discarding()" data-testid="ai-task-discard">{{ discarding() ? 'Elvetés…' : 'Elvetés' }}</button>
+    @if (state.changedFromGenerated()) {
+      <button type="button" class="btn btn-ghost" (click)="state.restore()" [disabled]="saving()" data-testid="ai-task-restore">Visszaállítás</button>
+    }
+    <button type="button" class="btn btn-primary" (click)="save.emit()" [disabled]="!state.canSave() || saving() || discarding()" data-testid="ai-task-save">
+      {{ saving() ? 'Mentés…' : 'Mentés' }}
+    </button>
+  </div>
+</div>

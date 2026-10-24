@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, inject, DestroyRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, take } from 'rxjs/operators';
 import { LeaderboardService } from './leaderboard.service';
@@ -23,9 +23,9 @@ export class LeaderboardStore {
   // LEGUTÓBB indított hívás válasza érvényesül.
   private _loadGeneration = 0;
 
-  readonly leaderboard = computed(() => this._leaderboard());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
+  readonly leaderboard = this._leaderboard.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
 
   loadGroupLeaderboard(groupId: number, category: LeaderboardCategory, period: LeaderboardPeriod): void {
     const generation = ++this._loadGeneration;

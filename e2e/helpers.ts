@@ -63,6 +63,18 @@ export async function acceptConfirmDialog(page: Page): Promise<void> {
   await expect(dialog).toHaveCount(0, { timeout: 15000 });
 }
 
+/**
+ * Publikáláskor a „Hiányos automatikus javítás” megerősítő (2026-10): a specek minimális feladatainak nincs teljes
+ * gépi javítás-beállítása (szempontlista, referencia), ezért a dialógus megjelenik - a tanár tudatosan publikálhat így.
+ */
+export async function confirmPublishDespiteGradingGaps(page: Page): Promise<void> {
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toContainText('Hiányos automatikus javítás', { timeout: 15000 });
+  await dialog.getByRole('button', { name: 'Publikálás mégis' }).click();
+  // Csak EZ a dialógus tűnik el: intézményi tanárnál rögtön a tartalom-megosztás megerősítése nyílik (ugyanazzal a testid-val).
+  await expect(dialog.filter({ hasText: 'Hiányos automatikus javítás' })).toHaveCount(0, { timeout: 15000 });
+}
+
 // ── Diák oldal ──────────────────────────────────────────────────────────
 
 export async function registerStudent(

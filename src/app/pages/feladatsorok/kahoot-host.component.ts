@@ -4,14 +4,12 @@ import {
   inject,
   OnDestroy,
   OnInit,
-  signal,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { environment } from '../../../environments/environment';
 import { KahootHostStore } from '../../services/kahoot-host/kahoot-host.store';
-import { CopyButtonComponent } from '../../shared/copy-button/copy-button.component';
-import { QrCodeComponent } from '../../shared/qr-code/qr-code.component';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { KahootLobbyComponent } from './kahoot-host/kahoot-lobby.component';
+import { KahootRevealComponent } from './kahoot-host/kahoot-reveal.component';
 
 /**
  * Élő (Kahoot-módú) játék vezérlő-képernyője - kivetítésre tervezve: nagy
@@ -27,7 +25,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kahoot-host',
   standalone: true,
-  imports: [RouterLink, IconComponent, CopyButtonComponent, QrCodeComponent],
+  imports: [RouterLink, IconComponent, KahootLobbyComponent, KahootRevealComponent],
   template: `
     <div class="max-w-4xl mx-auto px-4 py-8">
 
@@ -78,47 +76,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 
         <!-- ── Lobby ──────────────────────────────────────────── -->
         @if (store.phase() === 'lobby') {
-          <div class="card p-8 text-center mb-6">
-            <p class="text-sm text-text-muted mb-2">Csatlakozás a diák-appban: Kvíz → Élő játék</p>
-            @if (store.joinCode(); as code) {
-              <p class="text-xs uppercase tracking-widest text-text-muted mb-1">Játék-kód</p>
-              <p class="text-5xl font-black tracking-[0.3em] mb-1 select-all">{{ code }}</p>
-              <div class="flex items-center justify-center gap-2 mb-4">
-                <app-copy-button [value]="code" label="Játék-kód" />
-                <button type="button" (click)="qrVisible.set(!qrVisible())"
-                  class="btn btn-ghost !px-2 !py-1 !text-xs">
-                  {{ qrVisible() ? 'QR elrejtése' : 'QR-kód kivetítéshez' }}
-                </button>
-              </div>
-              <!-- UI-UX-T1: a QR a diák-app kvíz-oldalára visz - ott az "Élő játék most"
-                   blokk egy kattintás (a belépést a csoporttagság kapuzza, a kód csak
-                   keresés-könnyítés). -->
-              @if (qrVisible()) {
-                <div class="flex justify-center mb-4">
-                  <app-qr-code [value]="studentQuizUrl" [size]="280" />
-                </div>
-              }
-            }
-            <button type="button" class="btn btn-primary text-base px-8 py-3"
-                    (click)="start()"
-                    [disabled]="store.actionPending() || store.participantCount() === 0">
-              Indítás
-            </button>
-            @if (store.participantCount() === 0) {
-              <p class="text-sm text-text-muted mt-3">Várakozás az első csatlakozóra…</p>
-            }
-          </div>
-
-          <div class="card p-5">
-            <h2 class="font-bold mb-3">Csatlakozott diákok ({{ store.participantCount() }})</h2>
-            <div class="flex flex-wrap gap-2">
-              @for (name of store.participantNames(); track name) {
-                <span class="badge badge-primary">{{ name }}</span>
-              } @empty {
-                <span class="text-sm text-text-muted">Még senki.</span>
-              }
-            </div>
-          </div>
+          <app-kahoot-lobby />
         }
 
         <!-- ── Futó kérdés ────────────────────────────────────── -->
@@ -166,74 +124,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 
         <!-- ── Eredmény (kérdés-zárás) ────────────────────────── -->
         @if (store.phase() === 'reveal') {
-          @if (store.questionClosed(); as closed) {
-            <div class="card p-6 mb-4">
-              <div class="flex items-center justify-between mb-4">
-                <span class="badge badge-success">
-                  Helyes: {{ closed.correctAnswers.join(', ') }}
-                </span>
-                <span class="text-sm text-text-muted">
-                  {{ closed.answerCount }} / {{ closed.participantCount }} válaszolt
-                </span>
-              </div>
-
-              @if (closed.explanation) {
-                <p class="text-sm text-text-muted mb-4">{{ closed.explanation }}</p>
-              }
-
-              @if (closed.optionCounts.length) {
-                <ul class="space-y-2 mb-2">
-                  @for (oc of closed.optionCounts; track oc.option) {
-                    <li>
-                      <div class="flex justify-between text-sm mb-0.5">
-                        <span [class.text-success]="isCorrectOption(oc.option)"
-                              [class.font-bold]="isCorrectOption(oc.option)">
-                          @if (isCorrectOption(oc.option)) {
-                            <app-icon name="check" class="w-4 h-4 inline-block mr-1" />
-                          }
-                          {{ oc.option }}
-                        </span>
-                        <span class="text-text-muted tabular-nums">{{ oc.count }}</span>
-                      </div>
-                      <div class="h-2.5 rounded-full bg-bg-element overflow-hidden">
-                        <div class="h-full rounded-full transition-all duration-500"
-                             [class.bg-success]="isCorrectOption(oc.option)"
-                             [class.bg-border-default]="!isCorrectOption(oc.option)"
-                             [style.width.%]="optionPercent(closed, oc.count)"></div>
-                      </div>
-                    </li>
-                  }
-                </ul>
-              }
-            </div>
-
-            @if (closed.top.length) {
-              <div class="card p-5 mb-4">
-                <h2 class="font-bold mb-3">Élmezőny</h2>
-                <ol class="space-y-1.5">
-                  @for (entry of closed.top; track entry.userId) {
-                    <li class="flex items-center gap-3 text-sm">
-                      <span class="w-6 text-center font-bold text-text-muted">{{ entry.rank }}.</span>
-                      <span class="flex-1 truncate">{{ entry.name }}</span>
-                      <span class="font-bold tabular-nums">{{ entry.totalPoints }}</span>
-                    </li>
-                  }
-                </ol>
-              </div>
-            }
-          } @else {
-            <!-- F5 a reveal alatt: a zárás-payload nem őrződik, de a játék folytatható. -->
-            <div class="card p-6 mb-4 text-center text-sm text-text-muted">
-              Eredményhirdetés — a részletek a következő kérdésnél folytatódnak.
-            </div>
-          }
-
-          <div class="flex justify-end gap-3">
-            <button type="button" class="btn btn-primary text-base px-8 py-3"
-                    (click)="next()" [disabled]="store.actionPending()">
-              {{ store.hasNextQuestion() ? 'Következő kérdés' : 'Eredményhirdetés' }}
-            </button>
-          </div>
+          <app-kahoot-reveal />
         }
 
         <!-- ── Játék vége ─────────────────────────────────────── -->
@@ -289,8 +180,6 @@ export class KahootHostComponent implements OnInit, OnDestroy {
   readonly store = inject(KahootHostStore);
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
-  readonly qrVisible = signal(false);
-  readonly studentQuizUrl = environment.studentAppUrl + '/quiz';
 
   ngOnInit(): void {
     const kahootSessionId = Number(this.route.snapshot.paramMap.get('kahootSessionId'));
@@ -305,30 +194,11 @@ export class KahootHostComponent implements OnInit, OnDestroy {
     void this.store.leave();
   }
 
-  start(): void {
-    void this.store.start();
-  }
-
-  next(): void {
-    void this.store.next();
-  }
-
   closeQuestion(): void {
     void this.store.closeQuestion();
   }
 
   endGame(): void {
     void this.store.endGame();
-  }
-
-  isCorrectOption(option: string): boolean {
-    const closed = this.store.questionClosed();
-    return !!closed?.correctAnswers.some(
-      (c) => c.trim().toLowerCase() === option.trim().toLowerCase(),
-    );
-  }
-
-  optionPercent(closed: { answerCount: number }, count: number): number {
-    return closed.answerCount > 0 ? Math.round((count / closed.answerCount) * 100) : 0;
   }
 }

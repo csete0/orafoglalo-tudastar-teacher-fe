@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Observable, take } from 'rxjs';
@@ -229,6 +230,7 @@ export class CsoportAttekintesComponent implements OnInit {
   private readonly teacherProjectService = inject(TeacherProjectService);
   private readonly reportService = inject(ReportService);
   private readonly teamService = inject(TeacherTeamService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** null = töltődik vagy hibás (a csempe „–”). */
   readonly activity7 = signal<StudentActivitySummaryDto[] | null>(null);
@@ -296,7 +298,7 @@ export class CsoportAttekintesComponent implements OnInit {
     this.load(this.teacherTaskSetService.getGroupTaskSetAssignments(groupId), this.taskSets, deadlineSourceFailed);
     this.load(this.teacherProjectService.forGroup(groupId), this.projects, deadlineSourceFailed);
     this.load(this.reportService.getGroupWeakTopics(groupId), this.weakTopics);
-    this.teamService.forGroup(groupId).pipe(take(1)).subscribe({
+    this.teamService.forGroup(groupId).pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (teams) => this.teams.set(teams),
       // A kikapcsolt csapat-funkció 404-e nem hiba, csak nincs csapat-blokk.
       error: (e: { status?: number }) => e.status === 404 ? this.csapatokUnavailable.emit() : this.error.set(true),
@@ -305,7 +307,7 @@ export class CsoportAttekintesComponent implements OnInit {
 
   /** Független hívás: hiba esetén a cél-signal null marad (a blokk „–”), és megjelenik a közös figyelmeztetés. */
   private load<T>(source: Observable<T>, target: { set(value: T): void }, onError?: () => void): void {
-    source.pipe(take(1)).subscribe({
+    source.pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (value) => target.set(value),
       error: () => {
         this.error.set(true);

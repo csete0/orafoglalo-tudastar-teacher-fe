@@ -24,6 +24,9 @@ const RESULTS = (published: boolean): MockExamGroupResults => ({
 });
 
 describe('ProbaerettsegiPageComponent', () => {
+  /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
   async function render(event: MockExamTeacherEvent | null, published = false) {
     const api = {
       getCurrent: vi.fn(() => of(event ? { slug: event.slug, title: event.title } : null)),
@@ -41,6 +44,7 @@ describe('ProbaerettsegiPageComponent', () => {
     const fixture = TestBed.createComponent(ProbaerettsegiPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    await settle();
     fixture.detectChanges();
     return { fixture, el: fixture.nativeElement as HTMLElement, api, confirm };
   }
@@ -61,7 +65,22 @@ describe('ProbaerettsegiPageComponent', () => {
     select.dispatchEvent(new Event('change'));
     (Array.from(rows[0].querySelectorAll('button')).find((b) => b.textContent?.includes('Jelentkeztetés')) as HTMLButtonElement).click();
     await fixture.whenStable();
+    await settle();
     expect(api.registerGroup).toHaveBeenCalledWith('osz-2026', 1, 'emelt');
+  });
+
+  it('az alapszint-választó csak a két ismert szintet fogadja el', async () => {
+    const { fixture, el, api } = await render(EVENT);
+    const row = el.querySelectorAll('[data-testid="mock-group-row"]')[1];
+    const select = row.querySelector('select') as HTMLSelectElement;
+    expect(select.value).toBe('emelt');
+    select.value = 'kozep';
+    select.dispatchEvent(new Event('change'));
+    fixture.componentInstance.setLevel(EVENT.groups[1], 'ismeretlen');
+    (Array.from(row.querySelectorAll('button')).find((b) => b.textContent?.includes('Szint mentése')) as HTMLButtonElement).click();
+    await fixture.whenStable();
+    await settle();
+    expect(api.registerGroup).toHaveBeenCalledWith('osz-2026', 2, 'kozep');
   });
 
   it('visszavonás csak megerősítés után', async () => {
@@ -69,6 +88,7 @@ describe('ProbaerettsegiPageComponent', () => {
     const row = el.querySelectorAll('[data-testid="mock-group-row"]')[1];
     (Array.from(row.querySelectorAll('button')).find((b) => b.textContent?.includes('Visszavonás')) as HTMLButtonElement).click();
     await fixture.whenStable();
+    await settle();
     expect(confirm.ask).toHaveBeenCalled();
     expect(api.revokeGroup).toHaveBeenCalledWith('osz-2026', 2);
   });
@@ -80,6 +100,7 @@ describe('ProbaerettsegiPageComponent', () => {
       const row = el.querySelectorAll('[data-testid="mock-group-row"]')[1];
       (Array.from(row.querySelectorAll('button')).find((b) => /Állapot|Eredmények/.test(b.textContent ?? '')) as HTMLButtonElement).click();
       await fixture.whenStable();
+      await settle();
       fixture.detectChanges();
       const panel = el.querySelector('[data-testid="mock-group-results"]')!.textContent!;
       expect(panel).toContain('megerősítetlen e-mail');

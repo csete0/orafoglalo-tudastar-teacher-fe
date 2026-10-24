@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Observable, of, Subject, throwError } from 'rxjs';
-import { AiFeladatComponent, POLL_MS, PREMIUM_REQUIRED_MESSAGE, savedSummary } from './ai-feladat.component';
+import { AiFeladatComponent, POLL_MS } from './ai-feladat.component';
+import { PREMIUM_REQUIRED_MESSAGE, savedSummary } from './ai-feladat/ai-task.constants';
 import { TeacherAiCodeTaskService } from '../../services/teacher-ai-code-task/teacher-ai-code-task.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import {
@@ -152,7 +153,7 @@ describe('AiFeladatComponent', () => {
   const q = (fixture: { nativeElement: HTMLElement }, id: string) => fixture.nativeElement.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 
   function startNew(fixture: ReturnType<typeof create>) {
-    fixture.componentInstance.topic.set('Kártyajáték pontszámai');
+    fixture.componentInstance.request.topic.set('Kártyajáték pontszámai');
     fixture.detectChanges();
     q(fixture, 'ai-task-start')!.click();
     fixture.detectChanges();
@@ -164,14 +165,14 @@ describe('AiFeladatComponent', () => {
     const fixture = create();
     expect(q(fixture, 'ai-task-quota')!.textContent).toContain('még 27 / 30 maradt');
     expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(true);
-    fixture.componentInstance.topic.set('Valami');
+    fixture.componentInstance.request.topic.set('Valami');
     fixture.detectChanges();
     expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('nem prémium tanárnak a prémium-üzenet látszik, és nem indítható', () => {
     const fixture = create({ quota: { used: 0, limit: 30, month: '2026-10', isPremium: false } });
-    fixture.componentInstance.topic.set('Valami');
+    fixture.componentInstance.request.topic.set('Valami');
     fixture.detectChanges();
     expect(q(fixture, 'ai-task-premium')!.textContent).toContain(PREMIUM_REQUIRED_MESSAGE);
     expect(q(fixture, 'ai-task-quota')).toBeNull();
@@ -180,7 +181,7 @@ describe('AiFeladatComponent', () => {
 
   it('elfogyott keretnél jelzi, és nem indítható', () => {
     const fixture = create({ quota: { used: 30, limit: 30, month: '2026-10', isPremium: true } });
-    fixture.componentInstance.topic.set('Valami');
+    fixture.componentInstance.request.topic.set('Valami');
     fixture.detectChanges();
     expect(q(fixture, 'ai-task-quota')!.textContent).toContain('Elfogyott a havi kereted (30/30)');
     expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(true);
@@ -210,12 +211,12 @@ describe('AiFeladatComponent', () => {
   it('2. mód: a kérés téma, szint, darabszám, nyelvek (Python mindig) és ötlet; a jobot megjegyzi', () => {
     const fixture = create();
     const c = fixture.componentInstance;
-    c.topic.set('  Kártyajáték  ');
-    c.level.set('emelt');
-    c.subtaskCount.set(6);
-    c.idea.set('legyen rendezés');
-    c.toggleLanguage('cpp');
-    c.toggleLanguage('python'); // a Python nem vehető ki
+    c.request.topic.set('  Kártyajáték  ');
+    c.request.level.set('emelt');
+    c.request.subtaskCount.set(6);
+    c.request.idea.set('legyen rendezés');
+    c.request.toggleLanguage('cpp');
+    c.request.toggleLanguage('python'); // a Python nem vehető ki
     fixture.detectChanges();
     expect((q(fixture, 'ai-task-language-python') as HTMLInputElement).disabled).toBe(true);
     q(fixture, 'ai-task-start')!.click();
@@ -353,7 +354,7 @@ describe('AiFeladatComponent', () => {
       expect(service.getActiveJob).toHaveBeenCalledWith(9);
       expect(service.getJob).not.toHaveBeenCalled();
       expect(q(fixture, 'ai-task-input')).not.toBeNull();
-      fixture.componentInstance.topic.set('x');
+      fixture.componentInstance.request.topic.set('x');
       fixture.detectChanges();
       expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(false);
     });
@@ -361,7 +362,7 @@ describe('AiFeladatComponent', () => {
     it('amíg az aktív job lekérdezése tart, nem indítható', () => {
       const pending = new Subject<AiCodeTaskJobDto | null>();
       const fixture = create({ active: pending });
-      fixture.componentInstance.topic.set('x');
+      fixture.componentInstance.request.topic.set('x');
       fixture.detectChanges();
       expect((q(fixture, 'ai-task-start') as HTMLButtonElement).disabled).toBe(true);
       pending.next(null);
@@ -480,27 +481,27 @@ describe('AiFeladatComponent', () => {
       const c = fixture.componentInstance;
       expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(false);
 
-      c.setSubtask(1, { points: 5 });
+      c.preview.setSubtask(1, { points: 5 });
       fixture.detectChanges();
       expect(q(fixture, 'ai-task-dirty')).not.toBeNull();
       expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(true);
 
-      const normalized = proposal({ subtasks: c.proposal()!.subtasks, stdin: null, description: 'normalizált' });
+      const normalized = proposal({ subtasks: c.preview.proposal()!.subtasks, stdin: null, description: 'normalizált' });
       service.validate.mockReturnValue(of({ proposal: normalized, report: report() }));
       q(fixture, 'ai-task-revalidate')!.click();
       fixture.detectChanges();
 
       expect(service.validate).toHaveBeenCalledWith(9, 77, expect.objectContaining({ subtasks: expect.arrayContaining([expect.objectContaining({ label: '2.', points: 5 })]) }));
       expect(q(fixture, 'ai-task-dirty')).toBeNull();
-      expect(c.proposal()).toBe(normalized);
+      expect(c.preview.proposal()).toBe(normalized);
       q(fixture, 'ai-task-save')!.click();
       expect(service.apply).toHaveBeenCalledWith(9, 77, normalized);
     });
 
     it('sikertelen újraellenőrzés után sem menthető', () => {
       const fixture = preview();
-      fixture.componentInstance.setField('description', 'új leírás');
-      service.validate.mockReturnValue(of({ proposal: fixture.componentInstance.proposal()!, report: report({ status: 'failed', canSave: false, errors: ['hiba'] }) }));
+      fixture.componentInstance.preview.setField('description', 'új leírás');
+      service.validate.mockReturnValue(of({ proposal: fixture.componentInstance.preview.proposal()!, report: report({ status: 'failed', canSave: false, errors: ['hiba'] }) }));
       fixture.detectChanges();
       q(fixture, 'ai-task-revalidate')!.click();
       fixture.detectChanges();
@@ -513,23 +514,23 @@ describe('AiFeladatComponent', () => {
       const c = fixture.componentInstance;
       const pending = new Subject<AiCodeTaskValidateResult>();
       service.validate.mockReturnValue(pending);
-      c.setField('description', 'első');
+      c.preview.setField('description', 'első');
       c.revalidate();
-      c.setField('description', 'második');
+      c.preview.setField('description', 'második');
       pending.next({ proposal: proposal({ description: 'első' }), report: report() });
       fixture.detectChanges();
-      expect(c.proposal()!.description).toBe('második');
-      expect(c.dirty()).toBe(true);
-      expect(c.canSave()).toBe(false);
+      expect(c.preview.proposal()!.description).toBe('második');
+      expect(c.preview.dirty()).toBe(true);
+      expect(c.preview.canSave()).toBe(false);
     });
 
     it('a generáló szkript átírása törli a fájltartalmat (az újraellenőrzés futtatja)', () => {
       const fixture = preview();
       const c = fixture.componentInstance;
-      c.tab.set('adatfajl');
-      c.setGenerator('import random\nrandom.seed(7)\nfor i in range(500): print(i)\n');
+      c.preview.tab.set('adatfajl');
+      c.preview.setGenerator('import random\nrandom.seed(7)\nfor i in range(500): print(i)\n');
       fixture.detectChanges();
-      expect(c.proposal()!.dataFile!.content).toBeNull();
+      expect(c.preview.proposal()!.dataFile!.content).toBeNull();
       expect((q(fixture, 'ai-task-df-download') as HTMLButtonElement).disabled).toBe(true);
       expect(q(fixture, 'ai-task-df-content')!.textContent).toContain('az Újraellenőrzés futtatja le');
     });
@@ -542,26 +543,26 @@ describe('AiFeladatComponent', () => {
       expect(q(fixture, 'ai-task-renumber-note')!.textContent).toContain('„N. feladat” fejléceinek');
 
       q(fixture, 'ai-task-add-subtask')!.click();
-      expect(c.proposal()!.subtasks.map((s) => s.label)).toEqual(['1.', '2.', '3.']);
-      expect(c.proposal()!.languages[0].snippets.length).toBe(3);
-      expect(c.proposal()!.languages[1].snippets).toEqual([]);
+      expect(c.preview.proposal()!.subtasks.map((s) => s.label)).toEqual(['1.', '2.', '3.']);
+      expect(c.preview.proposal()!.languages[0].snippets.length).toBe(3);
+      expect(c.preview.proposal()!.languages[1].snippets).toEqual([]);
 
-      c.removeSubtask(0);
-      expect(c.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', 'Hány lap van?'], ['2.', '']]);
-      expect(c.proposal()!.languages[0].snippets[0].code).toBe('print(len(lines))');
+      c.preview.removeSubtask(0);
+      expect(c.preview.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', 'Hány lap van?'], ['2.', '']]);
+      expect(c.preview.proposal()!.languages[0].snippets[0].code).toBe('print(len(lines))');
 
       fixture.detectChanges();
       q(fixture, 'ai-task-st-down-0')!.click();
-      expect(c.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', ''], ['2.', 'Hány lap van?']]);
-      expect(c.proposal()!.languages[0].snippets[1].code).toBe('print(len(lines))');
-      expect(c.dirty()).toBe(true);
+      expect(c.preview.proposal()!.subtasks.map((s) => [s.label, s.text])).toEqual([['1.', ''], ['2.', 'Hány lap van?']]);
+      expect(c.preview.proposal()!.languages[0].snippets[1].code).toBe('print(len(lines))');
+      expect(c.preview.dirty()).toBe(true);
     });
 
     it('nem Python nyelvnél (üres kódrészlet-lista) nincs üres kódrészlet-szerkesztő', () => {
       const p = proposal();
       const withEmptyCsharp = { ...p, languages: [p.languages[0], { ...p.languages[1], snippets: [] }] };
       const fixture = preview(doneJob({ result: { proposal: withEmptyCsharp, report: report(), model: 'm', notes: null, reasked: false } }));
-      fixture.componentInstance.tab.set('megoldas');
+      fixture.componentInstance.preview.tab.set('megoldas');
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelectorAll('[id^="ai-task-snippet-python-"]').length).toBe(2);
       expect(q(fixture, 'ai-task-no-snippets')).toBeNull();
@@ -585,12 +586,12 @@ describe('AiFeladatComponent', () => {
     it('Visszaállítás: a generált változat és ellenőrzés vissza, újra menthető', () => {
       const fixture = preview();
       const c = fixture.componentInstance;
-      c.setField('title', 'Más cím');
+      c.preview.setField('title', 'Más cím');
       fixture.detectChanges();
       expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(true);
       q(fixture, 'ai-task-restore')!.click();
       fixture.detectChanges();
-      expect(c.proposal()!.title).toBe('Kártyajáték');
+      expect(c.preview.proposal()!.title).toBe('Kártyajáték');
       expect(q(fixture, 'ai-task-restore')).toBeNull();
       expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(false);
     });
@@ -598,11 +599,11 @@ describe('AiFeladatComponent', () => {
     it('Visszaállítás egy közben újraellenőrzött változat után: a szerver már mást ismer, újra kell ellenőrizni', () => {
       const fixture = preview();
       const c = fixture.componentInstance;
-      c.setField('title', 'Más cím');
+      c.preview.setField('title', 'Más cím');
       c.revalidate();
-      c.restore();
+      c.preview.restore();
       fixture.detectChanges();
-      expect(c.dirty()).toBe(true);
+      expect(c.preview.dirty()).toBe(true);
       expect((q(fixture, 'ai-task-save') as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -611,14 +612,14 @@ describe('AiFeladatComponent', () => {
       const c = fixture.componentInstance;
       const pending = new Subject<AiCodeTaskValidateResult>();
       service.validate.mockReturnValue(pending);
-      c.setField('title', 'x');
+      c.preview.setField('title', 'x');
       c.revalidate();
       q(fixture, 'ai-task-discard')!.click();
       fixture.detectChanges();
       expect(pending.observed).toBe(false);
       expect(service.dismiss).toHaveBeenCalledWith(9, 77);
       expect(q(fixture, 'ai-task-input')).not.toBeNull();
-      expect(c.report()).toBeNull();
+      expect(c.preview.report()).toBeNull();
     });
 
     it('Elvetés: a szerveren is elveti; amíg tart, a gombok tiltottak; utána új kérés indítható', () => {
@@ -665,14 +666,14 @@ describe('AiFeladatComponent', () => {
 
     it('a 413-at és a futtató-kiesést érthetően jelzi', () => {
       const fixture = preview();
-      fixture.componentInstance.setField('title', 'x');
+      fixture.componentInstance.preview.setField('title', 'x');
       service.validate.mockReturnValue(throwError(() => ({ status: 413 })));
       fixture.detectChanges();
       q(fixture, 'ai-task-revalidate')!.click();
       fixture.detectChanges();
       expect(q(fixture, 'ai-task-revalidate-error')!.textContent).toContain('legfeljebb 3 MB');
 
-      service.validate.mockReturnValue(of({ proposal: fixture.componentInstance.proposal()!, report: report({ status: 'unavailable', canSave: false, errors: ['időtúllépés'] }) }));
+      service.validate.mockReturnValue(of({ proposal: fixture.componentInstance.preview.proposal()!, report: report({ status: 'unavailable', canSave: false, errors: ['időtúllépés'] }) }));
       q(fixture, 'ai-task-revalidate')!.click();
       fixture.detectChanges();
       expect(q(fixture, 'ai-task-unavailable')!.textContent).toContain('próbáld újra');
@@ -741,7 +742,7 @@ describe('AiFeladatComponent', () => {
       expect((q(fixture, 'ai-task-st-text-0') as HTMLTextAreaElement).readOnly).toBe(true);
       expect((q(fixture, 'ai-task-st-points-0') as HTMLInputElement).readOnly).toBe(false);
       expect(q(fixture, 'ai-task-add-subtask')).toBeNull();
-      fixture.componentInstance.tab.set('megoldas');
+      fixture.componentInstance.preview.tab.set('megoldas');
       fixture.detectChanges();
       expect((q(fixture, 'ai-task-solution-python') as HTMLTextAreaElement).readOnly).toBe(true);
       expect((q(fixture, 'ai-task-stdin') as HTMLTextAreaElement).readOnly).toBe(true);

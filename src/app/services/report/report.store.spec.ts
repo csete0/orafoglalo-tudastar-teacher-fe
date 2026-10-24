@@ -5,8 +5,12 @@ import { ReportService } from './report.service';
 import {
   StudentActivityDetailDto,
   StudentActivitySummaryDto,
+  TeacherAttemptReviewDto,
   TeacherTaskSetResultsDto,
 } from '../../models/report.model';
+
+/** A specek csak a vizsgált mezőket adják meg a beadás-értékelésből. */
+type ReviewStub = Partial<TeacherAttemptReviewDto>;
 
 function makeSummary(overrides: Partial<StudentActivitySummaryDto> = {}): StudentActivitySummaryDto {
   return {
@@ -307,7 +311,7 @@ describe('ReportStore', () => {
   it('BUG: egy A feladatsoron elindított pontszám-felülbírálás késve érkező válasza felülírja a közben megnyitott B feladatsor eredmény-mátrixát', async () => {
     const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
     const taskSetBResults = new Subject<TeacherTaskSetResultsDto>();
-    const overrideAResponse = new Subject<any>();
+    const overrideAResponse = new Subject<ReviewStub>();
     serviceMock.getTaskSetResults
       .mockReturnValueOnce(taskSetAResults)
       .mockReturnValueOnce(taskSetBResults)
@@ -335,7 +339,7 @@ describe('ReportStore', () => {
     expect(store.taskSetResults()).toEqual(resultsB);
 
     // Az A-n indított felülbírálás válasza csak MOST érkezik meg.
-    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 } as any);
+    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 });
     overrideAResponse.complete();
     await Promise.resolve();
 
@@ -355,7 +359,7 @@ describe('ReportStore', () => {
   it('UI-TT-160 ellenpróba: ha a tanár NEM navigált el, a felülbírálás változatlanul újratölti az ÉPP nyitott feladatsor mátrixát', async () => {
     const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
     const taskSetAReload = new Subject<TeacherTaskSetResultsDto>();
-    const overrideAResponse = new Subject<any>();
+    const overrideAResponse = new Subject<ReviewStub>();
     serviceMock.getTaskSetResults.mockReturnValueOnce(taskSetAResults).mockReturnValueOnce(taskSetAReload);
     serviceMock.overrideScore.mockReturnValue(overrideAResponse);
 
@@ -364,7 +368,7 @@ describe('ReportStore', () => {
     taskSetAResults.complete();
 
     store.overrideScore(1, 42, { earnedPoints: 5, teacherFeedback: null, feedbackProvided: false });
-    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 } as any);
+    overrideAResponse.next({ attemptId: 42, earnedPoints: 5 });
     overrideAResponse.complete();
     await Promise.resolve();
 
@@ -379,6 +383,33 @@ describe('ReportStore', () => {
     expect(store.loading()).toBe(false);
   });
 
+  it('UI-TT-243: a dolgozat-áttekintőn (ahol nincs loadTaskSetResults) a mentés alatt foglalt, utána a gomb újra használható', async () => {
+    // A `dolgozat-attekintes.component.ts` a SAJÁT `ClassTestService.getOverview()`-ján
+    // át tölti be és frissíti a névsort/mátrixot - a megosztott `ReportStore.
+    // loadTaskSetResults()`-t erről az oldalról SOHA nem hívja senki (csak a
+    // `feladatsorok/.../eredmenyek` oldal hívja). A `<app-attempt-score-form>` Mentés/
+    // Visszaállítás gombja viszont MINDKÉT oldalról ugyanazt a globális (`providedIn:
+    // 'root'`) `report.taskSetResultsLoading()` jelzőt olvassa a `[disabled]` kötésben.
+    const overrideResponse = new Subject<ReviewStub>();
+    serviceMock.overrideScore.mockReturnValue(overrideResponse);
+
+    // Nincs előzetes store.loadTaskSetResults(...) hívás - pontosan úgy, ahogy a
+    // dolgozat-áttekintő oldal betöltésekor a store-ban semmi nem állítja be
+    // `_taskSetResultsId`-t erre (vagy semmilyen) feladatsorra.
+    store.overrideScore(7, 42, { earnedPoints: 4, teacherFeedback: null, feedbackProvided: false });
+    expect(store.reviewSaving()).toBe(true);
+
+    overrideResponse.next({ attemptId: 42, earnedPoints: 4 });
+    overrideResponse.complete();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A mentés lezárult: a gomb újra használható (eddig a mátrix-jelző örökre true maradt, a lezáró reload sosem futott).
+    expect(store.attemptReview()).toEqual({ attemptId: 42, earnedPoints: 4 });
+    expect(store.taskSetResultsLoading()).toBe(false);
+    expect(store.reviewSaving()).toBe(false);
+  });
+
   // TEACH-7 javítva: a mutateReview() hiba-ága a siker-ághoz (UI-TT-160) hasonlóan
   // mostantól ellenőrzi, hogy a mentés célpontja (`taskSetId`) még mindig a
   // mátrix-loader AKTUÁLIS célpontja-e - ha a tanár időközben egy MÁSIK feladatsor
@@ -387,7 +418,7 @@ describe('ReportStore', () => {
   it('BUG TEACH-7 javítva: egy elhagyott feladatsor (A) felülbírálásának HIBÁVAL záruló válasza NEM zárja le idő előtt a közben megnyitott MÁSIK feladatsor (B) MÉG FOLYAMATBAN LÉVŐ betöltésének loading-jelzőjét', async () => {
     const taskSetAResults = new Subject<TeacherTaskSetResultsDto>();
     const taskSetBResults = new Subject<TeacherTaskSetResultsDto>();
-    const overrideAResponse = new Subject<any>();
+    const overrideAResponse = new Subject<ReviewStub>();
     serviceMock.getTaskSetResults.mockReturnValueOnce(taskSetAResults).mockReturnValueOnce(taskSetBResults);
     serviceMock.overrideScore.mockReturnValue(overrideAResponse);
 
@@ -435,9 +466,9 @@ describe('ReportStore', () => {
   // komponens guardja nem szűri ki: csendben felülírja a frissen betöltött, valós
   // szerver-állapotot a lekésett mentés adataival.
   it('BUG: ugyanannak a beadásnak bezárás+újranyitás utáni friss betöltését felülírja egy közben lekésve érkező, korábbi mentés válasza', async () => {
-    const firstLoad = new Subject<any>();
-    const overrideResponse = new Subject<any>();
-    const reopenLoad = new Subject<any>();
+    const firstLoad = new Subject<ReviewStub>();
+    const overrideResponse = new Subject<ReviewStub>();
+    const reopenLoad = new Subject<ReviewStub>();
     serviceMock.getAttemptReview.mockReturnValueOnce(firstLoad).mockReturnValueOnce(reopenLoad);
     serviceMock.overrideScore.mockReturnValue(overrideResponse);
 

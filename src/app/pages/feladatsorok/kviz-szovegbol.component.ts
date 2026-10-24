@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -11,6 +11,8 @@ import {
   QuizTopicOptionDto,
 } from '../../models/teacher-quiz.model';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
+import { byteSize } from '../../shared/format/byte-size';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
@@ -52,13 +54,10 @@ export function sourceErrorMessage(err: unknown): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-szovegbol',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent],
+  imports: [DialogShellComponent, FormsModule, IconComponent, LocalSpinnerComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
-      <div class="fixed inset-0 bg-black/40" data-testid="quiz-source-backdrop" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="quiz-source-title" aria-describedby="quiz-source-help" tabindex="-1"
-        data-testid="quiz-source-dialog" class="card relative w-full max-w-2xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
+    <app-dialog-shell labelledBy="quiz-source-title" describedBy="quiz-source-help" testId="quiz-source-dialog" backdropTestId="quiz-source-backdrop"
+      panelClass="card w-full max-w-2xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-3">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="document" class="w-5 h-5 block" /></div>
@@ -161,7 +160,7 @@ export function sourceErrorMessage(err: unknown): string {
                 <label for="quiz-source-file" class="text-sm font-medium block mb-1">Fájl (.txt, .docx vagy .pdf, legfeljebb 10 MB)</label>
                 <input id="quiz-source-file" type="file" accept=".txt,.docx,.pdf" class="input !text-sm" (change)="onFile($event)" data-testid="quiz-source-file" />
                 @if (file(); as f) {
-                  <p class="text-xs text-text-muted mt-1 break-all" data-testid="quiz-source-file-name">{{ f.name }} ({{ sizeLabel(f.size) }})</p>
+                  <p class="text-xs text-text-muted mt-1 break-all" data-testid="quiz-source-file-name">{{ f.name }} ({{ byteSize(f.size) }})</p>
                 }
                 @if (fileError()) {
                   <p class="text-xs text-danger mt-1" role="alert" data-testid="quiz-source-file-error">{{ fileError() }}</p>
@@ -223,8 +222,7 @@ export function sourceErrorMessage(err: unknown): string {
             </div>
           </div>
         }
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class KvizSzovegbolComponent implements OnInit {
@@ -265,6 +263,7 @@ export class KvizSzovegbolComponent implements OnInit {
   readonly selectedTypes = signal<Set<QuizSourceQuestionType>>(new Set(['single', 'multi', 'truefalse', 'cloze']));
 
   readonly maxCount = SOURCE_MAX_COUNT;
+  readonly byteSize = byteSize;
   readonly remaining = quotaRemaining;
   /** A havi keret (betöltéskor és minden válasz után); null: nem ismert. */
   readonly quota = signal<AiHelperQuotaItemDto | null>(null);
@@ -294,8 +293,6 @@ export class KvizSzovegbolComponent implements OnInit {
       : this.file() !== null && this.fileError() === null;
   });
 
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
-
   ngOnInit(): void {
     const initial = this.initialTopicId();
     this.topicId.set(initial != null && this.topics().some((t) => t.id === initial) ? initial : null);
@@ -310,7 +307,6 @@ export class KvizSzovegbolComponent implements OnInit {
         },
         error: () => {},
       });
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   setMode(mode: SourceMode): void {
@@ -397,9 +393,5 @@ export class KvizSzovegbolComponent implements OnInit {
     }
     this.generating.set(false);
     this.closed.emit();
-  }
-
-  sizeLabel(bytes: number): string {
-    return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 }

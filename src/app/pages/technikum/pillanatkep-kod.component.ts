@@ -4,7 +4,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subscription, finalize, take } from 'rxjs';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { CodeFileRank, KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
+import { PillanatkepGaleriaComponent } from './pillanatkep-galeria.component';
+import { KodOlvasoComponent, codeFilePaths } from '../../shared/kod-olvaso/kod-olvaso.component';
+import { DESKTOP_PARTS, SnapshotTab, fileRankOf } from './pillanatkep-fajlsorrend';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { AiHelperQuotaItemDto, aiHelperErrorMessage } from '../../shared/ai-helper-quota.util';
 import { parseUtc } from '../../shared/utc-date.util';
@@ -12,37 +14,6 @@ import { CodeCommentSuggestionDto } from '../../models/teacher-project.model';
 import {
   BACKEND_RUNTIME_LABEL, CLIENT_FRAMEWORK_LABEL, DESKTOP_LANGUAGE_LABEL, EXAM_PART_LABEL, EXAM_PART_ROOTS, ExamCodeCommentDto, ExamPartKey, ExamSessionSnapshotDto,
 } from '../../models/technikum.model';
-
-/** A pillanatkép fülei: az öt vizsgarész és a részekhez nem tartozó (pl. hivatalos adat-) fájlok. */
-type Tab = ExamPartKey | 'egyeb';
-
-/** Az asztali részek (konzolos, grafikus): ezek nyelve a munkamenet nyelve (C# / Java). */
-const DESKTOP_PARTS: readonly Tab[] = ['console', 'gui'];
-
-const HAND_WRITTEN_SOURCES = ['.cs', '.xaml', '.java', '.fxml'];
-
-/**
- * Az asztali részek fájlsorrendje (BE: ExamCodeCommentService.Priority): előbb a kézzel írt forrás (.cs, .xaml, .java, .fxml),
- * aztán a generált (.Designer.cs), végül minden más (projektfájlok: .csproj, pom.xml, build.gradle…, adatfájlok).
- */
-export const desktopFileRank: CodeFileRank = (path) => {
-  const p = path.toLowerCase();
-  if (p.endsWith('.designer.cs')) return 1;
-  return HAND_WRITTEN_SOURCES.some((x) => p.endsWith(x)) ? 0 : 2;
-};
-
-/** A backend kezdő keret- és projektfájljai (csomag-, build- és beállításfájl, a Laravel alap-osztályai) - a kézzel írt forrás után. */
-const BACKEND_PROJECT_FILES = ['package.json', 'pom.xml', 'application.properties', 'controller.php', 'appserviceprovider.php'];
-
-/**
- * A backend-rész fájlsorrendje: elöl az útvonalak (routes/api.php), aztán a kézzel írt forrás (Controllers, Models, src/main/java/**,
- * *.js, *.cs), végül a kezdő keret- és projektfájlok (package.json, pom.xml, application.properties, Controller.php, AppServiceProvider.php).
- */
-export const backendFileRank: CodeFileRank = (path) => {
-  const p = path.toLowerCase();
-  if (p.endsWith('/routes/api.php')) return 0;
-  return BACKEND_PROJECT_FILES.includes(p.slice(p.lastIndexOf('/') + 1)) ? 2 : 1;
-};
 
 /** Kliens-oldali (nem mentett) MI-javaslat; a `key` csak a felületen azonosít. */
 interface Suggestion extends CodeCommentSuggestionDto {
@@ -61,8 +32,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-pillanatkep-kod',
   standalone: true,
-  imports: [DatePipe, KodOlvasoComponent],
-  host: { '(document:keydown.escape)': 'closeLightbox()' },
+  imports: [DatePipe, KodOlvasoComponent, PillanatkepGaleriaComponent],
   template: `
     <div class="mt-4" data-testid="snapshot-code">
       <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Vizsgarészek">
@@ -76,25 +46,10 @@ interface Suggestion extends CodeCommentSuggestionDto {
         }
       </div>
 
-      @if (tab() === 'gui') {
-        @if (snapshot().gui; as g) {
-          <p class="text-xs text-text-muted mt-3">Feltöltve: {{ utc(g.uploadedAt) | date: 'yyyy.MM.dd. HH:mm' }} · {{ g.imageCount }} képernyőkép</p>
-          @if (g.imageCount) {
-            <ul class="gallery mt-2" data-testid="gui-gallery" aria-label="Képernyőképek">
-              @for (url of imageUrls(); track $index; let i = $index) {
-                <li>
-                  <button type="button" class="thumb" (click)="lightbox.set(i)" [attr.aria-label]="(i + 1) + '. képernyőkép nagyítása'"
-                          [attr.data-testid]="'gui-thumb-' + i">
-                    @if (url) { <img [src]="url" [alt]="(i + 1) + '. képernyőkép'" /> } @else { <span class="text-xs text-text-muted">betöltés…</span> }
-                  </button>
-                </li>
-              }
-            </ul>
-            @if (imageError(); as err) { <p class="text-danger text-xs mt-1" role="alert">{{ err }}</p> }
-          }
-        } @else {
-          <p class="text-sm text-text-muted mt-3" data-testid="gui-missing">A diák a dolgozat alatt nem töltött fel grafikus programot.</p>
-        }
+      @if (snapshot().gui; as g) {
+        <app-pillanatkep-galeria [sessionId]="snapshot().sessionId" [gui]="g" [active]="tab() === 'gui'" />
+      } @else if (tab() === 'gui') {
+        <p class="text-sm text-text-muted mt-3" data-testid="gui-missing">A diák a dolgozat alatt nem töltött fel grafikus programot.</p>
       }
 
       @if (tab() === 'client' && clientBuild(); as b) {
@@ -183,17 +138,6 @@ interface Suggestion extends CodeCommentSuggestionDto {
       </ng-template>
     </div>
 
-    @if (lightbox() !== null) {
-      <div class="lightbox" role="dialog" aria-modal="true" aria-label="Képernyőkép nagyítva" data-testid="gui-lightbox" (click)="closeLightbox()">
-        <img [src]="imageUrls()[lightbox()!]" [alt]="(lightbox()! + 1) + '. képernyőkép'" (click)="$event.stopPropagation()" />
-        <div class="lightbox-bar" (click)="$event.stopPropagation()">
-          <button type="button" class="btn btn-ghost !text-xs" [disabled]="lightbox() === 0" (click)="step(-1)">‹ Előző</button>
-          <span class="text-xs">{{ lightbox()! + 1 }} / {{ imageUrls().length }}</span>
-          <button type="button" class="btn btn-ghost !text-xs" [disabled]="lightbox() === imageUrls().length - 1" (click)="step(1)">Következő ›</button>
-          <button type="button" class="btn btn-primary !text-xs" (click)="closeLightbox()">Bezárás</button>
-        </div>
-      </div>
-    }
   `,
   styles: [`
     .part-tab { padding: 0.25rem 0.625rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--color-border-default);
@@ -201,16 +145,6 @@ interface Suggestion extends CodeCommentSuggestionDto {
     .part-tab[aria-selected="true"] { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary); }
     .comment-count { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--color-warning); color: #fff; font-size: 0.625rem; }
     .lang-badge { margin-left: 0.25rem; padding: 0 0.375rem; border-radius: 999px; border: 1px solid currentColor; font-size: 0.625rem; }
-    .gallery { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-    .thumb { display: flex; align-items: center; justify-content: center; width: 10rem; height: 6.5rem; overflow: hidden; border-radius: 0.5rem;
-      border: 1px solid var(--color-border-default); background: var(--color-bg-element); }
-    .thumb img { width: 100%; height: 100%; object-fit: contain; }
-    .thumb:hover, .thumb:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-    .lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
-      padding: 1rem; background: rgba(0, 0, 0, 0.8); }
-    .lightbox img { max-width: 100%; max-height: calc(100vh - 6rem); object-fit: contain; border-radius: 0.5rem; background: var(--color-bg-panel); }
-    .lightbox-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 0.75rem;
-      background: var(--color-bg-panel); color: var(--color-text-primary); }
     .build-info { padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--color-border-default); background: var(--color-bg-element); }
     .ai-bar { padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px dashed var(--color-primary); }
     .thread, .suggestion { margin: 0.25rem 0.75rem 0.5rem 3rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-family: var(--font-sans, system-ui, sans-serif);
@@ -222,7 +156,7 @@ interface Suggestion extends CodeCommentSuggestionDto {
     .sev--hiba { background: var(--color-danger); }
     .sev--javaslat { background: var(--color-primary); }
     .sev--dicseret { background: var(--color-success); }
-    @media (max-width: 480px) { .thread, .suggestion { margin-left: 0.5rem; margin-right: 0.5rem; } .thumb { width: 8rem; height: 5.25rem; } }
+    @media (max-width: 480px) { .thread, .suggestion { margin-left: 0.5rem; margin-right: 0.5rem; } }
   `],
 })
 export class PillanatkepKodComponent {
@@ -234,23 +168,21 @@ export class PillanatkepKodComponent {
 
   readonly utc = parseUtc;
   readonly frameworkLabel = CLIENT_FRAMEWORK_LABEL;
-  readonly tab = signal<Tab>('console');
+  readonly tab = signal<SnapshotTab>('console');
   readonly activePath = signal<string | null>(null);
   readonly comments = signal<ExamCodeCommentDto[]>([]);
   readonly newLine = signal<number | null>(null);
   readonly editingId = signal<number | null>(null);
   readonly busy = signal(false);
   readonly commentError = signal<string | null>(null);
-  readonly imageUrls = signal<(string | null)[]>([]);
-  readonly imageError = signal<string | null>(null);
-  readonly lightbox = signal<number | null>(null);
   readonly suggestions = signal<Suggestion[]>([]);
   readonly suggesting = signal(false);
   readonly suggestError = signal<string | null>(null);
   readonly suggestNote = signal<string | null>(null);
   readonly suggestQuota = signal<AiHelperQuotaItemDto | null>(null);
 
-  private loads: Subscription[] = [];
+  /** A megjegyzések betöltése (másik dolgozat megnyitásakor a régi kérés eldobva). */
+  private commentsLoad: Subscription | undefined;
   private nextKey = 1;
 
   readonly clientBuild = computed(() => this.snapshot().clientBuild ?? null);
@@ -275,7 +207,7 @@ export class PillanatkepKodComponent {
     // A backend-jelvény minden munkamenetnél látszik (a C#-nál is): a REST API-t a diák indításkor választotta.
     const backend = BACKEND_RUNTIME_LABEL[sn.runtime] ?? sn.runtime;
     const badge = (k: ExamPartKey) => (DESKTOP_PARTS.includes(k) ? language : k === 'client' ? framework : k === 'api' ? backend : null);
-    const tabs: { key: Tab; label: string; language: string | null; comments: number }[] = keys.map((k) => ({
+    const tabs: { key: SnapshotTab; label: string; language: string | null; comments: number }[] = keys.map((k) => ({
       key: k, label: EXAM_PART_LABEL[k] ?? k, language: badge(k), comments: counts.get(k) ?? 0,
     }));
     if (Object.keys(this.otherFiles()).length) tabs.push({ key: 'egyeb', label: 'Egyéb fájlok', language: null, comments: 0 });
@@ -283,7 +215,7 @@ export class PillanatkepKodComponent {
   });
 
   readonly files = computed(() => this.filesOf(this.tab()));
-  readonly fileRank = computed(() => this.rankOf(this.tab()));
+  readonly fileRank = computed(() => fileRankOf(this.tab()));
   readonly hasFiles = computed(() => Object.keys(this.files()).length > 0);
   /** A diák azóta kilépett a csoportból: a dolgozat csak olvasható (a megjegyzések látszanak, újat írni, MI-javaslatot kérni nem lehet). */
   readonly locked = computed(() => !!this.snapshot().leftGroup);
@@ -318,15 +250,13 @@ export class PillanatkepKodComponent {
         sessionId = sn.sessionId;
         this.reset();
         this.loadComments(sn.sessionId);
-        this.loadImages(sn);
         const first = this.tabs().find((t) => Object.keys(this.filesOf(t.key)).length) ?? this.tabs()[0];
         if (first) this.selectTab(first.key);
       });
     });
-    this.destroyRef.onDestroy(() => this.reset());
   }
 
-  private filesOf(tab: Tab): Record<string, string> {
+  private filesOf(tab: SnapshotTab): Record<string, string> {
     const sn = this.snapshot();
     if (tab === 'egyeb') return this.otherFiles();
     if (tab === 'gui') return sn.gui?.files ?? {};
@@ -335,16 +265,12 @@ export class PillanatkepKodComponent {
     return root ? Object.fromEntries(Object.entries(sn.files).filter(([p]) => p.startsWith(root))) : {};
   }
 
-  selectTab(tab: Tab): void {
+  selectTab(tab: SnapshotTab): void {
     this.tab.set(tab);
     this.newLine.set(null);
     this.editingId.set(null);
     this.commentError.set(null);
-    this.activePath.set(codeFilePaths(this.filesOf(tab), this.snapshot().readOnlyPaths, this.rankOf(tab))[0] ?? null);
-  }
-
-  private rankOf(tab: Tab): CodeFileRank {
-    return DESKTOP_PARTS.includes(tab) ? desktopFileRank : tab === 'api' ? backendFileRank : () => 0;
+    this.activePath.set(codeFilePaths(this.filesOf(tab), this.snapshot().readOnlyPaths, fileRankOf(tab))[0] ?? null);
   }
 
   selectFile(path: string | null): void {
@@ -433,16 +359,6 @@ export class PillanatkepKodComponent {
     this.suggestions.update((list) => list.filter((s) => s.key !== sg.key));
   }
 
-  step(delta: number): void {
-    const i = this.lightbox();
-    if (i === null) return;
-    this.lightbox.set(Math.min(Math.max(i + delta, 0), this.imageUrls().length - 1));
-  }
-
-  closeLightbox(): void {
-    this.lightbox.set(null);
-  }
-
   /** Egy megjegyzés-művelet; a válasz eldobva, ha közben másik dolgozat pillanatképe nyílt meg. */
   private run<T>(call: Observable<T>, done: (value: T) => void): void {
     const sessionId = this.snapshot().sessionId;
@@ -459,31 +375,14 @@ export class PillanatkepKodComponent {
   }
 
   private loadComments(sessionId: number): void {
-    this.loads.push(this.api.comments(sessionId).pipe(take(1)).subscribe({
+    this.commentsLoad?.unsubscribe();
+    this.commentsLoad = this.api.comments(sessionId).pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (list) => this.comments.set(list),
       error: (e) => this.commentError.set(extractErrorMessage(e, 'A megjegyzések betöltése sikertelen.')),
-    }));
-  }
-
-  /** A képernyőképek blobként (a JWT nem süti), objektum-URL-lel; váltáskor / bezáráskor felszabadítva. */
-  private loadImages(sn: ExamSessionSnapshotDto): void {
-    const count = sn.gui?.imageCount ?? 0;
-    this.imageUrls.set(Array.from({ length: count }, () => null));
-    for (let i = 0; i < count; i++) {
-      this.loads.push(this.api.guiImage(sn.sessionId, i).pipe(take(1)).subscribe({
-        next: (blob) => this.imageUrls.update((urls) => urls.map((u, j) => (j === i ? URL.createObjectURL(blob) : u))),
-        error: () => this.imageError.set('Egy képernyőkép betöltése sikertelen.'),
-      }));
-    }
+    });
   }
 
   private reset(): void {
-    this.loads.forEach((s) => s.unsubscribe());
-    this.loads = [];
-    for (const url of this.imageUrls()) if (url) URL.revokeObjectURL(url);
-    this.imageUrls.set([]);
-    this.imageError.set(null);
-    this.lightbox.set(null);
     this.comments.set([]);
     this.suggestions.set([]);
     this.suggestError.set(null);

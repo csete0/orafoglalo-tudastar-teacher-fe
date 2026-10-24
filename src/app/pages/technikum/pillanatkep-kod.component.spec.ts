@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of } from 'rxjs';
-import { PillanatkepKodComponent, backendFileRank, desktopFileRank } from './pillanatkep-kod.component';
+import { PillanatkepKodComponent } from './pillanatkep-kod.component';
+import { backendFileRank, desktopFileRank } from './pillanatkep-fajlsorrend';
 import { TeacherTechnikumService } from '../../services/technikum/teacher-technikum.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ExamCodeCommentDto, ExamSessionSnapshotDto } from '../../models/technikum.model';
@@ -164,6 +165,59 @@ describe('PillanatkepKodComponent', () => {
     el.querySelector<HTMLTextAreaElement>('[data-testid="new-comment"] textarea')!.value = 'Nevezd át az űrlapot.';
     el.querySelector<HTMLFormElement>('[data-testid="new-comment"]')!.dispatchEvent(new Event('submit'));
     expect(api.createComment).toHaveBeenCalledWith(31, 'gui', 'Kolcsonzes/Form1.cs', 1, 'Nevezd át az űrlapot.');
+  });
+
+  it('képernyőképek: a pillanatkép megnyitásakor töltődnek, fülváltáskor megmaradnak; a nagyító lapoz, háttérre kattintva zár, a fókusz visszakerül', async () => {
+    const { fixture, el, api } = await setup([]);
+    expect(api.guiImage).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('[data-testid="gui-gallery"]')).toBeNull();
+    click(el, '[data-testid="part-tab-gui"]');
+    fixture.detectChanges();
+    click(el, '[data-testid="part-tab-console"]');
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="gui-gallery"]')).toBeNull();
+    click(el, '[data-testid="part-tab-gui"]');
+    fixture.detectChanges();
+    expect(api.guiImage).toHaveBeenCalledTimes(2);
+    expect(el.querySelectorAll('[data-testid="gui-gallery"] img').length).toBe(2);
+
+    const thumb = el.querySelector<HTMLButtonElement>('[data-testid="gui-thumb-0"]')!;
+    thumb.focus();
+    thumb.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const box = () => el.querySelector<HTMLElement>('[data-testid="gui-lightbox"]');
+    expect(box()!.getAttribute('role')).toBe('dialog');
+    expect(box()!.getAttribute('aria-modal')).toBe('true');
+    expect(box()!.getAttribute('aria-label')).toBe('Képernyőkép nagyítva');
+    expect(box()!.querySelector('img')!.getAttribute('alt')).toBe('1. képernyőkép');
+    const button = (label: string) => [...box()!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.includes(label))!;
+    expect(button('Előző').disabled).toBe(true);
+    button('Következő').click();
+    fixture.detectChanges();
+    expect(box()!.textContent).toContain('2 / 2');
+    expect(button('Következő').disabled).toBe(true);
+    box()!.querySelector('img')!.click();
+    fixture.detectChanges();
+    expect(box()).not.toBeNull();
+    el.querySelector<HTMLElement>('[data-testid="gui-lightbox-backdrop"]')!.click();
+    fixture.detectChanges();
+    expect(box()).toBeNull();
+    expect(document.activeElement).toBe(thumb);
+  });
+
+  it('másik dolgozat megnyitásakor a régi képernyőképek objektum-URL-jei felszabadulnak, az újak töltődnek', async () => {
+    const { fixture, api } = await setup([]);
+    fixture.componentRef.setInput('snapshot', { ...snapshot, sessionId: 32, gui: { ...snapshot.gui!, imageCount: 1 } });
+    fixture.detectChanges();
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(api.guiImage).toHaveBeenLastCalledWith(32, 0);
+    expect(api.guiImage).toHaveBeenCalledTimes(3);
+    fixture.componentRef.setInput('snapshot', { ...snapshot, sessionId: 32, gui: { ...snapshot.gui!, imageCount: 1 }, leftGroup: true });
+    fixture.detectChanges();
+    expect(api.guiImage).toHaveBeenCalledTimes(3); // ugyanannál a dolgozatnál nem tölt újra
+    fixture.destroy();
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
   });
 
   it('MI-javaslat: a rész fájljaira, elfogadva megjegyzés lesz, elvetve eltűnik', async () => {

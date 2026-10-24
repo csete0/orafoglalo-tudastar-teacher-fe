@@ -10,6 +10,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { ResultsCsvExportService } from '../../services/export/results-csv-export.service';
 import { TeacherAttemptReviewDto, TeacherTaskSetResultsDto } from '../../models/report.model';
 import { AttemptReviewPanelComponent } from '../../shared/attempt-review/attempt-review-panel.component';
+import { AttemptScoreFormComponent } from '../../shared/attempt-review/attempt-score-form.component';
 import { ReportService } from '../../services/report/report.service';
 import { of } from 'rxjs';
 
@@ -85,6 +86,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     taskSetResults: ReturnType<typeof signal<TeacherTaskSetResultsDto | null>>;
     attemptReview: ReturnType<typeof signal<TeacherAttemptReviewDto | null>>;
     taskSetResultsLoading: ReturnType<typeof signal<boolean>>;
+    reviewSaving: ReturnType<typeof signal<boolean>>;
     reviewLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadTaskSetResults: ReturnType<typeof vi.fn>;
@@ -101,6 +103,7 @@ describe('FeladatsorEredmenyekComponent', () => {
       taskSetResults: signal(results),
       attemptReview: signal<TeacherAttemptReviewDto | null>(null),
       taskSetResultsLoading: signal(false),
+      reviewSaving: signal(false),
       reviewLoading: signal(false),
       error: signal(null),
       loadTaskSetResults: vi.fn(),
@@ -146,6 +149,11 @@ describe('FeladatsorEredmenyekComponent', () => {
     return fixture.debugElement.query(By.directive(AttemptReviewPanelComponent)).componentInstance;
   }
 
+  /** A megnyitott panel értékelő űrlapja (pontszám, szöveg, mentés, visszaállítás). */
+  function scoreForm(fixture: ReturnType<typeof TestBed.createComponent<FeladatsorEredmenyekComponent>>): AttemptScoreFormComponent {
+    return fixture.debugElement.query(By.directive(AttemptScoreFormComponent)).componentInstance;
+  }
+
   // Teljes vizsga (H5): irodai beadásnál a tanár a fájlokat (letölthetők) és az MI szempontjait látja, a kód-blokk helyett.
   it('irodai beadásnál a fájlok letölthetők, a szempontok közül a pontot vesztettek indokkal látszanak', () => {
     configure(makeResults());
@@ -170,8 +178,19 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(rubric).not.toContain('igazítás: center'); // a teljesült szempont indoka nem kell
     expect(el.textContent).not.toContain('A diák megoldása');
 
-    (el.querySelector('[data-testid="attempt-files"] button') as HTMLButtonElement).click();
-    expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
+    // jsdom-ban nincs valódi blob-URL és letöltés: a böngésző-API-kat a saveBlob specjéhez hasonlóan stubboljuk
+    // (zone.js nélkül a jsdom-hiba már nem nyelődik el, hanem kezeletlen hibaként buktatná a futást).
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:teszt');
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    try {
+      (el.querySelector('[data-testid="attempt-files"] button') as HTMLButtonElement).click();
+      expect(reportServiceMock.downloadAttemptFile).toHaveBeenCalledWith(expect.any(Number), 'f1');
+      expect(createUrl).toHaveBeenCalledWith(expect.any(Blob));
+      expect(anchorClick).toHaveBeenCalledTimes(1);
+    } finally {
+      createUrl.mockRestore();
+      anchorClick.mockRestore();
+    }
   });
 
   it('a gépi tételnél közérthető indok, a nyers szabály-útvonal nélkül; a blokk címe semleges', () => {
@@ -351,8 +370,8 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = 11; // maxPoints = 10
+    const component = scoreForm(fixture);
+    component.draftPoints.set(11); // maxPoints = 10
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
@@ -365,8 +384,8 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = -1;
+    const component = scoreForm(fixture);
+    component.draftPoints.set(-1);
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
@@ -379,10 +398,10 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = 8;
-    component.draftFeedback = 'Szép munka.';
-    component.feedbackTouched = true;
+    const component = scoreForm(fixture);
+    component.draftPoints.set(8);
+    component.draftFeedback.set('Szép munka.');
+    component.feedbackTouched.set(true);
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
@@ -399,10 +418,10 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = null;
-    component.draftFeedback = 'Egyetértek az AI pontjával, de figyelj a névválasztásra.';
-    component.feedbackTouched = true;
+    const component = scoreForm(fixture);
+    component.draftPoints.set(null);
+    component.draftFeedback.set('Egyetértek az AI pontjával, de figyelj a névválasztásra.');
+    component.feedbackTouched.set(true);
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(
@@ -424,8 +443,8 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = 9;
+    const component = scoreForm(fixture);
+    component.draftPoints.set(9);
     // component.draftFeedback marad a betöltéskori érték - a tanár nem szerkesztette,
     // ezért component.feedbackTouched is false marad (nincs (input) esemény szimulálva).
     component.save(makeReview());
@@ -445,15 +464,15 @@ describe('FeladatsorEredmenyekComponent', () => {
     openFirstCell(fixture);
     fixture.detectChanges();
 
-    const component = panel(fixture);
-    expect(component.feedbackTouched).toBe(false);
+    const component = scoreForm(fixture);
+    expect(component.feedbackTouched()).toBe(false);
 
     const textarea: HTMLTextAreaElement | null = fixture.nativeElement.querySelector('textarea');
     expect(textarea).toBeTruthy();
     textarea!.value = 'Módosított értékelés.';
     textarea!.dispatchEvent(new Event('input'));
 
-    expect(component.feedbackTouched).toBe(true);
+    expect(component.feedbackTouched()).toBe(true);
   });
 
   it('üres pontszám ÉS üres szöveg esetén figyelmeztet, nem küld üres kérést', () => {
@@ -462,9 +481,9 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture);
 
-    const component = panel(fixture);
-    component.draftPoints = null;
-    component.draftFeedback = '   ';
+    const component = scoreForm(fixture);
+    component.draftPoints.set(null);
+    component.draftFeedback.set('   ');
     component.save(makeReview());
 
     expect(reportStoreMock.overrideScore).not.toHaveBeenCalled();
@@ -478,7 +497,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true }));
 
-    await panel(fixture).revert(makeReview({ isOverridden: true }));
+    await scoreForm(fixture).revert(makeReview({ isOverridden: true }));
 
     expect(confirmMock.ask).toHaveBeenCalled();
     expect(reportStoreMock.revertOverride).not.toHaveBeenCalled();
@@ -490,7 +509,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true }));
 
-    await panel(fixture).revert(makeReview({ isOverridden: true }));
+    await scoreForm(fixture).revert(makeReview({ isOverridden: true }));
 
     expect(reportStoreMock.revertOverride).toHaveBeenCalledWith(1, 101, expect.any(Function));
   });
@@ -519,7 +538,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const reviewNeverAiScored = makeReview({ isOverridden: true, aiEarnedPoints: null, earnedPoints: 4 });
     openFirstCell(fixture, reviewNeverAiScored);
 
-    await panel(fixture).revert(reviewNeverAiScored);
+    await scoreForm(fixture).revert(reviewNeverAiScored);
 
     expect(confirmMock.ask).toHaveBeenCalled();
     const confirmArgs = confirmMock.ask.mock.calls[0][0] as { title: string; message: string };
@@ -545,17 +564,17 @@ describe('FeladatsorEredmenyekComponent', () => {
     fixture.detectChanges();
     openFirstCell(fixture, makeReview({ isOverridden: true, teacherFeedback: 'Régi értékelés' }));
 
-    const component = panel(fixture);
+    const component = scoreForm(fixture);
     // A tanár hozzáért az értékelés-mezőhöz, majd meggondolta magát és visszaállított.
-    component.feedbackTouched = true;
+    component.feedbackTouched.set(true);
 
     await component.revert(makeReview({ isOverridden: true, teacherFeedback: 'Régi értékelés' }));
     const onRevertSuccess = reportStoreMock.revertOverride.mock.calls[0][2] as () => void;
     onRevertSuccess();
 
-    expect(component.feedbackTouched).toBe(false);
+    expect(component.feedbackTouched()).toBe(false);
 
-    component.draftPoints = 4;
+    component.draftPoints.set(4);
     component.save(makeReview({ attemptId: 101, isOverridden: false, teacherFeedback: null }));
 
     expect(reportStoreMock.overrideScore).toHaveBeenCalledWith(

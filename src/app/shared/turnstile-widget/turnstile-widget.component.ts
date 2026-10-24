@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, PLATFORM_ID, inject, output, viewChild, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, PLATFORM_ID, afterNextRender, inject, output, viewChild } from '@angular/core';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { environment } from '../../../environments/environment';
 
@@ -25,10 +25,10 @@ let scriptLoadPromise: Promise<void> | null = null;
 @Component({
   selector: 'app-turnstile-widget',
   standalone: true,
-  changeDetection: ChangeDetectionStrategy.Eager,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div #container></div>`,
 })
-export class TurnstileWidgetComponent implements AfterViewInit, OnDestroy {
+export class TurnstileWidgetComponent implements OnDestroy {
   private readonly document = inject(DOCUMENT);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly containerRef = viewChild.required<ElementRef<HTMLElement>>('container');
@@ -37,7 +37,12 @@ export class TurnstileWidgetComponent implements AfterViewInit, OnDestroy {
 
   private widgetId: string | null = null;
 
-  async ngAfterViewInit(): Promise<void> {
+  constructor() {
+    // A külső widget a kész DOM-konténerbe renderel: az első renderelés után, csak böngészőben.
+    afterNextRender(() => void this.init());
+  }
+
+  private async init(): Promise<void> {
     if (!this.isBrowser || !environment.turnstileSiteKey) {
       return;
     }

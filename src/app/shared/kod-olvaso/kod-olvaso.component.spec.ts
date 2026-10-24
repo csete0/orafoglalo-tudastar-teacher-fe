@@ -8,8 +8,8 @@ import { KodOlvasoComponent, codeFilePaths } from './kod-olvaso.component';
   template: `<app-kod-olvaso [files]="files" [readOnlyPaths]="['keret.py']" [(activePath)]="active" />`,
 })
 class HostComponent {
-  files = { 'b.py': 'print("b")', 'a.py': 'print("a")\nx = 1', 'keret.py': 'KERET' };
-  active = signal<string | null>('a.py');
+  readonly files = { 'b.py': 'print("b")', 'a.py': 'print("a")\nx = 1', 'keret.py': 'KERET' };
+  readonly active = signal<string | null>('a.py');
 }
 
 describe('KodOlvasoComponent', () => {

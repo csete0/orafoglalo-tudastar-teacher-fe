@@ -16,7 +16,6 @@
             "outputPath": "dist/teacher-fe",
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               "src/assets",
@@ -28,8 +27,8 @@
           "configurations": {
             "production": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "50kB" }
+                { "type": "initial", "maximumWarning": "600kB", "maximumError": "750kB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
               ],
               "outputHashing": "all",
               "fileReplacements": [
@@ -43,8 +42,8 @@
             },
             "staging": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "50kB" }
+                { "type": "initial", "maximumWarning": "600kB", "maximumError": "750kB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
               ],
               "outputHashing": "all",
               "fileReplacements": [
@@ -60,6 +59,14 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "e2e": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.e2e.ts" }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -72,12 +79,19 @@
           "configurations": {
             "production": { "buildTarget": "teacher-fe:build:production" },
             "staging": { "buildTarget": "teacher-fe:build:staging" },
-            "development": { "buildTarget": "teacher-fe:build:development" }
+            "development": { "buildTarget": "teacher-fe:build:development" },
+            "e2e": { "buildTarget": "teacher-fe:build:e2e" }
           },
           "defaultConfiguration": "development"
         },
         "extract-i18n": {
           "builder": "@angular/build:extract-i18n"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test",
@@ -85,8 +99,7 @@
             "buildTarget": "teacher-fe:build",
             "runner": "vitest",
             "runnerConfig": "vitest.config.ts",
-            "tsConfig": "tsconfig.spec.json",
-            "setupFiles": ["src/test-setup.ts"]
+            "tsConfig": "tsconfig.spec.json"
           },
           "configurations": {
             "ci": { "progress": false, "watch": false }

@@ -1,19 +1,17 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnInit, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, inject, input, linkedSignal, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { GroupStore } from '../../../services/group/group.store';
 import { GroupSeatStore } from '../../../services/group/group-seat.store';
 import { SchoolStore } from '../../../services/school/school.store';
 import { GroupDto } from '../../../models/group.model';
-import { GroupSeatOverviewDto } from '../../../models/group-seat.model';
 import { environment } from '../../../../environments/environment';
 import { ConfirmService } from '../../../shared/confirm/confirm.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { IconComponent } from '../../../shared/icon/icon.component';
-import { LocalSpinnerComponent } from '../../../shared/local-spinner/local-spinner.component';
 import { CopyButtonComponent } from '../../../shared/copy-button/copy-button.component';
 import { QrCodeComponent } from '../../../shared/qr-code/qr-code.component';
+import { CsoportHelyekComponent } from './csoport-helyek.component';
 
 /**
  * Csoportoldal „Beállítások” fül: név + intézmény-kötés, Meghívó kód (a régi „Meghívó” fül),
@@ -22,7 +20,7 @@ import { QrCodeComponent } from '../../../shared/qr-code/qr-code.component';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-beallitasok',
-  imports: [DatePipe, FormsModule, IconComponent, LocalSpinnerComponent, CopyButtonComponent, QrCodeComponent],
+  imports: [FormsModule, IconComponent, CopyButtonComponent, QrCodeComponent, CsoportHelyekComponent],
   template: `
     @let g = group();
     <div class="max-w-4xl space-y-10">
@@ -39,10 +37,10 @@ import { QrCodeComponent } from '../../../shared/qr-code/qr-code.component';
                 <button type="button" (click)="startRename()" class="btn btn-ghost !px-2 !py-1 !text-xs">Átnevezés</button>
               }
             } @else {
-              <input [(ngModel)]="renameValue" maxlength="255" class="input !w-auto flex-1 min-w-0" aria-label="Csoport neve"
+              <input [ngModel]="renameValue()" (ngModelChange)="renameValue.set($event)" maxlength="255" class="input !w-auto flex-1 min-w-0" aria-label="Csoport neve"
                 (keyup.enter)="saveRename()" (keyup.escape)="renaming.set(false)" />
               <button type="button" (click)="saveRename()"
-                [disabled]="!renameValue.trim() || store.loading()" class="btn btn-primary">Mentés</button>
+                [disabled]="!renameValue().trim() || store.loading()" class="btn btn-primary">Mentés</button>
               <button type="button" (click)="renaming.set(false)" class="btn btn-ghost">Mégse</button>
             }
           </div>
@@ -114,109 +112,7 @@ import { QrCodeComponent } from '../../../shared/qr-code/qr-code.component';
 
       <section aria-labelledby="helyek">
         <h2 id="helyek" class="text-lg font-bold mb-3 scroll-mt-20">Intézményi helyek</h2>
-        @if (seatStore.error()) {
-          <p class="text-danger text-sm mb-4">{{ seatStore.error() }}</p>
-        }
-        @if (seatStore.loading()) {
-          <app-local-spinner />
-        }
-        @if (seatStore.overview(); as seats) {
-          @if (!seats.licenseId) {
-            <div class="card p-5 text-sm text-text-muted">
-              Ehhez a csoporthoz nem tartozik érvényes intézményi licenc.
-              A diákok a saját előfizetésüket használják.
-            </div>
-          } @else {
-            <div class="card p-4 mb-4">
-              <div class="flex items-center justify-between gap-3 flex-wrap">
-                <div class="text-sm">
-                  <span class="font-bold">{{ seats.tier === 'premium' ? 'Prémium' : 'Standard' }}</span>
-                  licenc ·
-                  <span [class.text-danger]="seats.usedSeatsOnLicense >= seats.capacity">
-                    {{ seats.usedSeatsOnLicense }}/{{ seats.capacity }} hely használatban
-                  </span>
-                  <!-- UI-TT-202: usedSeatsOnLicense csak a licenc IdleWindowMinutes-én belül friss helyeket számolja,
-                       a lenti lista MINDEN fel nem szabadított helyet felsorol - a magyarázat nélkül a fejléc
-                       („0/0”) ellentmondani látszik a listának (admin-intezmenyek.component.ts mintája). -->
-                  @if (idleTransferableSeatCount(seats) > 0) {
-                    <span class="text-text-muted">
-                      ({{ idleTransferableSeatCount(seats) }} tétlen, átadható)
-                    </span>
-                  }
-                  <span class="text-text-muted">(az intézmény összes csoportjával együtt)</span>
-                </div>
-                @if (seats.holders.length > 0) {
-                  <button type="button" (click)="confirmEndLesson()" [disabled]="seatStore.loading()"
-                          class="btn btn-danger !px-3 !py-1.5 !text-sm">
-                    Óra vége — helyek felszabadítása
-                  </button>
-                }
-              </div>
-              <p class="text-xs text-text-muted mt-2">
-                Csak ennek a csoportnak a tagjaira hat. Aki épp vizsgázik vagy kvízt ír, attól nem veszi el a helyet.
-              </p>
-            </div>
-
-            @if (seatStore.lastReleaseResult(); as released) {
-              <div class="bg-success-subtle border border-success/40 rounded-xl p-4 mb-4 text-sm">
-                <p class="text-success font-bold">{{ released.releasedCount }} hely felszabadítva.</p>
-                @if (released.skippedInProgress.length > 0) {
-                  <p class="text-text-muted mt-1">
-                    Nem érintette (folyamatban lévő vizsga/kvíz):
-                    {{ released.skippedInProgress.join(', ') }}
-                  </p>
-                }
-              </div>
-            }
-
-            <h3 class="font-bold text-sm mb-2">Helyet használó diákok</h3>
-            <ul class="space-y-2 mb-6">
-              @for (holder of seats.holders; track holder.userId) {
-                <li class="flex justify-between items-center card !rounded-xl p-3 text-sm gap-3">
-                  <div class="min-w-0">
-                    <p class="truncate">{{ holder.displayName }}</p>
-                    <p class="text-xs text-text-muted">
-                      <span [class]="holder.isFresh ? 'text-success' : ''">
-                        {{ holder.isFresh ? 'aktív' : 'tétlen' }}
-                      </span>
-                      · utoljára: {{ holder.lastActivityAt | date: 'MM.dd HH:mm' }}
-                      @if (holder.hasSessionInProgress) {
-                        · <span class="text-warning">vizsga/kvíz folyamatban</span>
-                      }
-                      @if (holder.inMultipleGroups) {
-                        · <span class="text-text-muted">több csoport tagja</span>
-                      }
-                    </p>
-                  </div>
-                  <button type="button" (click)="confirmReleaseSeat(holder)" [disabled]="seatStore.loading()"
-                          class="btn btn-ghost !px-2 !py-1 !text-xs shrink-0">
-                    Felszabadítás
-                  </button>
-                </li>
-              } @empty {
-                <li class="text-sm text-text-muted">Jelenleg senki nem használ helyet ebben a csoportban.</li>
-              }
-            </ul>
-
-            @if (seats.withoutSeat.length > 0) {
-              <h3 class="font-bold text-sm mb-2">
-                Nem fért be ({{ seats.withoutSeat.length }})
-              </h3>
-              <p class="text-xs text-text-muted mb-2">
-                Ezek a diákok a saját (alacsonyabb) előfizetésüket használják. Aki már fizet
-                ugyanazért vagy jobbért, nem szerepel a listában.
-              </p>
-              <ul class="space-y-1">
-                @for (missing of seats.withoutSeat; track missing.userId) {
-                  <li class="text-sm flex gap-2">
-                    <span>{{ missing.displayName }}</span>
-                    <span class="text-text-muted">({{ missing.personalTier }})</span>
-                  </li>
-                }
-              </ul>
-            }
-          }
-        }
+        <app-csoport-helyek [groupId]="g.id" />
       </section>
 
       <section aria-labelledby="archivalas">
@@ -241,21 +137,19 @@ export class CsoportBeallitasokComponent implements OnInit {
   private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
   readonly store = inject(GroupStore);
-  readonly seatStore = inject(GroupSeatStore);
+  private readonly seatStore = inject(GroupSeatStore);
   readonly schoolStore = inject(SchoolStore);
 
   /** UI-UX-T1: a kivetíthető QR alapból rejtve - csak szándékos megnyitásra. */
   readonly qrVisible = signal(false);
   readonly renaming = signal(false);
-  renameValue = '';
+  /** Az átnevezés piszkozata - minden „Átnevezés” kattintás a mostani névvel indítja. */
+  readonly renameValue = signal('');
 
   // UI-TT-4: az intézmény-<select> külön, a nézetet vezérlő signalra kötve - a Mégse-ág így vissza tudja
-  // állítani a látott értéket akkor is, ha a mögöttes store-állapot közben nem változott.
-  readonly displaySchoolId = signal<number | null>(null);
-
-  private readonly syncDisplaySchoolId = effect(() => {
-    this.displaySchoolId.set(this.group().schoolId ?? null);
-  });
+  // állítani a látott értéket akkor is, ha a mögöttes store-állapot közben nem változott. Minden új csoport-objektum
+  // (sikeres mentés, újratöltés) a mentett értékre szinkronizál.
+  readonly displaySchoolId = linkedSignal<GroupDto, number | null>({ source: this.group, computation: (g) => g.schoolId ?? null });
 
   ngOnInit(): void {
     this.seatStore.load(this.group().id);
@@ -266,45 +160,6 @@ export class CsoportBeallitasokComponent implements OnInit {
 
   joinLink(code: string): string {
     return `${environment.studentAppUrl}/csoport/csatlakozas?code=${code}`;
-  }
-
-  // UI-TT-202: hány listázott hely tétlen (heldSeats - usedSeats ekvivalense a tanári DTO-ban).
-  idleTransferableSeatCount(seats: GroupSeatOverviewDto): number {
-    return seats.holders.filter((h) => !h.isFresh).length;
-  }
-
-  async confirmEndLesson(): Promise<void> {
-    if (this.seatStore.loading()) return;
-    const holders = this.seatStore.overview()?.holders ?? [];
-    const multiGroup = holders.filter((h) => h.inMultipleGroups).length;
-    const ok = await this.confirmService.ask({
-      message:
-        `Felszabadítod a csoport ${holders.length} használatban lévő helyét? ` +
-        (multiGroup > 0
-          ? `Figyelem: ${multiGroup} diák más csoportnak is tagja — egy diáknak egy helye van, ` +
-            'így a felszabadítás a másik óráján is látszani fog. '
-          : '') +
-        'Aki épp vizsgázik vagy kvízt ír, attól a rendszer nem veszi el a helyet.',
-      danger: true,
-      confirmLabel: 'Óra vége',
-    });
-    if (!ok) return;
-    this.seatStore.releaseAll(this.group().id);
-  }
-
-  async confirmReleaseSeat(holder: { userId: number; displayName: string; inMultipleGroups: boolean }): Promise<void> {
-    if (this.seatStore.loading()) return;
-    const ok = await this.confirmService.ask({
-      message:
-        `Felszabadítod ${holder.displayName} helyét? A diák visszaesik a saját előfizetésére. ` +
-        (holder.inMultipleGroups
-          ? 'Ez a diák más csoportnak is tagja — egy helye van, tehát a másik óráján is elveszíti.'
-          : ''),
-      danger: true,
-      confirmLabel: 'Felszabadítás',
-    });
-    if (!ok) return;
-    this.seatStore.releaseSeat(this.group().id, holder.userId);
   }
 
   async archive(): Promise<void> {
@@ -362,12 +217,12 @@ export class CsoportBeallitasokComponent implements OnInit {
   }
 
   startRename(): void {
-    this.renameValue = this.group().name;
+    this.renameValue.set(this.group().name);
     this.renaming.set(true);
   }
 
   saveRename(): void {
-    const name = this.renameValue.trim();
+    const name = this.renameValue().trim();
     if (!name || this.store.loading()) return;
     // UI-UX-T4: ugyanaz az update-útvonal, mint az intézmény-kötésé - a schoolId a MOST LÁTOTT értékkel megy,
     // hogy a két szerkesztési út ne írhassa felül egymást.

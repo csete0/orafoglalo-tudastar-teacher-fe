@@ -14,10 +14,10 @@ export class GroupSeatStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
 
-  readonly overview = computed(() => this._overview());
-  readonly lastReleaseResult = computed(() => this._lastReleaseResult());
-  readonly loading = computed(() => this._loading());
-  readonly error = computed(() => this._error());
+  readonly overview = this._overview.asReadonly();
+  readonly lastReleaseResult = this._lastReleaseResult.asReadonly();
+  readonly loading = this._loading.asReadonly();
+  readonly error = this._error.asReadonly();
 
   /** Van-e egyáltalán érvényes licenc a csoport intézményéhez. */
   readonly hasLicense = computed(() => this._overview()?.licenseId != null);

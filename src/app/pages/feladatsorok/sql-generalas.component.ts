@@ -1,37 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { concat, Subscription, toArray } from 'rxjs';
-import {
-  GeneratedSqlFileDto,
-  ReferenceSubtaskCheckDto,
-  SqlGenerationResultDto,
-  SqlGenerationSource,
-  TeacherFileDto,
-} from '../../models/teacher-content.model';
+import { GeneratedSqlFileDto, SqlGenerationResultDto, SqlGenerationSource, TeacherFileDto } from '../../models/teacher-content.model';
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { LocalSpinnerComponent } from '../../shared/local-spinner/local-spinner.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { saveBlob } from '../../shared/save-blob.util';
+import { SqlGenFileComponent } from './sql-generalas/sql-gen-file.component';
+import { SqlGenSchemaComponent } from './sql-generalas/sql-gen-schema.component';
+
+export { MAX_EDIT_BYTES } from './sql-generalas/sql-gen-file.component';
 
 /** A BE-vel azonos korlát. */
 const MAX_DESCRIPTION = 2000;
-/** Az előnézetben ennyi sor látszik egy fájlból (a teljes szöveg mentésre kerül). */
-const PREVIEW_LINES = 200;
-/** E fölött a böngészős szerkesztő lassú lenne: letöltés, gépen szerkesztés, visszatöltés a feltöltővel. */
-export const MAX_EDIT_BYTES = 200 * 1024;
 
 type SqlFileKind = GeneratedSqlFileDto['kind'];
-
-const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: string; badge: string }> = {
-  match: { label: 'ugyanazt adja, mint eddig', badge: 'badge-success' },
-  ok: { label: 'lefutott', badge: 'badge-success' },
-  different: { label: 'mást ad, mint eddig', badge: 'badge-warning' },
-  error: { label: 'hiba', badge: 'badge-danger' },
-  not_query: { label: 'nem lekérdezés', badge: 'badge-neutral' },
-};
 
 /**
  * „Hiányzó SQL-fájl elkészítése” párbeszédablak a feladatsor-szerkesztőben. Lépések: forrás választása → elkészítés (a
@@ -42,13 +29,10 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sql-generalas',
   standalone: true,
-  imports: [FormsModule, IconComponent, LocalSpinnerComponent],
+  imports: [DialogShellComponent, FormsModule, IconComponent, LocalSpinnerComponent, SqlGenFileComponent, SqlGenSchemaComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
-      <div class="fixed inset-0 bg-black/40" data-testid="sql-gen-backdrop" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="sql-gen-title" tabindex="-1" data-testid="sql-generation-dialog"
-        class="card relative w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
+    <app-dialog-shell labelledBy="sql-gen-title" testId="sql-generation-dialog" backdropTestId="sql-gen-backdrop"
+      panelClass="card w-full max-w-3xl p-5 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-4">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="database" class="w-5 h-5 block" /></div>
@@ -110,84 +94,11 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
               <p class="text-sm text-text-muted"><span class="font-medium">Az MI megjegyzése:</span> {{ r.aiNotes }}</p>
             }
 
-            <div>
-              <h3 class="font-semibold text-sm mb-2">Táblák</h3>
-              <div class="space-y-2">
-                @for (t of r.tables; track t.name) {
-                  <div class="bg-bg-element rounded-xl p-3 text-sm" [attr.data-testid]="'sql-gen-table-' + t.name">
-                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                      <span class="font-mono font-semibold break-all">{{ t.name }}</span>
-                      <span class="text-xs text-text-muted">
-                        forrás: {{ t.source }} ·
-                        <span [class.text-danger]="t.actualRows !== null && t.actualRows !== t.expectedRows">
-                          {{ t.actualRows ?? '–' }} / {{ t.expectedRows }} sor
-                        </span>
-                      </span>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5">
-                      @for (c of t.columns; track c.name) {
-                        <span class="badge badge-neutral !font-normal">
-                          <span class="font-mono">{{ c.name }}</span>&nbsp;<span class="text-text-muted">{{ typeLabel(c.type) }}</span>
-                          @if (c.primaryKey) { <span class="text-primary font-semibold">&nbsp;kulcs</span> }
-                          @if (c.references) { <span class="text-secondary">&nbsp;→ {{ c.references }}</span> }
-                        </span>
-                      }
-                    </div>
-                  </div>
-                }
-              </div>
-            </div>
-
-            @if (r.referenceChecks.length > 0) {
-              <div data-testid="sql-gen-reference-checks">
-                <h3 class="font-semibold text-sm mb-1">A feladatsor megoldásai az új sémán</h3>
-                <ul class="space-y-1 text-sm">
-                  @for (task of r.referenceChecks; track task.taskId) {
-                    @for (s of task.subtasks; track $index) {
-                      <li class="flex flex-wrap items-center gap-2">
-                        <span class="min-w-0">{{ task.taskTitle }} – {{ s.label }}</span>
-                        <span class="badge" [class]="referenceBadge(s)">{{ referenceLabel(s) }}</span>
-                        @if (s.rows !== null) { <span class="text-xs text-text-muted">{{ s.rows }} sor</span> }
-                        @if (s.message) { <span class="text-xs text-danger break-all">{{ s.message }}</span> }
-                      </li>
-                    }
-                  }
-                </ul>
-              </div>
-            }
+            <app-sql-gen-schema [result]="r" />
 
             @for (f of generatedFiles(); track f.kind) {
-              <details class="bg-bg-element rounded-xl p-3" [attr.data-testid]="'sql-gen-file-' + f.kind">
-                <summary class="cursor-pointer text-sm font-medium">
-                  {{ f.fileName }} <span class="text-text-muted font-normal">({{ sizeLabel(currentSize(f)) }}{{ existingFileName(f) ? ' – a meglévő fájl lecserélődik' : '' }})</span>
-                  @if (isChanged(f.kind)) { <span class="badge badge-warning ml-1">módosítva</span> }
-                </summary>
-                <div class="flex flex-wrap gap-2 mt-2">
-                  <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="download(f)" [attr.data-testid]="'sql-gen-download-' + f.kind"
-                    [attr.aria-label]="f.fileName + ' letöltése'">Letöltés</button>
-                  @if (f.sizeBytes <= maxEditBytes) {
-                    <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="toggleEdit(f.kind)" [attr.aria-pressed]="isEditing(f.kind)"
-                      [attr.aria-label]="f.fileName + (isEditing(f.kind) ? ' szerkesztésének befejezése' : ' szerkesztése')"
-                      [attr.data-testid]="'sql-gen-edit-' + f.kind">{{ isEditing(f.kind) ? 'Szerkesztés vége' : 'Szerkesztés' }}</button>
-                    @if (isChanged(f.kind)) {
-                      <button type="button" class="btn btn-ghost !px-2 !py-1 text-sm" (click)="restore(f.kind)" [attr.data-testid]="'sql-gen-restore-' + f.kind"
-                        [attr.aria-label]="f.fileName + ' visszaállítása az elkészített változatra'">Visszaállítás</button>
-                    }
-                  }
-                </div>
-                @if (f.sizeBytes > maxEditBytes) {
-                  <p class="text-xs text-text-muted mt-2" [attr.data-testid]="'sql-gen-large-' + f.kind">
-                    Nagy fájl – töltsd le, szerkeszd a gépeden, és a feltöltővel töltsd vissza.
-                  </p>
-                }
-                @if (isEditing(f.kind)) {
-                  <textarea rows="16" spellcheck="false" [attr.aria-label]="f.fileName + ' szerkesztése'" [attr.data-testid]="'sql-gen-editor-' + f.kind"
-                    class="input mt-2 !bg-bg-panel !px-2 !py-1 !text-xs font-mono whitespace-pre"
-                    [ngModel]="texts()[f.kind]" (ngModelChange)="edit(f.kind, $event)" [ngModelOptions]="{ standalone: true }"></textarea>
-                } @else {
-                  <pre class="mt-2 max-h-80 overflow-auto text-xs font-mono whitespace-pre bg-bg-panel rounded-lg p-2">{{ preview(texts()[f.kind] ?? f.content) }}</pre>
-                }
-              </details>
+              <app-sql-gen-file [file]="f" [text]="texts()[f.kind] ?? f.content" [editing]="isEditing(f.kind)" [replaces]="replacesExisting(f)"
+                (textChange)="edit(f.kind, $event)" (editToggle)="toggleEdit(f.kind)" (restore)="restore(f.kind)" (download)="download(f)" />
             }
 
             @if (dirty()) {
@@ -275,8 +186,7 @@ const REFERENCE_STATUS: Record<ReferenceSubtaskCheckDto['status'], { label: stri
             </div>
           </div>
         }
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class SqlGeneralasComponent implements OnInit {
@@ -309,7 +219,6 @@ export class SqlGeneralasComponent implements OnInit {
   readonly result = signal<SqlGenerationResultDto | null>(null);
 
   // ── Kézi javítás ──
-  readonly maxEditBytes = MAX_EDIT_BYTES;
   /** Az elkészítéskor kapott eredmény (a „Visszaállítás” ide tér vissza). */
   private readonly generatedResult = signal<SqlGenerationResultDto | null>(null);
   readonly generatedFiles = computed(() => this.generatedResult()?.files ?? []);
@@ -326,8 +235,6 @@ export class SqlGeneralasComponent implements OnInit {
     return (Object.keys(texts) as SqlFileKind[]).some((k) => texts[k] !== validated[k]);
   });
   readonly canSave = computed(() => !!this.result()?.canSave && !this.dirty());
-
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
 
   private readonly hasKind = (kind: string) => this.files().some((f) => f.kind === kind);
   readonly inputFiles = computed(() => this.files().filter((f) => f.kind === 'InputTxt'));
@@ -370,7 +277,6 @@ export class SqlGeneralasComponent implements OnInit {
     const preferred: SqlGenerationSource | null =
       hasCreate && !hasLite ? 'createSql' : hasLite && !hasCreate ? 'createLiteSql' : this.inputFiles().length > 0 ? 'dataFiles' : hasCreate ? 'createSql' : null;
     this.source.set(preferred);
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   toggleFile(id: string): void {
@@ -421,12 +327,6 @@ export class SqlGeneralasComponent implements OnInit {
     this.revalidating.set(false);
   }
 
-  /** A szerkesztett szöveg mérete (UTF-8 bájt) - a címkében ez látszik, nem az elkészítetté. */
-  currentSize(file: GeneratedSqlFileDto): number {
-    const text = this.texts()[file.kind];
-    return text === undefined || text === file.content ? file.sizeBytes : new TextEncoder().encode(text).length;
-  }
-
   readonly hasLiteText = computed(() => this.texts().CreateLiteSql !== undefined);
 
   private showGenerated(result: SqlGenerationResultDto): void {
@@ -442,10 +342,6 @@ export class SqlGeneralasComponent implements OnInit {
 
   isEditing(kind: SqlFileKind): boolean {
     return this.editingKinds().has(kind);
-  }
-
-  isChanged(kind: SqlFileKind): boolean {
-    return this.texts()[kind] !== this.generatedResult()?.files.find((f) => f.kind === kind)?.content;
   }
 
   toggleEdit(kind: SqlFileKind): void {
@@ -550,35 +446,10 @@ export class SqlGeneralasComponent implements OnInit {
     this.closed.emit();
   }
 
-  existingFileName(file: GeneratedSqlFileDto): string | null {
+  /** Mentéskor lecserélődik-e egy meglévő fájl. */
+  replacesExisting(file: GeneratedSqlFileDto): boolean {
     // Feladatonkénti sémánál csak a célfeladat (vagy a feladatsor-szintű) fájlja cserélődik.
     const taskId = this.taskId();
-    return this.files().find((f) => f.kind === file.kind && (taskId === null || f.taskId == null || f.taskId === taskId))?.originalFileName ?? null;
-  }
-
-  preview(content: string): string {
-    const lines = content.split('\n');
-    return lines.length <= PREVIEW_LINES
-      ? content
-      : `${lines.slice(0, PREVIEW_LINES).join('\n')}\n… (további ${lines.length - PREVIEW_LINES} sor - a mentés a teljes fájlt tartalmazza)`;
-  }
-
-  sizeLabel(bytes: number): string {
-    return bytes < 1024 ? `${bytes} bájt` : `${Math.round(bytes / 1024)} KB`;
-  }
-
-  typeLabel(type: string): string {
-    return (
-      { INTEGER: 'egész', DECIMAL: 'tizedes', TEXT: 'szöveg', DATE: 'dátum', DATETIME: 'dátum+idő', TIME: 'idő', BOOLEAN: 'logikai' }[type] ??
-      type.toLowerCase()
-    );
-  }
-
-  referenceLabel(s: ReferenceSubtaskCheckDto): string {
-    return REFERENCE_STATUS[s.status]?.label ?? s.status;
-  }
-
-  referenceBadge(s: ReferenceSubtaskCheckDto): string {
-    return REFERENCE_STATUS[s.status]?.badge ?? 'badge-neutral';
+    return !!this.files().find((f) => f.kind === file.kind && (taskId === null || f.taskId == null || f.taskId === taskId))?.originalFileName;
   }
 }

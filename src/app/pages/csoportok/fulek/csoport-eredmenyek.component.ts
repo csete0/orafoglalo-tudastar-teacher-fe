@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, model, OnInit, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, model, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { finalize, take } from 'rxjs';
 import { ReportStore } from '../../../services/report/report.store';
@@ -16,6 +16,7 @@ import {
 } from '../../../shared/date-range/report-date-range';
 import { floorPercent, GyengeTemakJavaslatokComponent } from '../gyenge-temak-javaslatok.component';
 import { VideoHelpComponent } from '../../../shared/video-help/video-help.component';
+import { LeaderboardPanelComponent } from '../../../shared/leaderboard-panel/leaderboard-panel.component';
 
 /**
  * Csoportoldal „Eredmények” fül: Összesítő (dátumszűrő + rendezhető tábla), Ranglista és Gyenge témák szakasz -
@@ -24,7 +25,7 @@ import { VideoHelpComponent } from '../../../shared/video-help/video-help.compon
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-eredmenyek',
-  imports: [FormsModule, RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent, VideoHelpComponent],
+  imports: [RouterLink, IconComponent, LocalSpinnerComponent, DateRangeFilterComponent, SortHeaderComponent, GyengeTemakJavaslatokComponent, VideoHelpComponent, LeaderboardPanelComponent],
   template: `
     <div class="max-w-4xl space-y-10">
       <section aria-labelledby="osszesito">
@@ -81,46 +82,8 @@ import { VideoHelpComponent } from '../../../shared/video-help/video-help.compon
 
       <section aria-labelledby="ranglista">
         <h2 id="ranglista" class="text-lg font-bold mb-3 scroll-mt-20">Ranglista</h2>
-        <div class="flex gap-2 mb-4">
-          <select [ngModel]="category()" (ngModelChange)="category.set($event); loadLeaderboard()" class="input !w-auto"
-                  aria-label="Ranglista kategória">
-            <option value="quiz">Kvíz</option>
-            <option value="exam">Vizsga</option>
-          </select>
-          <select [ngModel]="period()" (ngModelChange)="period.set($event); loadLeaderboard()" class="input !w-auto"
-                  aria-label="Ranglista időszak">
-            <option value="weekly">Heti</option>
-            <option value="monthly">Havi</option>
-            <option value="alltime">Összes idő</option>
-          </select>
-        </div>
-        @if (leaderboard.error()) {
-          <p class="text-danger text-sm mb-4">{{ leaderboard.error() }}</p>
-        } @else {
-          <ol class="space-y-2">
-            @for (entry of leaderboard.leaderboard()?.topEntries; track entry.rank) {
-              <li class="flex items-center gap-3 card !rounded-xl p-3 text-sm">
-                <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                  [class]="rankClass(entry.rank)">{{ entry.rank }}</span>
-                <!-- UI-UX-T7: a tanárnak a valódi név a beazonosítható - a becenév mellette marad, ha eltér. -->
-                <span class="flex-1 truncate">
-                  {{ entry.realName ?? entry.nickname }}
-                  @if (entry.realName && entry.realName !== entry.nickname) {
-                    <span class="text-text-muted text-xs">({{ entry.nickname }})</span>
-                  }
-                </span>
-                <span class="font-bold">{{ entry.score }}</span>
-              </li>
-            } @empty {
-              <li class="flex flex-col items-center py-10 gap-3">
-                <div class="icon-tile icon-tile-neutral">
-                  <app-icon name="trophy" class="w-6 h-6 block" />
-                </div>
-                <p class="font-semibold">Még nincs ranglista-adat.</p>
-              </li>
-            }
-          </ol>
-        }
+        <app-leaderboard-panel [(category)]="category" [(period)]="period" (selectionChange)="loadLeaderboard()"
+          [entries]="leaderboard.leaderboard()?.topEntries" [error]="leaderboard.error()" />
       </section>
 
       <section aria-labelledby="gyenge-temak">
@@ -173,6 +136,7 @@ export class CsoportEredmenyekComponent implements OnInit {
   readonly report = inject(ReportStore);
   readonly leaderboard = inject(LeaderboardStore);
   private readonly reportService = inject(ReportService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly customFromValue = computed(() => toDateInputValue(this.range().from));
   readonly customToValue = computed(() => toDateInputValueExclusiveEnd(this.range().to));
@@ -203,7 +167,7 @@ export class CsoportEredmenyekComponent implements OnInit {
     this.loadLeaderboard();
     this.weakTopicsLoading.set(true);
     this.reportService.getGroupWeakTopics(groupId)
-      .pipe(take(1), finalize(() => this.weakTopicsLoading.set(false)))
+      .pipe(take(1), finalize(() => this.weakTopicsLoading.set(false)), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (topics) => this.weakTopics.set(topics),
         error: () => this.weakTopicsError.set('A gyenge témák betöltése sikertelen.'),
@@ -222,12 +186,5 @@ export class CsoportEredmenyekComponent implements OnInit {
 
   loadLeaderboard(): void {
     this.leaderboard.loadGroupLeaderboard(this.groupId(), this.category(), this.period());
-  }
-
-  rankClass(rank: number): string {
-    if (rank === 1) return 'bg-warning-subtle text-warning';
-    if (rank === 2) return 'bg-primary-subtle text-primary';
-    if (rank === 3) return 'bg-secondary-subtle text-secondary';
-    return 'bg-bg-element text-text-muted';
   }
 }

@@ -1,45 +1,26 @@
-import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, finalize, forkJoin, map, of, take } from 'rxjs';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { catchError, map, of } from 'rxjs';
+import { QuizAuthoringScope, QuizTopicOptionDto } from '../../models/teacher-quiz.model';
 import { GroupStore } from '../../services/group/group.store';
-import { KahootHostService } from '../../services/kahoot-host/kahoot-host.service';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
-import {
-  CreateTeacherQuizQuestionRequest,
-  QUIZ_DIFFICULTY_LABELS,
-  QUIZ_FEEDBACK_MODE_LABELS,
-  QUIZ_QUESTION_TYPE_LABELS,
-  QuizAuthoringScope,
-  QuizBankQuestionDto,
-  QuizDifficulty,
-  QuizFeedbackMode,
-  QuizExamLevel,
-  QuizQuestionType,
-  QuizTopicOptionDto,
-  TeacherQuizQuestionDto,
-} from '../../models/teacher-quiz.model';
-import { ConfirmService } from '../../shared/confirm/confirm.service';
-import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
-import { IconComponent } from '../../shared/icon/icon.component';
-import { ToastService } from '../../shared/toast/toast.service';
-import { notBlankValidator } from '../../shared/validators/not-blank.validator';
-import { AuthorizedFileService } from '../../services/file/authorized-file.service';
-import { environment } from '../../../environments/environment';
-import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
+import { QuizAiComponent } from './kviz-szerkeszto/quiz-ai.component';
+import { QuizAssignComponent } from './kviz-szerkeszto/quiz-assign.component';
+import { QuizBankSearchComponent } from './kviz-szerkeszto/quiz-bank-search.component';
+import { QuizLiveComponent } from './kviz-szerkeszto/quiz-live.component';
+import { QuizPublishComponent } from './kviz-szerkeszto/quiz-publish.component';
+import { QuizQuestionFormComponent } from './kviz-szerkeszto/quiz-question-form.component';
+import { QuizQuestionListComponent } from './kviz-szerkeszto/quiz-question-list.component';
+import { QuizSettingsComponent } from './kviz-szerkeszto/quiz-settings.component';
 
 /**
  * Tanári kvíz-szerkesztő: beállítások, kérdések (típusonként eltérő űrlappal),
- * AI-generálás jóváhagyással, publikálás, csoportnak kiadás.
- *
- * A helyes válaszokat SZÁNDÉKOSAN nem szabad szövegként gépelteti be a tanárral: a
- * lehetőségeket soronként adja meg, és azok közül JELÖLI ki a helyeset. Egy elgépelt
- * "helyes válasz" különben olyan kérdést hozna létre, amit a diák sosem tudna eltalálni
- * (a kiértékelés szöveg-egyezésen alapul) - a backend ezt vissza is utasítja, de jobb, ha
- * a felület eleve nem engedi.
+ * AI-generálás jóváhagyással, publikálás, csoportnak kiadás. Az oldal a fejlécet, a
+ * szekció-navigációt és a szekció-kereteket adja; a szekciók tartalma a
+ * `kviz-szerkeszto/` alkomponensekben van.
  *
  * C5: admin-scope-ban (`/admin/kvizek/:id/szerkesztes`, route `data: { scope: 'admin' }`)
  * ugyanez a szerkesztő a platform-kvízeket kezeli. A különbség csak annyi, aminek a
@@ -50,8 +31,10 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-szerkeszto',
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink, IconComponent, DatePipe, KvizSzovegbolComponent],
+  imports: [RouterLink, QuizSettingsComponent, QuizQuestionListComponent, QuizQuestionFormComponent,
+    QuizBankSearchComponent, QuizAiComponent, QuizPublishComponent, QuizLiveComponent, QuizAssignComponent],
   template: `
     <div class="max-w-3xl mx-auto px-4 py-10">
       <div class="flex items-center gap-4">
@@ -100,557 +83,37 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
 
         <!-- ── Beállítások ────────────────────────────────────── -->
         <section id="beallitasok" aria-label="Beállítások" class="card p-5 mb-6 scroll-mt-24">
-          <h2 class="font-bold mb-3">Beállítások</h2>
-          <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()" class="space-y-3">
-            <input formControlName="title" placeholder="Cím" maxlength="200" class="input" />
-            <textarea formControlName="description" placeholder="Leírás" rows="2" class="input"></textarea>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Mikor lássa a diák a megoldást?</span>
-              <select formControlName="feedbackMode" class="input mt-1">
-                @for (mode of feedbackModes; track mode.value) {
-                  <option [value]="mode.value">{{ mode.label }}</option>
-                }
-              </select>
-            </label>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Kérdésenkénti időkorlát (mp, üresen nincs korlát)</span>
-              <input formControlName="secondsPerQuestion" type="number" min="1" class="input mt-1" />
-            </label>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Hányszor írhatja meg (üresen korlátlan)</span>
-              <input formControlName="maxAttempts" type="number" min="1" class="input mt-1" />
-            </label>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Érettségi vizsgaszint</span>
-              <select formControlName="examLevel" class="input mt-1">
-                @for (level of examLevels; track level.value) {
-                  <option [ngValue]="level.value">{{ level.label }}</option>
-                }
-              </select>
-            </label>
-
-            <label class="flex items-center gap-2 text-sm">
-              <input formControlName="shuffleQuestions" type="checkbox" />
-              Kérdések keverése
-            </label>
-
-            <!-- Platform-kvíznek nincs határideje - a kapcsoló ott értelmetlen lenne. -->
-            @if (!isAdmin) {
-              <label class="flex items-center gap-2 text-sm">
-                <input formControlName="allowLateSubmission" type="checkbox" />
-                Határidő után is beadható
-              </label>
-            }
-
-            <button type="submit" class="btn btn-primary" [disabled]="settingsForm.invalid || store.loading()">
-              Mentés
-            </button>
-          </form>
+          <app-quiz-settings [quizId]="quizId" [quiz]="quiz" [isAdmin]="isAdmin" />
         </section>
 
         <!-- ── Kérdések ───────────────────────────────────────── -->
         <section id="kerdesek" aria-label="Kérdések" class="card p-5 mb-6 scroll-mt-24">
           <h2 class="font-bold mb-3">Kérdések</h2>
-
-          <ul class="space-y-3 mb-5">
-            @for (question of quiz.questions; track question.id) {
-              <li class="border border-border-default rounded p-3">
-                <!-- UI-UX-T8: alapból összecsukva - 10+ kérdésnél a részletek
-                     (megoldás, gombsor) csak kibontásra látszanak. -->
-                <button type="button" (click)="toggleQuestion(question.id)"
-                        class="w-full flex items-start gap-2 text-left cursor-pointer"
-                        [attr.aria-expanded]="isQuestionExpanded(question.id)">
-                  <span class="min-w-0 flex-1">
-                    <span class="block font-semibold"
-                          [class.truncate]="!isQuestionExpanded(question.id)">{{ question.questionText }}</span>
-                    <span class="text-xs text-text-muted">
-                      {{ typeLabel(question.questionType) }} · {{ question.topicName }} ·
-                      {{ difficultyLabel(question.difficulty) }}
-                    </span>
-                  </span>
-                  @if (!question.isApproved) {
-                    <span class="badge badge-warning shrink-0">Jóváhagyásra vár</span>
-                  }
-                  @if (question.reportCount > 0) {
-                    <span class="badge badge-danger shrink-0">⚠ {{ question.reportCount }} jelentés</span>
-                  }
-                  <app-icon name="chevron-down" class="w-4 h-4 block shrink-0 transition-transform"
-                            [class.rotate-180]="isQuestionExpanded(question.id)" />
-                </button>
-
-                @if (isQuestionExpanded(question.id)) {
-                  <span class="block text-xs text-text-muted mt-2">
-                    Helyes: {{ question.correctAnswers.join(', ') }}
-                  </span>
-
-                <div class="flex gap-2 mt-2">
-                  <button
-                    type="button"
-                    class="btn btn-ghost"
-                    [disabled]="$first || store.loading()"
-                    (click)="moveQuestion(question, -1)"
-                    aria-label="Feljebb"
-                  >↑</button>
-                  <button
-                    type="button"
-                    class="btn btn-ghost"
-                    [disabled]="$last || store.loading()"
-                    (click)="moveQuestion(question, 1)"
-                    aria-label="Lejjebb"
-                  >↓</button>
-                  @if (!question.isApproved) {
-                    <button type="button" class="btn btn-ghost" (click)="approve(question)">Jóváhagyom</button>
-                  }
-                  <button type="button" class="btn btn-ghost" (click)="startEdit(question)">Szerkesztés</button>
-                  <button type="button" class="btn btn-ghost" (click)="duplicateQuestion(question)"
-                          title="Kérdés másolása a kvíz végére">⊕ Másolás</button>
-                  <button type="button" class="btn btn-ghost text-danger" (click)="deleteQuestion(question)">
-                    Törlés
-                  </button>
-                </div>
-                @if (question.reportCount > 0) {
-                  <div class="mt-3 p-2 rounded bg-danger/10 border border-danger/30 text-xs text-danger flex items-center gap-2">
-                    <span class="flex-1">⚠ {{ question.reportCount }} diák jelentette ezt a kérdést.</span>
-                    <button type="button" class="btn btn-ghost !text-xs !py-1 !px-2"
-                      (click)="resolveReports(question)">Elintézve</button>
-                  </div>
-                }
-                }
-              </li>
-            } @empty {
-              <li class="text-sm text-text-muted">Még nincs kérdés. Vegyél fel egyet, vagy generáltass AI-jal.</li>
-            }
-          </ul>
-
-          <!-- Kérdés-űrlap -->
-          <form [formGroup]="questionForm" (ngSubmit)="saveQuestion()" class="space-y-3 border-t border-border-default pt-4">
-            <h3 class="font-semibold">{{ editingId() ? 'Kérdés szerkesztése' : 'Új kérdés' }}</h3>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Típus</span>
-              <select formControlName="questionType" class="input mt-1">
-                @for (type of questionTypes; track type.value) {
-                  <option [value]="type.value">{{ type.label }}</option>
-                }
-              </select>
-            </label>
-
-            @if (questionType() === 'cloze') {
-              <p class="text-xs text-text-muted">
-                Jelöld a kihagyást három aláhúzással: <code>A ___ függvény keres értéket.</code>
-              </p>
-            }
-
-            <textarea formControlName="questionText" placeholder="A kérdés szövege" rows="2" class="input"></textarea>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Témakör</span>
-              <select formControlName="topicId" class="input mt-1">
-                @for (topic of topics(); track topic.id) {
-                  <option [value]="topic.id">{{ topic.name }}</option>
-                }
-              </select>
-            </label>
-
-            @if (questionType() === 'cloze') {
-              <label class="block">
-                <span class="text-sm text-text-muted">Elfogadott válaszok (soronként egy)</span>
-                <textarea
-                  formControlName="acceptedText"
-                  rows="3"
-                  class="input mt-1"
-                  placeholder="XKERES&#10;XLOOKUP"
-                ></textarea>
-              </label>
-              <p class="text-xs text-text-muted">
-                Több sor esetén bármelyik elfogadott — hasznos, ha ugyanannak a fogalomnak több
-                érvényes írásmódja van.
-              </p>
-            } @else {
-              <label class="block">
-                <span class="text-sm text-text-muted">Válaszlehetőségek (soronként egy)</span>
-                <textarea
-                  formControlName="optionsText"
-                  rows="4"
-                  class="input mt-1"
-                  placeholder="XKERES&#10;SZUM&#10;HA&#10;DARAB"
-                ></textarea>
-              </label>
-
-              <div>
-                <span class="text-sm text-text-muted">
-                  {{ questionType() === 'multi' ? 'Helyes válaszok (több is lehet)' : 'A helyes válasz' }}
-                </span>
-                @if (parsedOptions().length === 0) {
-                  <p class="text-sm text-text-muted mt-1">Előbb add meg a válaszlehetőségeket.</p>
-                } @else {
-                  <ul class="mt-1 space-y-1">
-                    @for (option of parsedOptions(); track option) {
-                      <li>
-                        <label class="flex items-center gap-2 text-sm">
-                          <input
-                            [type]="questionType() === 'multi' ? 'checkbox' : 'radio'"
-                            [checked]="isSelected(option)"
-                            (change)="toggleCorrect(option)"
-                          />
-                          {{ option }}
-                        </label>
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-            }
-
-            <textarea
-              formControlName="explanation"
-              placeholder="Magyarázat (nem kötelező)"
-              rows="2"
-              class="input"
-            ></textarea>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Nehézség</span>
-              <select formControlName="difficulty" class="input mt-1">
-                @for (level of difficulties; track level.value) {
-                  <option [value]="level.value">{{ level.label }}</option>
-                }
-              </select>
-            </label>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">
-                Időkorlát erre a kérdésre (mp, üresen a kvíz beállítása érvényes)
-              </span>
-              <input formControlName="secondsLimit" type="number" min="1" class="input mt-1" />
-            </label>
-
-            <!-- ── C6: kvízkép-feltöltés ──────────────────────────── -->
-            <div class="border border-dashed border-border-default rounded-lg p-3 space-y-2">
-              <span class="text-sm text-text-muted">Kép a kérdéshez (jpg/png/webp, max 2 MB, opcionális)</span>
-              @if (questionImagePreview()) {
-                <img [src]="questionImagePreview()" alt="Kérdéskép előnézet" class="max-h-32 rounded" />
-                <button type="button" class="btn btn-ghost text-sm text-danger" (click)="removeQuestionImage()">
-                  Kép eltávolítása
-                </button>
-              }
-              <input #imageInput type="file" accept="image/jpeg,image/png,image/webp"
-                     class="hidden" (change)="onImageSelected($event)" />
-              <button type="button" class="btn btn-ghost text-sm" (click)="imageInput.click()">
-                {{ questionImagePreview() ? 'Kép cseréje' : 'Kép kiválasztása…' }}
-              </button>
-              @if (imageUploadError()) {
-                <p class="text-xs text-danger">{{ imageUploadError() }}</p>
-              }
-            </div>
-
-            @if (formWarning(); as warning) {
-              <p class="text-sm text-danger">{{ warning }}</p>
-            }
-
-            <div class="flex gap-2">
-              <button type="submit" class="btn btn-primary" [disabled]="questionForm.invalid || store.loading() || !!formWarning()">
-                {{ editingId() ? 'Mentés' : 'Hozzáadás' }}
-              </button>
-              @if (editingId()) {
-                <button type="button" class="btn btn-ghost" (click)="cancelEdit()">Mégsem</button>
-              }
-            </div>
-          </form>
-
-          <!-- ── Meglévő kérdés hozzáadása a közös bankból ─────── -->
-          <div class="border-t border-border-default pt-4 mt-4">
-            <button type="button" (click)="toggleBankSearch()"
-                    class="w-full flex items-center justify-between text-left cursor-pointer"
-                    [attr.aria-expanded]="bankSearchExpanded()">
-              <h3 class="font-semibold">Meglévő kérdés hozzáadása a bankból</h3>
-              <app-icon name="chevron-down" class="w-4 h-4 block shrink-0 transition-transform"
-                        [class.rotate-180]="bankSearchExpanded()" />
-            </button>
-
-            @if (bankSearchExpanded()) {
-              <p class="text-sm text-text-muted mt-2">
-                A közös, jóváhagyott kérdésbankból választott kérdés MÁSOLATA kerül a kvízedbe -
-                a bank-eredeti utólagos módosítása nem hat vissza rá.
-              </p>
-
-              <form [formGroup]="bankSearchForm" (ngSubmit)="searchBank()" class="space-y-3 mt-3">
-                <input formControlName="search" type="text" placeholder="Keresés a kérdés szövegében" class="input" />
-
-                <div class="grid grid-cols-2 gap-3">
-                  <label class="block">
-                    <span class="text-sm text-text-muted">Témakör</span>
-                    <select formControlName="topicId" class="input mt-1">
-                      <option [ngValue]="null">Mind</option>
-                      @for (topic of topics(); track topic.id) {
-                        <option [ngValue]="topic.id">{{ topic.name }}</option>
-                      }
-                    </select>
-                  </label>
-
-                  <label class="block">
-                    <span class="text-sm text-text-muted">Nehézség</span>
-                    <select formControlName="difficulty" class="input mt-1">
-                      <option [ngValue]="null">Mind</option>
-                      @for (level of difficulties; track level.value) {
-                        <option [ngValue]="level.value">{{ level.label }}</option>
-                      }
-                    </select>
-                  </label>
-                </div>
-
-                <button type="submit" class="btn btn-ghost" [disabled]="store.bankSearching()">
-                  {{ store.bankSearching() ? 'Keresés…' : 'Keresés' }}
-                </button>
-              </form>
-
-              @if (store.bankSearchError(); as error) {
-                <p class="text-sm text-danger mt-2">{{ error }}</p>
-              }
-
-              <ul class="space-y-2 mt-3">
-                @for (bq of store.bankResults(); track bq.id) {
-                  <li class="border border-border-default rounded p-3 flex items-start gap-2">
-                    <span class="min-w-0 flex-1">
-                      <span class="block font-semibold">{{ bq.questionText }}</span>
-                      <span class="text-xs text-text-muted">
-                        {{ typeLabel(bq.questionType) }} · {{ bq.topicName }} · {{ difficultyLabel(bq.difficulty) }}
-                      </span>
-                      <span class="block text-xs text-text-muted mt-1">
-                        Helyes: {{ bq.correctAnswers.join(', ') }}
-                      </span>
-                    </span>
-                    <button type="button" class="btn btn-ghost shrink-0" [disabled]="store.loading()"
-                            (click)="addExisting(bq)">
-                      Hozzáadás a kvízhez
-                    </button>
-                  </li>
-                } @empty {
-                  @if (bankSearched() && !store.bankSearching()) {
-                    <li class="text-sm text-text-muted">Nincs találat — próbálj más keresőszót/szűrőt.</li>
-                  }
-                }
-              </ul>
-            }
-          </div>
+          <app-quiz-question-list [quizId]="quizId" [questions]="quiz.questions"
+                                  (edit)="questionForm()?.startEdit($event)" />
+          <app-quiz-question-form [quizId]="quizId" [topics]="topics()" />
+          <app-quiz-bank-search [quizId]="quizId" [topics]="topics()" />
         </section>
 
         <!-- ── AI-generálás ───────────────────────────────────── -->
         <section id="ai" aria-label="AI-generálás" class="card p-5 mb-6 scroll-mt-24">
-          <h2 class="font-bold mb-1">Kérdések generálása AI-jal</h2>
-          <p class="text-sm text-text-muted mb-3">
-            A generált kérdések piszkozatként kerülnek be — átnézés és jóváhagyás után válnak
-            a kvíz részévé. A kvíz addig nem publikálható, amíg van jóváhagyatlan kérdés.
-          </p>
-
-          <form [formGroup]="generateForm" (ngSubmit)="generate()" class="space-y-3">
-            <label class="block">
-              <span class="text-sm text-text-muted">Témakör</span>
-              <select formControlName="topicId" class="input mt-1">
-                @for (topic of topics(); track topic.id) {
-                  <option [value]="topic.id">{{ topic.name }}</option>
-                }
-              </select>
-            </label>
-
-            <label class="block">
-              <span class="text-sm text-text-muted">Darabszám</span>
-              <input formControlName="count" type="number" min="1" max="20" class="input mt-1" />
-            </label>
-
-            <button
-              type="submit"
-              class="btn btn-primary"
-              [disabled]="generateForm.invalid || store.generating() || topics().length === 0 || !!quiz.takedownAt"
-            >
-              {{ store.generating() ? 'Generálás folyamatban…' : 'Generálás' }}
-            </button>
-          </form>
-
-          <!-- Kérdések a tanár saját tananyagából (beillesztett szöveg vagy fájl) - csak tanári kvíznél. -->
-          @if (!isAdmin) {
-            <div class="border-t border-border-default mt-4 pt-4" data-testid="quiz-source-section">
-              <h3 class="font-semibold text-sm mb-1">Kérdések szövegből</h3>
-              <p class="text-sm text-text-muted mb-3">
-                Saját tananyagból (beillesztett szöveg vagy .txt, .docx, .pdf fájl): minden kérdés szó szerinti idézettel
-                ellenőrizve, jóváhagyásra várva kerül a kvízbe. Prémium tanároknak, havi kerettel (a napi MI-keretet nem érinti).
-              </p>
-              <button type="button" class="btn btn-ghost" (click)="sourceOpen.set(true)"
-                [disabled]="topics().length === 0 || !!quiz.takedownAt" data-testid="quiz-source-open">
-                Kérdések szövegből…
-              </button>
-            </div>
-            @if (sourceOpen()) {
-              <app-kviz-szovegbol [quizId]="quizId" [topics]="topics()" [initialTopicId]="generateTopicId()"
-                (closed)="sourceOpen.set(false)" (changed)="onSourceChanged()" />
-            }
-          }
+          <app-quiz-ai [quizId]="quizId" [quiz]="quiz" [topics]="topics()" [isAdmin]="isAdmin" />
         </section>
 
         <!-- ── Publikálás ─────────────────────────────────────── -->
         <section id="publikalas" aria-label="Publikálás" class="card p-5 mb-6 scroll-mt-24">
-          <div class="flex items-center gap-3">
-            <div class="flex-1">
-              <h2 class="font-bold">{{ isAdmin ? 'Mehet a diákoknak?' : 'Kiadásra kész?' }}</h2>
-              <p class="text-sm text-text-muted">
-                {{ quiz.questionCount }} kérdés
-                @if (quiz.pendingQuestionCount > 0) {
-                  <span class="text-danger">, ebből {{ quiz.pendingQuestionCount }} jóváhagyásra vár</span>
-                }
-              </p>
-            </div>
-            <button
-              type="button"
-              class="btn btn-primary"
-              [disabled]="store.loading() || !!quiz.takedownAt"
-              (click)="publish()"
-              data-testid="publish-btn"
-            >
-              {{ quiz.isPublished ? 'Újrapublikálás' : 'Publikálás' }}
-            </button>
-            @if (isAdmin && quiz.isPublished) {
-              <button type="button" class="btn btn-ghost text-danger" [disabled]="store.loading()"
-                      (click)="unpublish()" data-testid="unpublish-btn">
-                Visszavonás
-              </button>
-            }
-          </div>
-          @if (isAdmin) {
-            <p class="text-sm text-text-muted mt-2">
-              A publikált platform-kvízt minden előfizető diák látja a „Hivatalos kvízek” között -
-              a vizsgaszint dönti el, kinek: a középszintű mindenkinek, a csak emelt szintű csak az
-              emelt szintre készülőknek.
-            </p>
-          }
-
-          @if (store.publishResult(); as result) {
-            @if (!result.success) {
-              <ul class="mt-3 space-y-1">
-                @for (error of result.errors; track error) {
-                  <li class="text-sm text-danger">{{ error }}</li>
-                }
-              </ul>
-            }
-          }
+          <app-quiz-publish [quizId]="quizId" [quiz]="quiz" [isAdmin]="isAdmin" />
         </section>
 
         @if (!isAdmin) {
         <!-- ── Élő játék (Kahoot-mód) ─────────────────────────── -->
         <section id="elo" aria-label="Élő játék" class="card p-5 mb-6 scroll-mt-24">
-          <h2 class="font-bold mb-1">Élő játék</h2>
-          <p class="text-sm text-text-muted mb-3">
-            Tanár-vezérelt, valós idejű kvízjáték: a diákok a saját eszközükön válaszolnak,
-            a pontszám a gyorsaságtól is függ. Az indítás kiadja a kvízt a csoportnak, ha
-            még nem volt kiadva. Időkorlát nélküli kvíznél élőben kérdésenként 30 mp az
-            alapértelmezés.
-          </p>
-
-          @if (!quiz.isPublished) {
-            <p class="text-sm text-text-muted">Előbb publikáld a kvízt, utána indíthatsz élő játékot.</p>
-          } @else {
-            <div class="flex flex-wrap items-end gap-3">
-              <label class="block grow max-w-xs">
-                <span class="text-sm text-text-muted">Csoport</span>
-                <select class="input mt-1" [value]="liveGroupId() ?? ''"
-                        (change)="liveGroupId.set($any($event.target).value ? +$any($event.target).value : null)">
-                  <option value="">Válassz csoportot…</option>
-                  @for (group of groupOptions(); track group.id) {
-                    <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
-                  }
-                </select>
-              </label>
-              <button type="button" class="btn btn-primary"
-                      (click)="startLive()"
-                      [disabled]="liveGroupId() === null || livePending() || !!quiz.takedownAt">
-                {{ livePending() ? 'Szoba nyitása…' : 'Élő játék indítása' }}
-              </button>
-            </div>
-            @if (liveError(); as err) {
-              <p class="text-sm text-danger mt-2">{{ err }}</p>
-            }
-          }
+          <app-quiz-live [quizId]="quizId" [quiz]="quiz" />
         </section>
 
         <!-- ── Kiadás csoportnak ──────────────────────────────── -->
         <section id="kiadas" aria-label="Kiadás csoportnak" class="card p-5 scroll-mt-24">
-          <h2 class="font-bold mb-3">Kiadás csoportnak</h2>
-
-          <ul class="space-y-2 mb-4">
-            @for (assignment of activeAssignments(); track assignment.id) {
-              <li class="flex items-center gap-2 text-sm">
-                <app-icon name="users" class="w-4 h-4 block text-text-muted" />
-                <span class="flex-1">
-                  {{ groupLabel(assignment.groupId, assignment.groupName) }}
-                  @if (assignment.opensAt) {
-                    <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
-                  }
-                  @if (assignment.dueAt) {
-                    <span class="text-text-muted">· határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
-                  }
-                </span>
-                <button type="button" class="btn btn-ghost text-danger" (click)="revoke(assignment.id)">
-                  Visszavonás
-                </button>
-              </li>
-            } @empty {
-              <li class="text-sm text-text-muted">Még nincs kiadva egyetlen csoportnak sem.</li>
-            }
-          </ul>
-
-          @if (!quiz.isPublished) {
-            <p class="text-sm text-text-muted">Előbb publikáld a kvízt, utána adhatod ki csoportoknak.</p>
-          } @else {
-            <form [formGroup]="assignForm" (ngSubmit)="assign()" class="space-y-3 border-t border-border-default pt-4">
-              <label class="block">
-                <span class="text-sm text-text-muted">Csoport</span>
-                <select formControlName="groupId" class="input mt-1">
-                  @for (group of assignableGroups(); track group.id) {
-                    <option [value]="group.id">{{ groupLabel(group.id, group.name) }}</option>
-                  }
-                </select>
-              </label>
-
-              <label class="block">
-                <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
-                <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
-              </label>
-
-              <label class="block">
-                <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
-                <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
-              </label>
-
-              @if (assignForm.errors?.['opensAtAfterDueAt']) {
-                <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
-              }
-
-              <button
-                type="submit"
-                class="btn btn-primary"
-                [disabled]="assignForm.invalid || store.loading() || assignableGroups().length === 0"
-              >
-                Kiadás
-              </button>
-              @if (assignableGroups().length === 0 && groupStore.activeGroups().length > 0) {
-                <p class="text-sm text-text-muted">Minden csoportod megkapta már ezt a kvízt.</p>
-              }
-            </form>
-          }
-
-          <div class="border-t border-border-default mt-6 pt-4">
-            <button
-              type="button"
-              class="btn btn-ghost text-danger"
-              [disabled]="store.loading()"
-              (click)="deleteQuiz()"
-            >
-              Kvíz törlése
-            </button>
-          </div>
+          <app-quiz-assign [quizId]="quizId" [quiz]="quiz" />
         </section>
         }
       } @else if (store.loading()) {
@@ -663,15 +126,11 @@ import { KvizSzovegbolComponent } from './kviz-szovegbol.component';
   `,
 })
 export class KvizSzerkesztoComponent {
-  private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly quizService = inject(TeacherQuizService);
-  private readonly toastService = inject(ToastService);
+  private readonly groupStore = inject(GroupStore);
   private readonly confirmService = inject(ConfirmService);
-  protected readonly groupStore = inject(GroupStore);
-  private readonly authorizedFileService = inject(AuthorizedFileService);
   readonly store = inject(TeacherQuizStore);
-  readonly apiOrigin = new URL(environment.apiUrl).origin;
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
   /** C5: a route `data.scope`-ja dönti el, tanári vagy admin (platform-kvíz) nézet-e. */
@@ -685,19 +144,6 @@ export class KvizSzerkesztoComponent {
     return detail?.id === this.quizId ? detail : null;
   });
 
-  readonly questionTypes = (Object.keys(QUIZ_QUESTION_TYPE_LABELS) as QuizQuestionType[]).map((value) => ({
-    value,
-    label: QUIZ_QUESTION_TYPE_LABELS[value],
-  }));
-  readonly feedbackModes = (Object.keys(QUIZ_FEEDBACK_MODE_LABELS) as QuizFeedbackMode[]).map((value) => ({
-    value,
-    label: QUIZ_FEEDBACK_MODE_LABELS[value],
-  }));
-  readonly difficulties = (Object.keys(QUIZ_DIFFICULTY_LABELS) as QuizDifficulty[]).map((value) => ({
-    value,
-    label: QUIZ_DIFFICULTY_LABELS[value],
-  }));
-
   // catchError NÉLKÜL a toSignal() a hibát minden KÖVETKEZŐ olvasáskor újra-dobná, és
   // mivel a témalistát a sablon feltétel nélkül olvassa, egy hibás GET a TELJES oldal
   // renderelését döntené el (UI-TT-133 ugyanezen tanulsága).
@@ -709,207 +155,62 @@ export class KvizSzerkesztoComponent {
     { initialValue: [] as QuizTopicOptionDto[] },
   );
 
-  /**
-   * Az emelt szint követelményei TARTALMAZZÁK a középszintűeket, ezért a `kozep` jelentése
-   * "középtől felfelé kell" - nem kell külön "mindkettő" érték. A `null` = nem érettségi
-   * anyag.
-   */
-  readonly examLevels: { value: QuizExamLevel; label: string }[] = [
-    { value: null, label: 'Nem érettségi anyag' },
-    { value: 'kozep', label: 'Középszint (emelten is kell)' },
-    { value: 'emelt', label: 'Csak emelt szint' },
+  /** A „Szerkesztés” a kérdéslistából a kérdés-űrlapba tölt. */
+  protected readonly questionForm = viewChild(QuizQuestionFormComponent);
+  private readonly settings = viewChild(QuizSettingsComponent);
+
+  // ── UI-UX-T8 ── (C5: admin-scope-ban a csoport-függő Élő játék/Kiadás szekció nincs)
+  readonly sectionAnchors = [
+    { id: 'beallitasok', label: 'Beállítások' },
+    { id: 'kerdesek', label: 'Kérdések' },
+    { id: 'ai', label: 'AI' },
+    { id: 'publikalas', label: 'Publikálás' },
+    ...(this.isAdmin ? [] : [
+      { id: 'elo', label: 'Élő játék' },
+      { id: 'kiadas', label: 'Kiadás' },
+    ]),
   ];
-
-  readonly editingId = signal<number | null>(null);
-  private readonly selectedCorrect = signal<string[]>([]);
-
-  // ── C6: kvízkép-állapot ──────────────────────────────────────
-  readonly questionImagePreview = signal<string | null>(null);
-  readonly imageUploadError = signal<string | null>(null);
-  private readonly pendingImageFileId = signal<string | null>(null);
-  private resolvedImageBlobUrl: string | null = null;
-
-  readonly settingsForm = this.fb.nonNullable.group({
-    title: ['', [Validators.required, notBlankValidator(), Validators.maxLength(200)]],
-    description: [''],
-    feedbackMode: ['after' as QuizFeedbackMode, Validators.required],
-    secondsPerQuestion: this.fb.control<number | null>(null),
-    maxAttempts: this.fb.control<number | null>(null),
-    shuffleQuestions: [true],
-    allowLateSubmission: [true],
-    examLevel: this.fb.control<QuizExamLevel>(null),
-  });
-
-  // UI-TT-209: a gombok `[disabled]`-je korábban NEM nézte a form `invalid` állapotát,
-  // csak a store-t és a saját figyelmeztetéseket. A `topicId`/`groupId` legördülők
-  // kezdőértéke `null` és `Validators.required`-esek - ha a tanár nem nyúlt hozzájuk
-  // explicit, a form érvénytelen maradt, a gomb viszont AKTÍVNAK látszott, és a metódus
-  // első sora (`if (form.invalid) return;`) némán, hálózati forgalom nélkül visszatért.
-  // A kattintás semmit nem csinált és semmit nem üzent.
-  readonly questionForm = this.fb.nonNullable.group({
-    questionType: ['single' as QuizQuestionType, Validators.required],
-    questionText: ['', [Validators.required, notBlankValidator()]],
-    topicId: this.fb.control<number | null>(null, Validators.required),
-    optionsText: [''],
-    acceptedText: [''],
-    explanation: [''],
-    difficulty: ['Medium' as QuizDifficulty, Validators.required],
-    secondsLimit: this.fb.control<number | null>(null),
-  });
-
-  readonly generateForm = this.fb.nonNullable.group({
-    topicId: this.fb.control<number | null>(null, Validators.required),
-    count: [5, [Validators.required, Validators.min(1), Validators.max(20)]],
-  });
-
-  // UI-UX: "meglévő kérdés hozzáadása a bankból" - alapból összecsukva, ugyanazzal az
-  // indoklással, mint a kérdés-kártyáknál (UI-UX-T8): nem minden szerkesztésnél kell.
-  readonly bankSearchExpanded = signal(false);
-  readonly bankSearched = signal(false);
-  readonly bankSearchForm = this.fb.nonNullable.group({
-    search: [''],
-    topicId: this.fb.control<number | null>(null),
-    difficulty: this.fb.control<QuizDifficulty | null>(null),
-  });
-
-  readonly assignForm = this.fb.nonNullable.group(
-    {
-      groupId: this.fb.control<number | null>(null, Validators.required),
-      opensAt: [''],
-      dueAt: [''],
-    },
-    {
-      validators: (group) => {
-        const opensAt = group.get('opensAt')?.value;
-        const dueAt = group.get('dueAt')?.value;
-        if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
-          return { opensAtAfterDueAt: true };
-        }
-        return null;
-      },
-    },
-  );
-
-  private readonly questionTypeSignal = toSignal(this.questionForm.controls.questionType.valueChanges, {
-    initialValue: this.questionForm.controls.questionType.value,
-  });
-  private readonly optionsTextSignal = toSignal(this.questionForm.controls.optionsText.valueChanges, {
-    initialValue: this.questionForm.controls.optionsText.value,
-  });
-  // A formWarning() `computed`, ezért MINDEN általa olvasott form-értéknek signalnak kell
-  // lennie. Egy sima `control.value` olvasás nem váltana újraszámolást: a figyelmeztetés
-  // bent ragadna azután is, hogy a tanár kijavította a hibát (pl. beírta a ___ jelölést).
-  private readonly questionTextSignal = toSignal(this.questionForm.controls.questionText.valueChanges, {
-    initialValue: this.questionForm.controls.questionText.value,
-  });
-  private readonly acceptedTextSignal = toSignal(this.questionForm.controls.acceptedText.valueChanges, {
-    initialValue: this.questionForm.controls.acceptedText.value,
-  });
-
-  readonly questionType = computed(() => this.questionTypeSignal());
-
-  /** A soronként megadott lehetőségek — üres sorok nélkül, trimmelve. */
-  readonly parsedOptions = computed(() =>
-    (this.optionsTextSignal() ?? '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
-  );
-
-  readonly activeAssignments = computed(() => this.detail()?.assignments.filter((a) => !a.revokedAt) ?? []);
-
-  /** Csak azok a csoportok, amelyek MÉG NEM kapták meg — a backend is elutasítaná a duplát. */
-  readonly assignableGroups = computed(() => {
-    const assigned = new Set(this.activeAssignments().map((a) => a.groupId));
-    return this.groupStore.activeGroups().filter((g) => !assigned.has(g.id));
-  });
-
-  /**
-   * UI-TT-219: a `StudentGroups.Name`-en nincs unique constraint - egy tanárnak élőben
-   * ténylegesen lehet két, egyaránt aktív, azonos nevű csoportja. A "Csoport" választó és a
-   * kiadás-lista korábban KIZÁRÓLAG a nevet mutatta, így a két sor megkülönböztethetetlen
-   * volt, és a tanár nem tudta megmondani, melyik "Visszavonás" gomb melyik csoportot
-   * érinti. Csak akkor fűzünk hozzá invite-kódot, ha a név ténylegesen duplikált - a
-   * megszokott (egyedi nevű csoportok) esetben a felület változatlan marad.
-   */
-  private readonly duplicateGroupNameCounts = computed(() => {
-    const counts = new Map<string, number>();
-    for (const g of this.groupStore.groups()) {
-      counts.set(g.name, (counts.get(g.name) ?? 0) + 1);
-    }
-    return counts;
-  });
-
-  groupLabel(groupId: number, groupName: string): string {
-    if ((this.duplicateGroupNameCounts().get(groupName) ?? 0) <= 1) return groupName;
-    const full = this.groupStore.groups().find((g) => g.id === groupId);
-    return full ? `${groupName} (kód: ${full.inviteCode})` : groupName;
-  }
-
-  /**
-   * Beküldés előtti, felhasználóbarát ellenőrzés. A backend ugyanezeket kikényszeríti —
-   * ez csak azért van itt, hogy a tanár ne egy hibaüzenetből tudja meg.
-   */
-  readonly formWarning = computed(() => {
-    const type = this.questionType();
-    const correct = this.selectedCorrect();
-
-    if (type === 'cloze') {
-      if (this.acceptedAnswers().length === 0) return 'Adj meg legalább egy elfogadott választ.';
-      if (!(this.questionTextSignal() ?? '').includes('___')) {
-        return 'Jelöld a kihagyást három aláhúzással (___) a kérdés szövegében.';
-      }
-      return null;
-    }
-
-    const options = this.parsedOptions();
-    if (options.length < 2) return 'Adj meg legalább két válaszlehetőséget.';
-    if (new Set(options.map((o) => o.toLowerCase())).size !== options.length) {
-      return 'A válaszlehetőségek nem ismétlődhetnek.';
-    }
-    if (correct.length === 0) return 'Jelöld ki a helyes választ.';
-    if (type === 'single' && correct.length !== 1) return 'Egyválasztósnál pontosan egy helyes válasz lehet.';
-    return null;
-  });
 
   constructor() {
     this.store.setScope(this.scope);
-    this.store.loadDetail(this.quizId, () => this.syncSettingsForm());
+    // A betöltés végén a beállítás-űrlap a friss adatokkal töltődik (ha a szekció már
+    // látszott egy korábbi, ugyanehhez a kvízhez tartozó állapotból; különben a szekció
+    // létrejöttekor maga tölti fel magát).
+    this.store.loadDetail(this.quizId, () => {
+      const quiz = this.detail();
+      if (quiz) this.settings()?.sync(quiz);
+    });
     // Platform-kvíznek nincs csoportja - a /api/groups tanári végpont, admin-only fióknál
     // csak egy fölösleges (és hibázó) hívás lenne.
     if (!this.isAdmin) this.groupStore.loadMine();
   }
 
-  private syncSettingsForm(): void {
-    const quiz = this.detail();
-    if (!quiz) return;
+  /**
+   * UI-TT-245: mentetlen beállítás vagy kérdés-piszkozat (a testvér-szerkesztők mintájára). Betöltött kvíz nélkül
+   * (pl. a sikeres törlés után, amely a store-ból is kiveszi) nincs mit elveszíteni - a listára visszavivő navigáció ne kérdezzen.
+   */
+  hasUnsavedChanges(): boolean {
+    if (!this.detail()) return false;
+    return !!this.settings()?.settingsForm.dirty || !!this.questionForm()?.questionForm.dirty;
+  }
 
-    this.settingsForm.patchValue({
-      title: quiz.title,
-      description: quiz.description ?? '',
-      feedbackMode: quiz.feedbackMode,
-      secondsPerQuestion: quiz.secondsPerQuestion ?? null,
-      maxAttempts: quiz.maxAttempts ?? null,
-      shuffleQuestions: quiz.shuffleQuestions,
-      allowLateSubmission: quiz.allowLateSubmission,
-      examLevel: quiz.examLevel ?? null,
+  /** Route canDeactivate: mentetlen módosításnál megerősítés (SPA-navigáció). */
+  canLeave(): boolean | Promise<boolean> {
+    if (!this.hasUnsavedChanges()) return true;
+    return this.confirmService.ask({
+      title: 'Elveted a módosításokat?',
+      message: 'A kvízen mentetlen módosításaid vannak (beállítás vagy kérdés). Ha most továbblépsz, elvesznek.',
+      confirmLabel: 'Elvetem',
+      cancelLabel: 'Maradok',
+      danger: true,
     });
   }
 
-  /** Signalból olvas, hogy a formWarning() computed újraszámoljon gépelés közben is. */
-  private acceptedAnswers(): string[] {
-    return (this.acceptedTextSignal() ?? '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-  }
-
-  typeLabel(type: QuizQuestionType): string {
-    return QUIZ_QUESTION_TYPE_LABELS[type];
-  }
-
-  difficultyLabel(difficulty: QuizDifficulty): string {
-    return QUIZ_DIFFICULTY_LABELS[difficulty];
+  /** Újratöltés / lap bezárása: a böngésző saját megerősítése. */
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.hasUnsavedChanges()) return;
+    event.preventDefault();
+    event.returnValue = '';
   }
 
   badgeLabel(): string {
@@ -926,325 +227,12 @@ export class KvizSzerkesztoComponent {
     return quiz.isPublished ? 'badge-success' : 'badge-warning';
   }
 
-  isSelected(option: string): boolean {
-    return this.selectedCorrect().includes(option);
-  }
-
-  toggleCorrect(option: string): void {
-    if (this.questionType() === 'multi') {
-      this.selectedCorrect.update((list) =>
-        list.includes(option) ? list.filter((o) => o !== option) : [...list, option],
-      );
-    } else {
-      this.selectedCorrect.set([option]);
-    }
-  }
-
-  saveSettings(): void {
-    if (this.settingsForm.invalid || this.store.loading()) return;
-
-    const raw = this.settingsForm.getRawValue();
-    this.store.updateQuiz(
-      this.quizId,
-      {
-        title: raw.title,
-        description: raw.description || null,
-        feedbackMode: raw.feedbackMode,
-        secondsPerQuestion: raw.secondsPerQuestion || null,
-        maxAttempts: raw.maxAttempts || null,
-        shuffleQuestions: raw.shuffleQuestions,
-        allowLateSubmission: raw.allowLateSubmission,
-        examLevel: raw.examLevel,
-        // Konkurrencia-token a betöltött kvízből - ütközésnél a backend elutasít.
-        rowVersion: this.store.selectedDetail()?.rowVersion,
-      },
-      () => this.toastService.success('Beállítások mentve.'),
-    );
-  }
-
-  publish(): void {
-    this.store.clearPublishResult();
-    this.store.publish(this.quizId, () => this.toastService.success('Kvíz publikálva.'));
-  }
-
-  /** C5: platform-kvíz visszavonása a diákok elől - a már megírt eredmények megmaradnak. */
-  async unpublish(): Promise<void> {
-    const confirmed = await this.confirmService.ask({
-      title: 'Kvíz visszavonása',
-      message: 'A diákok nem látják és nem indíthatják többé. A már megírt eredmények megmaradnak, és a kvíz bármikor újra publikálható.',
-      confirmLabel: 'Visszavonás',
-      cancelLabel: 'Mégsem',
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    this.store.clearPublishResult();
-    this.store.unpublish(this.quizId, () => this.toastService.success('Kvíz visszavonva.'));
-  }
-
-  /**
-   * UI-TT-218: minden kérdés UGYANAZT a questionForm-ot/editingId signalt osztja - ha a
-   * tanár egy másik kérdést épp szerkeszt és MÓDOSÍTOTT (de még nem mentett), egy másik
-   * kérdés "Szerkesztés" gombjára kattintva a patchValue korábban figyelmeztetés nélkül,
-   * nyomtalanul eldobta az el nem mentett szöveget.
-   */
-  async startEdit(question: TeacherQuizQuestionDto): Promise<void> {
-    if (this.editingId() !== null && this.questionForm.dirty) {
-      const confirmed = await this.confirmService.ask({
-        title: 'Nem mentett módosítás',
-        message: 'A jelenleg szerkesztett kérdésen el nem mentett módosításaid vannak - másik kérdésre váltva ezek elvesznek.',
-        confirmLabel: 'Váltás mentés nélkül',
-        cancelLabel: 'Mégsem',
-        danger: true,
-      });
-      if (!confirmed) return;
-    }
-
-    this.editingId.set(question.id);
-    this.expandedQuestionIds.update((ids) => new Set(ids).add(question.id));
-    this.questionForm.patchValue({
-      questionType: question.questionType,
-      questionText: question.questionText,
-      topicId: question.topicId,
-      optionsText: question.options.join('\n'),
-      acceptedText: question.questionType === 'cloze' ? question.correctAnswers.join('\n') : '',
-      explanation: question.explanation ?? '',
-      difficulty: question.difficulty,
-      secondsLimit: question.secondsLimit ?? null,
-    });
-    this.selectedCorrect.set(question.questionType === 'cloze' ? [] : [...question.correctAnswers]);
-    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
-    this.resolvedImageBlobUrl = null;
-    this.questionImagePreview.set(null);
-    if (question.imageUrl) {
-      this.authorizedFileService.resolveUrl(this.apiOrigin + question.imageUrl)
-        .pipe(take(1))
-        .subscribe(url => {
-          this.resolvedImageBlobUrl = url;
-          this.questionImagePreview.set(url);
-        });
-    }
-    this.pendingImageFileId.set(question.imageFileId ?? null);
-    this.imageUploadError.set(null);
-  }
-
-  cancelEdit(): void {
-    this.editingId.set(null);
-    this.questionForm.reset({ questionType: 'single', difficulty: 'Medium' });
-    this.selectedCorrect.set([]);
-    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
-    this.resolvedImageBlobUrl = null;
-    this.questionImagePreview.set(null);
-    this.pendingImageFileId.set(null);
-    this.imageUploadError.set(null);
-  }
-
-  saveQuestion(): void {
-    if (this.questionForm.invalid || this.formWarning() || this.store.loading()) return;
-
-    const raw = this.questionForm.getRawValue();
-    const type = raw.questionType;
-
-    const request: CreateTeacherQuizQuestionRequest = {
-      topicId: Number(raw.topicId),
-      questionType: type,
-      questionText: raw.questionText,
-      options: type === 'cloze' ? [] : this.parsedOptions(),
-      correctAnswers: type === 'cloze' ? this.acceptedAnswers() : this.selectedCorrect(),
-      explanation: raw.explanation || null,
-      difficulty: raw.difficulty,
-      secondsLimit: raw.secondsLimit || null,
-      imageFileId: this.pendingImageFileId(),
-    };
-
-    const editingId = this.editingId();
-    const done = () => {
-      this.toastService.success(editingId ? 'Kérdés mentve.' : 'Kérdés hozzáadva.');
-      this.cancelEdit();
-    };
-
-    if (editingId) {
-      this.store.updateQuestion(this.quizId, editingId, request, done);
-    } else {
-      this.store.addQuestion(this.quizId, request, done);
-    }
-  }
-
-  /**
-   * Kérdés mozgatása a sorrendben. A két érintett kérdés DisplayOrder-jét CSERÉLJÜK,
-   * nem "beszúrunk" - így nem kell az egész listát újraszámozni, és két gyors kattintás
-   * sem tud lyukat hagyni a sorszámozásban.
-   *
-   * UI-TT-213: korábban két külön updateQuestion()-hívással történt (a második csak az
-   * első sikere UTÁN indult) - ha a MÁSODIK hívás hálózati/átmeneti hibával elbukott, a
-   * szerveren két kérdés maradt UGYANAZZAL a DisplayOrder-rel, a hibaüzenet pedig nem
-   * jelezte, hogy az állapot félig módosult. A dedikált reorderQuestion() végpont mindkét
-   * kérdés DisplayOrder-jét EGYETLEN, atomi BE-hívással cseréli.
-   */
-  moveQuestion(question: TeacherQuizQuestionDto, direction: -1 | 1): void {
-    const questions = this.detail()?.questions ?? [];
-    const index = questions.findIndex((q) => q.id === question.id);
-    const neighbour = questions[index + direction];
-    if (!neighbour || this.store.loading()) return;
-
-    this.store.reorderQuestion(this.quizId, question.id, neighbour.id);
-  }
-
-  approve(question: TeacherQuizQuestionDto): void {
-    this.store.approveQuestion(this.quizId, question.id, () => this.toastService.success('Kérdés jóváhagyva.'));
-  }
-
-  resolveReports(question: TeacherQuizQuestionDto): void {
-    this.quizService.getQuestionReports(this.quizId, true).subscribe({
-      next: (data) => {
-        const openReports = data.items.filter((r) => r.questionId === question.id && !r.isReviewed);
-        if (openReports.length === 0) {
-          this.toastService.success('Nincs elintézetlen jelentés ennél a kérdésnél.');
-          return;
-        }
-        forkJoin(openReports.map((r) => this.quizService.resolveQuestionReport(r.id))).subscribe({
-          next: () => {
-            this.toastService.success('Jelentések elintézve.');
-            this.store.loadDetail(this.quizId);
-          },
-          error: () => this.toastService.danger('Hiba a jelentések elintézésekor.'),
-        });
-      },
-      error: () => this.toastService.danger('Hiba a jelentések lekérésekor.'),
-    });
-  }
-
-  async deleteQuestion(question: TeacherQuizQuestionDto): Promise<void> {
-    const confirmed = await this.confirmService.ask({
-      title: 'Kérdés törlése',
-      message: `Biztosan törlöd? „${question.questionText}"`,
-      confirmLabel: 'Törlés',
-      cancelLabel: 'Mégsem',
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    this.store.deleteQuestion(this.quizId, question.id, () => this.toastService.success('Kérdés törölve.'));
-  }
-
-  generate(): void {
-    if (this.generateForm.invalid || this.store.generating()) return;
-
-    const raw = this.generateForm.getRawValue();
-    this.store.generateQuestions(
-      this.quizId,
-      { topicId: Number(raw.topicId), count: Number(raw.count), difficulty: 'Medium' },
-      (count) => this.toastService.success(`${count} kérdés generálva — nézd át és hagyd jóvá őket.`),
-    );
-  }
-
-  // ── Kérdések szövegből ──
-  readonly sourceOpen = signal(false);
-
-  /** Az AI-szekcióban kiválasztott témakör a „Kérdések szövegből” kezdőértékének. */
-  generateTopicId(): number | null {
-    const id = this.generateForm.controls.topicId.value;
-    return id == null ? null : Number(id);
-  }
-
-  /** A szövegből készült piszkozatok a meglévő jóváhagyási úton jelennek meg - a kérdéslista újratöltése (az eredményt az ablak mutatja). */
-  onSourceChanged(): void {
-    this.store.loadDetail(this.quizId);
-  }
-
-  toggleBankSearch(): void {
-    this.bankSearchExpanded.update((v) => !v);
-  }
-
-  searchBank(): void {
-    const raw = this.bankSearchForm.getRawValue();
-    this.bankSearched.set(true);
-    this.store.searchBankQuestions(
-      raw.search.trim() || null,
-      raw.topicId,
-      raw.difficulty,
-    );
-  }
-
-  addExisting(bankQuestion: QuizBankQuestionDto): void {
-    this.store.addExistingQuestion(
-      this.quizId,
-      bankQuestion.id,
-      () => this.toastService.success('Kérdés hozzáadva a kvízhez.'),
-    );
-  }
-
-  // ── C6: kvízkép-feltöltés, kérdés-duplikálás, kvíz-klónozás ──
-
-  onImageSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    this.imageUploadError.set(null);
-
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowed.includes(file.type)) {
-      this.imageUploadError.set('Csak jpg, png vagy webp fájl engedélyezett.');
-      input.value = '';
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      this.imageUploadError.set('A fájl mérete nem haladhatja meg a 2 MB-ot.');
-      input.value = '';
-      return;
-    }
-
-    const preview = URL.createObjectURL(file);
-    this.questionImagePreview.set(preview);
-
-    this.quizService.uploadQuizImage(this.quizId, file).pipe(take(1)).subscribe({
-      next: (res) => this.pendingImageFileId.set(res.id),
-      error: (err) => {
-        this.imageUploadError.set(extractErrorMessage(err, 'A kép feltöltése sikertelen.'));
-        this.questionImagePreview.set(null);
-        input.value = '';
-      },
-    });
-  }
-
-  removeQuestionImage(): void {
-    this.authorizedFileService.revoke(this.resolvedImageBlobUrl);
-    this.resolvedImageBlobUrl = null;
-    this.questionImagePreview.set(null);
-    this.pendingImageFileId.set(null);
-    this.imageUploadError.set(null);
-  }
-
-  duplicateQuestion(question: TeacherQuizQuestionDto): void {
-    this.store.duplicateQuestion(this.quizId, question.id, () =>
-      this.toastService.success('Kérdés másolva.'),
-    );
-  }
-
   cloneQuiz(): void {
     this.store.cloneQuiz(this.quizId, (newId) => {
       // router.navigate újrahasználná a komponens-példányt (stale readonly quizId) — full reload kell.
       window.location.href = `/feladatsorok/kvizek/${newId}/szerkesztes`;
     });
   }
-
-  // ── Élő játék (Kahoot-mód) ────────────────────────────────
-
-  private readonly kahootHostService = inject(KahootHostService);
-  private readonly router = inject(Router);
-
-  // ── UI-UX-T8 ── (C5: admin-scope-ban a csoport-függő Élő játék/Kiadás szekció nincs)
-  readonly sectionAnchors = [
-    { id: 'beallitasok', label: 'Beállítások' },
-    { id: 'kerdesek', label: 'Kérdések' },
-    { id: 'ai', label: 'AI' },
-    { id: 'publikalas', label: 'Publikálás' },
-    ...(this.isAdmin ? [] : [
-      { id: 'elo', label: 'Élő játék' },
-      { id: 'kiadas', label: 'Kiadás' },
-    ]),
-  ];
 
   /**
    * BUG UI-TT-228: a fülek korábban plain `<a [href]="'#' + anchor.id">` linkek voltak - az
@@ -1257,93 +245,5 @@ export class KvizSzerkesztoComponent {
    */
   scrollToSection(sectionId: string): void {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  private readonly expandedQuestionIds = signal<Set<number>>(new Set());
-
-  isQuestionExpanded(questionId: number): boolean {
-    return this.expandedQuestionIds().has(questionId);
-  }
-
-  toggleQuestion(questionId: number): void {
-    this.expandedQuestionIds.update((ids) => {
-      const next = new Set(ids);
-      if (next.has(questionId)) next.delete(questionId);
-      else next.add(questionId);
-      return next;
-    });
-  }
-
-  readonly liveGroupId = signal<number | null>(null);
-  readonly livePending = signal(false);
-  readonly liveError = signal<string | null>(null);
-
-  /** Élő játékhoz bármely saját, NEM archivált csoport választható - a szoba-nyitás kiadást
-   *  is létrehoz, ha még nincs (a jogosultság azon öröklődik a diákokra). */
-  readonly groupOptions = computed(() => this.groupStore.activeGroups());
-
-  startLive(): void {
-    const groupId = this.liveGroupId();
-    if (groupId === null || this.livePending()) return;
-
-    this.livePending.set(true);
-    this.liveError.set(null);
-    this.kahootHostService
-      .createRoom(this.quizId, groupId)
-      .pipe(take(1), finalize(() => this.livePending.set(false)))
-      .subscribe({
-        next: (room) =>
-          void this.router.navigate([
-            '/feladatsorok', 'kvizek', this.quizId, 'elo', room.kahootSessionId,
-          ]),
-        error: (err) =>
-          this.liveError.set(extractErrorMessage(err, 'Az élő játék indítása sikertelen.')),
-      });
-  }
-
-  assign(): void {
-    if (this.assignForm.invalid || this.store.loading()) return;
-
-    const raw = this.assignForm.getRawValue();
-    this.store.assignToGroup(
-      this.quizId,
-      {
-        groupId: Number(raw.groupId),
-        // A datetime-local érték helyi idő, időzóna-jelölés nélkül - ISO-alakra váltjuk,
-        // hogy a szerver ne értelmezhesse félre.
-        opensAt: raw.opensAt ? new Date(raw.opensAt).toISOString() : null,
-        dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : null,
-      },
-      () => {
-        this.toastService.success('Kvíz kiadva.');
-        this.assignForm.reset();
-      },
-    );
-  }
-
-  async revoke(assignmentId: number): Promise<void> {
-    const confirmed = await this.confirmService.ask({
-      title: 'Kiadás visszavonása',
-      message: 'A diákok nem indíthatják többé. A már megírt eredmények megmaradnak.',
-      confirmLabel: 'Visszavonás',
-      cancelLabel: 'Mégsem',
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    this.store.revokeAssignment(this.quizId, assignmentId, () => this.toastService.success('Kiadás visszavonva.'));
-  }
-
-  async deleteQuiz(): Promise<void> {
-    const confirmed = await this.confirmService.ask({
-      title: 'Kvíz törlése',
-      message: 'A kvíz és az összes kiadása törlődik. Ez nem vonható vissza.',
-      confirmLabel: 'Törlés',
-      cancelLabel: 'Mégsem',
-      danger: true,
-    });
-    if (!confirmed) return;
-    if (this.store.loading()) return;
-    this.store.deleteQuiz(this.quizId, () => this.router.navigate(['/kvizek']));
   }
 }

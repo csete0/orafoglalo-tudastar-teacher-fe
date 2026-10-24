@@ -1,0 +1,134 @@
+<form [formGroup]="questionForm" (ngSubmit)="saveQuestion()" class="space-y-3 border-t border-border-default pt-4">
+  <h3 class="font-semibold">{{ editingId() ? 'Kérdés szerkesztése' : 'Új kérdés' }}</h3>
+
+  <label class="block">
+    <span class="text-sm text-text-muted">Típus</span>
+    <select formControlName="questionType" class="input mt-1">
+      @for (type of questionTypes; track type.value) {
+        <option [value]="type.value">{{ type.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (questionType() === 'cloze') {
+    <p class="text-xs text-text-muted">
+      Jelöld a kihagyást három aláhúzással: <code>A ___ függvény keres értéket.</code>
+    </p>
+  }
+
+  <textarea formControlName="questionText" placeholder="A kérdés szövege" rows="2" class="input"></textarea>
+
+  <label class="block">
+    <span class="text-sm text-text-muted">Témakör</span>
+    <select formControlName="topicId" class="input mt-1">
+      @for (topic of topics(); track topic.id) {
+        <option [value]="topic.id">{{ topic.name }}</option>
+      }
+    </select>
+  </label>
+
+  @if (questionType() === 'cloze') {
+    <label class="block">
+      <span class="text-sm text-text-muted">Elfogadott válaszok (soronként egy)</span>
+      <textarea
+        formControlName="acceptedText"
+        rows="3"
+        class="input mt-1"
+        placeholder="XKERES&#10;XLOOKUP"
+      ></textarea>
+    </label>
+    <p class="text-xs text-text-muted">
+      Több sor esetén bármelyik elfogadott — hasznos, ha ugyanannak a fogalomnak több
+      érvényes írásmódja van.
+    </p>
+  } @else {
+    <label class="block">
+      <span class="text-sm text-text-muted">Válaszlehetőségek (soronként egy)</span>
+      <textarea
+        formControlName="optionsText"
+        rows="4"
+        class="input mt-1"
+        placeholder="XKERES&#10;SZUM&#10;HA&#10;DARAB"
+      ></textarea>
+    </label>
+
+    <div>
+      <span class="text-sm text-text-muted">
+        {{ questionType() === 'multi' ? 'Helyes válaszok (több is lehet)' : 'A helyes válasz' }}
+      </span>
+      @if (parsedOptions().length === 0) {
+        <p class="text-sm text-text-muted mt-1">Előbb add meg a válaszlehetőségeket.</p>
+      } @else {
+        <ul class="mt-1 space-y-1">
+          @for (option of parsedOptions(); track option) {
+            <li>
+              <label class="flex items-center gap-2 text-sm">
+                <input
+                  [type]="questionType() === 'multi' ? 'checkbox' : 'radio'"
+                  [checked]="isSelected(option)"
+                  (change)="toggleCorrect(option)"
+                />
+                {{ option }}
+              </label>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  }
+
+  <textarea
+    formControlName="explanation"
+    placeholder="Magyarázat (nem kötelező)"
+    rows="2"
+    class="input"
+  ></textarea>
+
+  <label class="block">
+    <span class="text-sm text-text-muted">Nehézség</span>
+    <select formControlName="difficulty" class="input mt-1">
+      @for (level of difficulties; track level.value) {
+        <option [value]="level.value">{{ level.label }}</option>
+      }
+    </select>
+  </label>
+
+  <label class="block">
+    <span class="text-sm text-text-muted">
+      Időkorlát erre a kérdésre (mp, üresen a kvíz beállítása érvényes)
+    </span>
+    <input formControlName="secondsLimit" type="number" min="1" class="input mt-1" />
+  </label>
+
+  <!-- ── C6: kvízkép-feltöltés ──────────────────────────── -->
+  <div class="border border-dashed border-border-default rounded-lg p-3 space-y-2">
+    <span class="text-sm text-text-muted">Kép a kérdéshez (jpg/png/webp, max 2 MB, opcionális)</span>
+    @if (questionImagePreview()) {
+      <img [src]="questionImagePreview()" alt="Kérdéskép előnézet" class="max-h-32 rounded" />
+      <button type="button" class="btn btn-ghost text-sm text-danger" (click)="removeQuestionImage()">
+        Kép eltávolítása
+      </button>
+    }
+    <input #imageInput type="file" accept="image/jpeg,image/png,image/webp"
+           class="hidden" (change)="onImageSelected($event)" />
+    <button type="button" class="btn btn-ghost text-sm" (click)="imageInput.click()">
+      {{ questionImagePreview() ? 'Kép cseréje' : 'Kép kiválasztása…' }}
+    </button>
+    @if (imageUploadError()) {
+      <p class="text-xs text-danger">{{ imageUploadError() }}</p>
+    }
+  </div>
+
+  @if (formWarning(); as warning) {
+    <p class="text-sm text-danger">{{ warning }}</p>
+  }
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn btn-primary" [disabled]="questionForm.invalid || store.loading() || !!formWarning()">
+      {{ editingId() ? 'Mentés' : 'Hozzáadás' }}
+    </button>
+    @if (editingId()) {
+      <button type="button" class="btn btn-ghost" (click)="cancelEdit()">Mégsem</button>
+    }
+  </div>
+</form>

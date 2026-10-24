@@ -1,16 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, untracked } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ReportStore } from '../../services/report/report.store';
-import { RubricGradeItemDto, SubmittedFileDto, TeacherAttemptReviewDto } from '../../models/report.model';
+import { SubmittedFileDto, TeacherAttemptReviewDto } from '../../models/report.model';
 import { ReportService } from '../../services/report/report.service';
-import { ConfirmService } from '../confirm/confirm.service';
 import { ToastService } from '../toast/toast.service';
 import { LocalSpinnerComponent } from '../local-spinner/local-spinner.component';
-import { gradeReason, GradeReasonView } from '../grade-reason.util';
 import { saveBlob } from '../save-blob.util';
-
-/** A backend `TeacherAttemptReviewService.MaxTeacherFeedbackLength` párja. */
-const MAX_FEEDBACK_LENGTH = 2000;
+import { AttemptRubricComponent } from './attempt-rubric.component';
+import { AttemptScoreFormComponent } from './attempt-score-form.component';
 
 /**
  * Egy beadás tanári értékelő panelje: AI-értékelés, munkafolyamat-adatok, a diák kódja, pont-
@@ -22,7 +18,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-attempt-review-panel',
   standalone: true,
-  imports: [FormsModule, LocalSpinnerComponent],
+  imports: [LocalSpinnerComponent, AttemptRubricComponent, AttemptScoreFormComponent],
   template: `
     @if (review(); as r) {
       <!-- UI-TT-174/UI-TT-176: a panel (pl. a diák-kód pre eleme) intrinsic
@@ -137,26 +133,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
           </div>
         }
         @if (r.rubricGrade; as g) {
-          <details class="mt-4 text-sm" data-testid="attempt-rubric">
-            <summary class="cursor-pointer">
-              <span class="text-xs uppercase tracking-wide text-text-muted">Szempontonként</span>
-              <strong class="ml-2">{{ g.rawPoints }}/{{ g.rawTotal }} nyers pont</strong>
-              @if (g.draftRubric) { <span class="text-xs text-warning ml-1">vázlat-útmutató</span> }
-              <span class="text-xs text-text-muted ml-1">– {{ lost(g.items).length }} szempontnál veszett pont</span>
-            </summary>
-            <ul class="mt-2 space-y-1">
-              @for (item of g.items; track item.itemId) {
-                <li [class.text-text-muted]="!isLost(item)">
-                  <span class="font-semibold tabular-nums">{{ item.kind === 'statement' ? (item.ok ? '✓' : '✗') : item.points + '/' + item.maxPoints }}</span>
-                  {{ item.text }}
-                  @if (isLost(item) && reason(item); as why) {
-                    <span class="text-text-muted" data-testid="attempt-rubric-reason">– {{ why.text }}</span>
-                    @if (why.detail) { <span class="block text-xs text-text-muted" data-testid="attempt-rubric-reason-detail">{{ why.detail }}</span> }
-                  }
-                </li>
-              }
-            </ul>
-          </details>
+          <app-attempt-rubric [grade]="g" />
         }
 
         <!-- ── A diák megoldása (irodai beadásnál a fenti fájlok helyettesítik) ── -->
@@ -168,81 +145,7 @@ const MAX_FEEDBACK_LENGTH = 2000;
         }
 
         <!-- ── Tanári értékelés ── -->
-        <div class="mt-4">
-          <h3 class="text-xs uppercase tracking-wide text-text-muted mb-2">Saját értékelés</h3>
-          @if (canEditScore(r)) {
-            <div class="flex gap-3 items-end flex-wrap">
-              <div>
-                <label class="text-xs text-text-muted block mb-1" [attr.for]="'pontszam-' + r.attemptId">
-                  Pontszám (0–{{ r.maxPoints }})
-                </label>
-                <input type="number" min="0" step="1" [max]="r.maxPoints"
-                  [id]="'pontszam-' + r.attemptId"
-                  [(ngModel)]="draftPoints" [ngModelOptions]="{ standalone: true }"
-                  class="input !px-2 !py-1.5 !w-28" />
-              </div>
-              <button type="button" (click)="save(r)" [disabled]="report.taskSetResultsLoading()"
-                class="btn btn-primary !px-3 !py-1.5">Mentés</button>
-              @if (r.isOverridden) {
-                <!-- BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM:
-                     a gomb felirata korábban feltétel nélkül "Visszaállítás az AI
-                     pontjára" volt, akkor is, ha az AI SOSEM értékelte a beadást
-                     (napi token-limit/hiba - aiEarnedPoints null, dokumentáltan
-                     legitim állapot). Ilyenkor a revert() ténylegesen nem "vissza"
-                     állít semmit, hanem véglegesen törli a tanár kézzel beírt
-                     pontszámát/értékelését - a gomb feliratának ezt tükröznie kell,
-                     ne állítson létező AI-alapértéket. -->
-                <button type="button" (click)="revert(r)" [disabled]="report.taskSetResultsLoading()"
-                  class="btn btn-danger !px-3 !py-1.5">{{ hasAiScore(r) ? 'Visszaállítás az AI pontjára' : 'Felülbírálás törlése' }}</button>
-              }
-            </div>
-            @if (pointsError(r); as err) {
-              <p class="text-sm text-danger mt-1">{{ err }}</p>
-            }
-          } @else {
-            <p class="text-sm text-text-muted">
-              {{ r.studentLeftGroup ? leftGroupNote : 'Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a pontszám nem módosítható.' }}
-            </p>
-          }
-
-          <div class="mt-3">
-            <label class="text-xs text-text-muted block mb-1" [attr.for]="'ertekeles-' + r.attemptId">
-              Szöveges értékelés a diáknak
-            </label>
-            <!-- UI-TT-190: canEditScore(r)===false esetén a "Mentés" gomb (és maga
-                 a save() hívási útja) nincs renderelve - enélkül a [disabled] nélkül
-                 a tanár írhatott ide szöveget, ami a panel bezárásakor
-                 (draftFeedback visszaáll review.teacherFeedback-re) nyomtalanul,
-                 figyelmeztetés nélkül elveszett - "néma no-op", pontosan az a
-                 hibaosztály, amit a save() lent explicit el akar kerülni. A mező
-                 szándékosan NEM [(ngModel)]-t, hanem egyirányú [value] + (input)
-                 kezelést használ - az NgModel saját disabled-állapot-
-                 szinkronizációja (a mögöttes FormControl sosem lett ténylegesen
-                 disable()-özve) minden CD-ciklusban visszaírta volna false-ra a
-                 [disabled]/[attr.disabled] binding által beállított értéket. -->
-            <textarea rows="3" [id]="'ertekeles-' + r.attemptId"
-              [value]="draftFeedback"
-              (input)="draftFeedback = $any($event.target).value; feedbackTouched = true"
-              [attr.maxlength]="maxFeedbackLength"
-              [disabled]="!canEditScore(r)"
-              class="input !py-1.5 w-full disabled:opacity-60 disabled:cursor-not-allowed"
-              placeholder="Amit a diáknak érdemes tudnia — akkor is hasznos, ha a pontszámmal egyetértesz."></textarea>
-            @if (!canEditScore(r)) {
-              <p class="text-sm text-text-muted mt-1">
-                {{ r.studentLeftGroup ? leftGroupNote : 'Ehhez a beadáshoz még nincs kiértékelt eredmény, ezért a szöveges értékelés sem menthető el.' }}
-              </p>
-            } @else {
-              <div class="flex justify-between gap-2 mt-1">
-                @if (feedbackError(); as err) {
-                  <p class="text-sm text-danger">{{ err }}</p>
-                } @else {
-                  <span></span>
-                }
-                <span class="text-xs text-text-muted">{{ draftFeedback.length }}/{{ maxFeedbackLength }}</span>
-              </div>
-            }
-          </div>
-        </div>
+        <app-attempt-score-form [review]="r" [taskSetId]="taskSetId()" (changed)="changed.emit()" />
       </div>
     } @else if (report.reviewLoading()) {
       <app-local-spinner />
@@ -251,7 +154,6 @@ const MAX_FEEDBACK_LENGTH = 2000;
 })
 export class AttemptReviewPanelComponent {
   readonly report = inject(ReportStore);
-  private readonly confirmService = inject(ConfirmService);
   private readonly toastService = inject(ToastService);
   private readonly reportService = inject(ReportService);
 
@@ -259,45 +161,6 @@ export class AttemptReviewPanelComponent {
   readonly taskSetId = input.required<number>();
   readonly closed = output<void>();
   readonly changed = output<void>();
-
-  /** A backend ugyanezt a korlátot kényszeríti ki (TeacherAttemptReviewService). */
-  readonly maxFeedbackLength = MAX_FEEDBACK_LENGTH;
-
-
-  // Piszkozat: sima mezők, nem signal — az admin-tanarok kvóta-szerkesztés mintája.
-  draftPoints: number | null = null;
-  draftFeedback = '';
-
-  /**
-   * BE-TEACHERATTEMPTREVIEW-OVERRIDE-FEEDBACK-LOST-UPDATE: nyomon követi, hogy a tanár
-   * TÉNYLEGESEN hozzáért-e az értékelés-mezőhöz, mióta a panel a jelenlegi beadáshoz
-   * betöltődött — a mentéskor ez dönti el, hogy a `teacherFeedback` egyáltalán
-   * elküldésre kerüljön-e. Enélkül egy csak-pontszámot-módosító mentés (a mező
-   * érintetlenül hagyva) ugyanazt a `null`-t küldené, mint egy szándékos törlés — a
-   * backend nem tudná megkülönböztetni a kettőt, és lenullázná egy MÁSIK, konkurens
-   * tanár épp beírt értékelését.
-   */
-  feedbackTouched = false;
-
-  constructor() {
-    // A piszkozatot a betöltött nézetből töltjük fel. Effect-ben, NEM a sablonból
-    // hívott metódusban: a renderelés közbeni mellékhatás
-    // ExpressionChangedAfterItHasBeenChecked-hez vezetne. A latch (`syncedAttemptId`)
-    // azért kell, hogy a gépelés közbeni újrafutás ne írja vissza a mentett értéket a
-    // tanár épp szerkesztett szövegére — ugyanaz a minta, mint az
-    // `intezmeny-reszletek.component.ts` név-szinkronizálásánál (UI-TT-62).
-    effect(() => {
-      const review = this.review();
-      if (!review || this.syncedAttemptId === review.attemptId) return;
-      this.syncedAttemptId = review.attemptId;
-      this.draftPoints = review.earnedPoints;
-      this.draftFeedback = review.teacherFeedback ?? '';
-      this.feedbackTouched = false;
-    });
-  }
-
-  private syncedAttemptId: number | null = null;
-
 
   /**
    * A panel megjelenítendő adata — de csak akkor, ha a MOST nyitott cellához
@@ -310,127 +173,13 @@ export class AttemptReviewPanelComponent {
     return review;
   });
 
-  /**
-   * A pontszám csak akkor szerkeszthető, ha egyáltalán van kiértékelt eredmény.
-   * A backend `MaxPoints`-a 0, ha a beadáshoz nem tartozik `ExamTaskResult` —
-   * ilyenkor a mentés szerver-oldalon is elutasításra kerülne.
-   */
-  /** A kilépett diák dolgozata csak olvasható (a BE is elutasítja a módosítást). */
-  canEditScore(review: TeacherAttemptReviewDto): boolean {
-    return review.maxPoints > 0 && !review.studentLeftGroup;
-  }
-
-  readonly leftGroupNote = 'A diák kilépett a csoportból – a tagként írt dolgozata csak olvasható.';
-
-  /**
-   * BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: van-e ténylegesen
-   * olyan AI-eredmény, amire a revert() visszaállítana. Szándékosan KIZÁRÓLAG
-   * `aiEarnedPoints`-ot nézi, nem `aiScoredAt`-ot is - a backend `RevertOverrideAsync`
-   * ténylegesen `EarnedPoints = AiEarnedPoints`-et hajt végre, tehát EZ a mező dönti el
-   * a valós hatást. `aiEarnedPoints` null, ha az AI a napi token-limit vagy egy hiba
-   * miatt sosem értékelte a beadást (dokumentáltan legitim, gyakori állapot, ld.
-   * `ExamTaskResult.AiEarnedPoints` doc-kommentje) - ilyenkor a `revert()` NEM
-   * "visszaállít" semmit, hanem véglegesen törli a tanár kézzel beírt
-   * pontszámát/értékelését, `aiScoredAt`-tól függetlenül.
-   */
-  hasAiScore(review: TeacherAttemptReviewDto): boolean {
-    return review.aiEarnedPoints != null;
-  }
-
-  /** Inline validáció — a hibát gépelés közben mutatjuk, nem csak mentéskor. */
-  pointsError(review: TeacherAttemptReviewDto): string | null {
-    const points = this.draftPoints;
-    if (points == null) return null;
-    if (!Number.isInteger(points)) return 'A pontszám csak egész szám lehet.';
-    if (points < 0) return 'A pontszám nem lehet negatív.';
-    if (points > review.maxPoints) {
-      return `A pontszám nem lehet több a feladat maximumánál (${review.maxPoints} pont).`;
-    }
-    return null;
-  }
-
-  feedbackError(): string | null {
-    return this.draftFeedback.length > MAX_FEEDBACK_LENGTH
-      ? `A szöveges értékelés legfeljebb ${MAX_FEEDBACK_LENGTH} karakter lehet.`
-      : null;
-  }
-
-  save(review: TeacherAttemptReviewDto): void {
-    if (this.report.taskSetResultsLoading()) return;
-
-    const pointsError = this.pointsError(review);
-    const feedbackError = this.feedbackError();
-    // Soha ne legyen néma no-op: ha a mentés nem indul el, a tanárnak tudnia kell,
-    // miért (UI-TT-134).
-    if (pointsError || feedbackError) {
-      this.toastService.warning(pointsError ?? feedbackError!);
-      return;
-    }
-
-    const feedback = this.draftFeedback.trim();
-    if (this.draftPoints == null && !this.feedbackTouched) {
-      this.toastService.warning(
-        'Adj meg pontszámot vagy szöveges értékelést. A felülbírálás visszavonásához használd a visszaállítást.',
-      );
-      return;
-    }
-
-    this.report.overrideScore(
-      this.taskSetId(),
-      review.attemptId,
-      { earnedPoints: this.draftPoints, teacherFeedback: feedback || null, feedbackProvided: this.feedbackTouched },
-      () => {
-        this.toastService.success('Értékelés mentve.');
-        this.changed.emit();
-      },
-    );
-  }
-
-  async revert(review: TeacherAttemptReviewDto): Promise<void> {
-    if (this.report.taskSetResultsLoading()) return;
-
-    // BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: ha nincs valódi
-    // AI-pontszám (az AI sosem értékelte ezt a beadást), a megerősítő ablak és a
-    // sikertoast korábban feltétel nélkül azt állította, hogy egy AI-értékelésre áll
-    // vissza - valójában a tanár saját munkája véglegesen, visszavonhatatlanul
-    // törlődik, nincs mire "visszaállni". A szöveg ezt az esetet explicit
-    // megkülönbözteti, hogy a tanár tudatosan döntsön.
-    const aiScoreExists = this.hasAiScore(review);
-    const confirmed = await this.confirmService.ask({
-      title: aiScoreExists ? 'Visszaállítás az AI pontjára' : 'Felülbírálás törlése',
-      message: aiScoreExists
-        ? 'Biztosan visszaállítod az AI eredeti pontszámát? A saját pontszámod és a szöveges értékelésed törlődik.'
-        : 'FIGYELEM: az AI még nem értékelte ezt a beadást, nincs mire visszaállni. A saját pontszámod és a szöveges értékelésed véglegesen törlődik.',
-      confirmLabel: aiScoreExists ? 'Visszaállítás' : 'Törlés',
-      danger: true,
+  constructor() {
+    // A megnyitott beadás betöltése (attemptId-váltáskor is). A store a betöltés indulásakor
+    // törli az előző nézetet, így az értékelő űrlap az új beadás nézetéből, frissen indul.
+    effect(() => {
+      const attemptId = this.attemptId();
+      untracked(() => this.report.loadAttemptReview(attemptId));
     });
-    if (!confirmed) return;
-
-    this.report.revertOverride(this.taskSetId(), review.attemptId, () => {
-      this.draftPoints = null;
-      this.draftFeedback = '';
-      this.feedbackTouched = false;
-      this.toastService.success(
-        aiScoreExists ? 'Visszaállítva az AI pontjára.' : 'Felülbírálás törölve.',
-      );
-      this.changed.emit();
-    });
-  }
-
-
-  /** Pontot vesztett szempont: állításnál hamis, egyébként a maximumnál kevesebb pont. */
-  isLost(item: RubricGradeItemDto): boolean {
-    return item.kind === 'statement' ? item.ok === false : item.points < item.maxPoints;
-  }
-
-  /** Az indok közérthetően (a gépi tétel nyers szabály-útvonala nélkül). */
-  reason(item: RubricGradeItemDto): GradeReasonView | null {
-    const state = item.kind === 'statement' ? (item.ok ? 'full' : 'none') : item.points >= item.maxPoints ? 'full' : item.points > 0 ? 'partial' : 'none';
-    return gradeReason(item.reason, state);
-  }
-
-  lost(items: RubricGradeItemDto[]): RubricGradeItemDto[] {
-    return items.filter((i) => this.isLost(i));
   }
 
   kb(bytes: number): number {
@@ -452,18 +201,6 @@ export class AttemptReviewPanelComponent {
     if (minutes > 0) return `${minutes} p ${seconds} mp`;
     return `${seconds} mp`;
   }
-
-  /** A megnyitott beadás betöltése; attemptId-váltáskor a latch feloldásával, hogy az új beadás piszkozata töltődjön. */
-  private readonly loadOnOpen = effect(() => {
-    const attemptId = this.attemptId();
-    untracked(() => {
-      this.syncedAttemptId = null;
-      this.draftPoints = null;
-      this.draftFeedback = '';
-      this.feedbackTouched = false;
-      this.report.loadAttemptReview(attemptId);
-    });
-  });
 
   close(): void {
     this.report.clearAttemptReview();

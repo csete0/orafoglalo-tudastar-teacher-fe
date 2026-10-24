@@ -279,4 +279,24 @@ describe('KvizSzovegbolComponent', () => {
     expect(closed).toHaveBeenCalledTimes(1);
     expect(changed).not.toHaveBeenCalled();
   });
+
+  it('a közös dialógus-héjon: a leírás a dialógus leírása, Escape és háttérkattintás bezár', () => {
+    const { fixture, closed } = create();
+    const dialog = q(fixture, 'quiz-source-dialog')!;
+    expect(fixture.nativeElement.querySelector('#' + dialog.getAttribute('aria-describedby'))!.textContent).toContain('Másold be a tananyagot');
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    q(fixture, 'quiz-source-backdrop')!.click();
+    expect(closed).toHaveBeenCalledTimes(2);
+  });
+
+  it('a kiválasztott fájl neve mellett a mérete', () => {
+    const { fixture } = create();
+    (q(fixture, 'quiz-source-mode-file') as HTMLInputElement).click();
+    fixture.detectChanges();
+    const input = q(fixture, 'quiz-source-file') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['x'.repeat(1536 * 1024)], 'anyag.pdf')] });
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(q(fixture, 'quiz-source-file-name')!.textContent).toBe('anyag.pdf (1.5 MB)');
+  });
 });

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -226,6 +227,7 @@ export class SzobeliEredmenyekComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly modeLabels = ORAL_MODE_LABELS;
   readonly noteMax = ORAL_REVIEW_NOTE_MAX;
@@ -248,7 +250,7 @@ export class SzobeliEredmenyekComponent implements OnInit {
   readonly sections = computed(() => transcriptSections(this.session()?.transcript ?? []));
 
   ngOnInit(): void {
-    this.api.results(this.assignmentId).pipe(take(1)).subscribe({
+    this.api.results(this.assignmentId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (r) => this.results.set(r),
       error: (err) => this.loadError.set(extractErrorMessage(err, 'Az eredmények betöltése sikertelen.')),
     });
@@ -264,7 +266,7 @@ export class SzobeliEredmenyekComponent implements OnInit {
     this.selectedId.set(sessionId);
     this.session.set(null);
     this.sessionError.set(null);
-    this.api.session(sessionId).pipe(take(1)).subscribe({
+    this.api.session(sessionId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (s) => {
         if (this.selectedId() === sessionId) this.applySession(s);
       },

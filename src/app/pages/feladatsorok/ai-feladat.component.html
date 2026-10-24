@@ -1,0 +1,33 @@
+<app-dialog-shell labelledBy="ai-task-title" testId="ai-task-dialog" panelClass="card w-full max-w-4xl p-4 sm:p-6 shadow-xl my-8 sm:my-auto min-w-0"
+  (closed)="close()">
+  <div class="flex items-start justify-between gap-3 mb-4">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="sparkles" class="w-5 h-5 block" /></div>
+      <div class="min-w-0">
+        <h2 id="ai-task-title" class="font-bold text-lg">{{ mode() === 'complete' ? 'Feladat kiegészítése AI-val' : 'Új programozási feladat AI-val' }}</h2>
+        @if (mode() === 'complete' && taskTitle()) {
+          <p class="text-sm text-text-muted truncate">{{ taskTitle() }}</p>
+        }
+      </div>
+    </div>
+    <button type="button" class="btn btn-ghost !p-1.5" aria-label="Bezárás" (click)="close()" data-testid="ai-task-close">
+      <app-icon name="x" class="w-5 h-5 block" />
+    </button>
+  </div>
+
+  @switch (step()) {
+    @case ('running') {
+      <app-ai-task-progress [mode]="mode()" [progressText]="poller.progressText()" [pollError]="poller.error()" (closed)="close()" />
+    }
+    @case ('preview') {
+      @if (preview.report(); as r) {
+        <app-ai-task-preview [mode]="mode()" [report]="r" [revalidating]="revalidating()" [saving]="saving()" [discarding]="discarding()"
+          (revalidate)="revalidate()" (discard)="discard()" (save)="save()" />
+      }
+    }
+    @default {
+      <app-ai-task-request [mode]="mode()" [taskSubtaskCount]="taskSubtaskCount()" [otherJob]="otherJob()" [otherJobTitle]="otherJobTitle()"
+        [canStart]="canStart()" [starting]="starting()" [startError]="startError()" (start)="start()" (cancel)="close()" (resume)="resume($event)" />
+    }
+  }
+</app-dialog-shell>

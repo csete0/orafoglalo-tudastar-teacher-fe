@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,6 +7,7 @@ import { CatalogPageDto, CatalogQuery, CatalogTaskSetDto } from '../../models/te
 import { TeacherTaskSetService } from '../../services/teacher-taskset/teacher-taskset.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ToastService } from '../../shared/toast/toast.service';
+import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { FREE_ACCESS_TEXT, isPaidAccess, PAID_ACCESS_TEXT } from './hozzaferes.util';
@@ -47,13 +48,10 @@ type LoadResult = { page: CatalogPageDto } | { error: string };
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-katalogus-masolas',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [DialogShellComponent, FormsModule, IconComponent],
   template: `
-    <div class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto" (keydown.escape)="close()">
-      <!-- fixed, nem absolute: a görgethető ablak-tartalom alatt is az egész képernyőt takarja. -->
-      <div class="fixed inset-0 bg-black/40" data-testid="catalog-backdrop" (click)="close()"></div>
-      <div #dialog role="dialog" aria-modal="true" aria-labelledby="catalog-title" aria-describedby="catalog-help" tabindex="-1"
-        data-testid="catalog-dialog" class="card relative w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto outline-none">
+    <app-dialog-shell labelledBy="catalog-title" describedBy="catalog-help" testId="catalog-dialog" backdropTestId="catalog-backdrop"
+      panelClass="card w-full max-w-3xl min-w-0 p-4 sm:p-6 shadow-xl my-8 sm:my-auto" (closed)="close()">
         <div class="flex items-start justify-between gap-3 mb-3">
           <div class="flex items-center gap-3 min-w-0">
             <div class="icon-tile icon-tile-primary shrink-0"><app-icon name="clipboard-list" class="w-5 h-5 block" /></div>
@@ -157,8 +155,7 @@ type LoadResult = { page: CatalogPageDto } | { error: string };
             }
           }
         </div>
-      </div>
-    </div>
+    </app-dialog-shell>
   `,
 })
 export class KatalogusMasolasComponent implements OnInit {
@@ -201,7 +198,6 @@ export class KatalogusMasolasComponent implements OnInit {
   private readonly search$ = new Subject<string>();
   /** A kérések sora - switchMap: az új szűrés megszakítja a korábbit, elavult válasz nem írhat felül frissebbet. */
   private readonly requests$ = new Subject<CatalogQuery>();
-  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
 
   constructor() {
     this.search$
@@ -246,7 +242,6 @@ export class KatalogusMasolasComponent implements OnInit {
 
   ngOnInit(): void {
     this.load();
-    setTimeout(() => this.dialog()?.nativeElement.focus());
   }
 
   load(): void {
