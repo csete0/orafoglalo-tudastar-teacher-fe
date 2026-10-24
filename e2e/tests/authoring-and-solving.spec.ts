@@ -85,7 +85,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
   await saveSnippetsButton.click();
 
   // ── SQL-párosítási figyelmeztetés látszik (még nincs fájl feltöltve) ──
-  await expect(teacherPage.locator('p.text-warning')).toBeVisible({ timeout: 15000 });
+  await expect(teacherPage.getByTestId('sql-files-warning')).toBeVisible({ timeout: 15000 });
 
   // ── create.sql + create_lite.sql feltöltése ──
   const createSqlInput = teacherPage.locator('label', { hasText: 'create.sql' }).locator('xpath=following-sibling::input[@type="file"]');
@@ -101,7 +101,7 @@ test('SQL-feladatsor create.sql+lite párral publikálva, csoporttag diák elér
     name: 'create_lite.sql', mimeType: 'application/sql',
     buffer: Buffer.from('CREATE TABLE Users (Id INTEGER PRIMARY KEY, Name TEXT);', 'utf-8'),
   });
-  await expect(teacherPage.locator('p.text-warning')).toHaveCount(0, { timeout: 15000 });
+  await expect(teacherPage.getByTestId('sql-files-warning')).toHaveCount(0, { timeout: 15000 });
 
   // ── Publikálás (magántanár — nincs intézmény, nincs megerősítő dialógus) ──
   await teacherPage.getByRole('button', { name: 'Publikálás' }).click();

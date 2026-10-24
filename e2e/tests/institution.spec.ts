@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
-import { acceptConfirmDialog, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { acceptConfirmDialog, confirmPublishDespiteGradingGaps, createLoggedInStudent, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 // A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
 // a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
@@ -130,6 +130,9 @@ test('intézményi tartalom-megosztás: igazgató + kolléga tanár + diák, maj
   await saveSnippetsButton.click();
 
   await principalPage.getByRole('button', { name: 'Publikálás', exact: true }).click();
+  await confirmPublishDespiteGradingGaps(principalPage);
+  // Utána az intézményi tartalom-megosztás megerősítése.
+  await expect(principalPage.getByTestId('confirm-dialog')).toContainText('intézményed MINDEN iskolai csoportjának', { timeout: 15000 });
   await principalPage.getByTestId('confirm-accept').click();
   await expect(principalPage.getByRole('button', { name: 'Publikálva' })).toBeVisible({ timeout: 15000 });
 

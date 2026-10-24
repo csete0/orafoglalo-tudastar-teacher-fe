@@ -33,13 +33,22 @@ async function registerAndJoin(browser: Browser, prefix: string, inviteCode: str
   }
 }
 
-/** Friss kontextusban belép, és megmondja, kapott-e intézményi helyet. */
+/**
+ * Friss kontextusban belép, és megmondja, kapott-e intézményi helyet.
+ *
+ * A profil a friss jogosultságot a `check-auth` válaszából rajzolja: megvárjuk a választ és az előfizetés-szekciót,
+ * csak utána nézzük meg a licenc-kártyát. (Korábban egy azonnali `isVisible()` a még be sem töltött oldalon
+ * versenyhelyzetben „nincs hely”-et mondott a ténylegesen helyet kapott diákra is.)
+ */
 async function loginAndHasSeat(browser: Browser, email: string): Promise<{ hasSeat: boolean; page: Page }> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await loginOnStudentApp(page, email);
+  const checkAuth = page.waitForResponse((r) => r.url().includes('/auth/check-auth') && r.ok(), { timeout: 15000 });
   await page.goto(`${STUDENT_FE_URL}/profile`);
-  const hasSeat = await page.getByText(/Iskolai licenc/).isVisible().catch(() => false);
+  await checkAuth;
+  await expect(page.getByText('Előfizetéseid')).toBeVisible({ timeout: 15000 });
+  const hasSeat = await page.getByText(/Iskolai licenc/).isVisible();
   return { hasSeat, page };
 }
 

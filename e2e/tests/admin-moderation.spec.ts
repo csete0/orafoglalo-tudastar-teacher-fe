@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN_FE_URL, TEACHER_FE_URL } from '../constants';
-import { loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { confirmPublishDespiteGradingGaps, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 /**
  * Admin moderáció: kill-switch (TeacherProfile.IsActive) és feladatsor-
@@ -48,6 +48,7 @@ test('admin felfüggeszt egy tanárt és visszavonja egy publikált feladatsor p
     await saveSnippetsButton.click();
 
     await teacherPage.getByRole('button', { name: 'Publikálás' }).click();
+    await confirmPublishDespiteGradingGaps(teacherPage);
     await expect(teacherPage.getByRole('button', { name: 'Publikálva' })).toBeVisible({ timeout: 15000 });
 
     // ── Admin: /admin/tanarok — a tanár sorát az email alapján találjuk meg

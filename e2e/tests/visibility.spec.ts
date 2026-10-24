@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDENT_FE_URL, TEACHER_FE_URL } from '../constants';
-import { apiGet, createLoggedInStudent, getAccessTokenFromStorage, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
+import { apiGet, confirmPublishDespiteGradingGaps, createLoggedInStudent, getAccessTokenFromStorage, loginAsE2EAdmin, onboardApprovedTeacher } from '../helpers';
 
 // A csoport-/intézmény-oldal fülei UI-TT-179 óta valódi tab-widgetek:
 // a gombok `role="tab"`-ot viselnek. Az explicit role FELÜLÍRJA az implicit
@@ -65,6 +65,7 @@ test('nem-csoporttag és másik csoport tagja sem éri el a tanári feladatsort 
   await saveSnippetsButton.click();
 
   await teacherPage.getByRole('button', { name: 'Publikálás' }).click();
+  await confirmPublishDespiteGradingGaps(teacherPage);
   await expect(teacherPage.getByRole('button', { name: 'Publikálva' })).toBeVisible({ timeout: 15000 });
 
   // ── Két privát csoport: A (a tartalom tanáráé), B (másik, független) ──
