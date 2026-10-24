@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
 import { QuizAuthoringScope, QuizTopicOptionDto } from '../../models/teacher-quiz.model';
 import { GroupStore } from '../../services/group/group.store';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { TeacherQuizService } from '../../services/teacher-quiz/teacher-quiz.service';
 import { TeacherQuizStore } from '../../services/teacher-quiz/teacher-quiz.store';
 import { QuizAiComponent } from './kviz-szerkeszto/quiz-ai.component';
@@ -30,6 +31,7 @@ import { QuizSettingsComponent } from './kviz-szerkeszto/quiz-settings.component
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-kviz-szerkeszto',
+  host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   standalone: true,
   imports: [RouterLink, QuizSettingsComponent, QuizQuestionListComponent, QuizQuestionFormComponent,
     QuizBankSearchComponent, QuizAiComponent, QuizPublishComponent, QuizLiveComponent, QuizAssignComponent],
@@ -127,6 +129,7 @@ export class KvizSzerkesztoComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly quizService = inject(TeacherQuizService);
   private readonly groupStore = inject(GroupStore);
+  private readonly confirmService = inject(ConfirmService);
   readonly store = inject(TeacherQuizStore);
 
   readonly quizId = Number(this.route.snapshot.paramMap.get('id'));
@@ -180,6 +183,30 @@ export class KvizSzerkesztoComponent {
     // Platform-kvíznek nincs csoportja - a /api/groups tanári végpont, admin-only fióknál
     // csak egy fölösleges (és hibázó) hívás lenne.
     if (!this.isAdmin) this.groupStore.loadMine();
+  }
+
+  /** UI-TT-245: mentetlen beállítás vagy kérdés-piszkozat (a testvér-szerkesztők mintájára). */
+  hasUnsavedChanges(): boolean {
+    return !!this.settings()?.settingsForm.dirty || !!this.questionForm()?.questionForm.dirty;
+  }
+
+  /** Route canDeactivate: mentetlen módosításnál megerősítés (SPA-navigáció). */
+  canLeave(): boolean | Promise<boolean> {
+    if (!this.hasUnsavedChanges()) return true;
+    return this.confirmService.ask({
+      title: 'Elveted a módosításokat?',
+      message: 'A kvízen mentetlen módosításaid vannak (beállítás vagy kérdés). Ha most továbblépsz, elvesznek.',
+      confirmLabel: 'Elvetem',
+      cancelLabel: 'Maradok',
+      danger: true,
+    });
+  }
+
+  /** Újratöltés / lap bezárása: a böngésző saját megerősítése. */
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.hasUnsavedChanges()) return;
+    event.preventDefault();
+    event.returnValue = '';
   }
 
   badgeLabel(): string {

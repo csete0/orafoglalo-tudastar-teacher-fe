@@ -491,6 +491,50 @@ describe('KvizSzerkesztoComponent', () => {
     });
   });
 
+  // UI-TT-245 (refaktor-tanar-admin, 2026-10-24): a fenti UI-TT-218 védelem CSAK a kérdések közti
+  // váltást fedi (startEdit), a "Beállítások" (Cím/Leírás/időkorlát/stb.) mentetlen módosítását NEM -
+  // a route ('kvizek/:id/szerkesztes', app.routes.ts) nem kap canDeactivate-et, a komponens nem
+  // implementál canLeave()-t, szemben a testvér oldalakkal (szóbeli-téma, feladatsor-szerkesztő,
+  // projekt-kiadás - mindhárom "Mentetlen módosítások elhagyás előtt megerősítést kérnek." kommenttel
+  // kapja a route-guardot). Élőben reprodukálva: Leírás mezőbe szöveg írva, Mentés NÉLKÜL
+  // "Eredmények →"-re (majd külön próbával "← Kvízeim"-re) kattintva - nincs "Elveted a
+  // módosításokat?" dialógus, a szöveg a visszatéréskor véglegesen, csendben elveszett.
+  describe('Beállítások mentetlen módosítás elhagyás-őre (UI-TT-245)', () => {
+    it('UI-TT-245: mentetlen Beállítások-módosításnál az elhagyás megerősítést kér, mentés után nem', async () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+      const settings = section(fixture, QuizSettingsComponent);
+      const confirmService = TestBed.inject(ConfirmService);
+
+      expect(component.canLeave()).toBe(true);
+
+      settings.settingsForm.controls.description.setValue('UI-TT-repro-lostwork-test');
+      settings.settingsForm.markAsDirty();
+      const leave = component.canLeave();
+      expect(confirmService.pending()).not.toBeNull();
+      confirmService.resolve(false);
+      expect(await leave).toBe(false);
+
+      storeMock.updateQuiz.mockImplementation((_id: number, _req: unknown, onSuccess?: () => void) => onSuccess?.());
+      settings.saveSettings();
+      expect(component.canLeave()).toBe(true);
+    });
+
+    it('UI-TT-245: az „Új kérdés” piszkozat is védett', async () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const form = section(fixture, QuizQuestionFormComponent);
+      form.questionForm.controls.questionText.setValue('Félbehagyott kérdés');
+      form.questionForm.markAsDirty();
+
+      const leave = fixture.componentInstance.canLeave();
+      const confirmService = TestBed.inject(ConfirmService);
+      confirmService.resolve(true);
+      expect(await leave).toBe(true);
+    });
+  });
+
   // UI-TT-219: a StudentGroups.Name-en nincs unique constraint - élőben ténylegesen
   // előfordul, hogy egy tanárnak két, egyaránt aktív, azonos nevű csoportja van (élő
   // reprodukció: browserhunt-csoport-20260721, Id=1 és Id=12, két külön invite-kóddal).

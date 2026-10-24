@@ -163,6 +163,8 @@ export const routes: Routes = [
         path: 'kvizek/:id/szerkesztes',
         loadComponent: () =>
           import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
+        // UI-TT-245: mentetlen beállítás / kérdés-piszkozat elhagyás előtt megerősítést kér.
+        canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
       },
       {
         path: 'kvizek/:id/eredmenyek',
@@ -222,6 +224,7 @@ export const routes: Routes = [
     data: { scope: 'admin' },
     loadComponent: () =>
       import('./pages/feladatsorok/kviz-szerkeszto.component').then((m) => m.KvizSzerkesztoComponent),
+    canDeactivate: [(c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave()],
   },
   {
     // B6: Intézményi érdeklődés-űrlap — publikus, authGuard nélkül

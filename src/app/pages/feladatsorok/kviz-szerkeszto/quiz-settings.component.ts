@@ -141,7 +141,10 @@ export class QuizSettingsComponent implements OnInit {
         // Konkurrencia-token a betöltött kvízből - ütközésnél a backend elutasít.
         rowVersion: this.store.selectedDetail()?.rowVersion,
       },
-      () => this.toastService.success('Beállítások mentve.'),
+      () => {
+        this.settingsForm.markAsPristine();
+        this.toastService.success('Beállítások mentve.');
+      },
     );
   }
 }
