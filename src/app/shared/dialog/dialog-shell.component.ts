@@ -23,6 +23,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-dialog-shell',
   standalone: true,
+  // A hívó statikus `role="…"`-ja a hoston is DOM-attribútum maradna (dupla dialógus-szerep a képernyőolvasónak); a szerep csak a panelé.
+  host: { '[attr.role]': 'null' },
   template: `
     <div class="fixed inset-0 z-50 flex justify-center p-4"
          [class.items-center]="align() === 'center'"

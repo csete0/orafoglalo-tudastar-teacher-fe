@@ -29,6 +29,13 @@ class HostComponent {
   closedCount = 0;
 }
 
+@Component({
+  standalone: true,
+  imports: [DialogShellComponent],
+  template: `<app-dialog-shell role="alertdialog" label="Megerősítés" testId="a-dialog"><p>Biztos?</p></app-dialog-shell>`,
+})
+class AlertHostComponent {}
+
 describe('DialogShellComponent', () => {
   /** Zoneless: natív Promise-ok, a függő async lánc (ngModel-írás, firstValueFrom-await-ek, setTimeout(0)) egy makrotaszk alatt lefut. */
   const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -54,6 +61,15 @@ describe('DialogShellComponent', () => {
     expect(panel.classList).toContain('card');
     expect(panel.classList).toContain('max-w-lg');
     expect(panel.textContent).toContain('Súgó');
+  });
+
+  it('role="alertdialog": a szerep csak a panelen van, a hoston nem duplikálódik', () => {
+    const fixture = TestBed.createComponent(AlertHostComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-dialog-shell')!.hasAttribute('role')).toBe(false);
+    expect(Array.from(el.querySelectorAll('[role]')).map((n) => n.getAttribute('data-testid'))).toEqual(['a-dialog']);
+    expect(el.querySelector('[data-testid="a-dialog"]')!.getAttribute('role')).toBe('alertdialog');
   });
 
   it('top igazítás: felülről, görgethető; center: középre', () => {
