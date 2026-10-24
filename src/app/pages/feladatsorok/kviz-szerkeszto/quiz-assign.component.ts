@@ -176,6 +176,6 @@ export class QuizAssignComponent {
     });
     if (!confirmed) return;
     if (this.store.loading()) return;
-    this.store.deleteQuiz(this.quizId(), () => this.router.navigate(['/kvizek']));
+    this.store.deleteQuiz(this.quizId(), () => this.router.navigate(['/feladatsorok/kvizek']));
   }
 }
