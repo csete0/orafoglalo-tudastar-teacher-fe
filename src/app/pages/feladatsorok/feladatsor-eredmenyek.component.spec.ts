@@ -86,6 +86,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     taskSetResults: ReturnType<typeof signal<TeacherTaskSetResultsDto | null>>;
     attemptReview: ReturnType<typeof signal<TeacherAttemptReviewDto | null>>;
     taskSetResultsLoading: ReturnType<typeof signal<boolean>>;
+    reviewSaving: ReturnType<typeof signal<boolean>>;
     reviewLoading: ReturnType<typeof signal<boolean>>;
     error: ReturnType<typeof signal<string | null>>;
     loadTaskSetResults: ReturnType<typeof vi.fn>;
@@ -102,6 +103,7 @@ describe('FeladatsorEredmenyekComponent', () => {
       taskSetResults: signal(results),
       attemptReview: signal<TeacherAttemptReviewDto | null>(null),
       taskSetResultsLoading: signal(false),
+      reviewSaving: signal(false),
       reviewLoading: signal(false),
       error: signal(null),
       loadTaskSetResults: vi.fn(),

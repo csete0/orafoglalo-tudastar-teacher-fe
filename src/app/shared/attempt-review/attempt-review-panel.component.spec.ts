@@ -59,6 +59,7 @@ describe('AttemptReviewPanelComponent', () => {
     attemptReview: ReturnType<typeof signal<TeacherAttemptReviewDto | null>>;
     reviewLoading: ReturnType<typeof signal<boolean>>;
     taskSetResultsLoading: ReturnType<typeof signal<boolean>>;
+    reviewSaving: ReturnType<typeof signal<boolean>>;
     loadAttemptReview: ReturnType<typeof vi.fn>;
     clearAttemptReview: ReturnType<typeof vi.fn>;
     overrideScore: ReturnType<typeof vi.fn>;
@@ -72,7 +73,7 @@ describe('AttemptReviewPanelComponent', () => {
     store = {
       attemptReview: signal<TeacherAttemptReviewDto | null>(null),
       reviewLoading: signal(false),
-      taskSetResultsLoading: signal(false),
+      taskSetResultsLoading: signal(false), reviewSaving: signal(false),
       loadAttemptReview: vi.fn(),
       clearAttemptReview: vi.fn(),
       overrideScore: vi.fn(),

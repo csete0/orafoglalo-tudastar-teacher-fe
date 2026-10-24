@@ -383,6 +383,33 @@ describe('ReportStore', () => {
     expect(store.loading()).toBe(false);
   });
 
+  it('UI-TT-243: a dolgozat-áttekintőn (ahol nincs loadTaskSetResults) a mentés alatt foglalt, utána a gomb újra használható', async () => {
+    // A `dolgozat-attekintes.component.ts` a SAJÁT `ClassTestService.getOverview()`-ján
+    // át tölti be és frissíti a névsort/mátrixot - a megosztott `ReportStore.
+    // loadTaskSetResults()`-t erről az oldalról SOHA nem hívja senki (csak a
+    // `feladatsorok/.../eredmenyek` oldal hívja). A `<app-attempt-score-form>` Mentés/
+    // Visszaállítás gombja viszont MINDKÉT oldalról ugyanazt a globális (`providedIn:
+    // 'root'`) `report.taskSetResultsLoading()` jelzőt olvassa a `[disabled]` kötésben.
+    const overrideResponse = new Subject<ReviewStub>();
+    serviceMock.overrideScore.mockReturnValue(overrideResponse);
+
+    // Nincs előzetes store.loadTaskSetResults(...) hívás - pontosan úgy, ahogy a
+    // dolgozat-áttekintő oldal betöltésekor a store-ban semmi nem állítja be
+    // `_taskSetResultsId`-t erre (vagy semmilyen) feladatsorra.
+    store.overrideScore(7, 42, { earnedPoints: 4, teacherFeedback: null, feedbackProvided: false });
+    expect(store.reviewSaving()).toBe(true);
+
+    overrideResponse.next({ attemptId: 42, earnedPoints: 4 });
+    overrideResponse.complete();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A mentés lezárult: a gomb újra használható (eddig a mátrix-jelző örökre true maradt, a lezáró reload sosem futott).
+    expect(store.attemptReview()).toEqual({ attemptId: 42, earnedPoints: 4 });
+    expect(store.taskSetResultsLoading()).toBe(false);
+    expect(store.reviewSaving()).toBe(false);
+  });
+
   // TEACH-7 javítva: a mutateReview() hiba-ága a siker-ághoz (UI-TT-160) hasonlóan
   // mostantól ellenőrzi, hogy a mentés célpontja (`taskSetId`) még mindig a
   // mátrix-loader AKTUÁLIS célpontja-e - ha a tanár időközben egy MÁSIK feladatsor

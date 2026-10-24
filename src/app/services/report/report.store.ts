@@ -37,6 +37,8 @@ export class ReportStore {
   private readonly _error = signal<string | null>(null);
   /** Külön a mátrix `_loading`-jától: a panel töltése ne cserélje spinnerre az egész táblát. */
   private readonly _reviewLoading = signal(false);
+  /** UI-TT-243: egy pontszám-mentés/visszaállítás fut - a dolgozat-áttekintőn nincs mátrix-reload, ami a jelzőt lezárná. */
+  private readonly _reviewSaving = signal(false);
 
   // Ugyanaz a hiba-osztály, mint a LeaderboardStore/TeacherApplicationStore
   // (UI-TT-124-mintájú) generációs-számláló fixje: mivel ez a store `providedIn:
@@ -96,6 +98,7 @@ export class ReportStore {
       this._taskSetResultsLoading(),
   );
   readonly reviewLoading = this._reviewLoading.asReadonly();
+  readonly reviewSaving = this._reviewSaving.asReadonly();
   readonly error = this._error.asReadonly();
 
   loadGroupActivity(groupId: number, from?: Date, to?: Date): void {
@@ -262,7 +265,7 @@ export class ReportStore {
    * ezért a panelt nem kell újratölteni — a MÁTRIXot viszont igen, hogy a cella az új
    * pontszámot és a "felülbírálva" jelzést mutassa.
    *
-   * FONTOS: nincs `finalize()` ezen a mutáción. A `_taskSetResultsLoading` szándékosan
+   * FONTOS: a mutáció `finalize()`-a csak a `_reviewSaving`-et zárja. A `_taskSetResultsLoading` szándékosan
    * true marad a mutáció válasza után is, egészen addig, amíg a szinkron elindított
    * `loadTaskSetResults()` saját `finalize()`-a le nem zárja (UI-TT-45 / UI-TT-147) —
    * enélkül a UI egy pillanatra "kész, nem tölt" állapotot mutatna a régi mátrixszal.
@@ -298,7 +301,10 @@ export class ReportStore {
     taskSetId: number,
     onSuccess?: () => void,
   ): void {
-    this._taskSetResultsLoading.set(true);
+    // UI-TT-243: a mátrix-jelző csak akkor, ha a mentés után ez a store tölti újra a mátrixot (a feladatsor Eredmények
+    // oldala) - a dolgozat-áttekintőn sosem futna le a lezáró `loadTaskSetResults()`, és a gomb örökre letiltva maradt.
+    if (this._taskSetResultsId === taskSetId) this._taskSetResultsLoading.set(true);
+    this._reviewSaving.set(true);
     this._error.set(null);
 
     // TEACH-9: a mentés INDULÁSÁNAK pillanatában rögzített generáció - ha a panel
@@ -311,7 +317,7 @@ export class ReportStore {
     const targetGeneration = this._attemptReviewGeneration;
 
     observable
-      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef), finalize(() => this._reviewSaving.set(false)))
       .subscribe({
         next: (review) => {
           // Ha a panel a mentés indulása óta bezárult vagy újranyílt, ez a válasz már

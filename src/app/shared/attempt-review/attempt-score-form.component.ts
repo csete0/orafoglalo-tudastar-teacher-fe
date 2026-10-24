@@ -50,7 +50,7 @@ function draftOf<T>(
             [(ngModel)]="draftPoints" [ngModelOptions]="{ standalone: true }"
             class="input !px-2 !py-1.5 !w-28" />
         </div>
-        <button type="button" (click)="save(r)" [disabled]="report.taskSetResultsLoading()"
+        <button type="button" (click)="save(r)" [disabled]="busy()"
           class="btn btn-primary !px-3 !py-1.5">Mentés</button>
         @if (r.isOverridden) {
           <!-- BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM:
@@ -61,7 +61,7 @@ function draftOf<T>(
                állít semmit, hanem véglegesen törli a tanár kézzel beírt
                pontszámát/értékelését - a gomb feliratának ezt tükröznie kell,
                ne állítson létező AI-alapértéket. -->
-          <button type="button" (click)="revert(r)" [disabled]="report.taskSetResultsLoading()"
+          <button type="button" (click)="revert(r)" [disabled]="busy()"
             class="btn btn-danger !px-3 !py-1.5">{{ hasAiScore(r) ? 'Visszaállítás az AI pontjára' : 'Felülbírálás törlése' }}</button>
         }
       </div>
@@ -127,6 +127,9 @@ export class AttemptScoreFormComponent {
   readonly maxFeedbackLength = MAX_FEEDBACK_LENGTH;
   readonly leftGroupNote = LEFT_GROUP_NOTE;
 
+  /** Mentés/visszaállítás közben, és amíg a mátrix utána újratöltődik (UI-TT-243). */
+  readonly busy = computed(() => this.report.reviewSaving() || this.report.taskSetResultsLoading());
+
   readonly draftPoints = draftOf(this.review, (review) => review.earnedPoints);
   readonly draftFeedback = draftOf(this.review, (review) => review.teacherFeedback ?? '');
 
@@ -190,7 +193,7 @@ export class AttemptScoreFormComponent {
   }
 
   save(review: TeacherAttemptReviewDto): void {
-    if (this.report.taskSetResultsLoading()) return;
+    if (this.busy()) return;
 
     // Soha ne legyen néma no-op: ha a mentés nem indul el, a tanárnak tudnia kell,
     // miért (UI-TT-134).
@@ -221,7 +224,7 @@ export class AttemptScoreFormComponent {
   }
 
   async revert(review: TeacherAttemptReviewDto): Promise<void> {
-    if (this.report.taskSetResultsLoading()) return;
+    if (this.busy()) return;
 
     // BE-TEACHERATTEMPTREVIEW-REVERT-NOAISCORE-MISLEADING-CONFIRM: ha nincs valódi
     // AI-pontszám (az AI sosem értékelte ezt a beadást), a megerősítő ablak és a

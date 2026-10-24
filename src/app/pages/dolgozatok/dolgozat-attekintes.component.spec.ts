@@ -64,7 +64,7 @@ describe('DolgozatAttekintesComponent', () => {
         { provide: ToastService, useValue: toast },
         {
           provide: ReportStore,
-          useValue: { attemptReview: signal(null), reviewLoading: signal(false), taskSetResultsLoading: signal(false), loadAttemptReview: vi.fn(), clearAttemptReview: vi.fn() },
+          useValue: { attemptReview: signal(null), reviewLoading: signal(false), taskSetResultsLoading: signal(false), reviewSaving: signal(false), loadAttemptReview: vi.fn(), clearAttemptReview: vi.fn() },
         },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => '7' } } } },
       ],
