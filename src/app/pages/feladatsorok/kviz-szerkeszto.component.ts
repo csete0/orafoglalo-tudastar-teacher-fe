@@ -185,8 +185,12 @@ export class KvizSzerkesztoComponent {
     if (!this.isAdmin) this.groupStore.loadMine();
   }
 
-  /** UI-TT-245: mentetlen beállítás vagy kérdés-piszkozat (a testvér-szerkesztők mintájára). */
+  /**
+   * UI-TT-245: mentetlen beállítás vagy kérdés-piszkozat (a testvér-szerkesztők mintájára). Betöltött kvíz nélkül
+   * (pl. a sikeres törlés után, amely a store-ból is kiveszi) nincs mit elveszíteni - a listára visszavivő navigáció ne kérdezzen.
+   */
   hasUnsavedChanges(): boolean {
+    if (!this.detail()) return false;
     return !!this.settings()?.settingsForm.dirty || !!this.questionForm()?.questionForm.dirty;
   }
 

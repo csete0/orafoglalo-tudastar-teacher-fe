@@ -521,6 +521,19 @@ describe('KvizSzerkesztoComponent', () => {
       expect(component.canLeave()).toBe(true);
     });
 
+    it('a sikeres törlés után a mentetlen beállítás sem kérdez rá újra (a kvíz már nincs)', () => {
+      const fixture = configure();
+      fixture.detectChanges();
+      const settings = section(fixture, QuizSettingsComponent);
+      settings.settingsForm.controls.description.setValue('Mentetlen');
+      settings.settingsForm.markAsDirty();
+
+      // A store deleteQuiz-a a sikeres DELETE után kiveszi a kvízt (selectedDetail = null), utána navigál a listára.
+      storeMock.selectedDetail.set(null);
+      expect(fixture.componentInstance.canLeave()).toBe(true);
+      expect(TestBed.inject(ConfirmService).pending()).toBeNull();
+    });
+
     it('UI-TT-245: az „Új kérdés” piszkozat is védett', async () => {
       const fixture = configure();
       fixture.detectChanges();
