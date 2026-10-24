@@ -47,14 +47,14 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `npx ng serve --port ${STUDENT_FE_PORT}`,
+      command: `npx ng serve --configuration e2e --port ${STUDENT_FE_PORT}`,
       cwd: STUDENT_FE_REPO_PATH,
       url: STUDENT_FE_URL,
       timeout: 120_000,
       reuseExistingServer: false,
     },
     {
-      command: `npx ng serve --port ${TEACHER_FE_PORT}`,
+      command: `npx ng serve --configuration e2e --port ${TEACHER_FE_PORT}`,
       cwd: __dirname,
       url: TEACHER_FE_URL,
       timeout: 120_000,

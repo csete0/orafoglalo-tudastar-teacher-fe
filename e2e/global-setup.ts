@@ -18,6 +18,8 @@ import {
   DB_NAME,
   DB_PASSWORD,
   DB_USER,
+  STUDENT_FE_URL,
+  TEACHER_FE_URL,
   TEACHER_FILES_ROOT,
 } from './constants';
 
@@ -75,6 +77,11 @@ export default async function globalSetup(): Promise<void> {
     pidFile: BACKEND_PID_FILE,
     logFile: BACKEND_LOG_FILE,
     env: {
+      Kestrel__Port: String(BACKEND_PORT),
+      // A backend által generált linkek (e-mail, tanári/diák app közti átlinkelés) az E2E-portokra mutassanak.
+      Urls__Dev__Frontend: STUDENT_FE_URL,
+      Urls__Dev__Backend: BACKEND_URL,
+      Urls__Dev__TeacherFrontend: TEACHER_FE_URL,
       ContactForm__RecipientEmail: 'e2e-contact@example.com',
       TeacherFiles__RootPath: TEACHER_FILES_ROOT,
       // A Hangfire worker-szerver (12+ worker, hosszú-pollozó SQL kapcsolatokkal)

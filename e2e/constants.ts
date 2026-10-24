@@ -2,19 +2,14 @@ import path from 'node:path';
 import os from 'node:os';
 
 /**
- * Az E2E-futtatás a NORMÁL dev portokat használja (backend 7083, diák-fe 4200,
- * tanári-fe 4300) — ugyanazokat, amiket a diák-fe environment.ts fixen
- * hardcode-ol (apiUrl: http://localhost:7083/api). Emiatt E2E közben nem
- * futtatható párhuzamosan egy normál dev session (állítsd le előtte).
- *
- * A backend portja ténylegesen konfigurálható (Kestrel:Port env var, ld.
- * Program.cs) elszigetelt futtatáshoz, de ehhez a diák-fe/tanári-fe
- * environment.ts fájljainak is külön E2E-buildkonfigurációt kellene kapniuk —
- * ez jelenleg nincs bekötve, ld. README "Elszigetelt portok" szakasz.
+ * Elszigetelt E2E-portok (2026-10-24): a staging CT-n a 7083 (backend) és a 4300 (tanári-fe) a staging példányoké -
+ * a suite azokkal ütközött, és futtatáshoz le kellett állítani a stagingot. A backend a Kestrel__Port env varral, a két
+ * frontend a saját `e2e` build-konfigurációjával (environment.e2e.ts: apiUrl → localhost:17083) indul ezeken a portokon;
+ * a backend Development CORS-a a 4210/4310 origint engedi. Egy normál dev session (7083/4200/4300) mellette futhat.
  */
-export const BACKEND_PORT = 7083;
-export const STUDENT_FE_PORT = 4200;
-export const TEACHER_FE_PORT = 4300;
+export const BACKEND_PORT = 17083;
+export const STUDENT_FE_PORT = 4210;
+export const TEACHER_FE_PORT = 4310;
 
 // 2026-09-23 óta a platform-admin oldalak a külön admin-fe-ben vannak, ami a külön Admin API-t hívja.
 // Az Admin API-n nincs CORS: az admin-fe relatív `/api/admin` címet használ (production env), a dev-szerver
