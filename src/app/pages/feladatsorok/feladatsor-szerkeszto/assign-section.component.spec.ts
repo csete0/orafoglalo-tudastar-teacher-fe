@@ -116,7 +116,26 @@ describe('AssignSectionComponent', () => {
 
     expect(service.assignToGroup).toHaveBeenCalledWith(1, { groupId: 3, opensAt: null, dueAt: null, isTest: false, timeLimitMinutes: null });
     expect(c.activeAssignments().map((a) => a.id)).toEqual([7]);
-    expect(c.assignForm.controls.groupId.value).toBeNull();
+    // Az űrlap ürül; az egyetlen megmaradt választható csoport (B) előválasztódik.
+    expect(c.assignForm.controls.opensAt.value).toBe('');
+    expect(c.assignForm.controls.groupId.value).toBe(4);
+  });
+
+  it('egyetlen választható csoportnál azt előválasztja, a select nem üres és a Kiadás gomb aktív', () => {
+    const fixture = create(true);
+    groups.set([group(3, 'A')]);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(fixture.componentInstance.assignForm.controls.groupId.value).toBe(3);
+    expect((el.querySelector('select') as HTMLSelectElement).value).toBe('3');
+    expect((el.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('több választható csoportnál nem választ helyette', () => {
+    const fixture = create(true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.assignForm.controls.groupId.value).toBeNull();
   });
 
   // A kiadás/visszavonás írás: az oldal elhagyása után is végig kell futnia, és a toastnak

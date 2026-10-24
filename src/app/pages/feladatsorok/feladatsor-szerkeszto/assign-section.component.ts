@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -79,6 +79,15 @@ export class AssignSectionComponent implements OnInit {
       },
     },
   );
+
+  constructor() {
+    // Egyetlen választható csoportnál az üres select csak felesleges kattintás: előválasztjuk.
+    effect(() => {
+      const groups = this.assignableGroups();
+      const control = this.assignForm.controls.groupId;
+      if (groups.length === 1 && control.value === null) control.setValue(groups[0].id);
+    });
+  }
 
   ngOnInit(): void {
     this.groupStore.loadMine();
