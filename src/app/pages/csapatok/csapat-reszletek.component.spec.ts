@@ -317,4 +317,29 @@ describe('CsapatReszletekComponent', () => {
     const back = Array.from(el.querySelectorAll('a')).find((a) => a.textContent?.includes('13.T'))!;
     expect(back.getAttribute('href')).toBe('/csoportok/7?tab=technikum#csapatok');
   });
+  // BE-TEACHERFEEDBACK-QUOTA-IGNORES-PREMIUM-FLAG testvér-előfordulása: nem Prémium tanárnál a
+  // BE a `repoReview` mezőt kihagyja a keret-válaszból ("hiányában a sor nem látszik" - komment a
+  // komponens tetején), DE a `quotaFull()` computed `!!q && q.used >= q.limit`-je `null` quota-nál
+  // `false`-t ad - ez tévesen NEM blokkolja a "MI-átnézés kérése" gombot, ami emiatt engedélyezett
+  // marad egy nem Prémium tanárnak is (a BE `TeamRepoReviewService.ReserveTeacherAsync` 409
+  // PremiumRequiredCode-dal utasítaná el, de a gomb ezt előre nem jelzi, szemben a kártya szövegében
+  // lévő "(most X/Y)" rész eltűnésével, ami az EGYETLEN vizuális jel).
+  it('nem Prémium tanárnál (a válaszból hiányzik a repoReview mező) a „MI-átnézés kérése” gomb előre letiltva, Prémium-üzenettel (UI-TT-250)', async () => {
+    const { fixture, c, api, reports, el } = setup();
+    reports.getAiHelperQuota.mockReturnValue(of({ premium: false } as { premium: boolean; repoReview: { used: number; limit: number } }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await c.setTab('mi');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(c.quota()).toBeNull();
+    expect(c.notPremium()).toBe(true);
+    expect(el.querySelector('[data-testid="premium-required"]')?.textContent).toContain('Prémium');
+    const btn = Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('MI-átnézés kérése')) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(api.requestReview).not.toHaveBeenCalled();
+  });
 });
+

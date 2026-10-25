@@ -8,7 +8,7 @@ import { TeacherTeamService, TeamUpdate } from '../../services/team/teacher-team
 import { ReportService } from '../../services/report/report.service';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
-import { AiHelperQuotaItemDto } from '../../shared/ai-helper-quota.util';
+import { AI_HELPER_PREMIUM_TEXT, AiHelperQuotaItemDto } from '../../shared/ai-helper-quota.util';
 import { KodOlvasoComponent } from '../../shared/kod-olvaso/kod-olvaso.component';
 import { HetiAktivitasComponent } from './heti-aktivitas.component';
 import { CsapatAtnezesComponent } from './csapat-atnezes.component';
@@ -178,9 +178,10 @@ const MAX_POLLS = 36;
                         @for (b of branches(); track b) { <option [ngValue]="b">{{ b }}</option> }
                       </select></label>
                   }
-                  <button class="btn btn-primary" type="button" (click)="requestReview()" [disabled]="busy() || running() || r.used >= r.limit || quotaFull()">MI-átnézés kérése</button>
+                  <button class="btn btn-primary" type="button" (click)="requestReview()" [disabled]="busy() || running() || r.used >= r.limit || quotaFull() || notPremium()">MI-átnézés kérése</button>
                 </div>
                 @if (r.used >= r.limit) { <p class="text-xs text-text-muted">A csapat havi kerete elfogyott – a következő hónapban újra kérhető.</p> }
+                @else if (notPremium()) { <p class="text-xs text-text-muted" data-testid="premium-required">{{ premiumText }}</p> }
                 @else if (quotaFull()) { <p class="text-xs text-text-muted" data-testid="quota-full">A havi MI-kereted elfogyott – a következő hónapban újra kérhető.</p> }
               }
               @if (stalled()) { <p class="text-sm" role="status">Még fut – <button class="underline" type="button" (click)="refreshReviews()">frissítés</button></p> }
@@ -274,6 +275,9 @@ export class CsapatReszletekComponent implements OnInit {
   readonly branches = computed(() => (this.activity()?.branches ?? []).map((b) => b.name));
   readonly running = computed(() => !!this.reviews()?.items.some((r) => r.status === 'queued' || r.status === 'running'));
   readonly quotaFull = computed(() => { const q = this.quota(); return !!q && q.used >= q.limit; });
+  /** Nem Prémium tanár: az átnézés előre tiltva (a BE elutasítaná), mint a többi MI-segítőnél (UI-TT-250). */
+  readonly notPremium = signal(false);
+  protected readonly premiumText = AI_HELPER_PREMIUM_TEXT;
 
   private readonly destroyRef = inject(DestroyRef);
   /** A következő frissítés időzítője (fülváltáskor / új betöltéskor leállítva, a komponenssel együtt megszűnik). */
@@ -432,6 +436,7 @@ export class CsapatReszletekComponent implements OnInit {
   private async loadQuota(): Promise<void> {
     const q = await firstValueFrom(this.reports.getAiHelperQuota()).catch(() => null);
     this.quota.set(q?.repoReview ?? null);
+    this.notPremium.set(q?.premium === false);
   }
 
   // ---- fájlok ----
