@@ -39,6 +39,7 @@ describe('app.routes - teljes szélességű adatoldalak (data.wide)', () => {
   const widePaths = [
     'feladatsorok/:id/eredmenyek',
     'dolgozatok/:assignmentId',
+    'dolgozatok/kviz/:assignmentId',
     'feladatsorok/kvizek/:id/eredmenyek',
     'probaerettsegi',
     'feladatsorok/projektek/kiadas/:id',

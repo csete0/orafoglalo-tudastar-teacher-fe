@@ -11,6 +11,7 @@ import { ConfirmService } from '../../../shared/confirm/confirm.service';
 import { extractErrorMessage } from '../../../shared/http-error/extract-error-message.util';
 import { IconComponent } from '../../../shared/icon/icon.component';
 import { ToastService } from '../../../shared/toast/toast.service';
+import { TestWindowErrorsComponent, testWindowValidator } from '../../../shared/test-window/test-window';
 
 /** A szerkesztő „Kiadás csoportnak” része: az aktív kiadások listája, visszavonása és az új kiadás (dolgozat mód) űrlapja. */
 @Component({
@@ -18,7 +19,7 @@ import { ToastService } from '../../../shared/toast/toast.service';
   selector: 'app-assign-section',
   standalone: true,
   host: { class: 'block' },
-  imports: [ReactiveFormsModule, RouterLink, DatePipe, IconComponent],
+  imports: [ReactiveFormsModule, RouterLink, DatePipe, IconComponent, TestWindowErrorsComponent],
   templateUrl: './assign-section.component.html',
 })
 export class AssignSectionComponent implements OnInit {
@@ -61,23 +62,7 @@ export class AssignSectionComponent implements OnInit {
       isTest: [false],
       timeLimitMinutes: [45],
     },
-    {
-      validators: (group) => {
-        const opensAt = group.get('opensAt')?.value;
-        const dueAt = group.get('dueAt')?.value;
-        if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
-          return { opensAtAfterDueAt: true };
-        }
-        if (group.get('isTest')?.value) {
-          const minutes = Number(group.get('timeLimitMinutes')?.value);
-          if (!opensAt || !dueAt) return { testWindowRequired: true };
-          if (new Date(dueAt).getTime() <= Date.now()) return { testDueInPast: true };
-          if (!(minutes >= 5 && minutes <= 240)) return { testTimeLimit: true };
-          if ((new Date(dueAt).getTime() - new Date(opensAt).getTime()) / 60000 < minutes) return { testWindowTooShort: true };
-        }
-        return null;
-      },
-    },
+    { validators: testWindowValidator() },
   );
 
   constructor() {

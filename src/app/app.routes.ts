@@ -92,6 +92,14 @@ export const routes: Routes = [
       import('./pages/probaerettsegi/probaerettsegi-page.component').then((m) => m.ProbaerettsegiPageComponent),
   },
   {
+    // Kvíz-dolgozat (dolgozatként kiadott kvíz / technikumi elméleti dolgozat) áttekintője - a csoport "Kiadások" füléről.
+    path: 'dolgozatok/kviz/:assignmentId',
+    canActivate: [authGuard, roleGuard('teacher')],
+    data: { wide: true },
+    loadComponent: () =>
+      import('./pages/dolgozatok/kviz-dolgozat.component').then((m) => m.KvizDolgozatComponent),
+  },
+  {
     // Dolgozat mód: a kiadott dolgozat élő áttekintője (a csoport "Kiadva" füléről / a feladatsor-szerkesztőből).
     path: 'dolgozatok/:assignmentId',
     canActivate: [authGuard, roleGuard('teacher')],
