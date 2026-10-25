@@ -425,6 +425,25 @@ describe('KvizSzerkesztoComponent', () => {
       select.dispatchEvent(new Event('change'));
       expect(live.liveGroupId()).toBeNull();
     });
+
+    it('élő játék: futó (közzé nem tett) dolgozat-kiadásnál az indítás helyett magyarázat látszik', () => {
+      const test = { id: 9, groupId: 3, groupName: 'Élő', assignedAt: '2026-10-25T10:00:00Z', isTest: true, resultsPublishedAt: null };
+      const fixture = configure(makeDetail({ isPublished: true, assignments: [test] }), [makeGroup({ id: 3, name: 'Élő' })]);
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="quiz-live-test-block"]')).not.toBeNull();
+      expect(el.querySelector('#elo select')).toBeNull();
+    });
+
+    it('élő játék: közzétett dolgozat után újra indítható', () => {
+      const test = { id: 9, groupId: 3, groupName: 'Élő', assignedAt: '2026-10-25T10:00:00Z', isTest: true,
+        resultsPublishedAt: '2026-10-25T12:00:00Z' };
+      const fixture = configure(makeDetail({ isPublished: true, assignments: [test] }), [makeGroup({ id: 3, name: 'Élő' })]);
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="quiz-live-test-block"]')).toBeNull();
+      expect(el.querySelector('#elo select')).not.toBeNull();
+    });
   });
 
   describe('startEdit() - el nem mentett módosítás védelme (UI-TT-218)', () => {

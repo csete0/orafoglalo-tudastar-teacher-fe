@@ -108,6 +108,8 @@ export interface TeacherQuizAssignmentDto {
   /** Dolgozatként kiadva (kötelező ablak + időkorlát, egy kitöltés, eredmény a közzétételig rejtve). */
   isTest?: boolean;
   timeLimitSeconds?: number | null;
+  /** Dolgozatnál: az eredmény közzététele (addig a kvíz élő játékban nem indítható). */
+  resultsPublishedAt?: string | null;
 }
 
 // ── Kérések ───────────────────────────────────────────────────

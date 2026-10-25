@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { finalize, take } from 'rxjs';
 import { TeacherQuizDetailDto } from '../../../models/teacher-quiz.model';
@@ -24,6 +24,11 @@ import { groupLabeler } from './quiz-labels';
 
     @if (!quiz().isPublished) {
       <p class="text-sm text-text-muted">Előbb publikáld a kvízt, utána indíthatsz élő játékot.</p>
+    } @else if (hasOpenTest()) {
+      <p class="text-sm text-text-muted" data-testid="quiz-live-test-block">
+        Ez a kvíz dolgozatként ki van adva - élő játékban csak a dolgozat eredményének közzététele után indítható
+        (különben a kérdések és a megoldások a dolgozat közben kiderülnének).
+      </p>
     } @else {
       <div class="flex flex-wrap items-end gap-3">
         <label class="block grow max-w-xs">
@@ -56,6 +61,11 @@ export class QuizLiveComponent {
   readonly quiz = input.required<TeacherQuizDetailDto>();
 
   readonly groupLabel = groupLabeler(this.groupStore.groups);
+
+  /** Futó (vissza nem vont, közzé nem tett) dolgozat-kiadás: a backend is elutasítja az élő játékot. */
+  readonly hasOpenTest = computed(() =>
+    this.quiz().assignments.some((a) => a.isTest && !a.revokedAt && !a.resultsPublishedAt),
+  );
 
   readonly liveGroupId = signal<number | null>(null);
   readonly livePending = signal(false);

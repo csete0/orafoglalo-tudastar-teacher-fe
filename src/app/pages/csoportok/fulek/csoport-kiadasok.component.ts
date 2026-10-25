@@ -14,6 +14,7 @@ import { TeacherGroupTaskSetAssignmentDto } from '../../../models/teacher-conten
 import { ProjectAssignmentDto, RUNTIME_LABELS } from '../../../models/teacher-project.model';
 import { ORAL_MODE_LABELS, TeacherOralAssignmentDto } from '../../../models/teacher-oral-exam.model';
 import { parseUtc } from '../../../shared/utc-date.util';
+import { extractErrorMessage } from '../../../shared/http-error/extract-error-message.util';
 
 /** 48 órán belül lejáró határidő - vizuális sürgősség. */
 export function isDueSoon(dueAt: string, now = Date.now()): boolean {
@@ -271,7 +272,7 @@ export class CsoportKiadasokComponent implements OnInit {
       .subscribe({
         next: (room) =>
           void this.router.navigate(['/feladatsorok', 'kvizek', assignment.quizId, 'elo', room.kahootSessionId]),
-        error: () => this.liveStartError.set('Az élő játék indítása sikertelen.'),
+        error: (err) => this.liveStartError.set(extractErrorMessage(err, 'Az élő játék indítása sikertelen.')),
       });
   }
 }
