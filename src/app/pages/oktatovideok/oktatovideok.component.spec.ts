@@ -5,6 +5,8 @@ import { Observable, of, throwError } from 'rxjs';
 import { TutorialVideoList } from '../../models/tutorial-video.model';
 import { TutorialVideoService } from '../../services/tutorial-video/tutorial-video.service';
 import { OktatovideokComponent } from './oktatovideok.component';
+import { signal } from '@angular/core';
+import { AuthStore } from '../../services/auth/store/auth.store';
 
 const LIST: TutorialVideoList = {
   categories: [
@@ -24,7 +26,10 @@ describe('OktatovideokComponent', () => {
   let streamUrl: ReturnType<typeof vi.fn>;
   let queryV: string | null;
 
+  const isDemo = signal(false);
+
   beforeEach(() => {
+    isDemo.set(false);
     list = () => of(LIST);
     streamUrl = vi.fn((id: string) => of(`https://api/stream/${id}?token=a`));
     queryV = null;
@@ -35,6 +40,7 @@ describe('OktatovideokComponent', () => {
       imports: [OktatovideokComponent],
       providers: [
         provideRouter([]),
+        { provide: AuthStore, useValue: { isDemo } },
         { provide: TutorialVideoService, useValue: { list: () => list(), streamUrl } },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(queryV ? { v: queryV } : {}) } } },
       ],
@@ -109,6 +115,13 @@ describe('OktatovideokComponent', () => {
     expect(locked.querySelector('app-icon')).toBeTruthy();
     expect(locked.querySelector('a')!.getAttribute('href')).toContain('/subscriptions');
     expect(el(fixture).querySelector('[data-testid="tutorial-card"]')).toBeNull();
+  });
+
+  it('demó-fiókban a fizetőfalon nincs előfizetés-link (PATRICKS-DEMO-KORNYEZET-TERV.md F6)', async () => {
+    isDemo.set(true);
+    list = () => throwError(() => new HttpErrorResponse({ status: 403, error: { errorType: 'SubscriptionRequired' } }));
+    const fixture = await create();
+    expect(el(fixture).querySelector('[data-testid="tutorial-locked"]')!.querySelector('a')).toBeNull();
   });
 
   it('más hiba: hibaüzenet, nem fizetőfal; üres lista: „hamarosan”', async () => {
