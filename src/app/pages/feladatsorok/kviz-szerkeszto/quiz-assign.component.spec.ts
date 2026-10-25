@@ -31,6 +31,7 @@ describe('QuizAssignComponent', () => {
   function setup() {
     const navigate = vi.fn().mockResolvedValue(true);
     const deleteQuiz = vi.fn((_id: number, onSuccess?: () => void) => onSuccess?.());
+    const assignToGroup = vi.fn();
     const confirm = { ask: vi.fn().mockResolvedValue(true) };
     const toast = { success: vi.fn(), warning: vi.fn(), danger: vi.fn() };
 
@@ -39,7 +40,7 @@ describe('QuizAssignComponent', () => {
       providers: [
         {
           provide: TeacherQuizStore,
-          useValue: { loading: () => false, deleteQuiz, assignToGroup: vi.fn(), revokeAssignment: vi.fn() },
+          useValue: { loading: () => false, deleteQuiz, assignToGroup, revokeAssignment: vi.fn() },
         },
         { provide: GroupStore, useValue: { groups: signal([]), activeGroups: () => [] } },
         { provide: ConfirmService, useValue: confirm },
@@ -52,8 +53,24 @@ describe('QuizAssignComponent', () => {
     fixture.componentRef.setInput('quizId', 40);
     fixture.componentRef.setInput('quiz', makeQuiz());
     fixture.detectChanges();
-    return { fixture, navigate, deleteQuiz };
+    return { fixture, navigate, deleteQuiz, assignToGroup };
   }
+
+  it('dolgozatként: kötelező ablak + időkorlát, és a kérés viszi az isTest-et és a perceket', () => {
+    const { fixture, assignToGroup } = setup();
+    const form = fixture.componentInstance.assignForm;
+    form.patchValue({ groupId: 3, isTest: true, timeLimitMinutes: null });
+    expect(form.errors).toEqual({ testWindowRequired: true });
+
+    const local = (ms: number) => { const d = new Date(Date.now() + ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
+    form.patchValue({ opensAt: local(3600_000), dueAt: local(2 * 3600_000) });
+    expect(form.errors).toEqual({ testTimeLimit: true });
+    form.patchValue({ timeLimitMinutes: 20 });
+    expect(form.valid).toBe(true);
+
+    fixture.componentInstance.assign();
+    expect(assignToGroup).toHaveBeenCalledWith(40, expect.objectContaining({ groupId: 3, isTest: true, timeLimitMinutes: 20 }), expect.any(Function));
+  });
 
   // UI-TT-244: a "Kvíz törlése" sikeres törlés után a NEM LÉTEZŐ '/kvizek' útvonalra navigál
   // (a valódi lista a 'feladatsorok' alá van beágyazva: app.routes.ts 'feladatsorok' -> 'kvizek'

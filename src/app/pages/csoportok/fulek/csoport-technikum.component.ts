@@ -2,15 +2,16 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { VizsgareszTerkepComponent } from '../../technikum/vizsgaresz-terkep.component';
 import { CsoportCsapatokComponent } from '../../csapatok/csoport-csapatok.component';
 import { VideoHelpComponent } from '../../../shared/video-help/video-help.component';
+import { ElmeletiDolgozatKiadasComponent } from '../../technikum/elmeleti-dolgozat-kiadas.component';
 
 /**
- * Csoportoldal „Technikum” fül: felül a vizsgarész-térkép, alul a vizsgaremek-csapatok - mindkettő változatlanul
+ * Csoportoldal „Technikum” fül: felül a vizsgarész-térkép és az elméleti dolgozat kiadása, alul a vizsgaremek-csapatok - változatlanul
  * hosztolva. Hogy melyik látszik, a szülő dönti el (a fül maga is eltűnik, ha egyik sem elérhető).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-csoport-technikum',
-  imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent, VideoHelpComponent],
+  imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent, VideoHelpComponent, ElmeletiDolgozatKiadasComponent],
   template: `
     <div class="space-y-10">
       @if (showTerkep()) {
@@ -20,6 +21,10 @@ import { VideoHelpComponent } from '../../../shared/video-help/video-help.compon
             <app-video-help video="technikum" />
           </div>
           <app-vizsgaresz-terkep [groupId]="groupId()" (unavailable)="terkepUnavailable.emit()" />
+        </section>
+        <section aria-labelledby="elmeleti-dolgozat">
+          <h2 id="elmeleti-dolgozat" class="text-lg font-bold scroll-mt-20 mb-3">Elméleti dolgozat</h2>
+          <app-elmeleti-dolgozat-kiadas [groupId]="groupId()" />
         </section>
       }
       @if (showCsapatok()) {

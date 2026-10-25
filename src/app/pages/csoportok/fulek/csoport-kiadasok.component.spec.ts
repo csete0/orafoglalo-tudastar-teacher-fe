@@ -35,14 +35,14 @@ describe('CsoportKiadasokComponent', () => {
     opensAt: null, dueAt: null, createdAt: '2026-10-22T08:00:00', revokedAt: null, resultsPublishedAt: null, studentCount: 2,
   };
 
-  function setup(taskSets: TeacherGroupTaskSetAssignmentDto[] = [], opts: { quizError?: boolean; oral?: unknown } = {}) {
+  function setup(taskSets: TeacherGroupTaskSetAssignmentDto[] = [], opts: { quizError?: boolean; oral?: unknown; quizzes?: TeacherGroupAssignmentDto[] } = {}) {
     const kahoot = { createRoom: vi.fn(() => of({ kahootSessionId: 77 })) };
     const oralApi = { assignments: vi.fn(() => opts.oral ?? of([oral])) };
     TestBed.configureTestingModule({
       imports: [CsoportKiadasokComponent],
       providers: [
         provideRouter([]),
-        { provide: TeacherQuizService, useValue: { getGroupAssignments: vi.fn(() => (opts.quizError ? throwError(() => new Error('x')) : of([quiz]))) } },
+        { provide: TeacherQuizService, useValue: { getGroupAssignments: vi.fn(() => (opts.quizError ? throwError(() => new Error('x')) : of(opts.quizzes ?? [quiz]))) } },
         { provide: TeacherTaskSetService, useValue: { getGroupTaskSetAssignments: vi.fn(() => of(taskSets)) } },
         { provide: TeacherProjectService, useValue: { forGroup: vi.fn(() => of([])) } },
         { provide: KahootHostService, useValue: kahoot },
@@ -60,6 +60,18 @@ describe('CsoportKiadasokComponent', () => {
     expect(el.textContent).toContain('Algebrai alapok');
     expect(el.querySelector('#kvizek')?.textContent).toContain('Kvízek');
     expect(el.textContent).toContain('Törtek');
+  });
+
+  it('kvíz-dolgozat: „Dolgozat” jelvény idővel, és az élő játék helyett az áttekintőre visz', () => {
+    const test: TeacherGroupAssignmentDto = {
+      ...quiz, assignmentId: 31, isTest: true, timeLimitSeconds: 1800, opensAt: '2026-10-25T08:00:00Z', dueAt: '2026-10-25T09:00:00Z',
+      resultsPublishedAt: '2026-10-25T10:00:00Z',
+    };
+    const { el } = setup([], { quizzes: [test] });
+    expect(el.textContent).toContain('Dolgozat · 30 perc');
+    expect(el.textContent).toContain('eredmény közzétéve');
+    expect(el.querySelector('[data-testid="quiz-test-overview-31"]')!.getAttribute('href')).toBe('/dolgozatok/kviz/31');
+    expect(el.textContent).not.toContain('Élő indítás');
   });
 
   it('B4: üres feladatsor-kiadás listánál nincs hiba', () => {

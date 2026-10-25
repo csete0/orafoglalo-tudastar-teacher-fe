@@ -5,6 +5,12 @@ import { CsoportTechnikumComponent } from './csoport-technikum.component';
 import { VizsgareszTerkepComponent } from '../../technikum/vizsgaresz-terkep.component';
 import { CsoportCsapatokComponent } from '../../csapatok/csoport-csapatok.component';
 import { VideoHelpComponent } from '../../../shared/video-help/video-help.component';
+import { ElmeletiDolgozatKiadasComponent } from '../../technikum/elmeleti-dolgozat-kiadas.component';
+
+@Component({ selector: 'app-elmeleti-dolgozat-kiadas', template: '' })
+class ElmeletiStub {
+  readonly groupId = input.required<number>();
+}
 
 @Component({ selector: 'app-vizsgaresz-terkep', template: '' })
 class TerkepStub {
@@ -26,8 +32,8 @@ class VideoHelpStub {
 describe('CsoportTechnikumComponent', () => {
   function setup(showTerkep: boolean, showCsapatok: boolean) {
     TestBed.configureTestingModule({ imports: [CsoportTechnikumComponent] }).overrideComponent(CsoportTechnikumComponent, {
-      remove: { imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent, VideoHelpComponent] },
-      add: { imports: [TerkepStub, CsapatokStub, VideoHelpStub] },
+      remove: { imports: [VizsgareszTerkepComponent, CsoportCsapatokComponent, VideoHelpComponent, ElmeletiDolgozatKiadasComponent] },
+      add: { imports: [TerkepStub, CsapatokStub, VideoHelpStub, ElmeletiStub] },
     });
     const fixture = TestBed.createComponent(CsoportTechnikumComponent);
     fixture.componentRef.setInput('groupId', 7);

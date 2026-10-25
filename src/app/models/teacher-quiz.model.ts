@@ -105,6 +105,9 @@ export interface TeacherQuizAssignmentDto {
   opensAt?: string | null;
   dueAt?: string | null;
   revokedAt?: string | null;
+  /** Dolgozatként kiadva (kötelező ablak + időkorlát, egy kitöltés, eredmény a közzétételig rejtve). */
+  isTest?: boolean;
+  timeLimitSeconds?: number | null;
 }
 
 // ── Kérések ───────────────────────────────────────────────────
@@ -144,6 +147,9 @@ export interface AssignTeacherQuizRequest {
   groupId: number;
   opensAt?: string | null;
   dueAt?: string | null;
+  isTest?: boolean;
+  /** A teljes kitöltés időkorlátja (5-240 perc); lejártkor a rendszer beadja. Dolgozatnál kötelező. */
+  timeLimitMinutes?: number | null;
 }
 
 export interface GenerateTeacherQuizQuestionsRequest {
@@ -283,6 +289,88 @@ export interface TeacherGroupAssignmentDto {
   memberCount: number;
   hasActiveLiveRoom: boolean;
   activeKahootSessionId?: number | null;
+  isTest?: boolean;
+  timeLimitSeconds?: number | null;
+  resultsPublishedAt?: string | null;
+  /** Technikumi elméleti dolgozat ('szakmai' | 'alapvizsga' | 'topic'); null = saját kvíz. */
+  technikumTheoryKind?: string | null;
+}
+
+/** A kvíz-dolgozat tanári áttekintője (GET api/teacher/quiz-tests/{assignmentId}). */
+export interface QuizTestOverviewDto {
+  assignmentId: number;
+  quizId: number;
+  title: string;
+  groupId: number;
+  groupName: string;
+  opensAt: string;
+  dueAt: string;
+  timeLimitSeconds: number;
+  questionCount: number;
+  isKkk: boolean;
+  technikumTheoryKind: string | null;
+  resultsPublishedAt: string | null;
+  canPublish: boolean;
+  students: QuizTestStudentDto[];
+}
+
+export type QuizTestStudentStatus = 'not_started' | 'in_progress' | 'submitted';
+
+export interface QuizTestStudentDto {
+  userId: number;
+  name: string;
+  leftGroup: boolean;
+  status: QuizTestStudentStatus;
+  sessionId: number | null;
+  startedAt: string | null;
+  submittedAt: string | null;
+  correctAnswers: number | null;
+  answeredCount: number | null;
+  totalQuestions: number;
+  points: number | null;
+  maxPoints: number | null;
+  passed: boolean | null;
+}
+
+/** Egy diák kitöltése kérdésenként (a diák válasza + megoldás). */
+export interface QuizTestReviewDto {
+  sessionId: number;
+  score: number;
+  totalQuestions: number;
+  examPoints: number | null;
+  maxExamPoints: number | null;
+  items: QuizTestReviewItemDto[];
+}
+
+export interface QuizTestReviewItemDto {
+  questionId: number;
+  order: number;
+  questionText: string;
+  questionType: string;
+  options: string[];
+  userAnswers: string[];
+  correctAnswers: string[];
+  isCorrect: boolean;
+  examPoints: number | null;
+  explanation: string | null;
+}
+
+/** Kiadható technikumi elméleti teszt (szakmai próbateszt, alapvizsga, témakör). */
+export interface TheoryTestOptionDto {
+  kind: 'szakmai' | 'alapvizsga' | 'topic';
+  topicKey: string | null;
+  name: string;
+  questionCount: number;
+  defaultMinutes: number;
+}
+
+export interface CreateTheoryTestRequest {
+  groupId: number;
+  kind: TheoryTestOptionDto['kind'];
+  topicKey: string | null;
+  opensAt: string;
+  dueAt: string;
+  timeLimitMinutes: number;
 }
 
 /** Kérdésenkénti item-analízis - ez mondja meg, MIT kell újra elmagyarázni. */

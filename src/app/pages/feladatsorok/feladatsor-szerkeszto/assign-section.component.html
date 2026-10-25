@@ -75,21 +75,7 @@
       <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
     </label>
 
-    @if (assignForm.errors?.['opensAtAfterDueAt']) {
-      <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
-    }
-    @if (assignForm.errors?.['testWindowRequired']) {
-      <p class="text-sm text-text-muted">Dolgozatnál add meg, mettől meddig írható meg.</p>
-    }
-    @if (assignForm.errors?.['testDueInPast']) {
-      <p class="text-sm text-danger">A dolgozat határideje már elmúlt - adj meg egy jövőbeli időpontot.</p>
-    }
-    @if (assignForm.errors?.['testTimeLimit']) {
-      <p class="text-sm text-danger">Az időkorlát 5 és 240 perc között lehet.</p>
-    }
-    @if (assignForm.errors?.['testWindowTooShort']) {
-      <p class="text-sm text-danger">A megírható időszak legyen legalább olyan hosszú, mint az időkorlát.</p>
-    }
+    <app-test-window-errors [errors]="assignForm.errors" />
 
     <button
       type="submit"

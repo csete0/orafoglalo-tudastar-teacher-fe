@@ -1,13 +1,14 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TeacherQuizDetailDto } from '../../../models/teacher-quiz.model';
 import { GroupStore } from '../../../services/group/group.store';
 import { TeacherQuizStore } from '../../../services/teacher-quiz/teacher-quiz.store';
 import { ConfirmService } from '../../../shared/confirm/confirm.service';
 import { IconComponent } from '../../../shared/icon/icon.component';
 import { ToastService } from '../../../shared/toast/toast.service';
+import { TestWindowErrorsComponent, testWindowValidator } from '../../../shared/test-window/test-window';
 import { groupLabeler } from './quiz-labels';
 
 /** „Kiadás csoportnak”: aktív kiadások visszavonással, új kiadás, és a szekció alján a kvíz törlése. */
@@ -16,7 +17,7 @@ import { groupLabeler } from './quiz-labels';
   selector: 'app-quiz-assign',
   standalone: true,
   host: { class: 'block' },
-  imports: [ReactiveFormsModule, IconComponent, DatePipe],
+  imports: [ReactiveFormsModule, IconComponent, DatePipe, RouterLink, TestWindowErrorsComponent],
   template: `
     <h2 class="font-bold mb-3">Kiadás csoportnak</h2>
 
@@ -26,6 +27,12 @@ import { groupLabeler } from './quiz-labels';
           <app-icon name="users" class="w-4 h-4 block text-text-muted" />
           <span class="flex-1">
             {{ groupLabel(assignment.groupId, assignment.groupName) }}
+            @if (assignment.isTest) {
+              <span class="badge badge-warning">Dolgozat · {{ (assignment.timeLimitSeconds ?? 0) / 60 }} perc</span>
+              <a class="text-primary font-semibold" [routerLink]="['/dolgozatok', 'kviz', assignment.id]">Áttekintés</a>
+            } @else if (assignment.timeLimitSeconds) {
+              <span class="badge badge-neutral">{{ assignment.timeLimitSeconds / 60 }} perc</span>
+            }
             @if (assignment.opensAt) {
               <span class="text-text-muted">· nyílik: {{ assignment.opensAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
             }
@@ -55,19 +62,39 @@ import { groupLabeler } from './quiz-labels';
           </select>
         </label>
 
+        <label class="flex items-start gap-2">
+          <input formControlName="isTest" type="checkbox" class="mt-1" data-testid="quiz-assign-is-test" />
+          <span>
+            <span class="font-semibold">Dolgozatként adom ki</span>
+            <span class="block text-sm text-text-muted">
+              Egyszer írható meg a megadott időablakban és időkorláttal; lejártkor a rendszer beadja. A pontot és a megoldásokat a
+              diákok csak a közzétételed után látják, a Dolgozataim között.
+            </span>
+          </span>
+        </label>
+
         <label class="block">
-          <span class="text-sm text-text-muted">Nyitás dátuma (nem kötelező)</span>
+          <span class="text-sm text-text-muted">
+            {{ assignForm.controls.isTest.value ? 'Időkorlát (perc)' : 'Időkorlát a teljes kitöltésre (perc, nem kötelező)' }}
+          </span>
+          <input formControlName="timeLimitMinutes" type="number" min="5" max="240" class="input mt-1" data-testid="quiz-assign-time-limit" />
+        </label>
+
+        <label class="block">
+          <span class="text-sm text-text-muted">
+            {{ assignForm.controls.isTest.value ? 'Megírható ettől' : 'Nyitás dátuma (nem kötelező)' }}
+          </span>
           <input formControlName="opensAt" type="datetime-local" class="input mt-1" />
         </label>
 
         <label class="block">
-          <span class="text-sm text-text-muted">Határidő (nem kötelező)</span>
+          <span class="text-sm text-text-muted">
+            {{ assignForm.controls.isTest.value ? 'Megírható eddig (utána a rendszer beadja)' : 'Határidő (nem kötelező)' }}
+          </span>
           <input formControlName="dueAt" type="datetime-local" class="input mt-1" />
         </label>
 
-        @if (assignForm.errors?.['opensAtAfterDueAt']) {
-          <p class="text-sm text-danger">A nyitás dátuma nem lehet a határidő után.</p>
-        }
+        <app-test-window-errors [errors]="assignForm.errors" />
 
         <button
           type="submit"
@@ -112,17 +139,11 @@ export class QuizAssignComponent {
       groupId: this.fb.control<number | null>(null, Validators.required),
       opensAt: [''],
       dueAt: [''],
+      // Dolgozat: kötelező ablak + időkorlát; sima kiadásnál az időkorlát opcionális (a szerver is ellenőrzi).
+      isTest: [false],
+      timeLimitMinutes: this.fb.control<number | null>(null),
     },
-    {
-      validators: (group) => {
-        const opensAt = group.get('opensAt')?.value;
-        const dueAt = group.get('dueAt')?.value;
-        if (opensAt && dueAt && new Date(opensAt) > new Date(dueAt)) {
-          return { opensAtAfterDueAt: true };
-        }
-        return null;
-      },
-    },
+    { validators: testWindowValidator() },
   );
 
   readonly activeAssignments = computed(() => this.quiz().assignments.filter((a) => !a.revokedAt));
@@ -145,9 +166,11 @@ export class QuizAssignComponent {
         // hogy a szerver ne értelmezhesse félre.
         opensAt: raw.opensAt ? new Date(raw.opensAt).toISOString() : null,
         dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : null,
+        isTest: raw.isTest,
+        timeLimitMinutes: raw.timeLimitMinutes ? Number(raw.timeLimitMinutes) : null,
       },
       () => {
-        this.toastService.success('Kvíz kiadva.');
+        this.toastService.success(raw.isTest ? 'Dolgozat kiadva.' : 'Kvíz kiadva.');
         this.assignForm.reset();
       },
     );

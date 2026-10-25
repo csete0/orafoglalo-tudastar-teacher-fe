@@ -43,11 +43,23 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
           @for (assignment of groupAssignments(); track assignment.assignmentId) {
             <li class="card !rounded-xl px-3 py-2 text-sm flex items-center gap-3 flex-wrap">
               <div class="min-w-0 flex-1">
-                <p class="font-medium truncate">{{ assignment.quizTitle }}</p>
+                <p class="font-medium truncate">
+                  {{ assignment.quizTitle }}
+                  @if (assignment.isTest) {
+                    <span class="badge badge-warning ml-1">Dolgozat · {{ (assignment.timeLimitSeconds ?? 0) / 60 }} perc</span>
+                  } @else if (assignment.timeLimitSeconds) {
+                    <span class="badge badge-neutral ml-1">{{ assignment.timeLimitSeconds / 60 }} perc</span>
+                  }
+                </p>
                 <p class="text-xs text-text-muted">
                   {{ assignment.questionCount }} kérdés
                   · megírta: {{ assignment.completedMemberCount }} / {{ assignment.memberCount }}
-                  @if (assignment.dueAt) {
+                  @if (assignment.isTest && assignment.opensAt && assignment.dueAt) {
+                    · megírható: {{ assignment.opensAt | date: 'MM.dd. HH:mm' }}–{{ assignment.dueAt | date: 'HH:mm' }}
+                    @if (assignment.resultsPublishedAt) {
+                      · <span class="text-success font-semibold">eredmény közzétéve</span>
+                    }
+                  } @else if (assignment.dueAt) {
                     · <span [class.text-danger]="isDueSoon(assignment.dueAt)">
                       határidő: {{ assignment.dueAt | date: 'yyyy.MM.dd. HH:mm' }}</span>
                   }
@@ -57,17 +69,22 @@ export function isDueSoon(dueAt: string, now = Date.now()): boolean {
                 </p>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'eredmenyek']"
-                   class="btn btn-ghost !px-2 !py-1 !text-xs">Eredmények</a>
-                @if (assignment.hasActiveLiveRoom) {
-                  <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'elo', assignment.activeKahootSessionId]"
-                     class="btn btn-primary !px-2 !py-1 !text-xs">Vezérlés</a>
+                @if (assignment.isTest) {
+                  <a [routerLink]="['/dolgozatok', 'kviz', assignment.assignmentId]" [attr.data-testid]="'quiz-test-overview-' + assignment.assignmentId"
+                     class="btn btn-primary !px-2 !py-1 !text-xs">Áttekintés</a>
                 } @else {
-                  <button type="button" (click)="startLive(assignment)"
-                          [disabled]="liveStartPending()"
-                          class="btn btn-primary !px-2 !py-1 !text-xs">
-                    Élő indítás
-                  </button>
+                  <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'eredmenyek']"
+                     class="btn btn-ghost !px-2 !py-1 !text-xs">Eredmények</a>
+                  @if (assignment.hasActiveLiveRoom) {
+                    <a [routerLink]="['/feladatsorok', 'kvizek', assignment.quizId, 'elo', assignment.activeKahootSessionId]"
+                       class="btn btn-primary !px-2 !py-1 !text-xs">Vezérlés</a>
+                  } @else {
+                    <button type="button" (click)="startLive(assignment)"
+                            [disabled]="liveStartPending()"
+                            class="btn btn-primary !px-2 !py-1 !text-xs">
+                      Élő indítás
+                    </button>
+                  }
                 }
               </div>
             </li>
