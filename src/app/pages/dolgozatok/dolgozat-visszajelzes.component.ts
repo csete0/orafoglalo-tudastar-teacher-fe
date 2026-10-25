@@ -17,7 +17,7 @@ import { IconComponent } from '../../shared/icon/icon.component';
 import { DialogShellComponent } from '../../shared/dialog/dialog-shell.component';
 import { extractErrorMessage } from '../../shared/http-error/extract-error-message.util';
 import { ReportService } from '../../services/report/report.service';
-import { aiHelperBlock, aiHelperErrorMessage, AiHelperQuotaItemDto, quotaRemaining } from '../../shared/ai-helper-quota.util';
+import { AI_HELPER_PREMIUM_TEXT, aiHelperBlock, aiHelperErrorMessage, AiHelperQuotaItemDto, quotaRemaining } from '../../shared/ai-helper-quota.util';
 
 /** Egy diák sora a párbeszédablakban. */
 export interface FeedbackRow {
@@ -275,7 +275,18 @@ export class DolgozatVisszajelzesComponent implements OnInit {
     this.reports
       .getAiHelperQuota()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (q) => this.quota.update((current) => current ?? q.testFeedback), error: () => {} });
+      .subscribe({
+        next: (q) => {
+          // UI-TT-249: nem Prémium tanárnál előre tiltva (mint a többi MI-segítőnél), nem csak a sikertelen kérés után.
+          if (q.premium === false) {
+            this.draftError.set(AI_HELPER_PREMIUM_TEXT);
+            this.blocked.set(true);
+            return;
+          }
+          this.quota.update((current) => current ?? q.testFeedback);
+        },
+        error: () => {},
+      });
   }
 
   /**
