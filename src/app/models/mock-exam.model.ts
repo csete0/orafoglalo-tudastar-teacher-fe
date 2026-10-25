@@ -1,7 +1,8 @@
 // Próbaérettségi (tanár) - lásd DigitalCulture.Domain.Entities.MockExams.MockExamDtos (PATRICKS-PROBAERETTSEGI-TERV.md E).
 
 export type MockExamLevel = 'kozep' | 'emelt';
-export type MockExamMemberStatus = 'notRegistered' | 'registered' | 'started' | 'submitted' | 'notStarted';
+/** `elsewhere`: magától vagy más csoporttal jelentkezett - a jelentkezése és az eredménye az övé, ez a nézet nem mutatja. */
+export type MockExamMemberStatus = 'notRegistered' | 'registered' | 'started' | 'submitted' | 'notStarted' | 'elsewhere';
 
 /** A nyilvános aktuális esemény - a tanári appban csak a menüponthoz és a slughoz kell. */
 export interface MockExamCurrent { slug: string; title: string; }
@@ -59,4 +60,5 @@ export interface MockExamGroupResults {
 export const MOCK_EXAM_LEVEL_LABEL: Record<MockExamLevel, string> = { kozep: 'közép', emelt: 'emelt' };
 export const MOCK_EXAM_MEMBER_STATUS_LABEL: Record<MockExamMemberStatus, string> = {
   notRegistered: 'nem jelentkezett', registered: 'jelentkezett', started: 'elkezdte', submitted: 'beadta', notStarted: 'nem kezdte el',
+  elsewhere: 'önállóan jelentkezett',
 };

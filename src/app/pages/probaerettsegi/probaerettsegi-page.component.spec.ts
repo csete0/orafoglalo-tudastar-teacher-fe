@@ -20,7 +20,9 @@ const RESULTS = (published: boolean): MockExamGroupResults => ({
   groupId: 2, groupName: '12.B', resultsPublished: published, avgPercent: published ? 64 : null, distribution: [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
   members: [{ userId: 7, name: 'Kiss Anna', emailConfirmed: false, level: 'emelt', status: published ? 'submitted' : 'started',
     points: published ? 64 : null, maxPoints: published ? 100 : null, percent: published ? 64 : null, grade: published ? 3 : null,
-    rank: published ? 12 : null, percentile: published ? 51 : null, focusLossCount: published ? 1 : null, pasteCount: published ? 0 : null, tasks: [] }],
+    rank: published ? 12 : null, percentile: published ? 51 : null, focusLossCount: published ? 1 : null, pasteCount: published ? 0 : null, tasks: [] },
+  { userId: 8, name: 'Nagy Béla', emailConfirmed: true, level: null, status: 'elsewhere', points: null, maxPoints: null, percent: null, grade: null,
+    rank: null, percentile: null, focusLossCount: null, pasteCount: null, tasks: [] }],
 });
 
 describe('ProbaerettsegiPageComponent', () => {
@@ -106,6 +108,8 @@ describe('ProbaerettsegiPageComponent', () => {
       expect(panel).toContain('megerősítetlen e-mail');
       expect(panel.includes('Percentilis')).toBe(published);
       expect(panel).toContain(published ? 'beadta' : 'elkezdte');
+      // A magától jelentkezett tag csak jelölve, eredmény nélkül (BE-MOCKEXAM-TEACHERRESULTS-UNSCOPED-GROUPMEMBERSHIP-LEAK).
+      expect(panel).toContain('önállóan jelentkezett');
     }
   });
 });
