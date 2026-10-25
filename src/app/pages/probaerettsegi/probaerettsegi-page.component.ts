@@ -122,7 +122,7 @@ import {
                 </thead>
                 <tbody>
                   @for (m of r.members; track m.userId) {
-                    <tr [class.opacity-60]="m.status === 'notRegistered' || m.status === 'notStarted'">
+                    <tr [class.opacity-60]="m.status === 'notRegistered' || m.status === 'notStarted' || m.status === 'elsewhere'">
                       <td class="sticky-col whitespace-nowrap">
                         {{ m.name }}
                         @if (!m.emailConfirmed) {
@@ -130,7 +130,7 @@ import {
                         }
                       </td>
                       <td>{{ m.level ? levelLabel[m.level] : '–' }}</td>
-                      <td class="whitespace-nowrap">{{ statusLabel[m.status] }}</td>
+                      <td class="whitespace-nowrap" [title]="m.status === 'elsewhere' ? 'Nem ezzel a csoporttal jelentkezett: az eredménye az övé' : ''">{{ statusLabel[m.status] }}</td>
                       @if (r.resultsPublished) {
                         <td class="num text-right whitespace-nowrap" [title]="taskTitle(m)">{{ m.points != null ? m.points + ' / ' + m.maxPoints : '–' }}</td>
                         <td class="num text-right">{{ m.percent != null ? (m.percent | number: '1.0-1') + '%' : '–' }}</td>
