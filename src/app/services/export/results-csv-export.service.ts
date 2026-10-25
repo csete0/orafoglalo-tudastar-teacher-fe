@@ -137,7 +137,7 @@ export class ResultsCsvExportService {
     const cells: string[] = [student.name];
 
     if (!student.hasSession) {
-      cells.push(student.hasPractice ? PRACTICE_ONLY : 'nem kezdte el', NO_VALUE);
+      cells.push(student.hasPractice ? PRACTICE_ONLY : 'nincs beadás', NO_VALUE);
     } else if (!student.isCompleted) {
       // A még folyamatban lévő diák összesítője FÉLKÉSZ: a mátrix ezért ír mellé
       // "folyamatban" badge-et (UI-TT-49). A képernyőn a szám és a figyelmeztetés

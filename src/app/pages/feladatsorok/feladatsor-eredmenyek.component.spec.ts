@@ -236,7 +236,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(text).toContain('12 / 15');
   });
 
-  it('nem-kezdett diáknál "nem kezdte el" jelenik meg, nem pontszám', () => {
+  it('beadás nélküli diáknál "nincs beadás" jelenik meg, nem pontszám', () => {
     configure(makeResults());
     const fixture = TestBed.createComponent(FeladatsorEredmenyekComponent);
     fixture.detectChanges();
@@ -244,7 +244,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     const rows = fixture.nativeElement.querySelectorAll('tbody tr');
     const nagyRow = Array.from(rows).find((r) => (r as HTMLElement).textContent?.includes('Nagy Béla')) as HTMLElement;
 
-    expect(nagyRow.textContent).toContain('nem kezdte el');
+    expect(nagyRow.textContent).toContain('nincs beadás');
     expect(nagyRow.className).toContain('opacity-70');
   });
 
@@ -270,7 +270,7 @@ describe('FeladatsorEredmenyekComponent', () => {
     expect(anna.querySelectorAll('button')[0].textContent).not.toContain('9/10');
 
     expect(bela.textContent).toContain('csak gyakorolt');
-    expect(bela.textContent).not.toContain('nem kezdte el');
+    expect(bela.textContent).not.toContain('nincs beadás');
     expect(bela.className).not.toContain('opacity-70');
     const badges = bela.querySelectorAll('[data-testid="practice-badge"]');
     expect(badges.length).toBe(1);

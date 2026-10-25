@@ -141,7 +141,7 @@ describe('ResultsCsvExportService', () => {
     const csv = service.buildCsv(results);
     const studentLine = csv.split('\r\n')[1];
 
-    expect(studentLine).toContain('nem kezdte el');
+    expect(studentLine).toContain('nincs beadás');
     expect(studentLine).not.toContain('0');
   });
 

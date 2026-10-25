@@ -90,7 +90,7 @@ import {
               <option value="all">Összes</option>
               <option value="completed">Befejezett</option>
               <option value="inProgress">Folyamatban</option>
-              <option value="notStarted">Nem kezdte el</option>
+              <option value="notStarted">Nincs beadás</option>
             </select>
           </div>
           @if (weakest()[0]; as w) {
@@ -146,7 +146,9 @@ import {
                       <span class="badge badge-secondary !text-[10px] !px-1.5 !py-0.5"
                         title="A feladatsort nem írta meg, de gyakorló módban értékelést kért rá.">csak gyakorolt</span>
                     } @else {
-                      nem kezdte el
+                      <!-- A gyakorló módú mentés/futtatás nem jut el ide (BE-TEACHERREPORT-TASKSETRESULTS-GYAKORLAS-IGNORES-CODERUN):
+                           a „nem kezdte el” ezért hamis lehet. -->
+                      <span title="Nem írta meg a feladatsort, és gyakorló értékelést sem kért. A gyakorló módú szerkesztés és futtatás itt nem látszik.">nincs beadás</span>
                     }
                   </td>
                   @for (cell of row.taskResults; track cell.taskId) {

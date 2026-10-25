@@ -331,4 +331,37 @@ describe('DolgozatVisszajelzesComponent', () => {
     expect(confirm.ask).toHaveBeenCalled();
     expect(closed).not.toHaveBeenCalled();
   });
+
+  // BE-TEACHERFEEDBACK-QUOTA-IGNORES-PREMIUM-FLAG: a quota-válasz `premium: false` mezőjét a sógor-komponensek
+  // (asztali-feladat, kviz-szovegbol, irodai-megoldasbol, szobeli-tema-vazlat, szobeli-kiadas-dialog, mi-segito-panel)
+  // mind felhasználják a gomb előzetes letiltására - ez a komponens nem olvassa ki, csak a sikertelen draftFeedback()
+  // hívás 400-as AiHelperPremiumRequired hibájából derül ki utólag, hogy a tanár nem Prémium.
+  it('nem Prémium tanárnál (quota.premium: false) a „Vázlat AI-val” előre tiltva, blokk-üzenettel (UI-TT-249)', () => {
+    reports = { getAiHelperQuota: vi.fn(() => of({ month: '2026-10', premium: false, quizSource: { used: 0, limit: 60 }, testFeedback: { used: 0, limit: 600 } })) };
+    const draftFeedback = vi.fn();
+    service = { draftFeedback, saveFeedback: vi.fn(() => of({ saved: 1, examSessionIds: [], notifiedStudents: 0 })) };
+    confirm = { ask: vi.fn().mockResolvedValue(true) };
+    toast = { success: vi.fn() };
+    TestBed.configureTestingModule({
+      imports: [DolgozatVisszajelzesComponent],
+      providers: [
+        { provide: ClassTestService, useValue: service },
+        { provide: ConfirmService, useValue: confirm },
+        { provide: ToastService, useValue: toast },
+        { provide: ReportService, useValue: reports },
+      ],
+    });
+    const fixture = TestBed.createComponent(DolgozatVisszajelzesComponent);
+    fixture.componentRef.setInput('assignmentId', 7);
+    fixture.componentRef.setInput('students', [student(1)]);
+    fixture.componentRef.setInput('published', false);
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+
+    // A valós sógor-mintát követve ennek itt is igaznak kellene lennie a megnyitás pillanatában - de a
+    // komponens sosem olvassa ki a quota.premium mezőt, így a gomb tévesen aktív marad.
+    expect(c.canGenerate()).toBe(false);
+    expect(q(fixture, 'feedback-blocked')).not.toBeNull();
+    expect(draftFeedback).not.toHaveBeenCalled();
+  });
 });
