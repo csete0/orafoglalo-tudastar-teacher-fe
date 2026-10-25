@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 import { TutorialVideo, TutorialVideoCategory, formatDuration } from '../../models/tutorial-video.model';
 import { TutorialVideoService } from '../../services/tutorial-video/tutorial-video.service';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { AuthStore } from '../../services/auth/store/auth.store';
 
 export const TUTORIAL_PREMIUM_MESSAGE =
   'Az oktatóvideók Prémium előfizetéssel érhetők el: rövid bemutatók a csoportokról, a kiadásról, az eredményekről és a feladatsorokról.';
@@ -44,7 +45,9 @@ type State = 'loading' | 'ready' | 'locked' | 'error';
             <div class="space-y-3 min-w-0">
               <p class="font-bold">Prémium funkció</p>
               <p class="text-sm text-text-muted">{{ premiumMessage }}</p>
-              <a [href]="subscriptionUrl" target="_blank" rel="noopener" class="btn btn-primary">Prémium előfizetés</a>
+              @if (!isDemo()) {
+                <a [href]="subscriptionUrl" target="_blank" rel="noopener" class="btn btn-primary">Prémium előfizetés</a>
+              }
             </div>
           </div>
         }
@@ -126,6 +129,8 @@ export class OktatovideokComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  /** Demó-fiókban (PATRICKS-DEMO-KORNYEZET-TERV.md F6) nincs vásárlásra mutató link. */
+  readonly isDemo = inject(AuthStore).isDemo;
   private readonly player = viewChild<ElementRef<HTMLElement>>('player');
 
   readonly premiumMessage = TUTORIAL_PREMIUM_MESSAGE;

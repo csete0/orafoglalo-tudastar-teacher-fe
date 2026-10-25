@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
+import { demoRestrictedGuard } from './guards/demo-restricted.guard';
 import { guestGuard } from './guards/guest.guard';
 import { roleGuard } from './guards/role.guard';
 
@@ -237,6 +238,7 @@ export const routes: Routes = [
   {
     // B6: Intézményi érdeklődés-űrlap — publikus, authGuard nélkül
     path: 'iskolaknak',
+    canActivate: [demoRestrictedGuard],
     loadComponent: () =>
       import('./pages/iskolaknak/iskolaknak.component').then((m) => m.IskolakNakComponent),
   },
