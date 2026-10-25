@@ -22,6 +22,7 @@ describe('AppComponent', () => {
             hasAdminRole: vi.fn().mockReturnValue(false),
             hasTeacherRole: vi.fn().mockReturnValue(true),
             currentUser: vi.fn().mockReturnValue({ firstName: 'Elek', lastName: 'Teszt', email: 'teszt@example.com' }),
+            demo: vi.fn().mockReturnValue(null),
             logout: vi.fn(),
           },
         },

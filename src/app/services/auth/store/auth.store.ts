@@ -42,6 +42,9 @@ export class AuthStore {
   readonly roles = computed<string[]>(() => this.currentUser()?.roles ?? []);
   readonly hasTeacherRole = computed(() => this.roles().includes('teacher'));
   readonly hasAdminRole = computed(() => this.roles().includes('admin'));
+  /** Demó-fiók környezete (PATRICKS-DEMO-KORNYEZET-TERV.md F6) - null valódi fióknál és kijelentkezve. */
+  readonly demo = computed(() => this.currentUser()?.demo ?? null);
+  readonly isDemo = computed(() => this.demo() !== null);
 
   constructor() {
     this.tokenService.onTokenRefreshed = async (response) => this.handleSuccessfulRefresh(response);

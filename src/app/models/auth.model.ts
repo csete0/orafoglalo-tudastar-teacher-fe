@@ -1,3 +1,5 @@
+import { DemoSession } from './demo-session.model';
+
 export interface TeacherUserLoginDto {
   id: number;
   userName: string;
@@ -5,6 +7,8 @@ export interface TeacherUserLoginDto {
   firstName: string;
   lastName: string;
   roles: string[];
+  /** Demó-fióknál a környezet (szalag, tiltott oldalak); valódi fióknál hiányzik. */
+  demo?: DemoSession | null;
 }
 
 export interface SignInModel {

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { DemoBannerComponent } from './shared/demo-banner/demo-banner.component';
 import { RouterOutlet } from '@angular/router';
 import { AuthStore } from './services/auth/store/auth.store';
 import { AppSidebarComponent } from './shared/app-sidebar/app-sidebar.component';
@@ -15,13 +16,14 @@ import { ToastComponent } from './shared/toast/toast.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, AppSidebarComponent, ToastComponent, ConfirmDialogComponent],
+  imports: [RouterOutlet, AppSidebarComponent, ToastComponent, ConfirmDialogComponent, DemoBannerComponent],
   template: `
     <div class="min-h-screen lg:flex">
       @if (authStore.isAuthenticated()) {
         <app-sidebar />
       }
       <main class="flex-1 min-w-0">
+        <app-demo-banner />
         <router-outlet />
       </main>
     </div>
