@@ -46,6 +46,32 @@ describe('ProjektekListaComponent (Projektek fül)', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement, c: fixture.componentInstance };
   }
 
+  it('a hozzáférés-figyelmeztetés a diák-oldali szám szerinti INGYENES VALÓDI lépésszámot mutatja, nem a nyers freeMilestoneCountot (ami a bevezetőt is beleszámolja)', async () => {
+    // bufe-rendelo: freeMilestoneCount=3 a backendben (bevezető=0. mérföldkő + 2 valódi ingyenes lépés, orderNo<3 szabad).
+    // A diák-oldali projektlista (project-list.component.html) ugyanerre a projektre "Az első 2 lépést ingyen
+    // kipróbálhatod"-ot ír (freeMilestoneCount - 1, a bevezetőt explicit kizárva - ld. project-list.component.ts
+    // "hasFreePart" kommentje: "a 0. mérföldkő a tervben mindig a bevezető"). Élőben (staging, 2026-10-25 05:16,
+    // friss ingyenes fiók, bufe-rendelo tanári kiadással) megerősítve: a diák 1. és 2. mérföldkövet (valódi, nem
+    // bevezető lépést) tudta ingyen megoldani és "Tovább"-ot nyomni, a 3.-nál 400 SubscriptionRequired jött.
+    // A tanári kártya szövege viszont a NYERS freeMilestoneCount-ot (3) írja ki közvetlenül - a tanár azt hiheti,
+    // 3 valódi lépésig jutnak ingyen a diákjai, holott csak 2-ig.
+    const { el } = await setup([project([assignment({ freeMilestoneCount: 3 })])]);
+    const text = el.querySelector('[data-testid="access-warning"]')?.textContent ?? '';
+    expect(text).toContain('3 diáknak nincs teljes hozzáférése');
+    expect(text).toContain('az első 2 lépésig jut el');
+  });
+
+  it('a katalógus-kártya "A lépések" összegzése (p.freeMilestoneCount, a kiadástól függetlenül, MINDEN tanár látja) szintén a bevezető nélküli valódi ingyenes számot kellene mutassa', async () => {
+    // Élőben (staging, 2026-10-25 05:25) megerősítve: a "Büfé-rendelő" katalógus-kártya "A lépések"
+    // kibontása (projektek-lista.component.ts:88, data-testid nélküli <details>) "Az első 3 lépés
+    // mindenkinek ingyenes"-t ír - ugyanaz a nyers freeMilestoneCount, ugyanaz az off-by-one, mint az
+    // access-warningnál, de ez MINDEN tanárnak látszik, nem csak azoknak, akiknek már van kiadásuk
+    // nem-teljes-hozzáférésű taggal - ez a bug gyakorlatibb, széleebb körű megnyilvánulása.
+    const { el } = await setup([{ ...project([]), freeMilestoneCount: 3 }]);
+    const details = el.querySelector('details')?.textContent ?? '';
+    expect(details).toContain('Az első 2 lépés mindenkinek ingyenes');
+  });
+
   it('kiadás: a csoport, a kötött nyelv és a határidő (UTC ISO) megy; a már kiadott csoport nem választható', async () => {
     const { fixture, el } = await setup([project([assignment()])]);
     expect(el.querySelector('[data-testid="access-warning"]')?.textContent).toContain('3 diáknak nincs teljes hozzáférése');

@@ -85,7 +85,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                     <li>{{ m.title }} <span class="text-xs">(kb. {{ m.estimatedMinutes }} perc{{ m.kind === 'review' ? ', Kódellenőr' : '' }})</span></li>
                   }
                 </ol>
-                <p class="text-xs text-text-muted mt-2">Az első {{ p.freeMilestoneCount }} lépés mindenkinek ingyenes; a többihez előfizetés vagy intézményi hely kell (a kiadás ezt nem változtatja meg).</p>
+                <p class="text-xs text-text-muted mt-2">Az első {{ freeSteps(p.freeMilestoneCount) }} lépés mindenkinek ingyenes; a többihez előfizetés vagy intézményi hely kell (a kiadás ezt nem változtatja meg).</p>
               </details>
 
               @if (openFor() === p.slug) {
@@ -161,7 +161,7 @@ const EMPTY_DRAFT: AssignDraft = { groupId: null, runtime: '', opensAt: '', dueA
                       </div>
                       @if (a.membersWithoutFullAccess > 0) {
                         <p class="text-xs text-warning mt-2" data-testid="access-warning">
-                          {{ a.membersWithoutFullAccess }} diáknak nincs teljes hozzáférése – csak az első {{ a.freeMilestoneCount }} lépésig jut el
+                          {{ a.membersWithoutFullAccess }} diáknak nincs teljes hozzáférése – csak az első {{ freeSteps(a.freeMilestoneCount) }} lépésig jut el
                           (előfizetéssel vagy intézményi hellyel tovább).
                         </p>
                       }
@@ -190,6 +190,8 @@ export class ProjektekListaComponent implements OnInit {
 
   readonly runtimeLabels = RUNTIME_LABELS;
   readonly utc = parseUtc;
+  /** A valódi ingyenes lépések száma: a freeMilestoneCount a 0. (bevezető) mérföldkövet is számolja - mint a diák-oldalon (UI-TT-252). */
+  readonly freeSteps = (freeMilestoneCount: number): number => Math.max(0, freeMilestoneCount - 1);
   readonly projects = signal<TeacherProjectDto[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
