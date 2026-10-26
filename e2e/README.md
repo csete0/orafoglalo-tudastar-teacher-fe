@@ -69,7 +69,7 @@ A Playwright `webServer` plugin-jai **KORÁBBAN** indulnak, mint a user
 ELŐTT próbálná felhúzni, és összeomlana). Helyette:
 
 1. `e2e/global-setup.ts` maga indítja/állítja le a Docker konténert,
-   felépíti a sémát + seedeli az adatokat (`DigitalCulture.E2ESeed`
+   felépíti a sémát + seedeli az adatokat (`Patricks.E2ESeed`
    konzol-eszköz — ugyanazt a sémaépítést futtatja, mint az `xUnit`
    teszt-harness, önállóan futtatható).
 2. Ezután a `global-setup.ts` maga `spawn()`-olja a backendet (`dotnet run`),

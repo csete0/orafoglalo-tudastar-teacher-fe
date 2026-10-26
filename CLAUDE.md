@@ -61,7 +61,7 @@ signals; don't reintroduce `NgZone`.
 ## Test infra
 Vitest, same pattern as the student frontend (no Karma). Playwright E2E lives in this repo's own
 `e2e/` directory, with a throwaway Docker PostgreSQL 17 (schema = frozen EF base migrations + `sql-postgres/*.sql`,
-like prod) seeded by the standalone `DigitalCulture.E2ESeed` console tool. SQL Server support was removed 2026-09-29.
+like prod) seeded by the standalone `Patricks.E2ESeed` console tool. SQL Server support was removed 2026-09-29.
 
 ## Infra / staging deploy — this app is NOT dockerized on staging
 On the `.77` staging CT, unlike the student frontend and backend (which run in docker-compose at
