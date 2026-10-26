@@ -7,7 +7,7 @@ import { environment } from '../../environments/environment';
 
 /**
  * Token-csatolás + 401-re refresh-és-újrapróbálkozás, plusz globális
- * hiba-toast a MUTÁCIÓKRA (nem-GET): a backend OrafoglaloException-jei itt
+ * hiba-toast a MUTÁCIÓKRA (nem-GET): a backend PatricksException-jei itt
  * érnek felszínre, komponensenkénti hibakezelés nélkül. A GET/betöltési
  * hibák a store-ok inline error() megjelenítésén maradnak (nincs dupla
  * jelentés).
