@@ -299,7 +299,7 @@ export class KahootHostStore {
   }
 }
 
-/** A HubException a szerver OrafoglaloException-üzenetét hozza, SignalR-kerettel. */
+/** A HubException a szerver PatricksException-üzenetét hozza, SignalR-kerettel. */
 function extractHubErrorMessage(err: unknown, fallback: string): string {
   const raw = err instanceof Error ? err.message : '';
   if (!raw) return fallback;

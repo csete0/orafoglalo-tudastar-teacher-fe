@@ -71,10 +71,10 @@ export default async function globalSetup(): Promise<void> {
     'redis:7-alpine',
   ]);
 
-  console.log('[global-setup] Séma (EF-alapmigrációk + sql-postgres scriptek) + seed (DigitalCulture.E2ESeed)...');
+  console.log('[global-setup] Séma (EF-alapmigrációk + sql-postgres scriptek) + seed (Patricks.E2ESeed)...');
   execFileSync(
     'dotnet',
-    ['run', '--project', 'DigitalCulture.E2ESeed', '--', DB_CONNECTION_STRING],
+    ['run', '--project', 'Patricks.E2ESeed', '--', DB_CONNECTION_STRING],
     { cwd: BACKEND_REPO_PATH, stdio: 'inherit' },
   );
 
@@ -86,7 +86,7 @@ export default async function globalSetup(): Promise<void> {
   // Egymás után: két párhuzamos `dotnet run` ugyanazokat a közös projekteket fordítaná egyszerre (obj/-zár ütközés).
   await startDotnetService({
     name: 'Backend',
-    project: 'DigitalCulture.API',
+    project: 'Patricks.API',
     readyUrl: `${BACKEND_URL}/api/roles`,
     pidFile: BACKEND_PID_FILE,
     logFile: BACKEND_LOG_FILE,
@@ -113,7 +113,7 @@ export default async function globalSetup(): Promise<void> {
   // az admin-fe + Admin API párosé - a tanári app /admin/* útvonalai megszűntek.
   await startDotnetService({
     name: 'Admin API',
-    project: 'DigitalCulture.Admin.API',
+    project: 'Patricks.Admin.API',
     readyUrl: `${ADMIN_API_URL}/api/admin/health`,
     pidFile: ADMIN_API_PID_FILE,
     logFile: ADMIN_API_LOG_FILE,

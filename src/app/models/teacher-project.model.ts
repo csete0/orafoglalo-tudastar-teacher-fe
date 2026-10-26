@@ -1,4 +1,4 @@
-/** Projektműhely a tanári oldalon (BE: DigitalCulture.Domain/Entities/Projects/ProjectAssignment.cs). */
+/** Projektműhely a tanári oldalon (BE: Patricks.Domain/Entities/Projects/ProjectAssignment.cs). */
 
 export type ProjectRuntime = 'browser-python' | 'browser-js' | 'judge0-csharp' | 'judge0-java' | 'judge0-aspnet';
 export type Independence = 'onallo' | 'kis-segitseggel' | 'segitseggel';

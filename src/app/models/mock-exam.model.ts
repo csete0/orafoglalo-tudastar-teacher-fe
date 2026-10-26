@@ -1,4 +1,4 @@
-// Próbaérettségi (tanár) - lásd DigitalCulture.Domain.Entities.MockExams.MockExamDtos (PATRICKS-PROBAERETTSEGI-TERV.md E).
+// Próbaérettségi (tanár) - lásd Patricks.Domain.Entities.MockExams.MockExamDtos (PATRICKS-PROBAERETTSEGI-TERV.md E).
 
 export type MockExamLevel = 'kozep' | 'emelt';
 /** `elsewhere`: magától vagy más csoporttal jelentkezett - a jelentkezése és az eredménye az övé, ez a nézet nem mutatja. */
