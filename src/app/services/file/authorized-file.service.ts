@@ -8,7 +8,7 @@ import { map } from 'rxjs/operators';
  * nyers <a href> binding-ként nem tölthető be (a token localStorage-ban van,
  * nem cookie-ban, egy sima navigáció nem viszi magával) — a token kizárólag
  * a HttpClient-en (és rajta keresztül az auth-interceptoron) át kerül a
- * kérésre. Ld. az azonos mintát a diák-fe-ben (orafoglalo-tudastar-fe).
+ * kérésre. Ld. az azonos mintát a diák-fe-ben (patricks-web).
  */
 const TEACHER_FILE_URL_MARKER = '/api/teacher-files/';
 

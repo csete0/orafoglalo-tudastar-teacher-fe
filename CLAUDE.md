@@ -1,9 +1,9 @@
-# Tudástár Teacher Frontend (orafoglalo-tudastar-teacher-fe)
+# PaTricks Teacher Frontend (patricks-teacher)
 
 ## Overview
 Angular 22 standalone frontend (no SSR, **zoneless** change detection — no zone.js), dev port 4300, for teachers/external instructors using the
-Tudástár platform: creating private task sets, managing groups/schools, viewing student results,
-group/school leaderboards. Shares the same backend (`orafoglalo-tudastar-be`) and database as the
+PaTricks platform: creating private task sets, managing groups/schools, viewing student results,
+group/school leaderboards. Shares the same backend (`patricks-api`) and database as the
 student app. Part of "Patricks alkalmazás" / "PaTricks alkalmazás" (see the backend repo's CLAUDE.md
 for full platform context).
 
@@ -65,10 +65,10 @@ like prod) seeded by the standalone `Patricks.E2ESeed` console tool. SQL Server 
 
 ## Infra / staging deploy — this app is NOT dockerized on staging
 On the `.77` staging CT, unlike the student frontend and backend (which run in docker-compose at
-`/opt/tudastar`), **this app runs as a bare `ng serve --port 4300 --host 0.0.0.0` process**, started
-by the automated bug-hunt infra's own script
-(`/opt/bug-hunt/services/tudastar-teacher-fe-start.sh`), not systemd — if it dies or the CT reboots,
-it needs to be manually restarted with that same script. nginx site `tudastar-teacher-staging` on
+`/opt/patricks`), **this app runs as a bare `ng serve --port 4300 --host 0.0.0.0` process**, started
+from the bug-hunt clone `/opt/bug-hunt/repos/patricks-teacher` by the systemd unit
+`patricks-teacher-fe.service` (script `/opt/bug-hunt/services/patricks-teacher-fe-start.sh`) —
+`systemctl restart patricks-teacher-fe` after an update (the staging `deploy.sh` does this). nginx site `patricks-teacher-staging` on
 port 9443 proxies to it. **Do not create a second/parallel instance of this app on staging** (docker
 or otherwise) without first checking `ss -tlnp` / `docker ps -a` / `ps aux` for an existing one —
 this has happened before and was explicitly rejected by the project owner ("miért kell még egy, ha
@@ -77,7 +77,7 @@ már fut egy példány") — update/restart the existing process instead.
   `--configuration staging` (not the default `development`) — the dev config's `environment.ts`
   hardcodes `apiUrl: 'http://localhost:7083/api'`, which silently breaks every API call when
   accessed from any machine other than the one running the server.
-- Backend CORS (`StagingCorsPolicy` in `Program.cs`, `orafoglalo-tudastar-be`) must include this
+- Backend CORS (`StagingCorsPolicy` in `Program.cs`, `patricks-api`) must include this
   app's origin (`https://192.168.1.77:9443`) — if a new staging frontend origin/port is ever added,
   it needs adding there too, or API calls fail with a silent CORS error (Network tab can even show
   200 on the OPTIONS preflight while the actual policy still rejects the real request — check the
