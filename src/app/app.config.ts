@@ -13,7 +13,7 @@ import { authInterceptor } from './interceptors/auth.interceptor';
 // DecimalPipe/CurrencyPipe `NG02100 InvalidPipeArgument`-té csomagol újra -
 // ettől néma, üres cellák/sorok lettek a render-eredményben (a hiba a
 // változásérzékelési kört is megszakítja, ezért a HIBÁS binding UTÁNI
-// összes sor is üresen marad). A diák-fe (`orafoglalo-tudastar-fe`)
+// összes sor is üresen marad). A diák-fe (`patricks-web`)
 // `app.config.ts`-e ugyanezt a mintát már helyesen alkalmazza - ide is
 // átemelve.
 registerLocaleData(localeHu);

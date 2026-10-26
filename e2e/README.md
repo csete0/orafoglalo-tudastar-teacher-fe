@@ -2,8 +2,8 @@
 
 Teljes, valós stacken futó E2E suite: eldobható Docker PostgreSQL 17 konténer + a
 séma tényleges felépítése (EF-alapmigrációk + `sql-postgres/*.sql`, pontosan mint élesben) + a backend és az
-Admin API (`orafoglalo-tudastar-be`), valamint a három frontend (diák: `orafoglalo-tudastar-fe`, tanári: ez a repó,
-admin: `orafoglalo-tudastar-admin-fe`) valódi `dotnet run` / `ng serve` folyamatai. Nincs mockolás — a flow JWT role-claimeken, multipart uploadon és
+Admin API (`patricks-api`), valamint a három frontend (diák: `patricks-web`, tanári: ez a repó,
+admin: `patricks-admin`) valódi `dotnet run` / `ng serve` folyamatai. Nincs mockolás — a flow JWT role-claimeken, multipart uploadon és
 szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
 
 ## Előfeltételek
@@ -14,10 +14,10 @@ szerver-oldali gatingen ível át, amit egy mock nem tudna hitelesen leképezni.
   igényli).
 - Testvér-mappa elrendezés: mindhárom repó ugyanazon szülő könyvtár alatt van:
   ```
-  E:\Repos\orafoglalo-tudastar-be
-  E:\Repos\orafoglalo-tudastar-fe
-  E:\Repos\orafoglalo-tudastar-teacher-fe   <- ez a repó, innen futtatunk
-  E:\Repos\orafoglalo-tudastar-admin-fe     <- platform-admin felület (2026-09-23 óta)
+  E:\Repos\patricks-api
+  E:\Repos\patricks-web
+  E:\Repos\patricks-teacher   <- ez a repó, innen futtatunk
+  E:\Repos\patricks-admin     <- platform-admin felület (2026-09-23 óta)
   ```
   Ha máshol vannak, ld. alább az env var felülbírálást.
 - Saját, elszigetelt portok (2026-10-24 óta): backend `17083`, diák-fe `4210`, tanár-fe `4310` - a két frontend
@@ -51,12 +51,12 @@ visszajátszáshoz.
 
 | Változó                    | Alapértelmezés                              | Mire való |
 |-----------------------------|----------------------------------------------|-----------|
-| `E2E_BACKEND_REPO_PATH`     | `../orafoglalo-tudastar-be`                   | Backend repó útja |
-| `E2E_STUDENT_FE_REPO_PATH`  | `../orafoglalo-tudastar-fe`                   | Diák-fe repó útja |
-| `E2E_ADMIN_FE_REPO_PATH`    | `../orafoglalo-tudastar-admin-fe`             | Admin-fe repó útja |
-| `E2E_TEACHER_FILES_ROOT`    | OS temp / `tudastar-e2e-teacher-files`        | Tanári feltöltött fájlok fizikai gyökere |
+| `E2E_BACKEND_REPO_PATH`     | `../patricks-api`                   | Backend repó útja |
+| `E2E_STUDENT_FE_REPO_PATH`  | `../patricks-web`                   | Diák-fe repó útja |
+| `E2E_ADMIN_FE_REPO_PATH`    | `../patricks-admin`             | Admin-fe repó útja |
+| `E2E_TEACHER_FILES_ROOT`    | OS temp / `patricks-e2e-teacher-files`        | Tanári feltöltött fájlok fizikai gyökere |
 
-A DB-konténer neve/portja (`tudastar-e2e-db` / `15433`) és az admin teszt-fiók
+A DB-konténer neve/portja (`patricks-e2e-db` / `15433`) és az admin teszt-fiók
 (`e2e-admin@example.com` / `E2eAdmin123!`) az `e2e/constants.ts`-ben van
 fixen — ezek nem ütköznek semmilyen valódi/dev erőforrással, mert saját,
 dedikált konténerben/DB-ben élnek.

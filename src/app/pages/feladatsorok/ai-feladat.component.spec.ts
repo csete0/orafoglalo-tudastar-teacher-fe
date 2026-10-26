@@ -643,7 +643,7 @@ describe('AiFeladatComponent', () => {
 
     it('sikertelen elvetésnél (pl. 400) az előnézet marad, a hiba olvasható', () => {
       const fixture = preview();
-      service.dismiss.mockReturnValue(throwError(() => ({ status: 400, error: { errorType: 'OrafoglaloException', errorMessage: 'A generálás még fut - várd meg, amíg elkészül.' } })));
+      service.dismiss.mockReturnValue(throwError(() => ({ status: 400, error: { errorType: 'PatricksException', errorMessage: 'A generálás még fut - várd meg, amíg elkészül.' } })));
       q(fixture, 'ai-task-discard')!.click();
       fixture.detectChanges();
       expect(q(fixture, 'ai-task-preview')).not.toBeNull();

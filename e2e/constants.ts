@@ -25,9 +25,9 @@ export const TEACHER_FE_URL = `http://localhost:${TEACHER_FE_PORT}`;
 export const ADMIN_FE_URL = `http://localhost:${ADMIN_FE_PORT}`;
 
 // Eldobható PostgreSQL 17 (a Patricks 2026-09 óta csak Postgresen fut; az SQL Server-út megszűnt).
-export const DB_CONTAINER_NAME = 'tudastar-e2e-db';
+export const DB_CONTAINER_NAME = 'patricks-e2e-db';
 export const DB_HOST_PORT = 15433;
-export const DB_NAME = 'tudastar_e2e';
+export const DB_NAME = 'patricks_e2e';
 export const DB_USER = 'postgres';
 export const DB_PASSWORD = 'E2ePgPassw0rd!';
 
@@ -36,7 +36,7 @@ export const DB_CONNECTION_STRING =
 
 // Közös Redis a backend és az Admin API között, mint stagingen/élesen. Nélküle mindkét processz saját in-memory
 // check_auth cache-t kap, és az Admin API-ban végzett változás (pl. licenc-visszavonás) nem üríti a backend cache-ét.
-export const REDIS_CONTAINER_NAME = 'tudastar-e2e-redis';
+export const REDIS_CONTAINER_NAME = 'patricks-e2e-redis';
 export const REDIS_HOST_PORT = 16379;
 export const REDIS_CONNECTION_STRING = `127.0.0.1:${REDIS_HOST_PORT}`;
 
@@ -49,16 +49,16 @@ export const E2E_ADMIN_PASSWORD = 'E2eAdmin123!';
  * Felülírható E2E_BACKEND_REPO_PATH env var-ral, ha valakinél máshol van.
  */
 export const BACKEND_REPO_PATH =
-  process.env['E2E_BACKEND_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-be');
+  process.env['E2E_BACKEND_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'patricks-api');
 
 export const STUDENT_FE_REPO_PATH =
-  process.env['E2E_STUDENT_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-fe');
+  process.env['E2E_STUDENT_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'patricks-web');
 
 export const ADMIN_FE_REPO_PATH =
-  process.env['E2E_ADMIN_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'orafoglalo-tudastar-admin-fe');
+  process.env['E2E_ADMIN_FE_REPO_PATH'] ?? path.resolve(__dirname, '..', '..', 'patricks-admin');
 
 export const TEACHER_FILES_ROOT =
-  process.env['E2E_TEACHER_FILES_ROOT'] ?? path.resolve(os.tmpdir(), 'tudastar-e2e-teacher-files');
+  process.env['E2E_TEACHER_FILES_ROOT'] ?? path.resolve(os.tmpdir(), 'patricks-e2e-teacher-files');
 
 /**
  * A backend folyamat PID-jét ide írjuk ki global-setup-ban, hogy a
@@ -68,7 +68,7 @@ export const TEACHER_FILES_ROOT =
  * fájl, ezért a backendet NEM a webServer configon át indítjuk (az korán,
  * a DB-seedelés előtt próbálná elindítani), hanem itt, manuálisan.
  */
-export const BACKEND_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.pid');
-export const BACKEND_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-backend.log');
-export const ADMIN_API_PID_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.pid');
-export const ADMIN_API_LOG_FILE = path.resolve(os.tmpdir(), 'tudastar-e2e-admin-api.log');
+export const BACKEND_PID_FILE = path.resolve(os.tmpdir(), 'patricks-e2e-backend.pid');
+export const BACKEND_LOG_FILE = path.resolve(os.tmpdir(), 'patricks-e2e-backend.log');
+export const ADMIN_API_PID_FILE = path.resolve(os.tmpdir(), 'patricks-e2e-admin-api.pid');
+export const ADMIN_API_LOG_FILE = path.resolve(os.tmpdir(), 'patricks-e2e-admin-api.log');

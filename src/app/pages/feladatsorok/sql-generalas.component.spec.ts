@@ -134,9 +134,10 @@ describe('SqlGeneralasComponent', () => {
     expect((q(fixture, 'sql-gen-save') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('a BE hibaüzenetét (errorMessage) mutatja', () => {
+  // Az általános BE-hibakód 2026-10-26-án "OrafoglaloException"-ről "PatricksException"-re váltott - mindkettőnél ugyanaz.
+  it.each(['PatricksException', 'OrafoglaloException'])('a BE hibaüzenetét (errorMessage) mutatja (%s)', (errorType) => {
     const fixture = create([file('a', 'CreateSql', 'create.sql')],
-      throwError(() => ({ status: 400, error: { errorType: 'OrafoglaloException', errorMessage: 'A(z) „t” tábla 2. sorában nem literál érték áll.' } })));
+      throwError(() => ({ status: 400, error: { errorType, errorMessage: 'A(z) „t” tábla 2. sorában nem literál érték áll.' } })));
     q(fixture, 'sql-gen-generate')!.click();
     fixture.detectChanges();
 
